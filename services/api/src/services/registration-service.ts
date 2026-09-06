@@ -1,6 +1,5 @@
 import chalk from 'chalk'
 import {
-    log,
     err,
     infoStr,
 } from '@lixpi/debug-tools'
@@ -10,7 +9,11 @@ import Organization from '../models/organization.ts'
 
 const { MOCK_AUTH0 } = process.env
 
-const logStats = ({ operation, userId, origin }) => {
+const logStats = ({
+    operation,
+    userId,
+    origin,
+}) => {
     const logOrigin = `RegistrationService -> ${operation}`
     infoStr([
         chalk.white(logOrigin),
@@ -24,12 +27,14 @@ const logStats = ({ operation, userId, origin }) => {
 class RegistrationService {
     constructor() {}
 
-    async verifyRegistration({ decodedToken, accessToken }) {
+    async verifyRegistration({
+        decodedToken,
+        accessToken,
+    }) {
         const user = await User.get(decodedToken.sub) // Check if the user exists in the database
 
-        if (user) {
+        if (user)
             return { user }
-        }
 
         // If the user does not exist, register the user
         if (!user) {
@@ -50,7 +55,10 @@ class RegistrationService {
                 }
             } else {
                 // For real Auth0, call the userinfo endpoint
-                auth0User = await this.getAuth0UserInfo({ queryUserDetailsUrl: decodedToken.aud[1], accessToken })
+                auth0User = await this.getAuth0UserInfo({
+                    queryUserDetailsUrl: decodedToken.aud[1],
+                    accessToken,
+                })
             }
 
             const {
@@ -63,7 +71,10 @@ class RegistrationService {
                 picture: avatar,
             } = auth0User
 
-            const { user, error } = await this.createUser({
+            const {
+                user,
+                error,
+            } = await this.createUser({
                 userId,
                 stripeCustomerId,
                 email,
@@ -88,19 +99,27 @@ class RegistrationService {
         }
     }
 
-    async getAuth0UserInfo({ queryUserDetailsUrl, accessToken }) {
+    async getAuth0UserInfo({
+        queryUserDetailsUrl,
+        accessToken,
+    }) {
         try {
-            const response = await fetch(queryUserDetailsUrl, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
+            const response = await fetch(
+                queryUserDetailsUrl,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
                 },
-            })
-            if (!response.ok) {
+            )
+
+            if (!response.ok)
                 throw new Error(`Auth0 userinfo request failed: ${response.status}`)
-            }
+
             return await response.json()
         } catch (error) {
             err('Error during getAuth0UserInfo:', error)
+
             return { error }
         }
     }
@@ -125,13 +144,17 @@ class RegistrationService {
                 avatar,
                 hasActiveSubscription: false,
             })
+
             return { user }
         } catch (error) {
             return { error }
         }
     }
 
-    async createOrganization({ userId, organizationName }) {
+    async createOrganization({
+        userId,
+        organizationName,
+    }) {
         try {
             const organization = await Organization.createOrganization({
                 name: organizationName, // Partition key
@@ -146,6 +169,7 @@ class RegistrationService {
             })
         } catch (error) {
             err('Error during createOrganization:', error)
+
             return error
         }
     }

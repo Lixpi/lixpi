@@ -37,10 +37,10 @@ export type CapabilityProgressState = {
     outputAssetIds: string[]
 }
 
-export function projectCapabilityRunEvents(
+export const projectCapabilityRunEvents = (
     run: CapabilityRun,
     events: CapabilityRunEvent[],
-): CapabilityProgressState {
+): CapabilityProgressState => {
     const state: CapabilityProgressState = {
         runId: run.runId,
         status: run.status,
@@ -51,11 +51,25 @@ export function projectCapabilityRunEvents(
     const stepsById = new Map<string, CapabilityProgressStep>()
 
     for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
-        if (event.sequence <= state.lastSequence) continue
+        if (event.sequence <= state.lastSequence)
+            continue
+
         state.lastSequence = event.sequence
         state.status = event.runStatus
-        if (event.outputAssetIds) state.outputAssetIds = Array.from(new Set([...state.outputAssetIds, ...event.outputAssetIds]))
-        if (!event.stepId || !event.stepStatus) continue
+
+        if (event.outputAssetIds)
+            state.outputAssetIds = Array.from(
+                new Set([
+                    ...state.outputAssetIds,
+                    ...event.outputAssetIds,
+                ]),
+            )
+
+        if (
+            !event.stepId
+            || !event.stepStatus
+        )
+            continue
 
         const step = stepsById.get(event.stepId) ?? {
             stepId: event.stepId,
@@ -64,28 +78,38 @@ export function projectCapabilityRunEvents(
         }
         step.title = event.stepTitle ?? step.title
         step.status = event.stepStatus
-        step.summary = event.safeOutputSummary ?? event.safeInputSummary ?? step.summary
+        step.summary = event.safeOutputSummary
+            ?? event.safeInputSummary
+            ?? step.summary
         step.error = event.errorMessage ?? step.error
         step.trace = event.trace ?? step.trace
+
         if (!stepsById.has(event.stepId)) {
             stepsById.set(event.stepId, step)
             state.steps.push(step)
         }
     }
+
     return state
 }
 
 export type CapabilityRunProgressInstance = {
     readonly element: HTMLElement
     replay: (runId: string) => Promise<void>
-    render: (run: CapabilityRun, events: CapabilityRunEvent[]) => void
+    render: (
+        run: CapabilityRun,
+        events: CapabilityRunEvent[],
+    ) => void
     applyEvent: (event: CapabilityRunEvent) => void
     getState: () => CapabilityProgressState | null
     destroy: () => void
 }
 
 class CapabilityRunProgress implements CapabilityRunProgressInstance {
-    readonly element = html`<section className="capability-run-progress" aria-live="polite"></section>` as HTMLElement
+    readonly element = html`<section
+            className="capability-run-progress"
+            aria-live="polite"
+        ></section>` as HTMLElement
     private readonly timeline: ProgressTimelineInstance
     private replaySequence = 0
     private run: CapabilityRun | null = null
@@ -104,7 +128,9 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
     }
 
     async replay(runId: string): Promise<void> {
-        if (!this.client) throw new Error('Capability run replay requires a catalog client')
+        if (!this.client)
+            throw new Error('Capability run replay requires a catalog client')
+
         const replaySequence = ++this.replaySequence
         this.unsubscribeFromLiveEvents?.()
         this.unsubscribeFromLiveEvents = null
@@ -114,44 +140,66 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         this.element.replaceChildren(html`<div className="capability-run-progress-status">Loading run…</div>`)
         const bufferedLiveEvents: CapabilityRunEvent[] = []
         let replayComplete = false
+
         try {
-            this.unsubscribeFromLiveEvents = this.client.subscribeToRunEvents(runId, (event) => {
-                if (replaySequence !== this.replaySequence) return
+            this.unsubscribeFromLiveEvents = this.client.subscribeToRunEvents(runId, event => {
+                if (replaySequence !== this.replaySequence)
+                    return
+
                 if (!replayComplete) {
                     bufferedLiveEvents.push(event)
+
                     return
                 }
+
                 this.applyEvent(event)
             })
             let cursor: string | undefined
+
             do {
                 const page = await this.client.replay(runId, cursor)
-                if (replaySequence !== this.replaySequence) return
+
+                if (replaySequence !== this.replaySequence)
+                    return
+
                 this.run = page.run
-                page.events.forEach((event) => this.eventsBySequence.set(event.sequence, event))
+                page.events.forEach(event => this.eventsBySequence.set(event.sequence, event))
                 cursor = page.cursor
             } while (cursor)
-            bufferedLiveEvents.forEach((event) => this.eventsBySequence.set(event.sequence, event))
+
+            bufferedLiveEvents.forEach(event => this.eventsBySequence.set(event.sequence, event))
             replayComplete = true
             this.renderCurrentState()
             this.stopLiveEventsIfSettled()
         } catch {
-            if (replaySequence !== this.replaySequence) return
+            if (replaySequence !== this.replaySequence)
+                return
+
             this.unsubscribeFromLiveEvents?.()
             this.unsubscribeFromLiveEvents = null
-            this.element.replaceChildren(html`<div className="capability-run-progress-status capability-run-step-error">Could not replay this Tool run.</div>`)
+            this.element.replaceChildren(
+                html`<div className="capability-run-progress-status capability-run-step-error">Could not replay this Tool run.</div>`,
+            )
         }
     }
 
-    render(run: CapabilityRun, events: CapabilityRunEvent[]): void {
+    render(
+        run: CapabilityRun,
+        events: CapabilityRunEvent[],
+    ): void {
         this.run = run
         this.eventsBySequence.clear()
-        events.forEach((event) => this.eventsBySequence.set(event.sequence, event))
+        events.forEach(event => this.eventsBySequence.set(event.sequence, event))
         this.renderCurrentState()
     }
 
     applyEvent(event: CapabilityRunEvent): void {
-        if (this.run && this.run.runId !== event.runId) return
+        if (
+            this.run
+            && this.run.runId !== event.runId
+        )
+            return
+
         this.run ??= createStreamedCapabilityRun(event)
         this.eventsBySequence.set(event.sequence, event)
         this.renderCurrentState()
@@ -163,30 +211,39 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
     }
 
     private renderCurrentState(): void {
-        if (!this.run) return
+        if (!this.run)
+            return
+
         const state = projectCapabilityRunEvents(this.run, [...this.eventsBySequence.values()])
         this.projectedState = state
-        const steps: ProgressTimelineItem[] = state.steps.map((step) => ({
-            id: step.stepId,
-            title: step.title,
-            status: step.status,
-            summary: step.error ?? step.summary,
-            ...(step.trace ? { detail: step.trace } : {}),
-        }))
+        const steps: ProgressTimelineItem[] = state.steps.map(
+            step => ({
+                id: step.stepId,
+                title: step.title,
+                status: step.status,
+                summary: step.error ?? step.summary,
+                ...(step.trace ? { detail: step.trace } : {}),
+            }),
+        )
         this.timeline.setItems(steps)
         this.element.replaceChildren(
             html`
-            <header className="capability-run-progress-header">
-                <strong>Tool run</strong>
-                <span>${state.status}</span>
-            </header>
-        `,
+                <header className="capability-run-progress-header">
+                    <strong>Tool run</strong>
+                    <span>${state.status}</span>
+                </header>
+            `,
             this.timeline.element,
         )
     }
 
     private stopLiveEventsIfSettled(): void {
-        if (!this.projectedState || !isTerminalCapabilityRunStatus(this.projectedState.status)) return
+        if (
+            !this.projectedState
+            || !isTerminalCapabilityRunStatus(this.projectedState.status)
+        )
+            return
+
         this.unsubscribeFromLiveEvents?.()
         this.unsubscribeFromLiveEvents = null
     }
@@ -200,12 +257,10 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
     }
 }
 
-export function createCapabilityRunProgress(
+export const createCapabilityRunProgress = (
     client?: Pick<CapabilityCatalogClient, 'replay' | 'subscribeToRunEvents'>,
     previewRenderer?: PromptReferencePreviewRenderer,
-): CapabilityRunProgressInstance {
-    return new CapabilityRunProgress(client, previewRenderer)
-}
+): CapabilityRunProgressInstance => new CapabilityRunProgress(client, previewRenderer)
 
 function createStreamedCapabilityRun(event: CapabilityRunEvent): CapabilityRun {
     return {
@@ -215,7 +270,10 @@ function createStreamedCapabilityRun(event: CapabilityRunEvent): CapabilityRun {
         workspaceId: '',
         origin: 'model',
         status: event.runStatus,
-        currentStepIds: event.stepId && event.stepStatus === 'running' ? [event.stepId] : [],
+        currentStepIds: event.stepId
+            && event.stepStatus === 'running'
+            ? [event.stepId]
+            : [],
         outputAssetIds: event.outputAssetIds ?? [],
         eventStreamName: '',
         createdAt: event.timestamp,

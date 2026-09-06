@@ -7,13 +7,29 @@ import {
     type WorkspaceCanvasConversation,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 
-export function createConversationProjectionFetch(assetService: AssetService): WorkspaceConversationProjectionPorts<WorkspaceCanvasConversation>['fetchThread'] {
-    return async ({ workspaceId, threadId }) => {
+export const createConversationProjectionFetch = (assetService: AssetService): WorkspaceConversationProjectionPorts<WorkspaceCanvasConversation>['fetchThread'] => {
+    return async ({
+        workspaceId,
+        threadId,
+    }) => {
         const asset = await assetService.get(threadId, workspaceId)
-        if ('error' in asset || !asset.documents.conversation) return null
-        await assetService.resumeDocument({ organizationId: asset.organizationId, assetId: asset.assetId, role: 'conversation' })
+
+        if (
+            'error' in asset
+            || !asset.documents.conversation
+        )
+            return null
+
+        await assetService.resumeDocument({
+            organizationId: asset.organizationId,
+            assetId: asset.assetId,
+            role: 'conversation',
+        })
         const snapshot = assetDocumentsStore.get(asset.assetId, 'conversation')
-        if (!snapshot) return null
+
+        if (!snapshot)
+            return null
+
         return {
             threadId: asset.assetId,
             assetId: asset.assetId,

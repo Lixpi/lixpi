@@ -1,3 +1,4 @@
+import { err as debugError } from '@lixpi/debug-tools'
 import type NatsService from '@lixpi/nats-service'
 import {
     getAiInteractionCanonicalResponseSubject,
@@ -18,8 +19,7 @@ import {
 import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 
-const isPng = (buffer: Buffer): boolean =>
-    buffer.length >= 8
+const isPng = (buffer: Buffer): boolean => buffer.length >= 8
     && buffer[0] === 0x89
     && buffer[1] === 0x50
     && buffer[2] === 0x4e
@@ -44,29 +44,41 @@ export class VideoPublisher {
         private readonly generationRun?: MediaGenerationRunMeta,
         private readonly onProseMirrorContent?: ProseMirrorContentHandler,
         private readonly onPipelineContent?: ProseMirrorContentHandler,
-        private readonly canvasVisibleArea?: { width: number; height: number },
+        private readonly canvasVisibleArea?: {
+            width: number
+            height: number
+        },
         private readonly getProseMirrorSnapshot?: ProseMirrorSnapshotProvider,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
         if (this.onPipelineContent) {
             this.onPipelineContent(content)
+
             return
         }
 
-        this.nats.publish(getAiInteractionCanonicalResponseSubject(this.organizationId, this.aiChatThreadId), {
-            content,
-            conversationAssetId: this.aiChatThreadId,
-        })
+        this.nats.publish(
+            getAiInteractionCanonicalResponseSubject(this.organizationId, this.aiChatThreadId),
+            {
+                content,
+                conversationAssetId: this.aiChatThreadId,
+            },
+        )
         this.onProseMirrorContent?.(content)
     }
 
     // Persist the placeholder before publishing it so every connected client
     // receives the same node, edge, and coordinates.
     async pending(): Promise<void> {
-        if (!this.generationRun) throw new Error('Video pending is missing generationRun')
+        if (!this.generationRun)
+            throw new Error('Video pending is missing generationRun')
+
         const assetId = this.generationRun.lineageAssignment?.assetId
-        if (!assetId) throw new Error('Video pending is missing Asset assignment')
+
+        if (!assetId)
+            throw new Error('Video pending is missing Asset assignment')
+
         const canvasGeometry = await attachGeneratedAssetNode({
             assetId,
             workspaceId: this.workspaceId,
@@ -121,22 +133,37 @@ export class VideoPublisher {
             containerFormat = 'mp4',
         } = args
 
-        if (!videoBuffer || videoBuffer.length === 0) {
+        if (
+            !videoBuffer
+            || videoBuffer.length === 0
+        )
             throw new Error('Video completion failed: provider returned no video bytes')
-        }
+
         // MP4 and QuickTime MOV are ISO base-media containers with an `ftyp` box.
         const isIsoBaseMedia = videoBuffer.length > 12
             && videoBuffer[4] === 0x66
             && videoBuffer[5] === 0x74
             && videoBuffer[6] === 0x79
             && videoBuffer[7] === 0x70
-        if (!isIsoBaseMedia) {
-            throw new Error('Video completion failed: provider returned bytes without an ISO base-media ftyp box')
-        }
-        if (posterBuffer && !isPng(posterBuffer)) throw new Error('Video completion failed: provider poster is not a PNG')
-        if (frameBuffer && !isPng(frameBuffer)) throw new Error('Video completion failed: provider frame is not a PNG')
 
-        if (!this.generationRun) throw new Error('Video completion is missing generationRun')
+        if (!isIsoBaseMedia)
+            throw new Error('Video completion failed: provider returned bytes without an ISO base-media ftyp box')
+
+        if (
+            posterBuffer
+            && !isPng(posterBuffer)
+        )
+            throw new Error('Video completion failed: provider poster is not a PNG')
+
+        if (
+            frameBuffer
+            && !isPng(frameBuffer)
+        )
+            throw new Error('Video completion failed: provider frame is not a PNG')
+
+        if (!this.generationRun)
+            throw new Error('Video completion is missing generationRun')
+
         const originalName = `generated-video.${containerFormat}`
         const mimeType = containerFormat === 'mov' ? 'video/quicktime' : 'video/mp4'
         const videoResult = await settleGeneratedAssetOriginal({
@@ -185,13 +212,14 @@ export class VideoPublisher {
             generationRun: this.generationRun,
             terminalStatus: 'completed' as const,
         }
+
         try {
             await this.getProseMirrorSnapshot?.()
             await materializeAssetProvenance(provenancePayload)
         } catch (error) {
-            if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY') {
-                console.error('Video Asset provenance materialization failed; queued retry', error)
-            }
+            if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY')
+                debugError('Video Asset provenance materialization failed; queued retry', error)
+
             await enqueueProvenanceRebuild(provenancePayload)
         }
     }

@@ -31,28 +31,38 @@ export type WorkspaceCanvasAssetsPorts = {
     context: WorkspaceCanvasContext
     getWorkspaceId: () => string
     refreshChrome: () => void
-    reportError: (message: string, error: unknown) => void
+    reportError: (
+        message: string,
+        error: unknown,
+    ) => void
 }
 
 export class WorkspaceCanvasAssets {
     constructor(private readonly ports: WorkspaceCanvasAssetsPorts) {}
 
-    getDescriptor = (node: ImageCanvasNode | VideoCanvasNode): MediaDescriptor | undefined => {
-        return this.ports.host.assets.read(node.assetId)?.descriptor as MediaDescriptor | undefined
-    }
+    getDescriptor = (node: ImageCanvasNode | VideoCanvasNode): MediaDescriptor | undefined =>
+        this.ports.host.assets.read(node.assetId)?.descriptor as MediaDescriptor | undefined
 
     getArtifactProvenance = (node: CapabilityArtifactCanvasNode): Record<string, any> => {
         const document = this.ports.host.assets.readDocument(node.assetId, 'provenance')?.doc
         const text = document ? this.ports.host.extractText(document) : ''
+
         if (text) {
             try {
                 const parsed = JSON.parse(text)
-                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+
+                if (
+                    parsed
+                    && typeof parsed === 'object'
+                    && !Array.isArray(parsed)
+                )
+                    return parsed
             } catch {
                 // Older provenance documents can be plain text. Canvas metadata
                 // remains the replay fallback for those records.
             }
         }
+
         return {
             input: node.generatedBy?.input ?? {},
             variant: { reasoningModelId: node.generatedBy?.reasoningModelId ?? '' },
@@ -61,6 +71,7 @@ export class WorkspaceCanvasAssets {
 
     createViewPorts = (): WorkspaceAssetDetailsPorts => {
         const host = this.ports.host
+
         return {
             document: this.ports.document,
             workspaceId: this.ports.getWorkspaceId(),
@@ -69,22 +80,61 @@ export class WorkspaceCanvasAssets {
             getAsset: assetId => host.assets.read(assetId),
             getContentDocument: assetId => {
                 const snapshot = host.assets.readDocument(assetId, 'content')
-                return snapshot ? { doc: snapshot.doc as ProseMirrorJsonNode, version: snapshot.version } : undefined
+
+                return snapshot ? {
+                    doc: snapshot.doc as ProseMirrorJsonNode,
+                    version: snapshot.version,
+                } : undefined
             },
             mountEditor: this.ports.editors.mountAsset,
-            updateMetadata: async (assetId, revision, patch) => {
-                const updated = await host.assets.updateMetadata(assetId, revision, patch)
-                if (!('error' in updated)) host.assets.upsert(updated)
+            updateMetadata: async (
+                assetId,
+                revision,
+                patch,
+            ) => {
+                const updated = await host.assets.updateMetadata(
+                    assetId,
+                    revision,
+                    patch,
+                )
+
+                if (!('error' in updated))
+                    host.assets.upsert(updated)
+
                 return updated
             },
-            changeScope: async (assetId, revision, scope, ownerId) => {
-                const updated = await host.assets.changeScope(assetId, revision, scope, ownerId)
-                if (!('error' in updated)) host.assets.upsert(updated)
+            changeScope: async (
+                assetId,
+                revision,
+                scope,
+                ownerId,
+            ) => {
+                const updated = await host.assets.changeScope(
+                    assetId,
+                    revision,
+                    scope,
+                    ownerId,
+                )
+
+                if (!('error' in updated))
+                    host.assets.upsert(updated)
+
                 return updated
             },
-            attestSubjectIdentity: async (assetId, revision, classification) => {
-                const updated = await host.assets.attestSubjectIdentity(assetId, revision, classification)
-                if (!('error' in updated)) host.assets.upsert(updated)
+            attestSubjectIdentity: async (
+                assetId,
+                revision,
+                classification,
+            ) => {
+                const updated = await host.assets.attestSubjectIdentity(
+                    assetId,
+                    revision,
+                    classification,
+                )
+
+                if (!('error' in updated))
+                    host.assets.upsert(updated)
+
                 return updated
             },
             onChanged: this.ports.refreshChrome,
@@ -94,6 +144,7 @@ export class WorkspaceCanvasAssets {
 
     createLibraryPorts = (): WorkspaceLibraryPorts => {
         const host = this.ports.host
+
         return {
             document: this.ports.document,
             workspaceId: this.ports.getWorkspaceId(),
@@ -102,16 +153,41 @@ export class WorkspaceCanvasAssets {
                 list: query => host.assets.list(query),
                 get: async (assetId, workspaceId) => {
                     const asset = await host.assets.get(assetId, workspaceId)
-                    if (!('error' in asset)) host.assets.upsert(asset)
+
+                    if (!('error' in asset))
+                        host.assets.upsert(asset)
+
                     return asset
                 },
                 refresh: (assetId, workspaceId) => host.assets.refresh(assetId, workspaceId),
-                updateMetadata: (assetId, revision, patch) => host.assets.updateMetadata(assetId, revision, patch),
-                changeScope: (assetId, revision, scope, ownerId) => host.assets.changeScope(assetId, revision, scope, ownerId),
+                updateMetadata: (
+                    assetId,
+                    revision,
+                    patch,
+                ) => host.assets.updateMetadata(
+                    assetId,
+                    revision,
+                    patch,
+                ),
+                changeScope: (
+                    assetId,
+                    revision,
+                    scope,
+                    ownerId,
+                ) => host.assets.changeScope(
+                    assetId,
+                    revision,
+                    scope,
+                    ownerId,
+                ),
                 resumeDocument: coordinate => host.assets.resumeDocument(coordinate),
                 getDocument: (assetId, role) => host.assets.readDocument(assetId, role),
             },
-            mountHistory: ({ host: mount, asset, content }) =>
+            mountHistory: ({
+                host: mount,
+                asset,
+                content,
+            }) =>
                 this.ports.editors.mountHistory({
                     mount,
                     content: content as never,
@@ -119,7 +195,11 @@ export class WorkspaceCanvasAssets {
                     documentType: 'assetProvenance',
                     contextPreview: this.ports.context.getAiUserMessagePreviewRenderer(),
                     promptReferencePreviewRenderer: this.ports.context.getPromptReferencePreviewRenderer(),
-                    mediaGenerationProgress: ({ id, state, showSummaryWhenCollapsedItemIds }) =>
+                    mediaGenerationProgress: ({
+                        id,
+                        state,
+                        showSummaryWhenCollapsedItemIds,
+                    }) =>
                         createMediaGenerationProgress({
                             id: `provenance:${asset.assetId}:${id}`,
                             state,

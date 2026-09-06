@@ -17,7 +17,7 @@ import {
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
-import { authStore } from '$src/stores/authStore.ts'
+
 import { settings } from '$src/settings.ts'
 
 const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
@@ -25,19 +25,21 @@ const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
 configureUiKit(settings)
 
 // Init services and then start the app
-async function initializeServicesSequentially() {
+const initializeServicesSequentially = async () => {
     try {
         await AuthService.init()
         const authToken = await AuthService.getTokenSilently()
 
-        if (!authToken) {
+        if (!authToken)
             throw new Error('No auth token')
-        }
 
-        console.log('import.meta.env.VITE_NATS_SERVER:', {
-            natsServer: VITE_NATS_SERVER,
-            fullEnv: import.meta.env,
-        })
+        console.log(
+            'import.meta.env.VITE_NATS_SERVER:',
+            {
+                natsServer: VITE_NATS_SERVER,
+                fullEnv: import.meta.env,
+            },
+        )
 
         const natsInstance = await NatsService.init({
             servers: [VITE_NATS_SERVER],
@@ -81,29 +83,36 @@ async function initializeServicesSequentially() {
         await RouterService.init()
     } catch (error) {
         console.error('Error during service initialization', error)
+
         throw error // Re-throw to handle it in the caller
     }
 }
 
-export async function shutdownApplication(): Promise<void> {
+export const shutdownApplication = async (): Promise<void> => {
     const mounted = await application
     await mounted?.destroy()
 }
 
-async function initializeApplication(): Promise<AppInstance | null> {
+const initializeApplication = async (): Promise<AppInstance | null> => {
     try {
         await initializeServicesSequentially()
         const target = document.getElementById('app')
-        if (!target) throw new Error('Application mount target #app not found')
+
+        if (!target)
+            throw new Error('Application mount target #app not found')
+
         const workspaceService = servicesStore.getData('workspaceService')!
+
         return mountApp(target, async () => await workspaceService.canvasSessions.close())
     } catch (error) {
         console.error('Application failed to start', error)
+
         try {
             await servicesStore.getData('workspaceService')?.canvasSessions.close()
         } catch (closeError) {
             console.error('Canvas session shutdown after startup failure failed', closeError)
         }
+
         return null
     }
 }

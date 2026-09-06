@@ -23,7 +23,11 @@ export const writable = <Value>(initial: Value): Writable<Value> => {
     return {
         subscribe: run => store.subscribe(value => run(value)),
         set: value => store.set(value),
-        update: updater => store.set(updater(store.get())),
+        update: updater => store.set(
+            updater(
+                store.get(),
+            ),
+        ),
         get: () => store.get(),
     }
 }

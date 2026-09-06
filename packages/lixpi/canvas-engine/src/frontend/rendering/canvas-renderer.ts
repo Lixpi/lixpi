@@ -40,7 +40,11 @@ export class CanvasRenderer {
     readonly ready: Promise<boolean>
     readonly resources: DrawingResources
     readonly media: EngineMedia
-    readonly layers: Readonly<{ media: CanvasLayer; connectors: CanvasLayer; foreground: CanvasLayer }>
+    readonly layers: Readonly<{
+        media: CanvasLayer
+        connectors: CanvasLayer
+        foreground: CanvasLayer
+    }>
     private readonly app = new Application()
     private readonly lifetime = new Lifetime()
     private readonly backend: PixiDrawingResources
@@ -54,13 +58,27 @@ export class CanvasRenderer {
     private canvas: HTMLCanvasElement | null = null
     private initialized = false
     private destroyed = false
-    private size: CanvasEngineSize = { width: 1, height: 1 }
+    private size: CanvasEngineSize = {
+        width: 1,
+        height: 1,
+    }
 
     constructor(private readonly options: CanvasRendererOptions) {
-        this.frames = new FrameScheduler({ render: () => this.render(), onError: options.onError })
-        this.backend = new PixiDrawingResources(this.app.stage, this.retire, () => this.schedule())
+        this.frames = new FrameScheduler({
+            render: () => this.render(),
+            onError: options.onError,
+        })
+        this.backend = new PixiDrawingResources(
+            this.app.stage,
+            this.retire,
+            () => this.schedule(),
+        )
         this.resources = new ScopedDrawingResources(this.backend, this.lifetime)
-        this.layers = Object.freeze({ connectors: this.backend.addLayer(), media: this.backend.addLayer(), foreground: this.backend.addLayer() })
+        this.layers = Object.freeze({
+            connectors: this.backend.addLayer(),
+            media: this.backend.addLayer(),
+            foreground: this.backend.addLayer(),
+        })
         this.mediaCache = new CanvasMedia({
             resolver: options.mediaResolver ?? {
                 resolve: async () => {
@@ -70,17 +88,30 @@ export class CanvasRenderer {
             cache: options.mediaCache,
             decoder: options.decoder,
             createTexture: bitmap => {
-                const texture = this.backend.createOwnedTexture({ kind: 'image', source: bitmap, mipmaps: true }, () => bitmap.close())
-                return { texture, release: () => this.backend.release(texture) }
+                const texture = this.backend.createOwnedTexture(
+                    {
+                        kind: 'image',
+                        source: bitmap,
+                        mipmaps: true,
+                    },
+                    () => bitmap.close(),
+                )
+
+                return {
+                    texture,
+                    release: () => this.backend.release(texture),
+                }
             },
         })
         this.media = this.mediaCache.scoped(this.lifetime.signal)
+
         try {
             this.resizeObserver = new ResizeObserver(() => this.resize())
             this.resizeObserver.observe(options.root)
             this.ready = this.initialize()
         } catch (error) {
             this.destroy()
+
             throw error
         }
     }
@@ -96,43 +127,69 @@ export class CanvasRenderer {
                 autoStart: false,
                 sharedTicker: false,
                 gcActive: false,
-                webgpu: { antialias: true, powerPreference: 'high-performance' },
-                webgl: { antialias: true, powerPreference: 'high-performance' },
+                webgpu: {
+                    antialias: true,
+                    powerPreference: 'high-performance',
+                },
+                webgl: {
+                    antialias: true,
+                    powerPreference: 'high-performance',
+                },
             })
             this.app.ticker.stop()
             this.initialized = true
-            if ('gpu' in this.app.renderer && 'buffer' in this.app.renderer) this.gpuRetirement = new PixiGpuRetirement(this.app.renderer, this.retire)
+
+            if (
+                'gpu' in this.app.renderer
+                && 'buffer' in this.app.renderer
+            )
+                this.gpuRetirement = new PixiGpuRetirement(this.app.renderer, this.retire)
+
             if (this.destroyed) {
                 await this.disposeApplication()
+
                 return false
             }
+
             this.canvas = this.app.canvas
             this.canvas.style.pointerEvents = 'none'
             this.options.root.appendChild(this.canvas)
             this.resize()
+
             return true
         } catch (error) {
             this.initialized = Boolean(this.app.renderer)
+
             if (!this.destroyed) {
                 this.options.onError(error)
                 this.destroy()
-            } else if (this.initialized) {
+            } else if (this.initialized)
                 await this.disposeApplication()
-            }
+
             return false
         }
     }
 
     resize(size?: CanvasEngineSize): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         const bounds = size ?? this.options.root.getBoundingClientRect()
-        this.size = { width: Math.max(1, bounds.width), height: Math.max(1, bounds.height) }
-        if (this.initialized) this.app.renderer.resize(this.size.width, this.size.height)
+        this.size = {
+            width: Math.max(1, bounds.width),
+            height: Math.max(1, bounds.height),
+        }
+
+        if (this.initialized)
+            this.app.renderer.resize(this.size.width, this.size.height)
+
         this.invalidate()
     }
 
     setViewport(viewport: CanvasViewport): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.backend.setViewport(viewport)
     }
 
@@ -142,7 +199,11 @@ export class CanvasRenderer {
     }
 
     private schedule(bounds?: CanvasEngineRect): void {
-        if (!this.destroyed && this.initialized) this.frames.invalidate(bounds)
+        if (
+            !this.destroyed
+            && this.initialized
+        )
+            this.frames.invalidate(bounds)
     }
 
     requestFrame(callback: (elapsedMs: number) => void): Dispose {
@@ -150,22 +211,39 @@ export class CanvasRenderer {
     }
 
     createScope(): CanvasDrawingScope {
-        if (this.destroyed) throw new Error('Canvas renderer is disposed')
-        return new CanvasDrawingScope({
-            resources: this.backend,
-            media: this.media,
-            layers: this.layers,
-            requestFrame: callback => this.requestFrame(callback),
-            invalidate: bounds => this.invalidate(bounds),
-        }, this.lifetime.child())
+        if (this.destroyed)
+            throw new Error('Canvas renderer is disposed')
+
+        return new CanvasDrawingScope(
+            {
+                resources: this.backend,
+                media: this.media,
+                layers: this.layers,
+                requestFrame: callback => this.requestFrame(callback),
+                invalidate: bounds => this.invalidate(bounds),
+            },
+            this.lifetime.child(),
+        )
     }
 
     private render(): void {
-        if (this.destroyed || !this.initialized) return
+        if (
+            this.destroyed
+            || !this.initialized
+        )
+            return
+
         this.options.beforeRender?.()
-        if (this.destroyed) return
+
+        if (this.destroyed)
+            return
+
         this.backend.renderCaptures(this.app.renderer)
-        this.backend.prepareProjection({ x: 0, y: 0, ...this.size })
+        this.backend.prepareProjection({
+            x: 0,
+            y: 0,
+            ...this.size,
+        })
         this.app.render()
     }
 
@@ -181,16 +259,21 @@ export class CanvasRenderer {
     private async drainRetirements(): Promise<void> {
         // Yield once so the retirement promise is registered before cleanup can finish.
         await Promise.resolve()
+
         try {
             while (this.retirements.length > 0) {
                 const batch = this.retirements.splice(0)
+
                 try {
-                    if (this.initialized && 'gpu' in this.app.renderer) {
+                    if (
+                        this.initialized
+                        && 'gpu' in this.app.renderer
+                    )
                         await this.app.renderer.gpu.device.queue.onSubmittedWorkDone()
-                    }
                 } catch (error) {
                     this.options.onError(error)
                 }
+
                 for (const dispose of batch) {
                     try {
                         dispose()
@@ -205,29 +288,37 @@ export class CanvasRenderer {
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.resizeObserver?.disconnect()
         this.frames.destroy()
         this.canvas?.remove()
+
         try {
             this.lifetime.destroy()
         } catch (error) {
             this.options.onError(error)
         }
+
         this.mediaCache.destroy()
         this.backend.destroy()
-        if (this.initialized) void this.disposeApplication()
+
+        if (this.initialized)
+            void this.disposeApplication()
     }
 
     private disposeApplication(): Promise<void> {
         this.applicationDisposal ??= this.destroyApplication()
+
         return this.applicationDisposal
     }
 
     private async destroyApplication(): Promise<void> {
         try {
             await this.retirement
+
             if ('gpu' in this.app.renderer) {
                 try {
                     await this.app.renderer.gpu.device.queue.onSubmittedWorkDone()
@@ -235,10 +326,18 @@ export class CanvasRenderer {
                     this.options.onError(error)
                 }
             }
+
             this.gpuRetirement?.destroy()
             this.gpuRetirement = null
             this.initialized = false
-            this.app.destroy(true, { children: true, texture: false, textureSource: false })
+            this.app.destroy(
+                true,
+                {
+                    children: true,
+                    texture: false,
+                    textureSource: false,
+                },
+            )
             await this.retirement
         } catch (error) {
             this.options.onError(error)

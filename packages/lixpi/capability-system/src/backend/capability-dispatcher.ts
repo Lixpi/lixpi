@@ -48,7 +48,10 @@ export type CapabilityUseRequest = {
     signal?: AbortSignal
     onRunCreated?: (run: Readonly<CapabilityRun>) => void | Promise<void>
     onEvent?: (event: Readonly<CapabilityRunEvent>) => void | Promise<void>
-    variant?: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
+    variant?: {
+        axis: 'request'
+        variantKey: 'request'
+    } | CapabilityReasoningModelVariant
 }
 
 export type CapabilityDispatcherOptions = {
@@ -56,10 +59,11 @@ export type CapabilityDispatcherOptions = {
     registry: CapabilityActionRegistry
     createPersistence: (userId: string) => CapabilityRunPersistence
     createEventStreamName: (run: CapabilityRun) => string
-    search: (request: CapabilitySearchRequest, requester: CapabilityRequesterContext) => Promise<CapabilitySearchResult>
-    createEventHandler?: (
-        request: CapabilityUseRequest,
-    ) => ((event: Readonly<CapabilityRunEvent>) => void | Promise<void>) | undefined
+    search: (
+        request: CapabilitySearchRequest,
+        requester: CapabilityRequesterContext,
+    ) => Promise<CapabilitySearchResult>
+    createEventHandler?: (request: CapabilityUseRequest) => ((event: Readonly<CapabilityRunEvent>) => void | Promise<void>) | undefined
 }
 
 export class CapabilityDispatcher {
@@ -75,10 +79,16 @@ export class CapabilityDispatcher {
         request: CapabilitySearchRequest,
         requester: CapabilityRequesterContext,
     ): Promise<CapabilitySearchResult> {
-        return await this.options.search({
-            ...request,
-            limit: Math.min(20, Math.max(1, request.limit ?? 10)),
-        }, requester)
+        return await this.options.search(
+            {
+                ...request,
+                limit: Math.min(
+                    20,
+                    Math.max(1, request.limit ?? 10),
+                ),
+            },
+            requester,
+        )
     }
 
     async use(request: CapabilityUseRequest): Promise<CapabilityWorkflowRunResult> {
@@ -88,15 +98,21 @@ export class CapabilityDispatcher {
                 'A Capability Tool run cannot recursively invoke another Capability Tool through a chat turn',
             )
         }
+
         const plan = request.sealedPlan?.getManifest(request.capabilityId)
             ? request.sealedPlan
-            : await this.resolveToolPlan(request.capabilityId, request.requester, request.signal)
+            : await this.resolveToolPlan(
+                request.capabilityId,
+                request.requester,
+                request.signal,
+            )
         const runner = new CapabilityWorkflowRunner({
             registry: this.options.registry,
             persistence: this.options.createPersistence(request.requester.userId),
             createEventStreamName: this.options.createEventStreamName,
         })
         const eventHandler = request.onEvent ?? this.options.createEventHandler?.(request)
+
         return await runner.run({
             plan,
             rootCapabilityId: request.capabilityId,
@@ -112,7 +128,10 @@ export class CapabilityDispatcher {
             signal: request.signal,
             onRunCreated: request.onRunCreated,
             onEvent: eventHandler,
-            variant: request.variant ?? { axis: 'request', variantKey: 'request' },
+            variant: request.variant ?? {
+                axis: 'request',
+                variantKey: 'request',
+            },
         })
     }
 
@@ -121,14 +140,20 @@ export class CapabilityDispatcher {
         requester: CapabilityRequesterContext,
         signal?: AbortSignal,
     ): Promise<SealedResolvedCapabilityPlan> {
-        return await resolveCapabilities([
-            { capabilityId, kind: 'tool' } satisfies CapabilityPromptReference,
-        ], {
-            store: this.options.store,
-            requester,
-            allowedActions: this.options.registry.allowedActionKeys(),
-            signal,
-        })
+        return await resolveCapabilities(
+            [
+                {
+                    capabilityId,
+                    kind: 'tool',
+                } satisfies CapabilityPromptReference,
+            ],
+            {
+                store: this.options.store,
+                requester,
+                allowedActions: this.options.registry.allowedActionKeys(),
+                signal,
+            },
+        )
     }
 
     async startDetached(request: Omit<CapabilityUseRequest, 'signal' | 'onRunCreated'>): Promise<CapabilityRun> {
@@ -144,15 +169,23 @@ export class CapabilityDispatcher {
             signal: controller.signal,
             onRunCreated: run => {
                 const snapshot = structuredClone(run)
-                this.activeRuns.set(run.runId, {
-                    controller,
-                    userId: request.requester.userId,
-                    workspaceId: request.requester.workspaceId,
-                })
+                this.activeRuns.set(
+                    run.runId,
+                    {
+                        controller,
+                        userId: request.requester.userId,
+                        workspaceId: request.requester.workspaceId,
+                    },
+                )
                 resolveCreated(snapshot)
             },
         })
-        void this.observeDetachedExecution(execution, controller, rejectCreated)
+        void this.observeDetachedExecution(
+            execution,
+            controller,
+            rejectCreated,
+        )
+
         return await created
     }
 
@@ -166,17 +199,33 @@ export class CapabilityDispatcher {
             this.activeRuns.delete(result.run.runId)
         } catch (error) {
             for (const [runId, active] of this.activeRuns) {
-                if (active.controller !== controller) continue
+                if (active.controller !== controller)
+                    continue
+
                 this.activeRuns.delete(runId)
             }
+
             rejectCreated(error)
         }
     }
 
-    stopDetached(run: Pick<CapabilityRun, 'runId' | 'workspaceId'>, userId: string): boolean {
+    stopDetached(
+        run: Pick<CapabilityRun, 'runId' | 'workspaceId'>,
+        userId: string,
+    ): boolean {
         const active = this.activeRuns.get(run.runId)
-        if (!active || active.userId !== userId || active.workspaceId !== run.workspaceId) return false
-        active.controller.abort(new Error('Capability run stopped by user'))
+
+        if (
+            !active
+            || active.userId !== userId
+            || active.workspaceId !== run.workspaceId
+        )
+            return false
+
+        active.controller.abort(
+            new Error('Capability run stopped by user'),
+        )
+
         return true
     }
 }

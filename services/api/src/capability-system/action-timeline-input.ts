@@ -8,14 +8,17 @@ import {
 } from '@lixpi/capability-system'
 
 export type ActionTimelineInputResolution =
-    | { valid: true; input: ActionTimelineInput }
+    | {
+        valid: true
+        input: ActionTimelineInput
+    }
     | {
         valid: false
         error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED'
         missingInputFields: Array<'durationMs' | 'precisionMs'>
     }
 
-export function resolveActionTimelineInput({
+export const resolveActionTimelineInput = ({
     prompt,
     referenceAssetIds,
     routedInput,
@@ -25,7 +28,7 @@ export function resolveActionTimelineInput({
     referenceAssetIds: string[]
     routedInput?: Readonly<Record<string, CapabilityJsonValue>>
     submittedInput?: Readonly<Record<string, CapabilityJsonValue>>
-}): ActionTimelineInputResolution {
+}): ActionTimelineInputResolution => {
     const promptTiming = parseActionTimelineTiming(prompt)
     const durationMs = promptTiming.durationMs
         ?? readNumber(routedInput?.durationMs)
@@ -33,7 +36,11 @@ export function resolveActionTimelineInput({
     const precisionMs = promptTiming.precisionMs
         ?? readNumber(routedInput?.precisionMs)
         ?? readNumber(submittedInput?.precisionMs)
-    if (durationMs === undefined || precisionMs === undefined) {
+
+    if (
+        durationMs === undefined
+        || precisionMs === undefined
+    ) {
         return {
             valid: false,
             error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED',
@@ -43,7 +50,9 @@ export function resolveActionTimelineInput({
             ],
         }
     }
+
     assertTimelineTiming(durationMs, precisionMs)
+
     return {
         valid: true,
         input: {

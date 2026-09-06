@@ -9,4 +9,7 @@ export * from './shared/stream-assembly.ts'
 export * from './shared/thread-doc.ts'
 export * from './shared/transport-types.ts'
 export * from './backend/headless-engine.ts'
-export { Mapping, Step } from 'prosemirror-transform'
+export {
+    Mapping,
+    Step,
+} from 'prosemirror-transform'

@@ -18,7 +18,7 @@
     white-space: pre-wrap;
     white-space: break-spaces;
     font-variant-ligatures: none;
-    font-feature-settings: "liga" 0; /* the above doesn't seem to work in Edge */
+    font-feature-settings: "liga" 0; // the above doesn't seem to work in Edge
     line-height: 1.2;
     outline: none;
     background: #fff;
@@ -72,7 +72,7 @@
     .empty-node-placeholder:empty:before {
         display: block;
     }
-    /* Also show placeholder when the only child is the PM trailing BR */
+    // Also show placeholder when the only child is the PM trailing BR
     .empty-node-placeholder:has(> br.ProseMirror-trailingBreak:only-child):before {
         display: block;
     }
@@ -94,7 +94,7 @@
 
 //TODO rename, refactor
 .ProseMirror-example-setup-style {
-    /* Add space around the hr to make clicking it easier */
+    // Add space around the hr to make clicking it easier
     hr {
         padding: 2px 10px;
         border: none;
@@ -128,7 +128,7 @@
 // 	outline: 2px solid #8cf;
 // }
 
-/* Make sure li selections wrap around markers */
+// Make sure li selections wrap around markers
 
 li.ProseMirror-selectednode {
     outline: none;
@@ -145,7 +145,7 @@ li.ProseMirror-selectednode:after {
     pointer-events: none;
 }
 
-/* Protect against generic img rules */
+// Protect against generic img rules
 
 img.ProseMirror-separator {
     display: inline !important;

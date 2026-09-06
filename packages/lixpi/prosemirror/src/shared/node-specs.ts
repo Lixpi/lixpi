@@ -117,30 +117,39 @@ export const aiChatThreadNodeSpec = {
                     status: dom.getAttribute('data-status') || 'active',
                     mediaGenerationMode: dom.getAttribute('data-media-generation-mode') === 'video' ? 'video' : 'image',
                     aiReasoningModels: dom.getAttribute('data-ai-reasoning-models') || '',
-                    reasoningGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-reasoning-generation-config-groups')),
+                    reasoningGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(
+                        dom.getAttribute('data-reasoning-generation-config-groups'),
+                    ),
                     useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true',
                     useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true',
                     useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true',
                     aiImageModels: dom.getAttribute('data-ai-image-models') || '',
                     imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
                     imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
-                    imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups')),
+                    imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(
+                        dom.getAttribute('data-image-generation-config-groups'),
+                    ),
                     previousResponseId: dom.getAttribute('data-previous-response-id') || '',
                     aiVideoModels: dom.getAttribute('data-ai-video-models') || '',
                     videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                     videoResolution: dom.getAttribute('data-video-resolution') || '',
                     videoDuration: dom.getAttribute('data-video-duration') || '',
-                    videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups')),
+                    videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(
+                        dom.getAttribute('data-video-generation-config-groups'),
+                    ),
                     sourceVideoNodeId: dom.getAttribute('data-source-video-node-id') || '',
-                    capabilityInputs: normalizeCapabilityInputsAttr(dom.getAttribute('data-capability-inputs')),
+                    capabilityInputs: normalizeCapabilityInputsAttr(
+                        dom.getAttribute('data-capability-inputs'),
+                    ),
                 }
             },
         },
     ],
-    toDOM: (node) => {
+    toDOM: node => {
         const useMultipleReasoningModels = parseBooleanAttr(node.attrs.useMultipleReasoningModels)
         const useMultipleImageModels = parseBooleanAttr(node.attrs.useMultipleImageModels)
         const useMultipleVideoModels = parseBooleanAttr(node.attrs.useMultipleVideoModels)
+
         return [
             'div',
             {
@@ -254,7 +263,9 @@ export const aiUserMessageNodeSpec = {
                 class: 'ai-user-message',
                 'data-id': node.attrs.id,
                 'data-created-at': String(node.attrs.createdAt || 0),
-                'data-reference-node-ids': JSON.stringify(normalizeReferenceNodeIds(node.attrs.referenceNodeIds)),
+                'data-reference-node-ids': JSON.stringify(
+                    normalizeReferenceNodeIds(node.attrs.referenceNodeIds),
+                ),
             },
             0,
         ]
@@ -264,23 +275,33 @@ export const aiUserMessageNodeSpec = {
 export function normalizeReferenceNodeIds(value: unknown): string[] {
     const rawIds = Array.isArray(value)
         ? value
-        : typeof value === 'string' && value.trim()
-        ? parseReferenceNodeIds(value)
-        : []
+        : typeof value === 'string'
+            && value.trim()
+            ? parseReferenceNodeIds(value)
+            : []
     const ids: string[] = []
     const seen = new Set<string>()
+
     for (const rawId of rawIds) {
         const nodeId = typeof rawId === 'string' ? rawId.trim() : ''
-        if (!nodeId || seen.has(nodeId)) continue
+
+        if (
+            !nodeId
+            || seen.has(nodeId)
+        )
+            continue
+
         seen.add(nodeId)
         ids.push(nodeId)
     }
+
     return ids
 }
 
 function parseReferenceNodeIds(value: string): unknown[] {
     try {
         const parsed = JSON.parse(value)
+
         return Array.isArray(parsed) ? parsed : []
     } catch {
         return value.split(',')
@@ -319,22 +340,37 @@ export const aiPromptInputNodeSpec = {
                 const useMultipleReasoningModels = dom.getAttribute('data-use-multiple-reasoning-models') === 'true'
                 const useMultipleImageModels = dom.getAttribute('data-use-multiple-image-models') === 'true'
                 const useMultipleVideoModels = dom.getAttribute('data-use-multiple-video-models') === 'true'
+
                 return {
                     mediaGenerationMode: dom.getAttribute('data-media-generation-mode') === 'video' ? 'video' : 'image',
-                    aiReasoningModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-reasoning-models')),
-                    reasoningGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-reasoning-generation-config-groups')),
+                    aiReasoningModels: normalizeAiModelSelectionAttr(
+                        dom.getAttribute('data-ai-reasoning-models'),
+                    ),
+                    reasoningGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(
+                        dom.getAttribute('data-reasoning-generation-config-groups'),
+                    ),
                     useMultipleReasoningModels,
                     useMultipleImageModels,
                     useMultipleVideoModels,
-                    aiImageModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-image-models')),
+                    aiImageModels: normalizeAiModelSelectionAttr(
+                        dom.getAttribute('data-ai-image-models'),
+                    ),
                     imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
-                    imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups')),
-                    aiVideoModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-video-models')),
+                    imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(
+                        dom.getAttribute('data-image-generation-config-groups'),
+                    ),
+                    aiVideoModels: normalizeAiModelSelectionAttr(
+                        dom.getAttribute('data-ai-video-models'),
+                    ),
                     videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                     videoResolution: dom.getAttribute('data-video-resolution') || '',
                     videoDuration: dom.getAttribute('data-video-duration') || '',
-                    videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups')),
-                    capabilityInputs: normalizeCapabilityInputsAttr(dom.getAttribute('data-capability-inputs')),
+                    videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(
+                        dom.getAttribute('data-video-generation-config-groups'),
+                    ),
+                    capabilityInputs: normalizeCapabilityInputsAttr(
+                        dom.getAttribute('data-capability-inputs'),
+                    ),
                 }
             },
         },
@@ -343,6 +379,7 @@ export const aiPromptInputNodeSpec = {
         const useMultipleReasoningModels = parseBooleanAttr(node.attrs.useMultipleReasoningModels)
         const useMultipleImageModels = parseBooleanAttr(node.attrs.useMultipleImageModels)
         const useMultipleVideoModels = parseBooleanAttr(node.attrs.useMultipleVideoModels)
+
         return [
             'div',
             {
@@ -418,7 +455,9 @@ export const aiGeneratedImageNodeSpec = {
                     reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
                     mediaModelId: dom.getAttribute('data-media-model-id') || '',
                     mediaType: dom.getAttribute('data-media-type') || '',
-                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
+                    variantIndex: parseVariantIndex(
+                        dom.getAttribute('data-variant-index'),
+                    ),
                     branchId: dom.getAttribute('data-branch-id') || '',
                     parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
@@ -520,7 +559,9 @@ export const aiGeneratedVideoNodeSpec = {
                     reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
                     mediaModelId: dom.getAttribute('data-media-model-id') || '',
                     mediaType: dom.getAttribute('data-media-type') || '',
-                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
+                    variantIndex: parseVariantIndex(
+                        dom.getAttribute('data-variant-index'),
+                    ),
                     branchId: dom.getAttribute('data-branch-id') || '',
                     parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
@@ -594,10 +635,7 @@ export const aiCollapsibleBlockNodeSpec = {
         {
             tag: 'div.ai-generation-trace-block',
             getAttrs(dom: HTMLElement) {
-                return parseTraceBlockAttrs(
-                    dom,
-                    dom.getAttribute('data-title') || 'Image generation prompt',
-                )
+                return parseTraceBlockAttrs(dom, dom.getAttribute('data-title') || 'Image generation prompt')
             },
         },
     ],
@@ -645,11 +683,15 @@ export const aiReasoningSectionNodeSpec = {
                     generationRequestId: dom.getAttribute('data-generation-request-id') || '',
                     reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
                     reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
-                    reasoningIndex: parseReasoningIndex(dom.getAttribute('data-reasoning-index')),
+                    reasoningIndex: parseReasoningIndex(
+                        dom.getAttribute('data-reasoning-index'),
+                    ),
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
                     branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
-                    lineageProjectionScope: normalizeAiLineageProjectionScope(dom.getAttribute('data-lineage-projection-scope')),
+                    lineageProjectionScope: normalizeAiLineageProjectionScope(
+                        dom.getAttribute('data-lineage-projection-scope'),
+                    ),
                     isReceivingAnimation: false,
                 }
             },
@@ -693,7 +735,9 @@ export const aiLineageEventNodeSpec = {
             tag: 'div.ai-lineage-event',
             getAttrs(dom: HTMLElement) {
                 return {
-                    kind: normalizeAiLineageEventKind(dom.getAttribute('data-lineage-event-kind')),
+                    kind: normalizeAiLineageEventKind(
+                        dom.getAttribute('data-lineage-event-kind'),
+                    ),
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
                     branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
@@ -704,6 +748,7 @@ export const aiLineageEventNodeSpec = {
     ],
     toDOM(node) {
         const kind = normalizeAiLineageEventKind(node.attrs.kind)
+
         return [
             'div',
             {
@@ -757,12 +802,18 @@ export const aiChatNodeSpecs = {
 }
 
 function parseVariantIndex(value: string | null): number | null {
-    if (!value) return null
+    if (!value)
+        return null
+
     const parsed = Number(value)
+
     return Number.isFinite(parsed) ? parsed : null
 }
 
-function parseTraceBlockAttrs(dom: HTMLElement, title: string) {
+function parseTraceBlockAttrs(
+    dom: HTMLElement,
+    title: string,
+) {
     return {
         title,
         isOpen: false,
@@ -777,12 +828,21 @@ function parseTraceBlockAttrs(dom: HTMLElement, title: string) {
         reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
         mediaModelId: dom.getAttribute('data-media-model-id') || '',
         mediaType: dom.getAttribute('data-media-type') || '',
-        variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
+        variantIndex: parseVariantIndex(
+            dom.getAttribute('data-variant-index'),
+        ),
     }
 }
 
 function parseReasoningIndex(value: string | null): number | null {
-    if (value === null || value === undefined || value === '') return null
+    if (
+        value === null
+        || value === undefined
+        || value === ''
+    )
+        return null
+
     const parsed = Number(value)
+
     return Number.isFinite(parsed) ? parsed : null
 }

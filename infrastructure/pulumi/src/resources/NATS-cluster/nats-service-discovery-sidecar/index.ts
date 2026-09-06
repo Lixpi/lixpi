@@ -1,10 +1,10 @@
+import { log as debugLog } from '@lixpi/debug-tools'
 import {
     type Context,
 } from 'aws-lambda'
 import {
     Route53Client,
     ChangeResourceRecordSetsCommand,
-    ListResourceRecordSetsCommand,
 } from '@aws-sdk/client-route-53'
 import {
     ECSClient,
@@ -78,8 +78,15 @@ const ec2Client = new EC2Client({
     region: process.env.AWS_REGION,
 })
 
-const log = (message: string, data?: any) => {
-    console.log(`[NATS-ServiceDiscovery] ${message}`, data ? JSON.stringify(data, null, 2) : '')
+const log = (
+    message: string,
+    data?: any,
+) => {
+    debugLog(`[NATS-ServiceDiscovery] ${message}`, data ? JSON.stringify(
+        data,
+        null,
+        2,
+    ) : '')
 }
 
 const isTaskReadyForRegistration = (task: any): boolean => {
@@ -88,14 +95,12 @@ const isTaskReadyForRegistration = (task: any): boolean => {
 
     if (natsContainer) {
         // Container must be running
-        if (natsContainer.lastStatus !== 'RUNNING') {
+        if (natsContainer.lastStatus !== 'RUNNING')
             return false
-        }
 
         // If health status is explicitly UNHEALTHY, don't register
-        if (natsContainer.healthStatus === 'UNHEALTHY') {
+        if (natsContainer.healthStatus === 'UNHEALTHY')
             return false
-        }
 
         // Allow UNKNOWN, HEALTHY, or no health status
         // This handles the case where health checks haven't completed yet
@@ -103,14 +108,16 @@ const isTaskReadyForRegistration = (task: any): boolean => {
 
     // Allow registration for RUNNING tasks even if overall health is UNKNOWN
     // Only reject if explicitly UNHEALTHY
-    if (task.healthStatus === 'UNHEALTHY') {
+    if (task.healthStatus === 'UNHEALTHY')
         return false
-    }
 
     return true
 }
 
-const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<string | null> => {
+const getTaskPublicIP = async (
+    taskArn: string,
+    clusterArn: string,
+): Promise<string | null> => {
     try {
         const response = await ecsClient.send(
             new DescribeTasksCommand({
@@ -121,26 +128,38 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
         )
 
         const task = response.tasks?.[0]
+
         if (!task) {
             log('Task not found', { taskArn })
+
             return null
         }
 
         // Look for network interface ID in task ENI attachments
         let networkInterfaceId: string | null = null
+
         for (const attachment of task.attachments || []) {
             if (attachment.type === 'ElasticNetworkInterface') {
                 for (const detail of attachment.details || []) {
-                    if (detail.name === 'networkInterfaceId' && detail.value) {
+                    if (
+                        detail.name === 'networkInterfaceId'
+                        && detail.value
+                    ) {
                         networkInterfaceId = detail.value
+
                         break
                     }
                 }
             }
-            if (networkInterfaceId) break
+
+            if (networkInterfaceId)
+                break
         }
 
-        if (!networkInterfaceId && task.containerInstanceArn) {
+        if (
+            !networkInterfaceId
+            && task.containerInstanceArn
+        ) {
             const containerInstances = await ecsClient.send(
                 new DescribeContainerInstancesCommand({
                     cluster: clusterArn,
@@ -148,15 +167,21 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
                 }),
             )
             const ec2InstanceId = containerInstances.containerInstances?.[0]?.ec2InstanceId
+
             if (ec2InstanceId) {
-                const instances = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [ec2InstanceId] }))
+                const instances = await ec2Client.send(
+                    new DescribeInstancesCommand({ InstanceIds: [ec2InstanceId] }),
+                )
                 const publicIP = instances.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress
-                if (publicIP) return publicIP
+
+                if (publicIP)
+                    return publicIP
             }
         }
 
         if (!networkInterfaceId) {
             log('No network interface or EC2 public IP found for task', { taskArn })
+
             return null
         }
 
@@ -171,23 +196,38 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
         const publicIP = networkInterface?.Association?.PublicIp
 
         if (publicIP) {
-            log('Found public IP via network interface', {
-                taskArn,
-                networkInterfaceId,
-                publicIP,
-            })
+            log(
+                'Found public IP via network interface',
+                {
+                    taskArn,
+                    networkInterfaceId,
+                    publicIP,
+                },
+            )
+
             return publicIP
         }
 
-        log('No public IP found for task', {
-            taskArn,
-            networkInterfaceId,
-            hasAssociation: !!networkInterface?.Association,
-        })
+        log(
+            'No public IP found for task',
+            {
+                taskArn,
+                networkInterfaceId,
+                hasAssociation: !!networkInterface?.Association,
+            },
+        )
+
         return null
     } catch (error) {
         const err = error as Error
-        log('Error getting task public IP', { taskArn, error: err.message })
+        log(
+            'Error getting task public IP',
+            {
+                taskArn,
+                error: err.message,
+            },
+        )
+
         return null
     }
 }
@@ -214,22 +254,32 @@ const updateRoute53Records = async (
             },
         }
 
-        const response = await route53Client.send(new ChangeResourceRecordSetsCommand(changeRequest))
-        log('Successfully updated Route53 records', {
-            hostedZoneId,
-            recordName,
-            ips: publicIPs,
-            changeId: response.ChangeInfo?.Id,
-        })
+        const response = await route53Client.send(
+            new ChangeResourceRecordSetsCommand(changeRequest),
+        )
+        log(
+            'Successfully updated Route53 records',
+            {
+                hostedZoneId,
+                recordName,
+                ips: publicIPs,
+                changeId: response.ChangeInfo?.Id,
+            },
+        )
+
         return true
     } catch (error) {
         const err = error as Error
-        log('Error updating Route53 records', {
-            hostedZoneId,
-            recordName,
-            ips: publicIPs,
-            error: err.message,
-        })
+        log(
+            'Error updating Route53 records',
+            {
+                hostedZoneId,
+                recordName,
+                ips: publicIPs,
+                error: err.message,
+            },
+        )
+
         return false
     }
 }
@@ -247,8 +297,12 @@ const getAllHealthyNatsTaskIPs = async (clusterArn: string): Promise<string[]> =
             }),
         )
 
-        if (!listResponse.taskArns || listResponse.taskArns.length === 0) {
+        if (
+            !listResponse.taskArns
+            || listResponse.taskArns.length === 0
+        ) {
             log('No running tasks found in cluster')
+
             return healthyIPs
         }
 
@@ -264,21 +318,32 @@ const getAllHealthyNatsTaskIPs = async (clusterArn: string): Promise<string[]> =
         // Get public IPs for healthy NATS tasks
         for (const task of describeResponse.tasks || []) {
             // Only process NATS tasks
-            if (task.taskDefinitionArn && isNATSTask(task.taskDefinitionArn)) {
+            if (
+                task.taskDefinitionArn
+                && isNATSTask(task.taskDefinitionArn)
+            ) {
                 if (isTaskReadyForRegistration(task)) {
                     const publicIP = await getTaskPublicIP(task.taskArn!, clusterArn)
-                    if (publicIP) {
+
+                    if (publicIP)
                         healthyIPs.push(publicIP)
-                    }
                 }
             }
         }
 
-        log('Found healthy NATS task IPs', { count: healthyIPs.length, ips: healthyIPs })
+        log(
+            'Found healthy NATS task IPs',
+            {
+                count: healthyIPs.length,
+                ips: healthyIPs,
+            },
+        )
+
         return healthyIPs
     } catch (error) {
         const err = error as Error
         log('Error getting healthy NATS task IPs', { error: err.message })
+
         return healthyIPs
     }
 }
@@ -291,10 +356,14 @@ const isNATSTask = (taskDefinitionArn: string): boolean => {
 const generateInstanceId = (taskArn: string): string => {
     // Extract task ID from ARN and create a predictable instance ID
     const taskId = taskArn.split('/').pop() || taskArn
+
     return `nats-${taskId}`
 }
 
-export const handler = async (event: CloudWatchEvent, context: Context) => {
+export const handler = async (
+    event: CloudWatchEvent,
+    context: Context,
+) => {
     const {
         ROUTE53_HOSTED_ZONE_ID,
         NATS_RECORD_NAME,
@@ -304,41 +373,57 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
 
     if (!ROUTE53_HOSTED_ZONE_ID) {
         log('Missing ROUTE53_HOSTED_ZONE_ID environment variable')
+
         return
     }
 
     if (!NATS_RECORD_NAME) {
         log('Missing NATS_RECORD_NAME environment variable')
+
         return
     }
 
     if (!ECS_CLUSTER_ARN) {
         log('Missing ECS_CLUSTER_ARN environment variable')
+
         return
     }
 
-    log('Received ECS task state change event', {
-        taskArn: event.detail.taskArn,
-        lastStatus: event.detail.lastStatus,
-        desiredStatus: event.detail.desiredStatus,
-        healthStatus: event.detail.healthStatus,
-        connectivity: event.detail.connectivity,
-    })
+    log(
+        'Received ECS task state change event',
+        {
+            taskArn: event.detail.taskArn,
+            lastStatus: event.detail.lastStatus,
+            desiredStatus: event.detail.desiredStatus,
+            healthStatus: event.detail.healthStatus,
+            connectivity: event.detail.connectivity,
+        },
+    )
 
     const { detail } = event
-    const { taskArn, taskDefinitionArn, lastStatus, desiredStatus, clusterArn } = detail
+    const {
+        taskArn,
+        taskDefinitionArn,
+        lastStatus,
+        desiredStatus,
+        clusterArn,
+    } = detail
 
     // Only process NATS tasks
     if (!isNATSTask(taskDefinitionArn)) {
         log('Ignoring non-NATS task', { taskDefinitionArn })
+
         return
     }
 
-    log('NATS task state changed, rebuilding Route53 record set', {
-        taskArn,
-        lastStatus,
-        desiredStatus,
-    })
+    log(
+        'NATS task state changed, rebuilding Route53 record set',
+        {
+            taskArn,
+            lastStatus,
+            desiredStatus,
+        },
+    )
 
     try {
         // On ANY NATS task state change, rebuild the entire record set
@@ -352,26 +437,35 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
                 NATS_RECORD_NAME,
                 healthyIPs,
             )
-            log('Successfully updated Route53 with healthy NATS IPs', {
-                recordName: NATS_RECORD_NAME,
-                ipCount: healthyIPs.length,
-                ips: healthyIPs,
-            })
+            log(
+                'Successfully updated Route53 with healthy NATS IPs',
+                {
+                    recordName: NATS_RECORD_NAME,
+                    ipCount: healthyIPs.length,
+                    ips: healthyIPs,
+                },
+            )
         } else {
-            log('Warning: No healthy NATS tasks found, keeping existing Route53 record', {
-                taskArn,
-                recordName: NATS_RECORD_NAME,
-            })
+            log(
+                'Warning: No healthy NATS tasks found, keeping existing Route53 record',
+                {
+                    taskArn,
+                    recordName: NATS_RECORD_NAME,
+                },
+            )
             // Note: We don't delete the record when no healthy tasks exist
             // This prevents DNS resolution failures during rolling deployments
         }
     } catch (error) {
         const err = error as Error
-        log('Error processing NATS task state change', {
-            taskArn,
-            error: err.message,
-            stack: err.stack,
-        })
+        log(
+            'Error processing NATS task state change',
+            {
+                taskArn,
+                error: err.message,
+                stack: err.stack,
+            },
+        )
         // Don't throw error to avoid Lambda retries for unrecoverable errors
     }
 }

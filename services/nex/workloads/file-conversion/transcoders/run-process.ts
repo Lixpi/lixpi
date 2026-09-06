@@ -16,19 +16,30 @@ export const runProcess = async (
     { timeoutMs = 120000 }: { timeoutMs?: number } = {},
 ): Promise<void> => {
     await new Promise<void>((resolve, reject) => {
-        const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'ignore'] })
+        const child = spawn(
+            command,
+            args,
+            { stdio: ['ignore', 'ignore', 'ignore'] },
+        )
         const timer = setTimeout(() => {
             child.kill('SIGKILL')
-            reject(new Error(`${command} timed out after ${timeoutMs}ms`))
+            reject(
+                new Error(`${command} timed out after ${timeoutMs}ms`),
+            )
         }, timeoutMs)
-        child.on('error', (e) => {
+        child.on('error', e => {
             clearTimeout(timer)
             reject(e)
         })
-        child.on('close', (code) => {
+        child.on('close', code => {
             clearTimeout(timer)
-            if (code === 0) resolve()
-            else reject(new Error(`${command} exited with code ${code}`))
+
+            if (code === 0)
+                resolve()
+            else
+                reject(
+                    new Error(`${command} exited with code ${code}`),
+                )
         })
     })
 }
@@ -36,11 +47,26 @@ export const runProcess = async (
 // Run `fn` inside a freshly created temp dir, always cleaning it up afterwards.
 // Transcoders need a seekable on-disk input (ffmpeg/soffice/pdftoppm all read
 // files, not pipes), so this is the shared scaffolding around that.
-export const withTempDir = async <T>(prefix: string, fn: (dir: string) => Promise<T>): Promise<T> => {
-    const dir = await mkdtemp(join(tmpdir(), prefix))
+export const withTempDir = async <T>(
+    prefix: string,
+    fn: (dir: string) => Promise<T>,
+): Promise<T> => {
+    const dir = await mkdtemp(
+        join(
+            tmpdir(),
+            prefix,
+        ),
+    )
+
     try {
         return await fn(dir)
     } finally {
-        await rm(dir, { recursive: true, force: true }).catch(() => {})
+        await rm(
+            dir,
+            {
+                recursive: true,
+                force: true,
+            },
+        ).catch(() => {})
     }
 }

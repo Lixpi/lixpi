@@ -14,7 +14,10 @@ import {
 export type MarqueeControllerOptions = {
     root: HTMLElement
     gestures: GestureController
-    getWorldPoint: (clientX: number, clientY: number) => CanvasEnginePoint
+    getWorldPoint: (
+        clientX: number,
+        clientY: number,
+    ) => CanvasEnginePoint
     threshold?: number
     lock?: () => Dispose
     onStart: () => void
@@ -26,13 +29,23 @@ export type MarqueeControllerOptions = {
 export class MarqueeController {
     private gesture: CanvasGesture | null = null
     private releaseLock: Dispose | undefined
-    private startClient: CanvasEnginePoint = { x: 0, y: 0 }
-    private startWorld: CanvasEnginePoint = { x: 0, y: 0 }
+    private startClient: CanvasEnginePoint = {
+        x: 0,
+        y: 0,
+    }
+    private startWorld: CanvasEnginePoint = {
+        x: 0,
+        y: 0,
+    }
     private rectangle: CanvasEngineRect | null = null
     private destroyed = false
 
     constructor(private readonly options: MarqueeControllerOptions) {
-        if (!Number.isFinite(options.threshold ?? 3) || (options.threshold ?? 3) < 0) throw new Error('Marquee threshold must be finite and nonnegative')
+        if (
+            !Number.isFinite(options.threshold ?? 3)
+            || (options.threshold ?? 3) < 0
+        )
+            throw new Error('Marquee threshold must be finite and nonnegative')
     }
 
     get active(): boolean {
@@ -43,30 +56,60 @@ export class MarqueeController {
     }
 
     start(event: MouseEvent | PointerEvent): void {
-        if (this.destroyed) throw new Error('Marquee controller is disposed')
+        if (this.destroyed)
+            throw new Error('Marquee controller is disposed')
+
         this.cancel()
-        this.startClient = { x: event.clientX, y: event.clientY }
+        this.startClient = {
+            x: event.clientX,
+            y: event.clientY,
+        }
         this.startWorld = this.options.getWorldPoint(event.clientX, event.clientY)
+
         try {
             this.releaseLock = this.options.lock?.()
-            this.gesture = this.options.gestures.start({ root: this.options.root, event, onMove: this.move, onEnd: this.end, onCancel: this.cancelled })
+            this.gesture = this.options.gestures.start({
+                root: this.options.root,
+                event,
+                onMove: this.move,
+                onEnd: this.end,
+                onCancel: this.cancelled,
+            })
         } catch (error) {
             this.cleanup()
+
             throw error
         }
     }
 
     private move = (event: MouseEvent | PointerEvent): void => {
         const first = !this.active
-        if (first && Math.max(Math.abs(event.clientX - this.startClient.x), Math.abs(event.clientY - this.startClient.y)) <= (this.options.threshold ?? 3)) return
+
+        if (
+            first
+            && Math.max(
+                Math.abs(event.clientX - this.startClient.x),
+                Math.abs(event.clientY - this.startClient.y),
+            ) <= (this.options.threshold ?? 3)
+        )
+            return
+
         try {
-            const rectangle = rectangleFromPoints(this.startWorld, this.options.getWorldPoint(event.clientX, event.clientY))
+            const rectangle = rectangleFromPoints(
+                this.startWorld,
+                this.options.getWorldPoint(event.clientX, event.clientY),
+            )
             assertCanvasBounds(rectangle)
             this.rectangle = rectangle
-            if (first) this.options.onStart()
-            if (this.rectangle) this.options.onChange({ ...this.rectangle })
+
+            if (first)
+                this.options.onStart()
+
+            if (this.rectangle)
+                this.options.onChange({ ...this.rectangle })
         } catch (error) {
             this.cancel()
+
             throw error
         }
     }
@@ -95,7 +138,9 @@ export class MarqueeController {
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.gesture?.cancel('destroyed')
     }

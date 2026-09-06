@@ -24,14 +24,15 @@ export type WorkspaceCanvasThreadStatePorts = {
 export class WorkspaceCanvasThreadState {
     constructor(private readonly ports: WorkspaceCanvasThreadStatePorts) {}
 
-    getDocumentsKey = (documents: WorkspaceCanvasDocument[]): string => {
-        return documents.map(document => document.documentId).sort().join(',')
-    }
+    getDocumentsKey = (documents: WorkspaceCanvasDocument[]): string =>
+        documents.map(document => document.documentId)
+            .sort()
+            .join(',')
 
     getThreadsKey = (threads: WorkspaceCanvasConversation[]): string => {
-        return threads
-            .filter(thread => !this.isDetached(thread.threadId))
-            .map(thread => `${thread.threadId}:${thread.content ? 'loaded' : 'pending'}`)
+        return threads.filter(thread => !this.isDetached(thread.threadId)).map(
+            thread => `${thread.threadId}:${thread.content ? 'loaded' : 'pending'}`,
+        )
             .sort()
             .join(',')
     }
@@ -40,17 +41,24 @@ export class WorkspaceCanvasThreadState {
         threads: WorkspaceCanvasConversation[],
         state: CanvasState | null,
         workspaceChanged: boolean,
-    ): WorkspaceCanvasConversation[] => this.ports.merge(threads, state, workspaceChanged)
+    ): WorkspaceCanvasConversation[] => this.ports.merge(
+        threads,
+        state,
+        workspaceChanged,
+    )
 
     isDetached = (threadId: string): boolean => threadId.startsWith('canvas-')
 
-    hasInProgressContent = (thread: WorkspaceCanvasConversation | undefined): boolean => {
-        return this.contentHasInProgressAiContent(thread?.content)
-    }
+    hasInProgressContent = (thread: WorkspaceCanvasConversation | undefined): boolean => this.contentHasInProgressAiContent(thread?.content)
 
     hasRecoverableTurn = (thread: WorkspaceCanvasConversation | undefined): boolean => {
-        if (!thread?.content) return false
-        return countProseMirrorNodesByType(thread.content, new Set(['aiUserMessage'])) > 0
+        if (!thread?.content)
+            return false
+
+        return countProseMirrorNodesByType(
+            thread.content,
+            new Set(['aiUserMessage']),
+        ) > 0
             || this.hasInProgressContent(thread)
     }
 
@@ -60,7 +68,9 @@ export class WorkspaceCanvasThreadState {
                 if (
                     (node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine')
                     && getBranchMarkerThreadId(node) === threadId
-                ) return true
+                )
+                    return true
+
                 return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
                     && node.generatedBy?.conversationAssetId === threadId
             }),
@@ -69,14 +79,30 @@ export class WorkspaceCanvasThreadState {
 
     isRecentUpdate = (thread: WorkspaceCanvasConversation): boolean => {
         const updatedAt = Number(thread.updatedAt)
+
         return Number.isFinite(updatedAt) && this.ports.now() - updatedAt <= this.ports.reattachWindowMs
     }
 
     private contentHasInProgressAiContent(value: unknown): boolean {
-        if (!value || typeof value !== 'object') return false
-        const node = value as { attrs?: Record<string, unknown>; content?: unknown[] }
+        if (
+            !value
+            || typeof value !== 'object'
+        )
+            return false
+
+        const node = value as {
+            attrs?: Record<string, unknown>
+            content?: unknown[]
+        }
         const attrs = node.attrs ?? {}
-        if (attrs.isReceivingAnimation || attrs.isStreaming || attrs.isPartial) return true
+
+        if (
+            attrs.isReceivingAnimation
+            || attrs.isStreaming
+            || attrs.isPartial
+        )
+            return true
+
         return Boolean(node.content?.some(content => this.contentHasInProgressAiContent(content)))
     }
 }

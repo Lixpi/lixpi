@@ -11,7 +11,11 @@ export {
 }
 
 // Define the node view for custom rendering and behavior
-export const aiResponseMessageNodeView = (node, view, getPos) => {
+export const aiResponseMessageNodeView = (
+    node,
+    view,
+    getPos,
+) => {
     const responseShell = createAiResponseMessageShell({
         messageId: node.attrs.id,
     })
@@ -37,9 +41,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
     // The only response animation is the one-shot content reveal on first render.
     // Receiving state is conveyed by the loading indicator.
-    const updateAnimation = () => {
-        responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
-    }
+    const updateAnimation = () => void responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
 
     const updateLoadingState = () => {
         const isWaitingForContent = node.childCount === 0 && node.attrs.isReceivingAnimation
@@ -47,9 +49,8 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         aiResponseMessageContainer.classList.toggle('is-waiting', isWaitingForContent)
         aiResponseMessageContainer.classList.toggle('is-empty', isWaitingForContent)
 
-        if (loadingElement) {
+        if (loadingElement)
             loadingElement.classList.toggle('is-active', isWaitingForContent)
-        }
     }
 
     updateAnimation()
@@ -59,23 +60,28 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     return {
         dom: parentWrapper, // The outer DOM node of the node view
         contentDOM: responseMessageContent, // The DOM node that holds the node's content
-        ignoreMutation: (mutation) => {
-            if (mutation.target === capabilityProgressElement || capabilityProgressElement.contains(mutation.target)) {
+        ignoreMutation: mutation => {
+            if (
+                mutation.target === capabilityProgressElement
+                || capabilityProgressElement.contains(mutation.target)
+            )
                 return true
-            }
+
             // Ignore style attribute changes on the wrapper. Without this,
             // ProseMirror's internal MutationObserver can detect a canvas-driven
             // style change and reconcile away the externally-set margin.
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            if (
+                mutation.type === 'attributes'
+                && mutation.attributeName === 'style'
+            )
                 return true
-            }
+
             return false
         },
-        update: (updatedNode) => {
+        update: updatedNode => {
             // Check if the updated node is still of the same type
-            if (updatedNode.type.name !== aiResponseMessageNodeType) {
+            if (updatedNode.type.name !== aiResponseMessageNodeType)
                 return false
-            }
 
             node = updatedNode // Update the node reference and refresh the animation
             responseShell.setMessageId(node.attrs.id)

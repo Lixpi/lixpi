@@ -28,18 +28,22 @@ export type FloatingMenuPositionOptions = {
     preferredPlacement?: FloatingMenuPlacement
 }
 
-export function resolveFloatingMenuScreenPosition(
+export const resolveFloatingMenuScreenPosition = (
     anchor: FloatingMenuRect,
     menu: FloatingMenuSize,
     viewport: FloatingMenuViewport,
     gap: number,
     options: FloatingMenuPositionOptions = {},
-): FloatingMenuScreenPosition {
-    const { viewportMargin = 8, preferredPlacement } = options
+): FloatingMenuScreenPosition => {
+    const {
+        viewportMargin = 8,
+        preferredPlacement,
+    } = options
     const spaceAbove = anchor.top - viewportMargin
     const spaceBelow = viewport.height - anchor.bottom - viewportMargin
     const placement = preferredPlacement ?? (
-        spaceBelow < menu.height + gap && spaceAbove > spaceBelow
+        spaceBelow < menu.height + gap
+            && spaceAbove > spaceBelow
             ? 'above'
             : 'below'
     )
@@ -50,32 +54,56 @@ export function resolveFloatingMenuScreenPosition(
     const maxTop = Math.max(viewportMargin, viewport.height - menu.height - viewportMargin)
 
     return {
-        left: Math.min(Math.max(anchor.left, viewportMargin), maxLeft),
-        top: Math.min(Math.max(desiredTop, viewportMargin), maxTop),
+        left: Math.min(
+            Math.max(anchor.left, viewportMargin),
+            maxLeft,
+        ),
+        top: Math.min(
+            Math.max(desiredTop, viewportMargin),
+            maxTop,
+        ),
         placement,
     }
 }
 
-export function getTransformedAncestorScale(element: HTMLElement | null): number {
+export const getTransformedAncestorScale = (element: HTMLElement | null): number => {
     let scale = 1
     let current = element
+
     while (current) {
         const transform = getComputedStyle(current).transform
-        if (transform && transform !== 'none') {
+
+        if (
+            transform
+            && transform !== 'none'
+        ) {
             const match = transform.match(/^matrix(?:3d)?\(([^,]+),/)
             const parsedScale = match ? Number.parseFloat(match[1]) : Number.NaN
-            if (Number.isFinite(parsedScale) && parsedScale > 0) scale *= parsedScale
+
+            if (
+                Number.isFinite(parsedScale)
+                && parsedScale > 0
+            )
+                scale *= parsedScale
         }
+
         current = current.parentElement
     }
+
     return scale
 }
 
-export function screenPointToLocal(
+export const screenPointToLocal = (
     parentRect: Pick<FloatingMenuRect, 'left' | 'top'>,
-    screenPoint: { left: number; top: number },
+    screenPoint: {
+        left: number
+        top: number
+    },
     scale: number,
-): { left: number; top: number } {
+): {
+    left: number
+    top: number
+} => {
     return {
         left: (screenPoint.left - parentRect.left) / scale,
         top: (screenPoint.top - parentRect.top) / scale,

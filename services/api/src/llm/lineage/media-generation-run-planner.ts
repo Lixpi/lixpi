@@ -44,7 +44,8 @@ export type BuildMatrixReasoningRunInput = {
 // run IDs and copies lineage assignments onto the concrete media run.
 export class MediaGenerationRunPlanner {
     buildSingleReasoningRun(input: BuildSingleReasoningRunInput): MediaGenerationRunMeta {
-        if (input.existingRun) return input.existingRun
+        if (input.existingRun)
+            return input.existingRun
 
         const generationRequestId = this.getEventMetaString(input.eventMeta.generationRequestId) ?? `media-${randomUUID()}`
         const reasoningIndex = typeof input.eventMeta.reasoningIndex === 'number' ? input.eventMeta.reasoningIndex : 0
@@ -55,7 +56,11 @@ export class MediaGenerationRunPlanner {
             requestKind: 'single-media',
             generationRequestId,
             reasoningRunId,
-            reasoningModelId: this.buildReasoningModelId(input.provider, input.modelName, input.modelVersion),
+            reasoningModelId: this.buildReasoningModelId(
+                input.provider,
+                input.modelName,
+                input.modelVersion,
+            ),
             reasoningIndex,
         }
     }
@@ -71,19 +76,33 @@ export class MediaGenerationRunPlanner {
         }
     }
 
-    buildReasoningRunId(generationRequestId: string, reasoningIndex: number): string {
+    buildReasoningRunId(
+        generationRequestId: string,
+        reasoningIndex: number,
+    ): string {
         return `${generationRequestId}:reasoning:${reasoningIndex}`
     }
 
-    buildMediaModelId(provider: string, model: unknown, fallbackModel: string): AiModelId {
-        const modelName = typeof model === 'string' && model.trim().length > 0 ? model.trim() : fallbackModel
+    buildMediaModelId(
+        provider: string,
+        model: unknown,
+        fallbackModel: string,
+    ): AiModelId {
+        const modelName = typeof model === 'string'
+            && model.trim().length > 0
+            ? model.trim()
+            : fallbackModel
+
         return `${provider}:${modelName}` as AiModelId
     }
 
     buildProviderMediaRun(input: BuildProviderMediaRunInput): MediaGenerationRunMeta | undefined {
-        if (!input.generationRun) return undefined
+        if (!input.generationRun)
+            return undefined
 
-        const mediaIndex = input.mediaIndex ?? input.generationRun.mediaIndex ?? 0
+        const mediaIndex = input.mediaIndex
+            ?? input.generationRun.mediaIndex
+            ?? 0
         const mediaRunId = input.generationRun.mediaRunId ?? `${input.generationRun.reasoningRunId}:${input.mediaType}:${mediaIndex}`
         const mediaModelCount = input.mediaModelCount ?? 1
         const variantIndex = input.generationRun.variantIndex ?? input.generationRun.reasoningIndex * mediaModelCount + mediaIndex
@@ -110,7 +129,8 @@ export class MediaGenerationRunPlanner {
         eventMeta: MediaGenerationRunEventMeta,
         generationRun: MediaGenerationRunMeta | undefined,
     ): MediaGenerationRunEventMeta {
-        if (!generationRun) return eventMeta
+        if (!generationRun)
+            return eventMeta
 
         return {
             ...eventMeta,
@@ -126,10 +146,16 @@ export class MediaGenerationRunPlanner {
         }
     }
 
-    private buildReasoningModelId(provider: ProviderName, modelName: unknown, modelVersion: string | undefined): AiModelId {
-        const model = typeof modelName === 'string' && modelName.trim().length > 0
+    private buildReasoningModelId(
+        provider: ProviderName,
+        modelName: unknown,
+        modelVersion: string | undefined,
+    ): AiModelId {
+        const model = typeof modelName === 'string'
+            && modelName.trim().length > 0
             ? modelName.trim()
             : modelVersion
+
         return `${provider}:${model ?? 'unknown'}` as AiModelId
     }
 
@@ -139,7 +165,9 @@ export class MediaGenerationRunPlanner {
         mediaModelId: AiModelId,
         mediaType: MediaRunType,
     ): MediaRunLineageAssignment | undefined {
-        if (!assignment) return undefined
+        if (!assignment)
+            return undefined
+
         return {
             ...assignment,
             mediaRunId,
@@ -149,6 +177,9 @@ export class MediaGenerationRunPlanner {
     }
 
     private getEventMetaString(value: unknown): string | undefined {
-        return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+        return typeof value === 'string'
+            && value.trim().length > 0
+            ? value.trim()
+            : undefined
     }
 }

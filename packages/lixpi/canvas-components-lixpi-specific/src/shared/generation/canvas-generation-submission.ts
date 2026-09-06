@@ -61,7 +61,11 @@ export type CanvasGenerationSubmissionPorts = {
     reportError: (error: unknown) => void
 }
 
-type Submission = { threadId: string; epoch: number; cancelled: boolean }
+type Submission = {
+    threadId: string
+    epoch: number
+    cancelled: boolean
+}
 
 export class CanvasGenerationSubmission {
     private readonly pending = new Set<Submission>()
@@ -70,40 +74,69 @@ export class CanvasGenerationSubmission {
 
     constructor(private readonly ports: CanvasGenerationSubmissionPorts) {}
 
-    async submit(data: AiPromptComposerSubmitData, options: CanvasGenerationSubmitOptions = {}): Promise<void> {
-        if (this.destroyed) return
+    async submit(
+        data: AiPromptComposerSubmitData,
+        options: CanvasGenerationSubmitOptions = {},
+    ): Promise<void> {
+        if (this.destroyed)
+            return
+
         if (!data.aiReasoningModels[0]) {
-            this.ports.reportError(new Error('Cannot submit generation without a reasoning model.'))
+            this.ports.reportError(
+                new Error('Cannot submit generation without a reasoning model.'),
+            )
+
             return
         }
+
         const promptText = extractPromptTextFromContentJSON(data.contentJSON)
-        if (!promptText && !contentJSONHasPromptReference(data.contentJSON)) return
+
+        if (
+            !promptText
+            && !contentJSONHasPromptReference(data.contentJSON)
+        )
+            return
+
         const currentScope = this.ports.readScope()
-        if (!currentScope) return
+
+        if (!currentScope)
+            return
+
         const scope = structuredClone(currentScope)
         const submittedData = structuredClone(data)
         const submittedOptions = structuredClone(options)
         const threadId = this.ports.createId()
-        const submission: Submission = { threadId, epoch: this.epoch, cancelled: false }
+        const submission: Submission = {
+            threadId,
+            epoch: this.epoch,
+            cancelled: false,
+        }
         const explicitContextNodeIds = Array.from(
             new Set([
                 ...(submittedOptions.explicitContextNodeIds ?? scope.contextNodeIds),
                 ...getPromptReferenceCanvasNodeIds(submittedData.contentJSON),
             ]),
         )
-        const initialContent = buildCanvasConversationContent(submittedData, {
-            threadId,
-            messageId: `msg-${this.ports.createId()}`,
-            createdAt: this.ports.now(),
-            referenceNodeIds: explicitContextNodeIds,
-        })
+        const initialContent = buildCanvasConversationContent(
+            submittedData,
+            {
+                threadId,
+                messageId: `msg-${this.ports.createId()}`,
+                createdAt: this.ports.now(),
+                referenceNodeIds: explicitContextNodeIds,
+            },
+        )
         this.pending.add(submission)
+
         try {
             this.ports.activate(threadId)
+
             if (!this.isCurrent(submission, scope)) {
                 this.cancel(submission)
+
                 return
             }
+
             const asset = await this.ports.createConversation({
                 organizationId: scope.organizationId,
                 workspaceId: scope.workspaceId,
@@ -111,11 +144,16 @@ export class CanvasGenerationSubmission {
                 title: promptText || 'Capability request',
                 initialDoc: initialContent,
             })
+
             if (!this.isCurrent(submission, scope)) {
                 this.cancel(submission)
+
                 return
             }
-            if (asset.assetId !== threadId) throw new Error('Created conversation does not match the submitted Asset identity')
+
+            if (asset.assetId !== threadId)
+                throw new Error('Created conversation does not match the submitted Asset identity')
+
             this.ports.install({
                 thread: {
                     threadId: asset.assetId,
@@ -152,6 +190,7 @@ export class CanvasGenerationSubmission {
         const pending = [...this.pending]
         this.pending.clear()
         const errors: unknown[] = []
+
         for (const submission of pending) {
             try {
                 this.cancel(submission)
@@ -159,24 +198,40 @@ export class CanvasGenerationSubmission {
                 errors.push(error)
             }
         }
-        if (errors.length > 0) throw new AggregateError(errors, 'Canvas submission cleanup failed')
+
+        if (errors.length > 0)
+            throw new AggregateError(errors, 'Canvas submission cleanup failed')
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.clear()
     }
 
     private cancel(submission: Submission): void {
-        if (submission.cancelled) return
+        if (submission.cancelled)
+            return
+
         submission.cancelled = true
         this.ports.cancel(submission.threadId)
     }
 
-    private isCurrent(submission: Submission, scope: CanvasGenerationSubmissionScope): boolean {
-        if (this.destroyed || submission.cancelled || submission.epoch !== this.epoch) return false
+    private isCurrent(
+        submission: Submission,
+        scope: CanvasGenerationSubmissionScope,
+    ): boolean {
+        if (
+            this.destroyed
+            || submission.cancelled
+            || submission.epoch !== this.epoch
+        )
+            return false
+
         const current = this.ports.readScope()
+
         return current?.workspaceId === scope.workspaceId
             && current.organizationId === scope.organizationId
             && current.sceneKey === scope.sceneKey

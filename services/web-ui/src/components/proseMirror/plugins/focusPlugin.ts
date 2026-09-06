@@ -14,18 +14,33 @@ const setFocus = (
     isFocused: boolean,
     callback: (isFocused: boolean) => void,
 ): boolean => {
-    view.dispatch(view.state.tr.setMeta(key, isFocused))
+    view.dispatch(
+        view.state.tr.setMeta(key, isFocused),
+    )
     callback(isFocused)
+
     return false
 }
 
 const createPlugin = (callback: (isFocused: boolean) => void): Plugin<boolean> => {
     const handleDOMEvents = {
-        blur: (view: EditorView): boolean => setFocus(view, false, callback),
-        focus: (view: EditorView): boolean => setFocus(view, true, callback),
+        blur: (view: EditorView): boolean => setFocus(
+            view,
+            false,
+            callback,
+        ),
+        focus: (view: EditorView): boolean => setFocus(
+            view,
+            true,
+            callback,
+        ),
     }
-    const applyPluginState = (transaction: Transaction, previousFocus: boolean): boolean => {
+    const applyPluginState = (
+        transaction: Transaction,
+        previousFocus: boolean,
+    ): boolean => {
         const focused = transaction.getMeta(key)
+
         return typeof focused === 'boolean' ? focused : previousFocus
     }
 

@@ -38,10 +38,19 @@ const encode = (value: string): string => Buffer.from(value, 'utf8').toString('b
 const decode = (value: string): string => Buffer.from(value, 'base64url').toString('utf8')
 const stateSecret = (): string => {
     const secret = process.env.PROVIDER_VERIFICATION_STATE_SECRET
-    if (!secret || secret.length < 32) throw new Error('PROVIDER_VERIFICATION_STATE_SECRET_REQUIRED')
+
+    if (
+        !secret
+        || secret.length < 32
+    )
+        throw new Error('PROVIDER_VERIFICATION_STATE_SECRET_REQUIRED')
+
     return secret
 }
-const sign = (payload: string): string => createHmac('sha256', stateSecret()).update(payload).digest('base64url')
+const sign = (payload: string): string => createHmac(
+    'sha256',
+    stateSecret(),
+).update(payload).digest('base64url')
 const hashNonce = (nonce: string): string => createHash('sha256').update(nonce).digest('hex')
 
 export const normalizeProviderExpiresAt = (expiresAt: number): number => (
@@ -49,20 +58,44 @@ export const normalizeProviderExpiresAt = (expiresAt: number): number => (
 )
 
 export const createProviderVerificationState = (state: VerificationState): string => {
-    const payload = encode(JSON.stringify(state))
+    const payload = encode(
+        JSON.stringify(state),
+    )
+
     return `${payload}.${sign(payload)}`
 }
 
 export const verifyProviderVerificationState = (token: string): VerificationState => {
     const [payload, signature] = token.split('.')
-    if (!payload || !signature) throw new Error('PROVIDER_VERIFICATION_STATE_INVALID')
-    const expected = Buffer.from(sign(payload))
-    const actual = Buffer.from(signature)
-    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+
+    if (
+        !payload
+        || !signature
+    )
         throw new Error('PROVIDER_VERIFICATION_STATE_INVALID')
-    }
-    const state = JSON.parse(decode(payload)) as VerificationState
-    if (!state.sessionId || !state.nonce || state.expiresAt <= Date.now()) throw new Error('PROVIDER_VERIFICATION_STATE_EXPIRED')
+
+    const expected = Buffer.from(
+        sign(payload),
+    )
+    const actual = Buffer.from(signature)
+
+    if (
+        expected.length !== actual.length
+        || !timingSafeEqual(expected, actual)
+    )
+        throw new Error('PROVIDER_VERIFICATION_STATE_INVALID')
+
+    const state = JSON.parse(
+        decode(payload),
+    ) as VerificationState
+
+    if (
+        !state.sessionId
+        || !state.nonce
+        || state.expiresAt <= Date.now()
+    )
+        throw new Error('PROVIDER_VERIFICATION_STATE_EXPIRED')
+
     return state
 }
 
@@ -74,21 +107,41 @@ const createBytePlusSession = async (callbackUrl: string): Promise<{
     const endpoint = process.env.BYTEPLUS_IDENTITY_VERIFICATION_SESSION_URL
         ?? process.env.BYTEPLUS_IDENTITY_VERIFICATION_URL
     const apiKey = process.env.ARK_API_KEY
-    if (!endpoint || !apiKey) throw new Error('BYTEPLUS_IDENTITY_VERIFICATION_NOT_CONFIGURED')
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ callback_url: callbackUrl, project_name: process.env.BYTEPLUS_PROJECT_NAME ?? 'default' }),
-    })
-    const body = await response.json() as {
+
+    if (
+        !endpoint
+        || !apiKey
+    )
+        throw new Error('BYTEPLUS_IDENTITY_VERIFICATION_NOT_CONFIGURED')
+
+    const response = await fetch(
+        endpoint,
+        {
+            method: 'POST',
+            headers: {
+                authorization: `Bearer ${apiKey}`,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                callback_url: callbackUrl,
+                project_name: process.env.BYTEPLUS_PROJECT_NAME ?? 'default',
+            }),
+        },
+    )
+    const body = (await response.json()) as {
         h5_link?: string
         byted_token?: string
         expires_at?: number
         error?: { code?: string }
     }
-    if (!response.ok || !body.h5_link || !body.byted_token) {
+
+    if (
+        !response.ok
+        || !body.h5_link
+        || !body.byted_token
+    )
         throw new Error(`BYTEPLUS_IDENTITY_VERIFICATION_SESSION_FAILED:${body.error?.code ?? `HTTP_${response.status}`}`)
-    }
+
     return {
         verificationUrl: body.h5_link,
         providerSessionToken: body.byted_token,
@@ -96,20 +149,51 @@ const createBytePlusSession = async (callbackUrl: string): Promise<{
     }
 }
 
-const exchangeBytePlusResult = async (resultToken: string): Promise<{ subjectHandle: string; expiresAt?: number }> => {
+const exchangeBytePlusResult = async (resultToken: string): Promise<{
+    subjectHandle: string
+    expiresAt?: number
+}> => {
     const endpoint = process.env.BYTEPLUS_IDENTITY_VERIFICATION_EXCHANGE_URL
     const apiKey = process.env.ARK_API_KEY
-    if (!endpoint || !apiKey) throw new Error('BYTEPLUS_IDENTITY_VERIFICATION_EXCHANGE_NOT_CONFIGURED')
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ byted_token: resultToken, project_name: process.env.BYTEPLUS_PROJECT_NAME ?? 'default' }),
-    })
-    const body = await response.json() as { subject_handle?: string; expires_at?: number; error?: { code?: string; message?: string } }
-    if (!response.ok || !body.subject_handle) {
+
+    if (
+        !endpoint
+        || !apiKey
+    )
+        throw new Error('BYTEPLUS_IDENTITY_VERIFICATION_EXCHANGE_NOT_CONFIGURED')
+
+    const response = await fetch(
+        endpoint,
+        {
+            method: 'POST',
+            headers: {
+                authorization: `Bearer ${apiKey}`,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                byted_token: resultToken,
+                project_name: process.env.BYTEPLUS_PROJECT_NAME ?? 'default',
+            }),
+        },
+    )
+    const body = (await response.json()) as {
+        subject_handle?: string
+        expires_at?: number
+        error?: {
+            code?: string
+            message?: string
+        }
+    }
+
+    if (
+        !response.ok
+        || !body.subject_handle
+    ) {
         const detail = body.error?.code ?? `HTTP_${response.status}`
+
         throw new Error(`BYTEPLUS_IDENTITY_VERIFICATION_EXCHANGE_FAILED:${detail}`)
     }
+
     return {
         subjectHandle: body.subject_handle,
         ...(body.expires_at ? { expiresAt: body.expires_at } : {}),
@@ -133,27 +217,59 @@ export class ProviderVerificationCoordinator {
         generationRun: number
         assetId: string
         requester: AssetRequesterContext
-    }): Promise<{ verificationUrl: string; expiresAt: number; requestRevision: number }> {
-        const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
-        if ('error' in authorized) throw new Error(authorized.error)
-        if (authorized.revision !== requestRevision) throw new Error('STALE_MEDIA_REQUEST_REVISION')
+    }): Promise<{
+        verificationUrl: string
+        expiresAt: number
+        requestRevision: number
+    }> {
+        const authorized = await MediaGenerationRequestModel.getAuthorized({
+            generationRequestId,
+            workspaceId,
+            userId,
+        })
+
+        if ('error' in authorized)
+            throw new Error(authorized.error)
+
+        if (authorized.revision !== requestRevision)
+            throw new Error('STALE_MEDIA_REQUEST_REVISION')
+
         const run = authorized.runs.find(candidate => candidate.generationRun === generationRun)
-        if (!run || run.provider !== 'BytePlus') throw new Error('PROVIDER_VERIFICATION_RUN_UNSUPPORTED')
-        if (!run.requiredVerificationAssetIds?.includes(assetId)) {
+
+        if (
+            !run
+            || run.provider !== 'BytePlus'
+        )
+            throw new Error('PROVIDER_VERIFICATION_RUN_UNSUPPORTED')
+
+        if (!run.requiredVerificationAssetIds?.includes(assetId))
             throw new Error('PROVIDER_VERIFICATION_ASSET_NOT_REQUIRED')
-        }
-        const asset = await AssetModel.get({ assetId, requester })
-        if ('error' in asset || !authorized.bindings.some(binding => binding.assetId === assetId)) {
+
+        const asset = await AssetModel.get({
+            assetId,
+            requester,
+        })
+
+        if (
+            'error' in asset
+            || !authorized.bindings.some(binding => binding.assetId === assetId)
+        )
             throw new Error('PROVIDER_VERIFICATION_ASSET_NOT_AUTHORIZED')
-        }
+
         if (
             asset.subjectIdentity.classification !== 'self'
             && asset.subjectIdentity.classification !== 'authorized-real-person'
-        ) {
+        )
             throw new Error('PROVIDER_VERIFICATION_IDENTITY_CLASSIFICATION_REQUIRED')
-        }
+
         const providerAccountScope = process.env.BYTEPLUS_ACCOUNT_SCOPE
-        if (!providerAccountScope || !process.env.API_PUBLIC_URL) throw new Error('BYTEPLUS_IDENTITY_VERIFICATION_NOT_CONFIGURED')
+
+        if (
+            !providerAccountScope
+            || !process.env.API_PUBLIC_URL
+        )
+            throw new Error('BYTEPLUS_IDENTITY_VERIFICATION_NOT_CONFIGURED')
+
         const now = Date.now()
         const expiresAt = now + SESSION_DURATION_MS
         const nonce = uuid()
@@ -172,7 +288,9 @@ export class ProviderVerificationCoordinator {
         const token = createProviderVerificationState(state)
         const callbackUrl = new URL('/api/provider-verification/byteplus/callback', process.env.API_PUBLIC_URL)
         callbackUrl.searchParams.set('state', token)
-        const providerSession = await createBytePlusSession(callbackUrl.toString())
+        const providerSession = await createBytePlusSession(
+            callbackUrl.toString(),
+        )
         const providerExpiresAt = providerSession.expiresAt === undefined
             ? expiresAt
             : normalizeProviderExpiresAt(providerSession.expiresAt)
@@ -191,21 +309,25 @@ export class ProviderVerificationCoordinator {
         const next: MediaGenerationRequest = {
             ...authorized,
             status: 'action-required',
-            runs: authorized.runs.map(candidate =>
-                candidate.generationRun === generationRun
-                    ? {
-                        ...candidate,
-                        status: 'awaiting-provider-verification',
-                        requiredVerificationAssetIds: [assetId],
-                    }
-                    : candidate
+            runs: authorized.runs.map(
+                candidate =>
+                    candidate.generationRun === generationRun
+                        ? {
+                            ...candidate,
+                            status: 'awaiting-provider-verification',
+                            requiredVerificationAssetIds: [assetId],
+                        }
+                        : candidate,
             ),
             verificationSessions: [...(authorized.verificationSessions ?? []), session],
             revision: authorized.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
         }
-        await MediaGenerationRequestModel.transition({ request: next, expectedRevision: authorized.revision })
+        await MediaGenerationRequestModel.transition({
+            request: next,
+            expectedRevision: authorized.revision,
+        })
         await updateMediaGenerationOperationNode({
             workspaceId,
             operationNodeId: run.operationNodeId,
@@ -232,6 +354,7 @@ export class ProviderVerificationCoordinator {
                 createdAt: now,
             },
         })
+
         return {
             verificationUrl: providerSession.verificationUrl,
             expiresAt: session.expiresAt,
@@ -239,39 +362,68 @@ export class ProviderVerificationCoordinator {
         }
     }
 
-    async complete({ stateToken, resultToken, userId, requester }: {
+    async complete({
+        stateToken,
+        resultToken,
+        userId,
+        requester,
+    }: {
         stateToken: string
         resultToken: string
         userId: string
         requester: AssetRequesterContext
     }): Promise<MediaGenerationRequest> {
-        if (!resultToken || resultToken.length > 4096) throw new Error('PROVIDER_VERIFICATION_RESULT_TOKEN_INVALID')
+        if (
+            !resultToken
+            || resultToken.length > 4096
+        )
+            throw new Error('PROVIDER_VERIFICATION_RESULT_TOKEN_INVALID')
+
         const state = verifyProviderVerificationState(stateToken)
-        if (state.userId !== userId) throw new Error('PROVIDER_VERIFICATION_USER_MISMATCH')
+
+        if (state.userId !== userId)
+            throw new Error('PROVIDER_VERIFICATION_USER_MISMATCH')
+
         const authorized = await MediaGenerationRequestModel.getAuthorized({
             generationRequestId: state.generationRequestId,
             workspaceId: state.workspaceId,
             userId,
         })
-        if ('error' in authorized) throw new Error(authorized.error)
+
+        if ('error' in authorized)
+            throw new Error(authorized.error)
+
         const session = authorized.verificationSessions?.find(candidate => candidate.sessionId === state.sessionId)
-        if (!session || session.status !== 'pending') throw new Error('PROVIDER_VERIFICATION_SESSION_REPLAYED')
-        if (session.expiresAt <= Date.now() || session.stateNonceHash !== hashNonce(state.nonce)) {
+
+        if (
+            !session
+            || session.status !== 'pending'
+        )
+            throw new Error('PROVIDER_VERIFICATION_SESSION_REPLAYED')
+
+        if (
+            session.expiresAt <= Date.now()
+            || session.stateNonceHash !== hashNonce(state.nonce)
+        )
             throw new Error('PROVIDER_VERIFICATION_SESSION_EXPIRED')
-        }
+
         if (
             !session.providerSessionTokenHash
             || session.providerSessionTokenHash !== hashNonce(resultToken)
-        ) {
+        )
             throw new Error('PROVIDER_VERIFICATION_RESULT_TOKEN_MISMATCH')
-        }
+
         const exchange = await exchangeBytePlusResult(resultToken)
         const providerHandleExpiresAt = exchange.expiresAt === undefined
             ? undefined
             : normalizeProviderExpiresAt(exchange.expiresAt)
-        if (providerHandleExpiresAt !== undefined && providerHandleExpiresAt <= Date.now()) {
+
+        if (
+            providerHandleExpiresAt !== undefined
+            && providerHandleExpiresAt <= Date.now()
+        )
             throw new Error('PROVIDER_VERIFICATION_HANDLE_EXPIRED')
-        }
+
         const verification: ProviderIdentityVerification = {
             provider: 'BytePlus',
             providerAccountScope: session.providerAccountScope,
@@ -289,34 +441,47 @@ export class ProviderVerificationCoordinator {
             verification,
             requester,
         })
-        if ('error' in updatedAsset) throw new Error(updatedAsset.error)
+
+        if ('error' in updatedAsset)
+            throw new Error(updatedAsset.error)
+
         const now = Date.now()
-        const updatedBindings = authorized.bindings.map(binding =>
-            binding.assetId === updatedAsset.assetId
-                ? {
-                    ...binding,
-                    assetRevision: updatedAsset.revision,
-                    depictionMedium: updatedAsset.depictionMedium,
-                    subjectIdentity: updatedAsset.subjectIdentity,
-                }
-                : binding
+        const updatedBindings = authorized.bindings.map(
+            binding =>
+                binding.assetId === updatedAsset.assetId
+                    ? {
+                        ...binding,
+                        assetRevision: updatedAsset.revision,
+                        depictionMedium: updatedAsset.depictionMedium,
+                        subjectIdentity: updatedAsset.subjectIdentity,
+                    }
+                    : binding,
         )
         const verificationRun = authorized.runs.find(run => run.generationRun === session.generationRun)
-        if (!verificationRun) throw new Error('PROVIDER_VERIFICATION_RUN_NOT_FOUND')
-        const remainingVerificationAssetIds = (verificationRun.requiredVerificationAssetIds ?? [])
-            .filter(assetId =>
-                !updatedBindings.some(binding => (
-                    binding.assetId === assetId
-                    && binding.subjectIdentity.providerVerifications.some(candidate => (
-                        candidate.provider === session.provider
-                        && candidate.providerAccountScope === session.providerAccountScope
-                        && candidate.status === 'valid'
-                        && (candidate.expiresAt === undefined || candidate.expiresAt > now)
-                    ))
-                ))
-            )
+
+        if (!verificationRun)
+            throw new Error('PROVIDER_VERIFICATION_RUN_NOT_FOUND')
+
+        const remainingVerificationAssetIds = (verificationRun.requiredVerificationAssetIds ?? []).filter(
+            assetId =>
+                    !updatedBindings.some(
+                        binding => (
+                            binding.assetId === assetId
+                            && binding.subjectIdentity.providerVerifications.some(
+                                candidate => (
+                                    candidate.provider === session.provider
+                                    && candidate.providerAccountScope === session.providerAccountScope
+                                    && candidate.status === 'valid'
+                                    && (candidate.expiresAt === undefined || candidate.expiresAt > now)
+                                ),
+                            )
+                        ),
+                    ),
+        )
         const resumedRuns = authorized.runs.map(run => {
-            if (run.generationRun !== session.generationRun) return run
+            if (run.generationRun !== session.generationRun)
+                return run
+
             if (remainingVerificationAssetIds.length > 0) {
                 return {
                     ...run,
@@ -324,8 +489,17 @@ export class ProviderVerificationCoordinator {
                     requiredVerificationAssetIds: remainingVerificationAssetIds,
                 }
             }
-            const { requiredVerificationAssetIds: _required, problem: _problem, ...rest } = run
-            return { ...rest, status: 'pending' as const }
+
+            const {
+                requiredVerificationAssetIds: _required,
+                problem: _problem,
+                ...rest
+            } = run
+
+            return {
+                ...rest,
+                status: 'pending' as const,
+            }
         })
         const hasOtherActionRequired = resumedRuns.some(run => run.status === 'awaiting-provider-verification')
         const next: MediaGenerationRequest = {
@@ -333,20 +507,24 @@ export class ProviderVerificationCoordinator {
             status: hasOtherActionRequired ? 'action-required' : 'submitted',
             bindings: updatedBindings,
             runs: resumedRuns,
-            verificationSessions: (authorized.verificationSessions ?? []).map(candidate =>
-                candidate.sessionId === session.sessionId
-                    ? {
-                        ...candidate,
-                        status: 'consumed',
-                        consumedAt: now,
-                    }
-                    : candidate
+            verificationSessions: (authorized.verificationSessions ?? []).map(
+                candidate =>
+                    candidate.sessionId === session.sessionId
+                        ? {
+                            ...candidate,
+                            status: 'consumed',
+                            consumedAt: now,
+                        }
+                        : candidate,
             ),
             revision: authorized.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
         }
-        await MediaGenerationRequestModel.transition({ request: next, expectedRevision: authorized.revision })
+        await MediaGenerationRequestModel.transition({
+            request: next,
+            expectedRevision: authorized.revision,
+        })
         const resumedRun = next.runs.find(run => run.generationRun === session.generationRun)!
         await updateMediaGenerationOperationNode({
             workspaceId: state.workspaceId,
@@ -385,6 +563,7 @@ export class ProviderVerificationCoordinator {
                 createdAt: now,
             },
         })
+
         return next
     }
 }

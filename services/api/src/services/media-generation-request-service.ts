@@ -46,31 +46,29 @@ import {
 export const MEDIA_GENERATION_CHECKPOINT_SCHEMA_VERSION = 'media-generation-checkpoint-v1'
 const checkpointReferenceKey = (generationRequestId: string): string => `mediaGenerationRequest#${generationRequestId}#checkpoint`
 
-const getLineageMarkerNodeIds = (lineagePlan: MediaBranchLineagePlan | undefined): string[] =>
-    lineagePlan
-        ? [
-            lineagePlan.branchOrigin?.nodeId,
-            ...lineagePlan.branchForks.map(marker => marker.nodeId),
-            ...lineagePlan.branchLines.map(marker => marker.nodeId),
-        ].filter((nodeId): nodeId is string => Boolean(nodeId))
-        : []
+const getLineageMarkerNodeIds = (lineagePlan: MediaBranchLineagePlan | undefined): string[] => lineagePlan
+    ? [
+        lineagePlan.branchOrigin?.nodeId,
+        ...lineagePlan.branchForks.map(marker => marker.nodeId),
+        ...lineagePlan.branchLines.map(marker => marker.nodeId),
+    ].filter((nodeId): nodeId is string => Boolean(nodeId))
+    : []
 
 const mergeCanvasGeometryUpdates = (
     generationRequestId: string,
     updates: Array<CanvasGeometryUpdate | null | undefined>,
 ): CanvasGeometryUpdate => {
     const available = updates.filter((update): update is CanvasGeometryUpdate => Boolean(update))
-    const byNodeId = new Map(available.flatMap(update => update.nodes).map(node => [node.nodeId, node]))
+    const byNodeId = new Map(
+        available.flatMap(update => update.nodes).map(node => [node.nodeId, node]),
+    )
     const snapshotsByNodeId = new Map(
-        available
-            .flatMap(update => update.nodeSnapshots ?? [])
-            .map(node => [node.nodeId, node]),
+        available.flatMap(update => update.nodeSnapshots ?? []).map(node => [node.nodeId, node]),
     )
     const edgesById = new Map(
-        available
-            .flatMap(update => update.edgeSnapshots ?? [])
-            .map(edge => [edge.edgeId, edge]),
+        available.flatMap(update => update.edgeSnapshots ?? []).map(edge => [edge.edgeId, edge]),
     )
+
     return {
         generationRequestId,
         layoutRevision: Math.max(...available.map(update => update.layoutRevision)),
@@ -79,12 +77,16 @@ const mergeCanvasGeometryUpdates = (
         ...(edgesById.size ? { edgeSnapshots: [...edgesById.values()] } : {}),
         ...(available.some(update => update.removedNodeIds?.length)
             ? {
-                removedNodeIds: [...new Set(available.flatMap(update => update.removedNodeIds ?? []))],
+                removedNodeIds: [...new Set(
+                    available.flatMap(update => update.removedNodeIds ?? []),
+                )],
             }
             : {}),
         ...(available.some(update => update.removedEdgeIds?.length)
             ? {
-                removedEdgeIds: [...new Set(available.flatMap(update => update.removedEdgeIds ?? []))],
+                removedEdgeIds: [...new Set(
+                    available.flatMap(update => update.removedEdgeIds ?? []),
+                )],
             }
             : {}),
     }
@@ -93,7 +95,10 @@ const mergeCanvasGeometryUpdates = (
 export type MediaGenerationCheckpoint = {
     schemaVersion: typeof MEDIA_GENERATION_CHECKPOINT_SCHEMA_VERSION
     promptDocument: unknown
-    selectedReferences: Array<{ assetId: string; nodeId?: string }>
+    selectedReferences: Array<{
+        assetId: string
+        nodeId?: string
+    }>
     modelSelection: unknown
     configuration: unknown
     createdAt: number
@@ -112,29 +117,53 @@ const CHECKPOINT_FORBIDDEN_KEYS = new Set([
     'token',
 ])
 
-export const assertSafeMediaGenerationCheckpoint = (value: unknown, path = '$'): void => {
+export const assertSafeMediaGenerationCheckpoint = (
+    value: unknown,
+    path = '$',
+): void => {
     if (typeof value === 'string') {
-        if (/^data:[^,]*;base64,/iu.test(value)) throw new Error(`MEDIA_REQUEST_CHECKPOINT_MEDIA_BYTES_FORBIDDEN:${path}`)
+        if (/^data:[^,]*;base64,/iu.test(value))
+            throw new Error(`MEDIA_REQUEST_CHECKPOINT_MEDIA_BYTES_FORBIDDEN:${path}`)
+
         return
     }
-    if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+
+    if (
+        ArrayBuffer.isView(value)
+        || value instanceof ArrayBuffer
+    )
         throw new Error(`MEDIA_REQUEST_CHECKPOINT_BINARY_FORBIDDEN:${path}`)
-    }
+
     if (Array.isArray(value)) {
         value.forEach((item, index) => assertSafeMediaGenerationCheckpoint(item, `${path}[${index}]`))
+
         return
     }
-    if (!value || typeof value !== 'object') return
+
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return
+
     for (const [key, item] of Object.entries(value)) {
-        const normalizedKey = key.normalize('NFKC').replace(/[^a-z0-9]/giu, '').toLocaleLowerCase('en-US')
-        if (CHECKPOINT_FORBIDDEN_KEYS.has(normalizedKey)) {
+        const normalizedKey = key
+            .normalize('NFKC')
+            .replace(/[^a-z0-9]/giu, '')
+            .toLocaleLowerCase('en-US')
+
+        if (CHECKPOINT_FORBIDDEN_KEYS.has(normalizedKey))
             throw new Error(`MEDIA_REQUEST_CHECKPOINT_SECRET_FORBIDDEN:${path}.${key}`)
-        }
+
         assertSafeMediaGenerationCheckpoint(item, `${path}.${key}`)
     }
 }
 
-const eventFor = (request: MediaGenerationRequest, status: MediaGenerationRequestEvent['status'], payload: Record<string, unknown>): MediaGenerationRequestEvent => ({
+const eventFor = (
+    request: MediaGenerationRequest,
+    status: MediaGenerationRequestEvent['status'],
+    payload: Record<string, unknown>,
+): MediaGenerationRequestEvent => ({
     eventId: uuid(),
     generationRequestId: request.generationRequestId,
     sequence: request.revision,
@@ -144,61 +173,73 @@ const eventFor = (request: MediaGenerationRequest, status: MediaGenerationReques
     createdAt: request.updatedAt,
 })
 
-const isMediaGenerationRequestTerminal = (status: MediaGenerationRequestStatus): boolean => (
-    status === 'completed'
+const isMediaGenerationRequestTerminal = (status: MediaGenerationRequestStatus): boolean => status === 'completed'
     || status === 'completed-with-errors'
     || status === 'failed'
     || status === 'cancelled'
-)
 
 const isJetStreamExpectationFailure = (error: unknown): boolean => {
-    const candidate = error as { code?: unknown; message?: unknown }
+    const candidate = error as {
+        code?: unknown
+        message?: unknown
+    }
+
     return candidate.code === 10071
-        || /expected.*sequence|wrong last sequence|last subject sequence/iu.test(String(candidate.message ?? ''))
+        || /expected.*sequence|wrong last sequence|last subject sequence/iu.test(
+            String(candidate.message ?? ''),
+        )
 }
 
-const getReferenceResolutionAction = (
-    unresolvedBindings: readonly UnresolvedReferenceBinding[],
-): { bindingId: string; candidateAssetIds: string[] } | undefined => {
+const getReferenceResolutionAction = (unresolvedBindings: readonly UnresolvedReferenceBinding[]): {
+    bindingId: string
+    candidateAssetIds: string[]
+} | undefined => {
     const unresolved = unresolvedBindings[0]
-    if (!unresolved) return undefined
+
+    if (!unresolved)
+        return undefined
+
     return {
         bindingId: unresolved.bindingId,
-        candidateAssetIds: [...new Set(unresolved.candidates.map(candidate => candidate.assetId))],
+        candidateAssetIds: [...new Set(
+            unresolved.candidates.map(candidate => candidate.assetId),
+        )],
     }
 }
 
-function deriveRequestStatus(runs: readonly MediaGenerationRun[]): MediaGenerationRequestStatus {
+const deriveRequestStatus = (runs: readonly MediaGenerationRun[]): MediaGenerationRequestStatus => {
     const allTerminal = runs.every(run => ['completed', 'failed', 'cancelled'].includes(run.status))
     const completedCount = runs.filter(run => run.status === 'completed').length
     const failedCount = runs.filter(run => run.status === 'failed').length
     const hasActionRequired = runs.some(run => run.status === 'awaiting-provider-verification')
+
     return allTerminal
         ? failedCount === 0
             ? 'completed'
             : completedCount > 0
-            ? 'completed-with-errors'
-            : 'failed'
+                ? 'completed-with-errors'
+                : 'failed'
         : hasActionRequired
-        ? 'action-required'
-        : 'running'
+            ? 'action-required'
+            : 'running'
 }
 
 const createDurableRunsFromLineagePlan = (lineagePlan: MediaBranchLineagePlan): MediaGenerationRun[] => {
-    if (lineagePlan.runAssignments.length === 0) {
+    if (lineagePlan.runAssignments.length === 0)
         throw new Error('MEDIA_REQUEST_LINEAGE_ASSIGNMENTS_EMPTY')
-    }
 
     return lineagePlan.runAssignments.map((assignment, generationRun) => {
         if (
             !assignment.reasoningModelId
             || assignment.reasoningIndex === undefined
             || !assignment.mediaModelId
-        ) {
+        )
             throw new Error(`MEDIA_REQUEST_LINEAGE_ASSIGNMENT_INCOMPLETE:${generationRun}`)
-        }
+
         const [provider] = assignment.mediaModelId.split(':')
-        if (!provider) throw new Error(`MEDIA_REQUEST_LINEAGE_ASSIGNMENT_PROVIDER_MISSING:${generationRun}`)
+
+        if (!provider)
+            throw new Error(`MEDIA_REQUEST_LINEAGE_ASSIGNMENT_PROVIDER_MISSING:${generationRun}`)
 
         return {
             generationRun,
@@ -228,15 +269,20 @@ export class MediaGenerationRequestService {
     private async getStreamedRunProgress(
         request: Pick<MediaGenerationRequest, 'workspaceId' | 'generationRequestId'>,
         generationRun: number,
-    ): Promise<{ progress?: MediaGenerationRunProgress; streamSequence: number }> {
+    ): Promise<{
+        progress?: MediaGenerationRunProgress
+        streamSequence: number
+    }> {
         const envelope = await this.events().getLatestRunProgress({
             workspaceId: request.workspaceId,
             generationRequestId: request.generationRequestId,
             generationRun,
         })
         const progress = envelope?.event.payload.progress
+
         return {
-            ...(progress && typeof progress === 'object'
+            ...(progress
+                && typeof progress === 'object'
                 ? { progress: progress as MediaGenerationRunProgress }
                 : {}),
             streamSequence: envelope?.streamSequence ?? 0,
@@ -267,7 +313,10 @@ export class MediaGenerationRequestService {
         unresolvedBindings: UnresolvedReferenceBinding[]
         runs: MediaGenerationRun[]
         initialLineagePlan?: MediaBranchLineagePlan
-        canvasVisibleArea?: { width: number; height: number }
+        canvasVisibleArea?: {
+            width: number
+            height: number
+        }
         onCanvasGeometryProjected?: (canvasGeometry: CanvasGeometryUpdate) => void | Promise<void>
     }): Promise<MediaGenerationRequest> {
         const now = Date.now()
@@ -279,7 +328,9 @@ export class MediaGenerationRequestService {
         assertSafeMediaGenerationCheckpoint(checkpointDocument)
         const blob = await BlobModel.store({
             organizationId,
-            bytes: new TextEncoder().encode(JSON.stringify(checkpointDocument)),
+            bytes: new TextEncoder().encode(
+                JSON.stringify(checkpointDocument),
+            ),
             mimeType: 'application/json',
             description: `Media generation request ${generationRequestId} checkpoint`,
         })
@@ -306,11 +357,12 @@ export class MediaGenerationRequestService {
             unresolvedBindings,
             resolvedReferences: [],
             runs,
-            plannedCanvasNodeIds: runs.flatMap(run =>
-                [
-                    run.operationNodeId,
-                    run.outputNodeId,
-                ].filter((nodeId): nodeId is string => Boolean(nodeId))
+            plannedCanvasNodeIds: runs.flatMap(
+                run =>
+                    [
+                        run.operationNodeId,
+                        run.outputNodeId,
+                    ].filter((nodeId): nodeId is string => Boolean(nodeId)),
             ).concat(
                 getLineageMarkerNodeIds(initialLineagePlan),
             ),
@@ -321,6 +373,7 @@ export class MediaGenerationRequestService {
         }
         const referenceAction = getReferenceResolutionAction(unresolvedBindings)
         let requestCreated = false
+
         try {
             await MediaGenerationRequestModel.create(request)
             requestCreated = true
@@ -340,12 +393,19 @@ export class MediaGenerationRequestService {
                     ...(canvasVisibleArea ? { canvasVisibleArea } : {}),
                 })
                 : undefined
-            const canvasGeometry = mergeCanvasGeometryUpdates(generationRequestId, [
-                mediaCanvasGeometry,
-                lineageCanvasGeometry,
-            ])
+            const canvasGeometry = mergeCanvasGeometryUpdates(
+                generationRequestId,
+                [
+                    mediaCanvasGeometry,
+                    lineageCanvasGeometry,
+                ],
+            )
             await onCanvasGeometryProjected?.(canvasGeometry)
-            if (referenceAction && runs[0]) {
+
+            if (
+                referenceAction
+                && runs[0]
+            ) {
                 await updateMediaGenerationOperationNode({
                     workspaceId,
                     operationNodeId: runs[0].operationNodeId,
@@ -356,15 +416,20 @@ export class MediaGenerationRequestService {
                     requestRevision: request.revision,
                 })
             }
+
             await this.events().append({
                 userId,
                 workspaceId,
                 event: eventFor(
                     request,
                     unresolvedBindings.length > 0 ? 'MEDIA_GENERATION_ACTION_REQUIRED' : 'MEDIA_GENERATION_REQUEST_STATUS',
-                    { status, ...referenceAction },
+                    {
+                        status,
+                        ...referenceAction,
+                    },
                 ),
             })
+
             return request
         } catch (error) {
             if (requestCreated) {
@@ -375,14 +440,19 @@ export class MediaGenerationRequestService {
                         discardUnboundOutputNodes: true,
                     }),
                     MediaGenerationRequestModel.delete(request),
-                    this.events().purgeRequest({ workspaceId, generationRequestId }),
+                    this.events().purgeRequest({
+                        workspaceId,
+                        generationRequestId,
+                    }),
                 ])
             }
+
             await BlobModel.removeReference({
                 organizationId,
                 blobHash: blob.blobHash,
                 referenceKey: checkpointReferenceKey(generationRequestId),
             }).catch(() => undefined)
+
             throw error
         }
     }
@@ -392,8 +462,13 @@ export class MediaGenerationRequestService {
             organizationId: request.organizationId,
             blobHash: request.checkpointBlobHash,
         })
-        const checkpoint = JSON.parse(new TextDecoder().decode(bytes)) as MediaGenerationCheckpoint
-        if (checkpoint.schemaVersion !== MEDIA_GENERATION_CHECKPOINT_SCHEMA_VERSION) throw new Error('MEDIA_REQUEST_CHECKPOINT_SCHEMA_UNSUPPORTED')
+        const checkpoint = JSON.parse(
+            new TextDecoder().decode(bytes),
+        ) as MediaGenerationCheckpoint
+
+        if (checkpoint.schemaVersion !== MEDIA_GENERATION_CHECKPOINT_SCHEMA_VERSION)
+            throw new Error('MEDIA_REQUEST_CHECKPOINT_SCHEMA_UNSUPPORTED')
+
         return checkpoint
     }
 
@@ -407,25 +482,39 @@ export class MediaGenerationRequestService {
         lineagePlan: MediaBranchLineagePlan
     }): Promise<MediaGenerationRequest> {
         for (let attempt = 0; attempt < 8; attempt += 1) {
-            const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
-            if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
+            const request = await MediaGenerationRequestModel.get({
+                generationRequestId,
+                workspaceId,
+            })
+
+            if (!request)
+                throw new Error('MEDIA_REQUEST_NOT_FOUND')
+
             const runsWereDeferred = request.runs.length === 0
             const runs = runsWereDeferred
                 ? createDurableRunsFromLineagePlan(lineagePlan)
                 : request.runs
-            const assignmentByRun = new Map(runs.map(run => {
-                const assignment = lineagePlan.runAssignments.find(candidate => (
-                    Boolean(run.mediaRunId && candidate.mediaRunId === run.mediaRunId)
-                    || (candidate.reasoningIndex === run.reasoningIndex
-                        && candidate.mediaModelId === run.modelId
-                        && (run.mediaType === undefined || candidate.mediaType === run.mediaType)
-                        && (run.mediaIndex === undefined || candidate.mediaIndex === run.mediaIndex))
-                ))
-                if (!assignment) throw new Error(`MEDIA_REQUEST_LINEAGE_ASSIGNMENT_NOT_FOUND:${run.generationRun}`)
-                return [run.generationRun, assignment]
-            }))
+            const assignmentByRun = new Map(
+                runs.map(run => {
+                    const assignment = lineagePlan.runAssignments.find(
+                        candidate => (
+                            Boolean(run.mediaRunId && candidate.mediaRunId === run.mediaRunId)
+                            || (candidate.reasoningIndex === run.reasoningIndex
+                                && candidate.mediaModelId === run.modelId
+                                && (run.mediaType === undefined || candidate.mediaType === run.mediaType)
+                                && (run.mediaIndex === undefined || candidate.mediaIndex === run.mediaIndex))
+                        ),
+                    )
+
+                    if (!assignment)
+                        throw new Error(`MEDIA_REQUEST_LINEAGE_ASSIGNMENT_NOT_FOUND:${run.generationRun}`)
+
+                    return [run.generationRun, assignment]
+                }),
+            )
             const bindings = runs.map(run => {
                 const assignment = assignmentByRun.get(run.generationRun)!
+
                 return {
                     previousNodeId: run.operationNodeId,
                     previousOutputNodeId: run.outputNodeId,
@@ -445,46 +534,69 @@ export class MediaGenerationRequestService {
                 }
             })
             const alreadyBound = !runsWereDeferred
-                && bindings.every(binding => (
-                    binding.previousNodeId === binding.operationNodeId
-                    && binding.previousOutputNodeId === binding.run.outputNodeId
-                    && binding.run.outputAssetId !== undefined
-                    && binding.run.mediaRunId !== undefined
-                ))
+                && bindings.every(
+                    binding => (
+                        binding.previousNodeId === binding.operationNodeId
+                        && binding.previousOutputNodeId === binding.run.outputNodeId
+                        && binding.run.outputAssetId !== undefined
+                        && binding.run.mediaRunId !== undefined
+                    ),
+                )
             const next = alreadyBound ? request : {
                 ...request,
                 runs: bindings.map(binding => binding.run),
-                plannedCanvasNodeIds: bindings.flatMap(binding =>
-                    [
-                        binding.operationNodeId,
-                        binding.run.outputNodeId,
-                    ].filter((nodeId): nodeId is string => Boolean(nodeId))
+                plannedCanvasNodeIds: bindings.flatMap(
+                    binding =>
+                        [
+                            binding.operationNodeId,
+                            binding.run.outputNodeId,
+                        ].filter((nodeId): nodeId is string => Boolean(nodeId)),
                 ).concat(
                     getLineageMarkerNodeIds(lineagePlan),
                 ),
                 revision: request.revision + 1,
                 updatedAt: Date.now(),
             }
+
             if (!alreadyBound) {
                 try {
-                    await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+                    await MediaGenerationRequestModel.transition({
+                        request: next,
+                        expectedRevision: request.revision,
+                    })
                 } catch (error) {
-                    if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                    if (
+                        isTransactionConditionalCheckFailure(error)
+                        && attempt < 7
+                    )
+                        continue
+
                     throw error
                 }
             }
+
             await rebindMediaGenerationOperationNodes({
                 workspaceId,
                 generationRequestId,
                 requestRevision: next.revision,
                 bindings,
             })
+
             return next
         }
+
         throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
     }
 
-    async resolveReference({ generationRequestId, workspaceId, userId, requestRevision, bindingId, assetId, requester }: {
+    async resolveReference({
+        generationRequestId,
+        workspaceId,
+        userId,
+        requestRevision,
+        bindingId,
+        assetId,
+        requester,
+    }: {
         generationRequestId: string
         workspaceId: string
         userId: string
@@ -493,25 +605,53 @@ export class MediaGenerationRequestService {
         assetId: string
         requester: AssetRequesterContext
     }): Promise<MediaGenerationRequest> {
-        const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
-        if ('error' in authorized) throw new Error(authorized.error)
-        if (authorized.revision !== requestRevision) throw new Error('STALE_MEDIA_REQUEST_REVISION')
-        if (authorized.status !== 'awaiting-reference-resolution') throw new Error('MEDIA_REQUEST_NOT_AWAITING_REFERENCE')
+        const authorized = await MediaGenerationRequestModel.getAuthorized({
+            generationRequestId,
+            workspaceId,
+            userId,
+        })
+
+        if ('error' in authorized)
+            throw new Error(authorized.error)
+
+        if (authorized.revision !== requestRevision)
+            throw new Error('STALE_MEDIA_REQUEST_REVISION')
+
+        if (authorized.status !== 'awaiting-reference-resolution')
+            throw new Error('MEDIA_REQUEST_NOT_AWAITING_REFERENCE')
+
         const unresolved = authorized.unresolvedBindings.find(candidate => candidate.bindingId === bindingId)
-        if (!unresolved || !unresolved.candidates.some(candidate => candidate.assetId === assetId)) {
+
+        if (
+            !unresolved
+            || !unresolved.candidates.some(candidate => candidate.assetId === assetId)
+        )
             throw new Error('MEDIA_REFERENCE_CANDIDATE_NOT_AUTHORIZED')
-        }
+
         const previousBinding = authorized.bindings.find(binding => binding.assetId === assetId)
-        if (!previousBinding) throw new Error('MEDIA_REFERENCE_CANDIDATE_NOT_BOUND')
-        const currentAssets = await Promise.all(authorized.bindings.map(async binding => {
-            const current = await AssetModel.get({ assetId: binding.assetId, requester })
-            if ('error' in current) throw new Error('MEDIA_REFERENCE_CANDIDATE_NOT_AUTHORIZED')
-            return current
-        }))
+
+        if (!previousBinding)
+            throw new Error('MEDIA_REFERENCE_CANDIDATE_NOT_BOUND')
+
+        const currentAssets = await Promise.all(
+            authorized.bindings.map(async binding => {
+                const current = await AssetModel.get({
+                    assetId: binding.assetId,
+                    requester,
+                })
+
+                if ('error' in current)
+                    throw new Error('MEDIA_REFERENCE_CANDIDATE_NOT_AUTHORIZED')
+
+                return current
+            }),
+        )
         const refreshedByAssetId = new Map(
             createMediaReferenceBindings({
                 assets: currentAssets,
-                selectedNodeIds: Object.fromEntries(authorized.bindings.flatMap(binding => binding.nodeId ? [[binding.assetId, binding.nodeId]] : [])),
+                selectedNodeIds: Object.fromEntries(
+                    authorized.bindings.flatMap(binding => binding.nodeId ? [[binding.assetId, binding.nodeId]] : []),
+                ),
             }).map(binding => [binding.assetId, binding]),
         )
         const remaining = authorized.unresolvedBindings.filter(candidate => candidate.bindingId !== bindingId)
@@ -520,6 +660,7 @@ export class MediaGenerationRequestService {
             ...authorized,
             bindings: authorized.bindings.map(binding => {
                 const refreshed = refreshedByAssetId.get(binding.assetId)!
+
                 return {
                     ...refreshed,
                     alias: binding.alias,
@@ -548,9 +689,13 @@ export class MediaGenerationRequestService {
             updatedAt: now,
             statusUpdatedAt: now,
         }
-        await MediaGenerationRequestModel.transition({ request: next, expectedRevision: authorized.revision })
+        await MediaGenerationRequestModel.transition({
+            request: next,
+            expectedRevision: authorized.revision,
+        })
         const pendingAction = getReferenceResolutionAction(remaining)
         const operationNode = next.runs[0]
+
         if (operationNode) {
             await updateMediaGenerationOperationNode({
                 workspaceId,
@@ -569,21 +714,32 @@ export class MediaGenerationRequestService {
                 clearAction: !pendingAction,
             })
         }
+
         await this.events().append({
             userId,
             workspaceId,
-            event: eventFor(next, remaining.length > 0 ? 'MEDIA_GENERATION_ACTION_REQUIRED' : 'MEDIA_GENERATION_REQUEST_STATUS', {
-                status: next.status,
-                ...pendingAction,
-                resolvedBindingId: bindingId,
-                resolvedAssetId: assetId,
-            }),
+            event: eventFor(
+                next,
+                remaining.length > 0 ? 'MEDIA_GENERATION_ACTION_REQUIRED' : 'MEDIA_GENERATION_REQUEST_STATUS',
+                {
+                    status: next.status,
+                    ...pendingAction,
+                    resolvedBindingId: bindingId,
+                    resolvedAssetId: assetId,
+                },
+            ),
         })
+
         return next
     }
 
     private async cancelAuthorizedRequest(authorized: MediaGenerationRequest): Promise<MediaGenerationRequest> {
-        const { generationRequestId, workspaceId, userId } = authorized
+        const {
+            generationRequestId,
+            workspaceId,
+            userId,
+        } = authorized
+
         if (['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)) {
             await removeMediaGenerationOperationNodes({
                 workspaceId,
@@ -591,118 +747,189 @@ export class MediaGenerationRequestService {
                 terminalStatus: authorized.status === 'cancelled' ? 'cancelled' : 'completed',
                 discardUnboundOutputNodes: true,
             })
+
             return authorized
         }
-        const cancelledRuns = authorized.runs.filter(run => (
-            !['completed', 'failed', 'cancelled'].includes(run.status)
-        ))
+
+        const cancelledRuns = authorized.runs.filter(
+            run => (
+                !['completed', 'failed', 'cancelled'].includes(run.status)
+            ),
+        )
         const streamedProgressByRun = new Map(
-            await Promise.all(cancelledRuns.map(async run => {
-                const streamed = await this.getStreamedRunProgress(authorized, run.generationRun)
-                return [run.generationRun, streamed.progress] as const
-            })),
+            await Promise.all(
+                cancelledRuns.map(async run => {
+                    const streamed = await this.getStreamedRunProgress(authorized, run.generationRun)
+
+                    return [run.generationRun, streamed.progress] as const
+                }),
+            ),
         )
         const now = Date.now()
         const next: MediaGenerationRequest = {
             ...authorized,
             status: 'cancelled',
-            runs: authorized.runs.map(run =>
-                ['completed', 'failed', 'cancelled'].includes(run.status)
-                    ? run
-                    : {
-                        ...run,
-                        status: 'cancelled',
-                        completedAt: now,
-                        progress: settleMediaGenerationRunProgress(
-                            streamedProgressByRun.get(run.generationRun) ?? run.progress,
-                            'cancelled',
-                            streamedProgressByRun.get(run.generationRun)?.message
-                                ?? run.progress?.message
-                                ?? 'Media generation cancelled.',
-                        ),
-                    }
+            runs: authorized.runs.map(
+                run =>
+                    ['completed', 'failed', 'cancelled'].includes(run.status)
+                        ? run
+                        : {
+                            ...run,
+                            status: 'cancelled',
+                            completedAt: now,
+                            progress: settleMediaGenerationRunProgress(
+                                streamedProgressByRun.get(run.generationRun) ?? run.progress,
+                                'cancelled',
+                                streamedProgressByRun.get(run.generationRun)?.message
+                                    ?? run.progress?.message
+                                    ?? 'Media generation cancelled.',
+                            ),
+                        },
             ),
             revision: authorized.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
         }
-        await MediaGenerationRequestModel.transition({ request: next, expectedRevision: authorized.revision })
-        await this.events().append({ userId, workspaceId, event: eventFor(next, 'MEDIA_GENERATION_REQUEST_STATUS', { status: 'cancelled' }) })
+        await MediaGenerationRequestModel.transition({
+            request: next,
+            expectedRevision: authorized.revision,
+        })
+        await this.events().append({
+            userId,
+            workspaceId,
+            event: eventFor(
+                next,
+                'MEDIA_GENERATION_REQUEST_STATUS',
+                { status: 'cancelled' },
+            ),
+        })
         await removeMediaGenerationOperationNodes({
             workspaceId,
             generationRequestId,
             terminalStatus: 'cancelled',
             discardUnboundOutputNodes: true,
         })
-        await Promise.all(cancelledRuns.map(async run => {
-            if (!run.outputAssetId || !run.mediaRunId) return
-            const surfaceId = `conversation#${authorized.conversationAssetId}#media#${run.mediaRunId}`
-            try {
-                await AssetModel.removeAssetSurfaceReferenceSystem({
-                    assetId: run.outputAssetId,
-                    organizationId: authorized.organizationId,
-                    surfaceId,
-                })
-            } catch {
-                await enqueueAssetSurfaceCleanup({
-                    assetId: run.outputAssetId,
-                    organizationId: authorized.organizationId,
-                    surfaceId,
-                })
-            }
-        }))
+        await Promise.all(
+            cancelledRuns.map(async run => {
+                if (
+                    !run.outputAssetId
+                    || !run.mediaRunId
+                )
+                    return
+
+                const surfaceId = `conversation#${authorized.conversationAssetId}#media#${run.mediaRunId}`
+
+                try {
+                    await AssetModel.removeAssetSurfaceReferenceSystem({
+                        assetId: run.outputAssetId,
+                        organizationId: authorized.organizationId,
+                        surfaceId,
+                    })
+                } catch {
+                    await enqueueAssetSurfaceCleanup({
+                        assetId: run.outputAssetId,
+                        organizationId: authorized.organizationId,
+                        surfaceId,
+                    })
+                }
+            }),
+        )
         await this.releaseCheckpoint(next)
+
         return next
     }
 
-    async cancel({ generationRequestId, workspaceId, userId, requestRevision }: {
+    async cancel({
+        generationRequestId,
+        workspaceId,
+        userId,
+        requestRevision,
+    }: {
         generationRequestId: string
         workspaceId: string
         userId: string
         requestRevision: number
     }): Promise<MediaGenerationRequest> {
-        const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
-        if ('error' in authorized) throw new Error(authorized.error)
+        const authorized = await MediaGenerationRequestModel.getAuthorized({
+            generationRequestId,
+            workspaceId,
+            userId,
+        })
+
+        if ('error' in authorized)
+            throw new Error(authorized.error)
+
         if (
             !['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)
             && authorized.revision !== requestRevision
-        ) {
+        )
             throw new Error('STALE_MEDIA_REQUEST_REVISION')
-        }
+
         return await this.cancelAuthorizedRequest(authorized)
     }
 
-    async cancelCurrent({ generationRequestId, workspaceId, userId }: {
+    async cancelCurrent({
+        generationRequestId,
+        workspaceId,
+        userId,
+    }: {
         generationRequestId: string
         workspaceId: string
         userId: string
     }): Promise<MediaGenerationRequest> {
         for (let attempt = 0; attempt < 8; attempt += 1) {
-            const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
-            if ('error' in authorized) throw new Error(authorized.error)
+            const authorized = await MediaGenerationRequestModel.getAuthorized({
+                generationRequestId,
+                workspaceId,
+                userId,
+            })
+
+            if ('error' in authorized)
+                throw new Error(authorized.error)
+
             try {
                 return await this.cancelAuthorizedRequest(authorized)
             } catch (error) {
-                if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                if (
+                    isTransactionConditionalCheckFailure(error)
+                    && attempt < 7
+                )
+                    continue
+
                 throw error
             }
         }
+
         throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
     }
 
-    async pauseForBranchResolution({ request, candidateAssetIds, userId }: {
+    async pauseForBranchResolution({
+        request,
+        candidateAssetIds,
+        userId,
+    }: {
         request: MediaGenerationRequest
         candidateAssetIds: string[]
         userId: string
     }): Promise<MediaGenerationRequest> {
-        const candidates = [...new Set(candidateAssetIds)]
-            .filter(assetId => request.bindings.some(binding => binding.assetId === assetId))
-            .map(assetId => ({ assetId, score: 1, previewRenditionName: 'thumbnail' }))
-        if (candidates.length < 2) throw new Error('MEDIA_BRANCH_AMBIGUITY_CANDIDATES_INVALID')
+        const candidates = [...new Set(candidateAssetIds)].filter(assetId => request.bindings.some(binding => binding.assetId === assetId)).map(
+            assetId => ({
+                assetId,
+                score: 1,
+                previewRenditionName: 'thumbnail',
+            }),
+        )
+
+        if (candidates.length < 2)
+            throw new Error('MEDIA_BRANCH_AMBIGUITY_CANDIDATES_INVALID')
+
         const now = Date.now()
         const unresolved: UnresolvedReferenceBinding = {
             bindingId: `branch-target-${uuid()}`,
-            promptRange: { from: 0, to: 0 },
+            promptRange: {
+                from: 0,
+                to: 0,
+            },
             originalText: '',
             matcherVersion: 'media-branch-resolver-v1',
             candidates,
@@ -715,8 +942,12 @@ export class MediaGenerationRequestService {
             updatedAt: now,
             statusUpdatedAt: now,
         }
-        await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+        await MediaGenerationRequestModel.transition({
+            request: next,
+            expectedRevision: request.revision,
+        })
         const operationNode = request.runs[0]
+
         if (operationNode) {
             await updateMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
@@ -728,15 +959,21 @@ export class MediaGenerationRequestService {
                 requestRevision: next.revision,
             })
         }
+
         await this.events().append({
             userId,
             workspaceId: request.workspaceId,
-            event: eventFor(next, 'MEDIA_GENERATION_ACTION_REQUIRED', {
-                status: next.status,
-                bindingId: unresolved.bindingId,
-                candidateAssetIds: candidates.map(candidate => candidate.assetId),
-            }),
+            event: eventFor(
+                next,
+                'MEDIA_GENERATION_ACTION_REQUIRED',
+                {
+                    status: next.status,
+                    bindingId: unresolved.bindingId,
+                    candidateAssetIds: candidates.map(candidate => candidate.assetId),
+                },
+            ),
         })
+
         return next
     }
 
@@ -753,10 +990,19 @@ export class MediaGenerationRequestService {
         reasoningIndex: number
         assetIds: string[]
     }): Promise<MediaGenerationRequest> {
-        const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
-        if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
+        const request = await MediaGenerationRequestModel.get({
+            generationRequestId,
+            workspaceId,
+        })
+
+        if (!request)
+            throw new Error('MEDIA_REQUEST_NOT_FOUND')
+
         const run = request.runs.find(candidate => candidate.modelId === mediaModelId && candidate.reasoningIndex === reasoningIndex)
-        if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
+
+        if (!run)
+            throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
+
         const now = Date.now()
         const problem: MediaGenerationProblem = {
             problemVersion: '1',
@@ -775,21 +1021,25 @@ export class MediaGenerationRequestService {
         const next: MediaGenerationRequest = {
             ...request,
             status: 'action-required',
-            runs: request.runs.map(candidate =>
-                candidate.generationRun === run.generationRun
-                    ? {
-                        ...candidate,
-                        status: 'awaiting-provider-verification',
-                        requiredVerificationAssetIds: [...new Set(assetIds)],
-                        problem,
-                    }
-                    : candidate
+            runs: request.runs.map(
+                candidate =>
+                    candidate.generationRun === run.generationRun
+                        ? {
+                            ...candidate,
+                            status: 'awaiting-provider-verification',
+                            requiredVerificationAssetIds: [...new Set(assetIds)],
+                            problem,
+                        }
+                        : candidate,
             ),
             revision: request.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
         }
-        await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+        await MediaGenerationRequestModel.transition({
+            request: next,
+            expectedRevision: request.revision,
+        })
         await updateMediaGenerationOperationNode({
             workspaceId,
             operationNodeId: run.operationNodeId,
@@ -802,18 +1052,25 @@ export class MediaGenerationRequestService {
         await this.events().append({
             userId: request.userId,
             workspaceId,
-            event: eventFor(next, 'MEDIA_GENERATION_ACTION_REQUIRED', {
-                status: next.status,
-                problem,
-                generationRun: run.generationRun,
-                assetIds,
-            }),
+            event: eventFor(
+                next,
+                'MEDIA_GENERATION_ACTION_REQUIRED',
+                {
+                    status: next.status,
+                    problem,
+                    generationRun: run.generationRun,
+                    assetIds,
+                },
+            ),
         })
+
         return next
     }
 
     async releaseCheckpoint(request: MediaGenerationRequest): Promise<void> {
-        if (!['completed', 'cancelled'].includes(request.status)) throw new Error('MEDIA_REQUEST_CHECKPOINT_RETENTION_REQUIRED')
+        if (!['completed', 'cancelled'].includes(request.status))
+            throw new Error('MEDIA_REQUEST_CHECKPOINT_RETENTION_REQUIRED')
+
         await BlobModel.removeReference({
             organizationId: request.organizationId,
             blobHash: request.checkpointBlobHash,
@@ -834,26 +1091,41 @@ export class MediaGenerationRequestService {
         workspaceId: string
         detail?: string
     }): Promise<MediaGenerationRequest | undefined> {
-        const initialRequest = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
-        if (!initialRequest) return undefined
-        if (['awaiting-reference-resolution', 'action-required', 'cancelled'].includes(initialRequest.status)) {
+        const initialRequest = await MediaGenerationRequestModel.get({
+            generationRequestId,
+            workspaceId,
+        })
+
+        if (!initialRequest)
+            return undefined
+
+        if (['awaiting-reference-resolution', 'action-required', 'cancelled'].includes(initialRequest.status))
             return initialRequest
-        }
-        const unfinishedRunIds = initialRequest.runs
-            .filter(run => run.status === 'pending' || run.status === 'running')
-            .map(run => run.generationRun)
+
+        const unfinishedRunIds = initialRequest.runs.filter(run => run.status === 'pending' || run.status === 'running').map(run => run.generationRun)
         let latestRequest = initialRequest
 
         for (const generationRun of unfinishedRunIds) {
             for (let attempt = 0; attempt < 8; attempt += 1) {
-                const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
-                if (!request) return undefined
-                if (['awaiting-reference-resolution', 'action-required', 'cancelled'].includes(request.status)) {
+                const request = await MediaGenerationRequestModel.get({
+                    generationRequestId,
+                    workspaceId,
+                })
+
+                if (!request)
+                    return undefined
+
+                if (['awaiting-reference-resolution', 'action-required', 'cancelled'].includes(request.status))
                     return request
-                }
+
                 const targetRun = request.runs.find(run => run.generationRun === generationRun)
-                if (!targetRun || (targetRun.status !== 'pending' && targetRun.status !== 'running')) {
+
+                if (
+                    !targetRun
+                    || (targetRun.status !== 'pending' && targetRun.status !== 'running')
+                ) {
                     latestRequest = request
+
                     break
                 }
 
@@ -881,16 +1153,21 @@ export class MediaGenerationRequestService {
                 const accumulatedProgress = streamed.progress
                     ? mergeMediaGenerationRunProgress(targetRun.progress, streamed.progress)
                     : targetRun.progress
-                const runs = request.runs.map(run =>
-                    run.generationRun === generationRun
-                        ? {
-                            ...run,
-                            status: 'failed' as const,
-                            problem,
-                            completedAt: now,
-                            progress: settleMediaGenerationRunProgress(accumulatedProgress, 'failed', problemDetail),
-                        }
-                        : run
+                const runs = request.runs.map(
+                    run =>
+                        run.generationRun === generationRun
+                            ? {
+                                ...run,
+                                status: 'failed' as const,
+                                problem,
+                                completedAt: now,
+                                progress: settleMediaGenerationRunProgress(
+                                    accumulatedProgress,
+                                    'failed',
+                                    problemDetail,
+                                ),
+                            }
+                            : run,
                 )
                 const status = deriveRequestStatus(runs)
                 const next: MediaGenerationRequest = {
@@ -901,20 +1178,32 @@ export class MediaGenerationRequestService {
                     updatedAt: now,
                     statusUpdatedAt: request.status === status ? request.statusUpdatedAt : now,
                 }
+
                 try {
-                    await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+                    await MediaGenerationRequestModel.transition({
+                        request: next,
+                        expectedRevision: request.revision,
+                    })
                 } catch (error) {
-                    if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                    if (
+                        isTransactionConditionalCheckFailure(error)
+                        && attempt < 7
+                    )
+                        continue
+
                     throw error
                 }
+
                 await this.reconcileRunProjection({
                     request: next,
                     run: runs.find(run => run.generationRun === generationRun)!,
                 })
                 latestRequest = next
+
                 break
             }
         }
+
         return latestRequest
     }
 
@@ -936,33 +1225,59 @@ export class MediaGenerationRequestService {
         problem?: MediaGenerationProblem
     }): Promise<MediaGenerationRequest> {
         for (let attempt = 0; attempt < 8; attempt++) {
-            const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
-            if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
-            if (request.status === 'cancelled') return request
-            const run = request.runs.find(candidate => (
-                Boolean(mediaRunId && candidate.mediaRunId === mediaRunId)
-                || (!mediaRunId
-                    && candidate.modelId === mediaModelId
-                    && candidate.reasoningIndex === reasoningIndex)
-            ))
-            if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
+            const request = await MediaGenerationRequestModel.get({
+                generationRequestId,
+                workspaceId,
+            })
+
+            if (!request)
+                throw new Error('MEDIA_REQUEST_NOT_FOUND')
+
+            if (request.status === 'cancelled')
+                return request
+
+            const run = request.runs.find(
+                candidate => (
+                    Boolean(mediaRunId && candidate.mediaRunId === mediaRunId)
+                    || (!mediaRunId
+                        && candidate.modelId === mediaModelId
+                        && candidate.reasoningIndex === reasoningIndex)
+                ),
+            )
+
+            if (!run)
+                throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
+
             if (run.status === status) {
-                await this.reconcileRunProjection({ request, run })
+                await this.reconcileRunProjection({
+                    request,
+                    run,
+                })
+
                 return request
             }
+
             const repairsSyntheticUnsettledFailure = status === 'completed'
                 && run.status === 'failed'
                 && run.problem?.type === 'urn:lixpi:media-problem:media-run-unsettled'
+
             if (
                 ['completed', 'failed', 'cancelled'].includes(run.status)
                 && !repairsSyntheticUnsettledFailure
-            ) return request
+            )
+                return request
+
             const streamed = status === 'running'
-                ? { progress: undefined, streamSequence: 0 }
+                ? {
+                    progress: undefined,
+                    streamSequence: 0,
+                }
                 : await this.getStreamedRunProgress(request, run.generationRun)
             const now = Date.now()
             const runs = request.runs.map(candidate => {
-                if (candidate.generationRun !== run.generationRun) return candidate
+                if (candidate.generationRun !== run.generationRun)
+                    return candidate
+
                 const accumulatedProgress = streamed.progress
                     ? mergeMediaGenerationRunProgress(candidate.progress, streamed.progress)
                     : candidate.progress
@@ -976,11 +1291,21 @@ export class MediaGenerationRequestService {
                         ? { startedAt: candidate.startedAt ?? now }
                         : {
                             completedAt: now,
-                            progress: settleMediaGenerationRunProgress(accumulatedProgress, status, statusMessage),
+                            progress: settleMediaGenerationRunProgress(
+                                accumulatedProgress,
+                                status,
+                                statusMessage,
+                            ),
                         }),
-                    ...(problem ? { problem: { ...problem, generationRun: candidate.generationRun } } : {}),
+                    ...(problem ? { problem: {
+                        ...problem,
+                        generationRun: candidate.generationRun,
+                    } } : {}),
                 }
-                if (status === 'completed') delete nextRun.problem
+
+                if (status === 'completed')
+                    delete nextRun.problem
+
                 return nextRun
             })
             const requestStatus = deriveRequestStatus(runs)
@@ -992,18 +1317,30 @@ export class MediaGenerationRequestService {
                 updatedAt: now,
                 statusUpdatedAt: request.status === requestStatus ? request.statusUpdatedAt : now,
             }
+
             try {
-                await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+                await MediaGenerationRequestModel.transition({
+                    request: next,
+                    expectedRevision: request.revision,
+                })
             } catch (error) {
-                if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                if (
+                    isTransactionConditionalCheckFailure(error)
+                    && attempt < 7
+                )
+                    continue
+
                 throw error
             }
+
             await this.reconcileRunProjection({
                 request: next,
                 run: runs.find(candidate => candidate.generationRun === run.generationRun)!,
             })
+
             return next
         }
+
         throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
     }
 
@@ -1023,27 +1360,46 @@ export class MediaGenerationRequestService {
         progress: MediaGenerationRunProgress
     }): Promise<MediaGenerationRequest> {
         for (let attempt = 0; attempt < 8; attempt += 1) {
-            const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
-            if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
-            if (request.status === 'cancelled') return request
-            const run = request.runs.find(candidate => (
-                Boolean(mediaRunId && candidate.mediaRunId === mediaRunId)
-                || (!mediaRunId
-                    && candidate.modelId === mediaModelId
-                    && candidate.reasoningIndex === reasoningIndex)
-            ))
-            if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
-            if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
+            const request = await MediaGenerationRequestModel.get({
+                generationRequestId,
+                workspaceId,
+            })
+
+            if (!request)
+                throw new Error('MEDIA_REQUEST_NOT_FOUND')
+
+            if (request.status === 'cancelled')
+                return request
+
+            const run = request.runs.find(
+                candidate => (
+                    Boolean(mediaRunId && candidate.mediaRunId === mediaRunId)
+                    || (!mediaRunId
+                        && candidate.modelId === mediaModelId
+                        && candidate.reasoningIndex === reasoningIndex)
+                ),
+            )
+
+            if (!run)
+                throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
+
+            if (['completed', 'failed', 'cancelled'].includes(run.status))
+                return request
+
             const streamed = await this.getStreamedRunProgress(request, run.generationRun)
             const currentProgress = streamed.progress
                 ? mergeMediaGenerationRunProgress(run.progress, streamed.progress)
                 : run.progress
             const nextProgress = mergeMediaGenerationRunProgress(currentProgress, progress)
             const now = Date.now()
-            const runs = request.runs.map(candidate =>
-                candidate.generationRun === run.generationRun
-                    ? { ...candidate, progress: nextProgress }
-                    : candidate
+            const runs = request.runs.map(
+                candidate =>
+                    candidate.generationRun === run.generationRun
+                        ? {
+                            ...candidate,
+                            progress: nextProgress,
+                        }
+                        : candidate,
             )
             const next: MediaGenerationRequest = {
                 ...request,
@@ -1053,27 +1409,39 @@ export class MediaGenerationRequestService {
                 updatedAt: now,
                 statusUpdatedAt: request.status === 'submitted' ? now : request.statusUpdatedAt,
             }
+
             try {
                 await this.events().append({
                     userId: request.userId,
                     workspaceId,
-                    event: eventFor(next, 'MEDIA_GENERATION_PROGRESS', {
-                        status: next.status,
-                        runStatus: run.status,
-                        generationRun: run.generationRun,
-                        ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
-                        ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
-                        progress: nextProgress,
-                        message: nextProgress.message,
-                    }),
+                    event: eventFor(
+                        next,
+                        'MEDIA_GENERATION_PROGRESS',
+                        {
+                            status: next.status,
+                            runStatus: run.status,
+                            generationRun: run.generationRun,
+                            ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                            ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
+                            progress: nextProgress,
+                            message: nextProgress.message,
+                        },
+                    ),
                     expectedLastSubjectSequence: streamed.streamSequence,
                 })
             } catch (error) {
-                if (isJetStreamExpectationFailure(error) && attempt < 7) continue
+                if (
+                    isJetStreamExpectationFailure(error)
+                    && attempt < 7
+                )
+                    continue
+
                 throw error
             }
+
             return next
         }
+
         throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
     }
 
@@ -1096,68 +1464,78 @@ export class MediaGenerationRequestService {
                 generationRun: run.generationRun,
                 progress: run.progress,
             })
-            : run.status === 'failed' && run.outputNodeId && run.outputAssetId
-            ? settleFailedGeneratedMediaRunOnCanvas({
-                workspaceId: request.workspaceId,
-                generationRun: {
-                    requestKind: 'media-generation-matrix',
-                    generationRequestId: request.generationRequestId,
-                    reasoningRunId: run.reasoningRunId
+            : run.status === 'failed'
+                && run.outputNodeId
+                && run.outputAssetId
+                ? settleFailedGeneratedMediaRunOnCanvas({
+                    workspaceId: request.workspaceId,
+                    generationRun: {
+                        requestKind: 'media-generation-matrix',
+                        generationRequestId: request.generationRequestId,
+                        reasoningRunId: run.reasoningRunId
                         ?? `${request.generationRequestId}:reasoning:${run.reasoningIndex}`,
-                    ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
-                    reasoningModelId: run.reasoningModelId,
-                    mediaModelId: run.modelId,
-                    ...(run.mediaType ? { mediaType: run.mediaType } : {}),
-                    reasoningIndex: run.reasoningIndex,
-                    ...(run.mediaIndex === undefined ? {} : { mediaIndex: run.mediaIndex }),
-                    variantIndex: run.generationRun,
-                },
-                outputNodeId: run.outputNodeId,
-                assetId: run.outputAssetId,
-                errorMessage: message,
-                ...(problem ? { problem } : {}),
-                ...(run.progress ? { progress: run.progress } : {}),
-                requestRevision: request.revision,
-            })
-            : updateMediaGenerationOperationNode({
-                workspaceId: request.workspaceId,
-                operationNodeId: run.operationNodeId,
-                generationRequestId: request.generationRequestId,
-                generationRun: run.generationRun,
-                status: run.status === 'failed' ? 'failed' : 'in-progress',
-                message,
-                progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-                ...(problem ? { problem } : {}),
-                requestRevision: request.revision,
-            })
+                        ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                        reasoningModelId: run.reasoningModelId,
+                        mediaModelId: run.modelId,
+                        ...(run.mediaType ? { mediaType: run.mediaType } : {}),
+                        reasoningIndex: run.reasoningIndex,
+                        ...(run.mediaIndex === undefined ? {} : { mediaIndex: run.mediaIndex }),
+                        variantIndex: run.generationRun,
+                    },
+                    outputNodeId: run.outputNodeId,
+                    assetId: run.outputAssetId,
+                    errorMessage: message,
+                    ...(problem ? { problem } : {}),
+                    ...(run.progress ? { progress: run.progress } : {}),
+                    requestRevision: request.revision,
+                })
+                : updateMediaGenerationOperationNode({
+                    workspaceId: request.workspaceId,
+                    operationNodeId: run.operationNodeId,
+                    generationRequestId: request.generationRequestId,
+                    generationRun: run.generationRun,
+                    status: run.status === 'failed' ? 'failed' : 'in-progress',
+                    message,
+                    progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
+                    ...(problem ? { problem } : {}),
+                    requestRevision: request.revision,
+                })
         const event = this.events().append({
             userId: request.userId,
             workspaceId: request.workspaceId,
-            event: eventFor(request, problem ? 'MEDIA_GENERATION_PROBLEM' : 'MEDIA_GENERATION_REQUEST_STATUS', {
-                status: request.status,
-                runStatus: run.status,
-                generationRun: run.generationRun,
-                ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
-                ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
-                ...(run.progress
-                    ? {
-                        progress: run.progress,
-                        message: run.progress.message,
-                    }
-                    : {}),
-                ...(problem ? { problem } : {}),
-            }),
+            event: eventFor(
+                request,
+                problem ? 'MEDIA_GENERATION_PROBLEM' : 'MEDIA_GENERATION_REQUEST_STATUS',
+                {
+                    status: request.status,
+                    runStatus: run.status,
+                    generationRun: run.generationRun,
+                    ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                    ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
+                    ...(run.progress
+                        ? {
+                            progress: run.progress,
+                            message: run.progress.message,
+                        }
+                        : {}),
+                    ...(problem ? { problem } : {}),
+                },
+            ),
         })
         const [projectionResult, eventResult] = await Promise.allSettled([projection, event])
-        if (projectionResult.status === 'rejected') {
+
+        if (projectionResult.status === 'rejected')
             warn(`[MediaGenerationRequest] status projection failed: ${String(projectionResult.reason)}`)
-        }
-        if (eventResult.status === 'rejected') {
+
+        if (eventResult.status === 'rejected')
             warn(`[MediaGenerationRequest] status event failed: ${String(eventResult.reason)}`)
-        }
-        if (request.status === 'completed' || request.status === 'cancelled') {
+
+        if (
+            request.status === 'completed'
+            || request.status === 'cancelled'
+        )
             await this.releaseCheckpoint(request)
-        } else if (isMediaGenerationRequestTerminal(request.status)) {
+        else if (isMediaGenerationRequestTerminal(request.status)) {
             await this.events().purgeRequest({
                 workspaceId: request.workspaceId,
                 generationRequestId: request.generationRequestId,
@@ -1167,21 +1545,30 @@ export class MediaGenerationRequestService {
 
     async cleanupWorkspace(workspaceId: string): Promise<number> {
         const metas = await MediaGenerationRequestModel.listWorkspace(workspaceId)
-        const requests = (await Promise.all(metas.map(meta =>
-            MediaGenerationRequestModel.get({
-                generationRequestId: meta.generationRequestId,
-                workspaceId,
-            })
-        ))).filter((request): request is MediaGenerationRequest => Boolean(request))
+        const requests = (await Promise.all(
+            metas.map(
+                meta =>
+                    MediaGenerationRequestModel.get({
+                        generationRequestId: meta.generationRequestId,
+                        workspaceId,
+                    }),
+            ),
+        )).filter((request): request is MediaGenerationRequest => Boolean(request))
+
         for (const request of requests) {
             await BlobModel.removeReference({
                 organizationId: request.organizationId,
                 blobHash: request.checkpointBlobHash,
                 referenceKey: checkpointReferenceKey(request.generationRequestId),
             })
-            await this.events().purgeRequest({ workspaceId, generationRequestId: request.generationRequestId })
+            await this.events().purgeRequest({
+                workspaceId,
+                generationRequestId: request.generationRequestId,
+            })
         }
+
         await MediaGenerationRequestModel.deleteWorkspace(workspaceId)
+
         return requests.length
     }
 }

@@ -4,7 +4,10 @@ class InfoBubbleStateManager {
     private openBubbleId: string | null = null
     private bubbles: Map<string, { close: () => void }> = new Map()
 
-    register(id: string, bubble: { close: () => void }): void {
+    register(
+        id: string,
+        bubble: { close: () => void },
+    ): void {
         this.bubbles.set(id, bubble)
     }
 
@@ -16,21 +19,23 @@ class InfoBubbleStateManager {
         const previousId = this.openBubbleId
 
         // Close previously open bubble if different
-        if (previousId && previousId !== id) {
+        if (
+            previousId
+            && previousId !== id
+        )
             this.bubbles.get(previousId)?.close()
-        }
 
         this.openBubbleId = id
     }
 
     close(id: string): void {
-        if (this.openBubbleId === id) {
+        if (this.openBubbleId === id)
             this.openBubbleId = null
-        }
     }
 
     closeAll(): void {
         const currentId = this.openBubbleId
+
         if (currentId) {
             this.openBubbleId = null
             this.bubbles.get(currentId)?.close()

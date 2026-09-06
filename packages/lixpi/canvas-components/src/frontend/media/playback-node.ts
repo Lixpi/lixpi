@@ -37,10 +37,22 @@ export type PlaybackNodeOptions<Data> = {
     playback?: Pick<NativePlaybackOptions, 'muted' | 'loop' | 'preload' | 'crossOrigin'>
     pauseWhenHidden?: boolean
     isImageVisible?: (node: EngineNode<Data>) => boolean
-    onElement?: (node: EngineNode<Data>, element: HTMLVideoElement | HTMLAudioElement | null) => void
-    onPlayback?: (node: EngineNode<Data>, playback: NativePlayback | null) => void
-    onReady?: (node: EngineNode<Data>, element: HTMLVideoElement | HTMLAudioElement) => void
-    onIntrinsicSize?: (node: EngineNode<Data>, size: CanvasEngineSize) => void
+    onElement?: (
+        node: EngineNode<Data>,
+        element: HTMLVideoElement | HTMLAudioElement | null,
+    ) => void
+    onPlayback?: (
+        node: EngineNode<Data>,
+        playback: NativePlayback | null,
+    ) => void
+    onReady?: (
+        node: EngineNode<Data>,
+        element: HTMLVideoElement | HTMLAudioElement,
+    ) => void
+    onIntrinsicSize?: (
+        node: EngineNode<Data>,
+        size: CanvasEngineSize,
+    ) => void
     onError: (error: unknown) => void
 }
 
@@ -51,9 +63,18 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
     private destroyed = false
     private visible = false
 
-    constructor(node: EngineNode<Data>, private readonly context: ComponentContext, private readonly options: PlaybackNodeOptions<Data>) {
+    constructor(
+        node: EngineNode<Data>,
+        private readonly context: ComponentContext,
+        private readonly options: PlaybackNodeOptions<Data>,
+    ) {
         this.node = node
-        this.image = new ImageSurface({ ...options.image, surface: context, onError: options.onError })
+        this.image = new ImageSurface({
+            ...options.image,
+            surface: context,
+            onError: options.onError,
+        })
+
         try {
             this.playback = new NativePlayback({
                 ...options.playback,
@@ -67,25 +88,37 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
             })
         } catch (error) {
             this.image.destroy()
+
             throw error
         }
+
         try {
-            context.signal.addEventListener('abort', this.destroy, { once: true })
+            context.signal.addEventListener(
+                'abort',
+                this.destroy,
+                { once: true },
+            )
             options.onElement?.(node, this.playback.element)
             options.onPlayback?.(node, this.playback)
             this.update(node)
         } catch (error) {
             this.destroy()
+
             throw error
         }
     }
 
     update(node: EngineNode<Data>): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.node = node
         const content = this.options.getContent(node)
         const poster = content?.posterRenditionId
-            ? { ...content.media, renditions: content.media.renditions.filter(rendition => rendition.id === content.posterRenditionId) }
+            ? {
+                ...content.media,
+                renditions: content.media.renditions.filter(rendition => rendition.id === content.posterRenditionId),
+            }
             : null
         this.image.setMedia(poster)
         this.image.setVisible(this.visible && (this.options.isImageVisible?.(node) ?? true))
@@ -93,7 +126,10 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
         void this.playback.setPoster(poster, content?.posterRenditionId ?? '')
     }
 
-    setGeometry(bounds: CanvasEngineRect, viewport: CanvasViewport): void {
+    setGeometry(
+        bounds: CanvasEngineRect,
+        viewport: CanvasViewport,
+    ): void {
         this.image.setGeometry(bounds, viewport)
     }
     setSelected(_selected: boolean): void {}
@@ -101,7 +137,12 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
     setVisible(visible: boolean): void {
         this.visible = visible
         this.image.setVisible(visible && (this.options.isImageVisible?.(this.node) ?? true))
-        if (!visible && this.options.pauseWhenHidden) this.playback.pause()
+
+        if (
+            !visible
+            && this.options.pauseWhenHidden
+        )
+            this.playback.pause()
     }
 
     prefetch(): Promise<void> {
@@ -109,9 +150,12 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
     }
 
     destroy = (): void => {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.context.signal.removeEventListener('abort', this.destroy)
+
         try {
             this.playback.destroy()
         } finally {
@@ -128,10 +172,14 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
     }
 }
 
-export function createPlaybackNodeRegistration<Data>(options: PlaybackNodeOptions<Data>): NodeRegistration<Data> {
+export const createPlaybackNodeRegistration = <Data>(options: PlaybackNodeOptions<Data>): NodeRegistration<Data> => {
     return {
         type: options.type,
         geometry: options.geometry,
-        mount: (node, context) => new PlaybackNodeView(node, context, options),
+        mount: (node, context) => new PlaybackNodeView(
+            node,
+            context,
+            options,
+        ),
     }
 }

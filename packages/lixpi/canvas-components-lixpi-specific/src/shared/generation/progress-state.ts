@@ -10,8 +10,14 @@ import {
 import { getGeneratedMediaProgressCollisionRect } from '../branch-tree-layout/media-fitting.ts'
 
 export type MediaGenerationProgressAnchorGeometry = {
-    position: { x: number; y: number }
-    dimensions: { width: number; height: number }
+    position: {
+        x: number
+        y: number
+    }
+    dimensions: {
+        width: number
+        height: number
+    }
 }
 
 export type MediaGenerationProgressCollisionRect = {
@@ -39,35 +45,45 @@ export type BranchMarkerMediaRequestStatusSource = {
     status?: string
 }
 
-export function isMediaGenerationOperationSupersededByOutput(
+export const isMediaGenerationOperationSupersededByOutput = (
     operation: Pick<BranchMarkerMediaRequestStatusSource, 'outputNodeId' | 'mediaRunId'>,
     output: Pick<BranchMarkerMediaRequestStatusSource, 'nodeId' | 'mediaRunId'>,
-): boolean {
+): boolean => {
     return Boolean(
         (operation.outputNodeId && operation.outputNodeId === output.nodeId)
             || (operation.mediaRunId && operation.mediaRunId === output.mediaRunId),
     )
 }
 
-export function settleReadyMediaGenerationProgress(
+export const settleReadyMediaGenerationProgress = (
     state: MediaGenerationProgressState,
     mediaGenerationPhase: MediaGenerationCanvasPhase | undefined,
-): MediaGenerationProgressState {
+): MediaGenerationProgressState => {
     const isActive = state.status === 'pending'
         || state.status === 'running'
         || state.status === 'awaiting-provider-verification'
-    if (mediaGenerationPhase !== 'ready' || !isActive) return state
+
+    if (
+        mediaGenerationPhase !== 'ready'
+        || !isActive
+    )
+        return state
 
     const message = 'Media generation completed.'
+
     return {
         ...state,
         status: 'completed',
         message,
-        progress: settleMediaGenerationRunProgress(state.progress, 'completed', message),
+        progress: settleMediaGenerationRunProgress(
+            state.progress,
+            'completed',
+            message,
+        ),
     }
 }
 
-export function resolveMediaGenerationHistoryProgress({
+export const resolveMediaGenerationHistoryProgress = ({
     projectedState,
     liveState,
     matchesLiveTarget,
@@ -75,17 +91,24 @@ export function resolveMediaGenerationHistoryProgress({
     projectedState: MediaGenerationProgressState
     liveState: MediaGenerationProgressState | null
     matchesLiveTarget: boolean
-}): MediaGenerationProgressState {
-    if (!matchesLiveTarget || !liveState) return projectedState
+}): MediaGenerationProgressState => {
+    if (
+        !matchesLiveTarget
+        || !liveState
+    )
+        return projectedState
+
     if (
         liveState.status !== 'pending'
         && liveState.status !== 'running'
         && liveState.status !== 'awaiting-provider-verification'
-    ) return projectedState
+    )
+        return projectedState
+
     return liveState
 }
 
-export function isPersistedMediaGenerationActive({
+export const isPersistedMediaGenerationActive = ({
     progressStatus,
     reviewStatus,
     mediaGenerationPhase,
@@ -93,18 +116,26 @@ export function isPersistedMediaGenerationActive({
     progressStatus: MediaGenerationRunStatus | undefined
     reviewStatus: GeneratedOutputReviewStatus | undefined
     mediaGenerationPhase: MediaGenerationCanvasPhase | undefined
-}): boolean {
-    if (reviewStatus === 'accepted' || reviewStatus === 'superseded') return false
-    if (mediaGenerationPhase === 'ready') return false
+}): boolean => {
+    if (
+        reviewStatus === 'accepted'
+        || reviewStatus === 'superseded'
+    )
+        return false
+
+    if (mediaGenerationPhase === 'ready')
+        return false
+
     if (progressStatus) {
         return progressStatus === 'pending'
             || progressStatus === 'running'
             || progressStatus === 'awaiting-provider-verification'
     }
+
     return mediaGenerationPhase === 'pending-before-first-frame'
 }
 
-export function shouldRenderLiveMediaGenerationProgress({
+export const shouldRenderLiveMediaGenerationProgress = ({
     progressStatus,
     reviewStatus,
     hasActiveLineage,
@@ -114,12 +145,20 @@ export function shouldRenderLiveMediaGenerationProgress({
     reviewStatus: GeneratedOutputReviewStatus | undefined
     hasActiveLineage: boolean
     pendingBeforeFirstFrame: boolean
-}): boolean {
+}): boolean => {
     // Accepted output progress is immutable provenance, not live canvas state.
     // Active topology covers candidates; pre-frame state covers runs that have
     // started before their lineage marker is available.
-    if (!progressStatus || reviewStatus === 'accepted' || reviewStatus === 'superseded') return false
-    if (hasActiveLineage) return true
+    if (
+        !progressStatus
+        || reviewStatus === 'accepted'
+        || reviewStatus === 'superseded'
+    )
+        return false
+
+    if (hasActiveLineage)
+        return true
+
     return pendingBeforeFirstFrame && (
         progressStatus === 'pending'
         || progressStatus === 'running'
@@ -130,35 +169,48 @@ export function shouldRenderLiveMediaGenerationProgress({
 // Every run has a hidden operation record and a visible output node. Once the
 // output owns durable progress, it is authoritative for that run; retaining the
 // operation's older in-progress status would make completed branches pulse.
-export function resolveBranchMarkerMediaRequestStatuses(
-    sources: readonly BranchMarkerMediaRequestStatusSource[],
-): string[] {
+export const resolveBranchMarkerMediaRequestStatuses = (sources: readonly BranchMarkerMediaRequestStatusSource[]): string[] => {
     const outputSources = sources.filter(source => source.kind === 'output' && Boolean(source.status))
     const statuses = outputSources.map(source => source.status as string)
 
     for (const source of sources) {
-        if (source.kind !== 'operation' || !source.status) continue
-        if (outputSources.some(output => isMediaGenerationOperationSupersededByOutput(source, output))) continue
+        if (
+            source.kind !== 'operation'
+            || !source.status
+        )
+            continue
+
+        if (outputSources.some(output => isMediaGenerationOperationSupersededByOutput(source, output)))
+            continue
+
         statuses.push(source.status)
     }
+
     return statuses
 }
 
-export function isBranchMarkerMediaRequestTerminal(statuses: readonly string[]): boolean {
-    return statuses.length > 0 && statuses.every(status => (
-        status === 'completed' || status === 'failed' || status === 'cancelled'
-    ))
+export const isBranchMarkerMediaRequestTerminal = (statuses: readonly string[]): boolean => {
+    return statuses.length > 0 && statuses.every(
+        status => (
+            status === 'completed' || status === 'failed' || status === 'cancelled'
+        ),
+    )
 }
 
-export function settleBranchMarkerProgressStatusForTerminalMedia(
+export const settleBranchMarkerProgressStatusForTerminalMedia = (
     status: OperationProgressItem['status'],
     mediaRequestStatuses: readonly string[],
-): OperationProgressItem['status'] {
-    if (!isBranchMarkerMediaRequestTerminal(mediaRequestStatuses)) return status
-    return status === 'pending' || status === 'running' ? 'completed' : status
+): OperationProgressItem['status'] => {
+    if (!isBranchMarkerMediaRequestTerminal(mediaRequestStatuses))
+        return status
+
+    return status === 'pending'
+        || status === 'running'
+        ? 'completed'
+        : status
 }
 
-export function resolveBranchMarkerGlobalProgressStatuses({
+export const resolveBranchMarkerGlobalProgressStatuses = ({
     hasReasoningResponse,
     isReasoningReceiving,
     branchPending,
@@ -174,7 +226,7 @@ export function resolveBranchMarkerGlobalProgressStatuses({
     requestNodeCount: number
     mediaRequestStatuses: readonly string[]
     capabilityRunStatuses: readonly string[]
-}): BranchMarkerGlobalProgressStatuses {
+}): BranchMarkerGlobalProgressStatuses => {
     const hasFailedCapability = capabilityRunStatuses.includes('failed')
     const hasCancelledCapability = capabilityRunStatuses.includes('cancelled')
     const hasTerminalMediaRequest = isBranchMarkerMediaRequestTerminal(mediaRequestStatuses)
@@ -182,12 +234,16 @@ export function resolveBranchMarkerGlobalProgressStatuses({
         && capabilityRunStatuses.some(status => status === 'pending' || status === 'running')
     const hasFailedMediaRequest = mediaRequestStatuses.includes('failed')
     const hasCancelledMediaRequest = mediaRequestStatuses.includes('cancelled')
-    const hasAttentionMediaRequest = mediaRequestStatuses.some(status => (
-        status === 'action-required' || status === 'awaiting-provider-verification'
-    ))
-    const hasActiveMediaRequest = mediaRequestStatuses.some(status => (
-        status === 'pending' || status === 'running' || status === 'in-progress'
-    ))
+    const hasAttentionMediaRequest = mediaRequestStatuses.some(
+        status => (
+            status === 'action-required' || status === 'awaiting-provider-verification'
+        ),
+    )
+    const hasActiveMediaRequest = mediaRequestStatuses.some(
+        status => (
+            status === 'pending' || status === 'running' || status === 'in-progress'
+        ),
+    )
     const hasDurableMediaRequestStatus = mediaRequestStatuses.length > 0
     const requestHasStarted = requestNodeCount > 0
 
@@ -196,35 +252,45 @@ export function resolveBranchMarkerGlobalProgressStatuses({
         // understood the request and invoked media generation. Prefer that
         // monotonic fact over transient editor receiving flags, which may toggle
         // while tool output and the final assistant frame are interleaved.
-        reasoning: hasReasoningResponse || requestHasStarted
+        reasoning: hasReasoningResponse
+            || requestHasStarted
             ? 'completed'
-            : isReasoningReceiving || branchPending
-            ? 'running'
-            : 'completed',
-        capability: hasFailedCapability || hasFailedMediaRequest
+            : isReasoningReceiving
+                || branchPending
+                ? 'running'
+                : 'completed',
+        capability: hasFailedCapability
+            || hasFailedMediaRequest
             ? 'failed'
-            : hasCancelledCapability || hasCancelledMediaRequest
-            ? 'cancelled'
-            : hasAttentionMediaRequest
-            ? 'attention'
-            : (hasActiveCapability
-                    || hasActiveMediaRequest
-                    || (!hasDurableMediaRequestStatus && (branchPending || branchActive)))
-            ? 'running'
-            : 'completed',
+            : hasCancelledCapability
+                || hasCancelledMediaRequest
+                ? 'cancelled'
+                : hasAttentionMediaRequest
+                    ? 'attention'
+                    : (
+                        hasActiveCapability
+                        || hasActiveMediaRequest
+                        || (!hasDurableMediaRequestStatus && (branchPending || branchActive))
+                    )
+                        ? 'running'
+                        : 'completed',
         lineage: requestHasStarted
             ? 'completed'
-            : branchPending || branchActive
-            ? 'running'
-            : 'completed',
+            : branchPending
+                || branchActive
+                ? 'running'
+                : 'completed',
     }
 }
 
-export function getMediaGenerationProgressPosition(
+export const getMediaGenerationProgressPosition = (
     anchor: MediaGenerationProgressAnchorGeometry,
     progressHeight: number,
     gap = mediaGenerationLayoutSettings.generatedMediaProgress.gap,
-): { x: number; y: number } {
+): {
+    x: number
+    y: number
+} => {
     return {
         x: anchor.position.x + anchor.dimensions.width + gap,
         y: progressHeight <= anchor.dimensions.height
@@ -233,10 +299,14 @@ export function getMediaGenerationProgressPosition(
     }
 }
 
-export function getMediaGenerationProgressCollisionRect(
+export const getMediaGenerationProgressCollisionRect = (
     mediaCollisionRect: MediaGenerationProgressCollisionRect,
     anchor: MediaGenerationProgressAnchorGeometry,
     progressHeight: number,
-): MediaGenerationProgressCollisionRect {
-    return getGeneratedMediaProgressCollisionRect(mediaCollisionRect, anchor, progressHeight)
+): MediaGenerationProgressCollisionRect => {
+    return getGeneratedMediaProgressCollisionRect(
+        mediaCollisionRect,
+        anchor,
+        progressHeight,
+    )
 }

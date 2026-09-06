@@ -26,9 +26,17 @@ import {
 } from './canvas-conversation-run.ts'
 
 export type WorkspacePromptCatalog = {
-    list: (query: { category: PromptReferenceCategory; query?: string; cursor?: string; limit?: number }) => Promise<PromptReferenceCatalogPage>
+    list: (query: {
+        category: PromptReferenceCategory
+        query?: string
+        cursor?: string
+        limit?: number
+    }) => Promise<PromptReferenceCatalogPage>
     listModules: (query?: string) => Promise<CapabilityModuleMeta[]>
-    getModule: (moduleId: string) => Promise<{ meta: CapabilityModuleMeta; entry: CapabilityPromptReference }>
+    getModule: (moduleId: string) => Promise<{
+        meta: CapabilityModuleMeta
+        entry: CapabilityPromptReference
+    }>
 }
 
 export type WorkspaceContextPreview = {

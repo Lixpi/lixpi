@@ -15,7 +15,7 @@ import {
 
 export type CanvasTransform = [number, number, number]
 
-export function defaultPanZoomConfig(onTransformChange: (transform: CanvasTransform) => void) {
+export const defaultPanZoomConfig = (onTransformChange: (transform: CanvasTransform) => void) => {
     return {
         noWheelClassName: 'nowheel',
         noPanClassName: 'nopan',
@@ -58,7 +58,11 @@ export class ViewportController {
     constructor(private readonly options: ViewportControllerOptions) {
         this.validate(options.viewport)
         this.viewport = { ...options.viewport }
-        this.config = { ...defaultPanZoomConfig(this.onTransformChange), ...options.config, onTransformChange: this.onTransformChange }
+        this.config = {
+            ...defaultPanZoomConfig(this.onTransformChange),
+            ...options.config,
+            onTransformChange: this.onTransformChange,
+        }
         this.backend = XYPanZoom({
             domNode: options.root,
             viewport: this.viewport,
@@ -68,32 +72,57 @@ export class ViewportController {
             onDraggingChange: dragging => options.onDraggingChange?.(dragging),
             onPanZoom: () => {},
         })
+
         try {
-            this.locks.subscribe(state =>
-                this.backend.update(
-                    state.locked
-                        ? { ...this.config, panOnDrag: false, panOnScroll: false, zoomOnScroll: false, zoomOnPinch: false, zoomOnDoubleClick: false, userSelectionActive: true, connectionInProgress: true, selectionOnDrag: state.selection }
-                        : this.config,
-                )
+            this.locks.subscribe(
+                state =>
+                    this.backend.update(
+                        state.locked
+                            ? {
+                                ...this.config,
+                                panOnDrag: false,
+                                panOnScroll: false,
+                                zoomOnScroll: false,
+                                zoomOnPinch: false,
+                                zoomOnDoubleClick: false,
+                                userSelectionActive: true,
+                                connectionInProgress: true,
+                                selectionOnDrag: state.selection,
+                            }
+                            : this.config,
+                    ),
             )
         } catch (error) {
             this.backend.destroy()
             this.locks.destroy()
+
             throw error
         }
     }
 
     private validate(viewport: CanvasViewport): void {
-        if (![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom <= 0) throw new Error('Canvas viewport must be finite with a positive zoom')
+        if (
+            ![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite)
+            || viewport.zoom <= 0
+        )
+            throw new Error('Canvas viewport must be finite with a positive zoom')
     }
 
     private onTransformChange = (transform: CanvasTransform): void => {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         if (this.locked) {
             this.backend.syncViewport(this.viewport)
+
             return
         }
-        const viewport = { x: transform[0], y: transform[1], zoom: transform[2] }
+
+        const viewport = {
+            x: transform[0],
+            y: transform[1],
+            zoom: transform[2],
+        }
         this.validate(viewport)
         this.viewport = viewport
         this.options.onTransformChange([...transform])
@@ -110,20 +139,30 @@ export class ViewportController {
     }
 
     syncViewport(viewport: CanvasViewport): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.validate(viewport)
         this.viewport = { ...viewport }
         this.backend.syncViewport(viewport)
     }
 
     async setViewport(viewport: CanvasViewport): Promise<boolean> {
-        if (this.destroyed || this.locked) return false
+        if (
+            this.destroyed
+            || this.locked
+        )
+            return false
+
         this.validate(viewport)
+
         return Boolean(await this.backend.setViewport(viewport))
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.locks.destroy()
         this.backend.destroy()

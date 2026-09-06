@@ -1,3 +1,4 @@
-export function sanitizeSvgId(value: string, fallback = 'svg'): string {
-    return value.replace(/[^a-zA-Z0-9_-]/g, '-') || fallback
-}
+export const sanitizeSvgId = (
+    value: string,
+    fallback = 'svg',
+): string => value.replace(/[^a-zA-Z0-9_-]/g, '-') || fallback

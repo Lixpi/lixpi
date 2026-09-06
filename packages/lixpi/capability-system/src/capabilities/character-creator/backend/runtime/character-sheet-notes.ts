@@ -12,14 +12,16 @@ const ANGLE_LABELS: Readonly<Record<CharacterTargetAngle, string>> = {
     unspecified: 'unspecified-angle',
 }
 
-export function buildCharacterSourceCoverageNote(evidence: CharacterEvidenceProfile): string {
-    if (evidence.sourceCoverage.length === 0) {
+export const buildCharacterSourceCoverageNote = (evidence: CharacterEvidenceProfile): string => {
+    if (evidence.sourceCoverage.length === 0)
         return 'Source coverage: no source images supplied; identity, views, clothing, and hidden details inferred.'
-    }
-    const suppliedAngles = [...new Set(evidence.sourceCoverage.flatMap(coverage => coverage.angles))]
-        .filter(angle => angle !== 'unspecified')
-        .map(angle => ANGLE_LABELS[angle])
-    const suppliedRegions = [...new Set(evidence.sourceCoverage.flatMap(coverage => coverage.regions))]
+
+    const suppliedAngles = [...new Set(
+        evidence.sourceCoverage.flatMap(coverage => coverage.angles),
+    )].filter(angle => angle !== 'unspecified').map(angle => ANGLE_LABELS[angle])
+    const suppliedRegions = [...new Set(
+        evidence.sourceCoverage.flatMap(coverage => coverage.regions),
+    )]
     const supplied = suppliedAngles.length > 0
         ? `${suppliedAngles.join(', ')} views`
         : `${suppliedRegions.join(', ')} reference coverage`
@@ -31,5 +33,6 @@ export function buildCharacterSourceCoverageNote(evidence: CharacterEvidenceProf
         ...(!suppliedRegions.includes('prop') ? ['unobserved props'] : []),
         'hidden garment details',
     ]
+
     return `Source coverage: supplied ${supplied}; ${[...new Set(inferred)].join(', ')} inferred.`
 }

@@ -27,7 +27,7 @@ export type CapabilityModelToolDefinition = {
     executionPolicy?: 'model-required' | 'model-choice'
 }
 
-export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition[] {
+export const getStandingCapabilityModelTools = (): CapabilityModelToolDefinition[] => {
     return [
         {
             name: SEARCH_CAPABILITIES_TOOL_NAME,
@@ -38,7 +38,10 @@ export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition
                 properties: {
                     query: {
                         anyOf: [
-                            { type: 'string', maxLength: 200 },
+                            {
+                                type: 'string',
+                                maxLength: 200,
+                            },
                             { type: 'null' },
                         ],
                     },
@@ -46,7 +49,10 @@ export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition
                         anyOf: [
                             {
                                 type: 'array',
-                                items: { type: 'string', enum: ['tool', 'skill'] satisfies CapabilityKind[] },
+                                items: {
+                                    type: 'string',
+                                    enum: ['tool', 'skill'] satisfies CapabilityKind[],
+                                },
                                 maxItems: 2,
                             },
                             { type: 'null' },
@@ -54,13 +60,20 @@ export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition
                     },
                     limit: {
                         anyOf: [
-                            { type: 'integer', minimum: 1, maximum: 20 },
+                            {
+                                type: 'integer',
+                                minimum: 1,
+                                maximum: 20,
+                            },
                             { type: 'null' },
                         ],
                     },
                     cursor: {
                         anyOf: [
-                            { type: 'string', maxLength: 4096 },
+                            {
+                                type: 'string',
+                                maxLength: 4096,
+                            },
                             { type: 'null' },
                         ],
                     },
@@ -75,7 +88,11 @@ export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition
                 type: 'object',
                 required: ['capabilityId', 'arguments'],
                 properties: {
-                    capabilityId: { type: 'string', minLength: 1, maxLength: 256 },
+                    capabilityId: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: 256,
+                    },
                     arguments: { type: 'object' },
                 },
                 additionalProperties: false,
@@ -84,21 +101,30 @@ export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition
     ]
 }
 
-export function getAttachedCapabilityModelTools(
-    plan: SealedResolvedCapabilityPlan | undefined,
-): CapabilityModelToolDefinition[] {
-    if (!plan) return []
+export const getAttachedCapabilityModelTools = (plan: SealedResolvedCapabilityPlan | undefined): CapabilityModelToolDefinition[] => {
+    if (!plan)
+        return []
+
     return plan.serializable.rootCapabilityIds.flatMap(capabilityId => {
         const capability = plan.getManifest(capabilityId)
+
         if (
             capability?.kind !== 'tool'
             || (capability.manifest.tool?.executionPolicy !== 'model-choice'
                 && capability.manifest.tool?.executionPolicy !== 'model-required')
-        ) return []
+        )
+            return []
+
         const schema = plan.getResource(capabilityId, capability.manifest.tool.inputSchema.resourceId)
-        if (!schema) return []
+
+        if (!schema)
+            return []
+
         try {
-            const inputSchema = JSON.parse(new TextDecoder().decode(schema.bytes)) as Record<string, unknown>
+            const inputSchema = JSON.parse(
+                new TextDecoder().decode(schema.bytes),
+            ) as Record<string, unknown>
+
             return [{
                 name: directCapabilityToolName(capabilityId),
                 description: capability.manifest.description,
@@ -114,62 +140,116 @@ export function getAttachedCapabilityModelTools(
 }
 
 export function directCapabilityToolName(capabilityId: string): string {
-    const safeId = capabilityId.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32)
+    const safeId = capabilityId
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 32)
     const suffix = createHash('sha256').update(capabilityId).digest('hex').slice(0, 8)
+
     return `capability_${safeId}_${suffix}`
 }
 
-function isOpenAIStrictSchemaCompatible(value: unknown): boolean {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return true
+const isOpenAIStrictSchemaCompatible = (value: unknown): boolean => {
+    if (
+        !value
+        || typeof value !== 'object'
+        || Array.isArray(value)
+    )
+        return true
+
     const schema = value as Record<string, unknown>
+
     if (schema.type === 'object') {
-        if (schema.additionalProperties !== false) return false
+        if (schema.additionalProperties !== false)
+            return false
+
         const properties = schema.properties
-        if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return false
+
+        if (
+            !properties
+            || typeof properties !== 'object'
+            || Array.isArray(properties)
+        )
+            return false
+
         const propertyEntries = Object.entries(properties)
         const required = new Set(Array.isArray(schema.required) ? schema.required : [])
-        if (propertyEntries.some(([key]) => !required.has(key))) return false
-        if (propertyEntries.some(([, child]) => !isOpenAIStrictSchemaCompatible(child))) return false
+
+        if (propertyEntries.some(([key]) => !required.has(key)))
+            return false
+
+        if (propertyEntries.some(([, child]) => !isOpenAIStrictSchemaCompatible(child)))
+            return false
     }
-    if (schema.items && !isOpenAIStrictSchemaCompatible(schema.items)) return false
+
+    if (
+        schema.items
+        && !isOpenAIStrictSchemaCompatible(schema.items)
+    )
+        return false
+
     if (
         Array.isArray(schema.anyOf)
         && schema.anyOf.some(child => !isOpenAIStrictSchemaCompatible(child))
-    ) return false
+    )
+        return false
+
     return true
 }
 
-function projectOpenAISchemaMap(value: unknown): unknown {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+const projectOpenAISchemaMap = (value: unknown): unknown => {
+    if (
+        !value
+        || typeof value !== 'object'
+        || Array.isArray(value)
+    )
         return projectOpenAIInputSchema(value)
-    }
+
     return Object.fromEntries(
-        Object.entries(value).map(([name, schema]) => [
-            name,
-            projectOpenAIInputSchema(schema),
-        ]),
+        Object.entries(value).map(
+            ([name, schema]) => [
+                name,
+                projectOpenAIInputSchema(schema),
+            ],
+        ),
     )
 }
 
 function projectOpenAIInputSchema(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(child => projectOpenAIInputSchema(child))
-    if (!value || typeof value !== 'object') return value
+    if (Array.isArray(value))
+        return value.map(child => projectOpenAIInputSchema(child))
+
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return value
 
     const projected: Record<string, unknown> = {}
+
     for (const [key, child] of Object.entries(value)) {
         // OpenAI function parameters support only a subset of JSON Schema.
         // The sealed canonical schema still enforces these constraints on use.
-        if (key === '$schema' || key === 'uniqueItems') continue
-        const childIsSchemaMap = key === 'properties' || key === '$defs' || key === 'definitions'
+        if (
+            key === '$schema'
+            || key === 'uniqueItems'
+        )
+            continue
+
+        const childIsSchemaMap = key === 'properties'
+            || key === '$defs'
+            || key === 'definitions'
         projected[key] = childIsSchemaMap
             ? projectOpenAISchemaMap(child)
             : projectOpenAIInputSchema(child)
     }
+
     return projected
 }
 
-export function asOpenAITool(definition: CapabilityModelToolDefinition): Record<string, unknown> {
+export const asOpenAITool = (definition: CapabilityModelToolDefinition): Record<string, unknown> => {
     const inputSchema = projectOpenAIInputSchema(definition.inputSchema) as Record<string, unknown>
+
     return {
         type: 'function',
         name: definition.name,
@@ -182,7 +262,7 @@ export function asOpenAITool(definition: CapabilityModelToolDefinition): Record<
     }
 }
 
-export function asAnthropicTool(definition: CapabilityModelToolDefinition): Record<string, unknown> {
+export const asAnthropicTool = (definition: CapabilityModelToolDefinition): Record<string, unknown> => {
     return {
         name: definition.name,
         description: definition.description,
@@ -190,7 +270,7 @@ export function asAnthropicTool(definition: CapabilityModelToolDefinition): Reco
     }
 }
 
-export function asGoogleTool(definition: CapabilityModelToolDefinition): Record<string, unknown> {
+export const asGoogleTool = (definition: CapabilityModelToolDefinition): Record<string, unknown> => {
     return {
         name: definition.name,
         description: definition.description,
@@ -198,14 +278,23 @@ export function asGoogleTool(definition: CapabilityModelToolDefinition): Record<
     }
 }
 
-export function parseCapabilityToolArguments(value: unknown): Record<string, CapabilityJsonValue> {
+export const parseCapabilityToolArguments = (value: unknown): Record<string, CapabilityJsonValue> => {
     if (typeof value === 'string') {
         try {
-            return parseCapabilityToolArguments(JSON.parse(value))
+            return parseCapabilityToolArguments(
+                JSON.parse(value),
+            )
         } catch {
             return {}
         }
     }
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+    if (
+        !value
+        || typeof value !== 'object'
+        || Array.isArray(value)
+    )
+        return {}
+
     return value as Record<string, CapabilityJsonValue>
 }

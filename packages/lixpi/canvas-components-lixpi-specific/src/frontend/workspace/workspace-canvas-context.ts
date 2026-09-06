@@ -62,9 +62,7 @@ export class WorkspaceCanvasContext {
         })
     }
 
-    getPromptReferencePreviewRenderer = (
-        options: Pick<PromptReferencePreviewRenderer, 'inlinePopover' | 'preferredPlacement'> = {},
-    ): PromptReferencePreviewRenderer => {
+    getPromptReferencePreviewRenderer = (options: Pick<PromptReferencePreviewRenderer, 'inlinePopover' | 'preferredPlacement'> = {}): PromptReferencePreviewRenderer => {
         return {
             getNode: this.ports.getPreviewNode,
             environment: this.getPreviewEnvironment(),
@@ -93,20 +91,25 @@ export class WorkspaceCanvasContext {
     }) => {
         const asset = this.ports.host.assets.read(assetId)
         const mediaKind = asset?.media?.kind
-        if (!mediaKind) return undefined
-        return createMediaPromptReferencePreview(
-            {
-                referenceType: 'media',
-                assetId,
-                mediaKind,
-                displayName: asset.title.trim() || displayName?.trim() || assetId,
-            },
-            this.getPromptReferencePreviewRenderer({ inlinePopover: true }),
-            {
-                variant,
-                preferredPlacement: 'top',
-            },
-        ) ?? undefined
+
+        if (!mediaKind)
+            return undefined
+
+        return (
+            createMediaPromptReferencePreview(
+                {
+                    referenceType: 'media',
+                    assetId,
+                    mediaKind,
+                    displayName: asset.title.trim() || displayName?.trim() || assetId,
+                },
+                this.getPromptReferencePreviewRenderer({ inlinePopover: true }),
+                {
+                    variant,
+                    preferredPlacement: 'top',
+                },
+            ) ?? undefined
+        )
     }
 
     getAiUserMessagePreviewRenderer = (options: { inlinePopover?: boolean } = {}) => {
@@ -119,37 +122,56 @@ export class WorkspaceCanvasContext {
 
     createTray = (scope: 'chat' | 'canvas'): HTMLDivElement => this.trays.create(scope)
 
-    releaseTray = (element: HTMLDivElement): void => this.trays.release(element)
+    releaseTray = (element: HTMLDivElement): void => void this.trays.release(element)
 
     add = (nodeIds: Iterable<string>): void => {
         const state = this.ports.getState()
-        if (!state) return
+
+        if (!state)
+            return
+
         const eligibleNodeIds = new Set(
-            state.nodes
-                .filter(node => (
-                    node.type === 'image'
-                    || node.type === 'video'
-                    || node.type === 'document'
-                    || node.type === 'capabilityArtifact'
-                ))
-                .map(node => node.nodeId),
+            state.nodes.filter(
+                node => (
+                        node.type === 'image'
+                        || node.type === 'video'
+                        || node.type === 'document'
+                        || node.type === 'capabilityArtifact'
+                    ),
+            ).map(node => node.nodeId),
         )
         const panelState = this.ports.getPanelState()
         const chipNodeIds = new Set(panelState.contextChips)
         const nextChips = [...panelState.contextChips]
+
         for (const nodeId of nodeIds) {
-            if (!nodeId || chipNodeIds.has(nodeId) || !eligibleNodeIds.has(nodeId)) continue
+            if (
+                !nodeId
+                || chipNodeIds.has(nodeId)
+                || !eligibleNodeIds.has(nodeId)
+            )
+                continue
+
             chipNodeIds.add(nodeId)
             nextChips.push(nodeId)
         }
-        if (nextChips.length === panelState.contextChips.length) return
-        this.ports.persistPanelState({ ...panelState, contextChips: nextChips })
+
+        if (nextChips.length === panelState.contextChips.length)
+            return
+
+        this.ports.persistPanelState({
+            ...panelState,
+            contextChips: nextChips,
+        })
         this.refresh()
     }
 
     remove = (nodeId: string): void => {
         const panelState = this.ports.getPanelState()
-        if (!panelState.contextChips.includes(nodeId)) return
+
+        if (!panelState.contextChips.includes(nodeId))
+            return
+
         this.ports.persistPanelState({
             ...panelState,
             contextChips: panelState.contextChips.filter(id => id !== nodeId),
@@ -159,22 +181,36 @@ export class WorkspaceCanvasContext {
 
     clear = (): void => {
         const panelState = this.ports.getPanelState()
-        if (panelState.contextChips.length === 0) return
-        this.ports.persistPanelState({ ...panelState, contextChips: [] })
+
+        if (panelState.contextChips.length === 0)
+            return
+
+        this.ports.persistPanelState({
+            ...panelState,
+            contextChips: [],
+        })
         this.refresh()
     }
 
     removeLocal = (removedNodeIds: readonly string[]): void => {
-        if (removedNodeIds.length === 0) return
+        if (removedNodeIds.length === 0)
+            return
+
         const removedNodeIdSet = new Set(removedNodeIds)
         const panelState = this.ports.getPanelState()
         const contextChips = panelState.contextChips.filter(nodeId => !removedNodeIdSet.has(nodeId))
-        if (contextChips.length === panelState.contextChips.length) return
-        this.ports.applyLocalPanelState({ ...panelState, contextChips })
+
+        if (contextChips.length === panelState.contextChips.length)
+            return
+
+        this.ports.applyLocalPanelState({
+            ...panelState,
+            contextChips,
+        })
         this.refresh()
     }
 
-    refresh = (): void => this.trays.refresh()
+    refresh = (): void => void this.trays.refresh()
 
     destroy(): void {
         this.trays.destroy()

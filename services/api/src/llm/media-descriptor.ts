@@ -88,19 +88,28 @@ const buildDescriptorMessages = (imageUrl: string): ChatMessage[] => [
     {
         role: 'user',
         content: [
-            { type: 'input_text', text: 'Describe this media still.' },
-            { type: 'input_image', image_url: imageUrl, detail: 'high' },
+            {
+                type: 'input_text',
+                text: 'Describe this media still.',
+            },
+            {
+                type: 'input_image',
+                image_url: imageUrl,
+                detail: 'high',
+            },
         ],
     },
 ]
 
 const sanitizeTags = (tags: unknown): string[] => {
-    if (!Array.isArray(tags)) return []
+    if (!Array.isArray(tags))
+        return []
+
     return Array.from(
         new Set(
             tags
                 .filter((tag): tag is string => typeof tag === 'string')
-                .map((tag) => tag.trim())
+                .map(tag => tag.trim())
                 .filter(Boolean),
         ),
     )
@@ -110,12 +119,13 @@ const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): M
     const safe = parsed ?? ({} as MediaDescriptorResult)
     const title = typeof safe.title === 'string' ? safe.title.trim() : ''
     const summary = typeof safe.summary === 'string' ? safe.summary.trim() : ''
-    if (title.split(/\s+/).filter(Boolean).length > MEDIA_DESCRIPTOR_TITLE_MAX_WORDS) {
+
+    if (title.split(/\s+/).filter(Boolean).length > MEDIA_DESCRIPTOR_TITLE_MAX_WORDS)
         throw new Error('MEDIA_DESCRIPTOR_TITLE_TOO_LONG')
-    }
-    if (summary.length > MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH) {
+
+    if (summary.length > MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH)
         throw new Error('MEDIA_DESCRIPTOR_SUMMARY_TOO_LONG')
-    }
+
     return {
         title,
         summary,
@@ -204,13 +214,20 @@ export const buildTextDescriptorSchema = (): VlmJsonSchema => ({
     },
 })
 
-const buildTextDescriptorMessages = (text: string, title?: string): ChatMessage[] => {
+const buildTextDescriptorMessages = (
+    text: string,
+    title?: string,
+): ChatMessage[] => {
     const header = title?.trim() ? `Title: ${title.trim()}\n\n` : ''
+
     return [
         {
             role: 'user',
             content: [
-                { type: 'input_text', text: `Summarize this text node.\n\n${header}${text}` },
+                {
+                    type: 'input_text',
+                    text: `Summarize this text node.\n\n${header}${text}`,
+                },
             ],
         },
     ]
@@ -220,7 +237,14 @@ const buildTextDescriptorMessages = (text: string, title?: string): ChatMessage[
 // there is nothing to summarize (caller treats that as "skip", not "failed").
 export const describeTextContent = async (args: DescribeTextContentArgs): Promise<MediaDescriptorResult> => {
     const text = args.text.trim()
-    if (!text) return { title: '', summary: '', entityTags: [], styleTags: [] }
+
+    if (!text)
+        return {
+            title: '',
+            summary: '',
+            entityTags: [],
+            styleTags: [],
+        }
 
     const callVlm = args.callVlm ?? ((vlmArgs: VlmCallArgs) => callStructuredVlm<MediaDescriptorResult>(vlmArgs))
 

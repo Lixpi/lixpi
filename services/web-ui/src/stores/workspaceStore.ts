@@ -52,48 +52,44 @@ const store = writable({ ...workspace })
 
 export const workspaceStore = {
     ...store,
-
     getMeta: (key: keyof Meta | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(state => {
-            returnValue = key ? state.meta[key] : state.meta
-        })
+        const unsubscribe = store.subscribe(state => void (returnValue = key ? state.meta[key] : state.meta))
         unsubscribe()
 
         return returnValue
     },
-
     getData: (key: keyof WorkspaceData | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(state => {
-            returnValue = key ? state.data[key] : state.data
-        })
+        const unsubscribe = store.subscribe(state => void (returnValue = key ? state.data[key] : state.data))
         unsubscribe()
 
         return returnValue
     },
-
     setMetaValues: (values: Partial<Meta> = {}): void =>
-        store.update(state => ({
-            ...state,
-            meta: {
-                ...state.meta,
-                ...values,
-            },
-        })),
-
+        void store.update(
+            state => ({
+                ...state,
+                meta: {
+                    ...state.meta,
+                    ...values,
+                },
+            }),
+        ),
     setDataValues: (values: Partial<WorkspaceData> = {}): void =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                ...values,
-            },
-        })),
-
+        void store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    ...values,
+                },
+            }),
+        ),
     beginWorkspaceLoad: (workspaceId: string): void =>
-        store.update(state => {
+        void store.update(state => {
             const canvas = workspaceCanvasLoadPatch()
+
             return {
                 ...state,
                 meta: {
@@ -112,10 +108,10 @@ export const workspaceStore = {
                 },
             }
         }),
-
     updateCanvasState: (canvasState: CanvasState): void =>
-        store.update(state => {
+        void store.update(state => {
             const canvas = workspaceCanvasStatePatch(canvasState, 'local-intent')
+
             return {
                 ...state,
                 meta: {
@@ -128,6 +124,5 @@ export const workspaceStore = {
                 },
             }
         }),
-
-    resetStore: (): void => store.set({ ...workspace }),
+    resetStore: (): void => void store.set({ ...workspace }),
 }

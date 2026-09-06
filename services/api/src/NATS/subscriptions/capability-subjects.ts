@@ -17,7 +17,10 @@ import { CapabilityRunEventLog } from '../../services/capability-run-event-log.t
 import { ensureCapabilityCatalogEventRelay } from '../../services/capability-catalog-event-relay.ts'
 import { capabilityActionRegistry } from '../../capability-system/capability-runtime.ts'
 
-const { CATALOG, RUN } = NATS_SUBJECTS.CAPABILITY_SUBJECTS
+const {
+    CATALOG,
+    RUN,
+} = NATS_SUBJECTS.CAPABILITY_SUBJECTS
 
 export type CapabilityRunDispatcher = {
     start: (input: {
@@ -34,11 +37,9 @@ export type CapabilityRunDispatcher = {
 
 let runDispatcher: CapabilityRunDispatcher | undefined
 
-export function setCapabilityRunDispatcher(dispatcher: CapabilityRunDispatcher): void {
-    runDispatcher = dispatcher
-}
+export const setCapabilityRunDispatcher = (dispatcher: CapabilityRunDispatcher): void => void (runDispatcher = dispatcher)
 
-async function getRequester(userId: string): Promise<CapabilityRequesterContext> {
+const getRequester = async (userId: string): Promise<CapabilityRequesterContext> => {
     const requester = await getAssetRequesterContext(userId)
     const capabilityRequester = {
         userId,
@@ -46,26 +47,40 @@ async function getRequester(userId: string): Promise<CapabilityRequesterContext>
         canManageGlobalCapabilities: false,
     }
     ensureCapabilityCatalogEventRelay(capabilityRequester)
+
     return capabilityRequester
 }
 
-async function getAuthorizedWorkspaceOrganizationId(userId: string, workspaceId: string): Promise<string | undefined> {
-    const workspace = await Workspace.getWorkspace({ userId, workspaceId })
-    return !('error' in workspace) && !workspace.deletingAt ? workspace.organizationId : undefined
+const getAuthorizedWorkspaceOrganizationId = async (
+    userId: string,
+    workspaceId: string,
+): Promise<string | undefined> => {
+    const workspace = await Workspace.getWorkspace({
+        userId,
+        workspaceId,
+    })
+
+    return !('error' in workspace)
+        && !workspace.deletingAt
+        ? workspace.organizationId
+        : undefined
 }
 
-function publishCatalogInvalidation(payload: Record<string, unknown>): void {
+const publishCatalogInvalidation = (payload: Record<string, unknown>): void => {
     const connection = NATS_Service.getInstance()?.getConnection()
-    if (!connection) return
-    const bytes = new TextEncoder().encode(JSON.stringify(payload))
+
+    if (!connection)
+        return
+
+    const bytes = new TextEncoder().encode(
+        JSON.stringify(payload),
+    )
     connection.publish(CATALOG.CATALOG_CHANGED, bytes)
 }
 
-function sanitizeSubjectToken(value: string): string {
-    return value.replace(/[^A-Za-z0-9_-]/g, '_')
-}
+const sanitizeSubjectToken = (value: string): string => value.replace(/[^A-Za-z0-9_-]/g, '_')
 
-async function searchCatalog(data: any): Promise<unknown> {
+const searchCatalog = async (data: any): Promise<unknown> => {
     return await CapabilityModel.listAuthorized({
         requester: await getRequester(data.user.userId),
         query: typeof data.query === 'string' ? data.query : '',
@@ -75,23 +90,36 @@ async function searchCatalog(data: any): Promise<unknown> {
     })
 }
 
-async function saveCatalog(data: any, operation: 'create' | 'update' | 'save'): Promise<unknown> {
+const saveCatalog = async (
+    data: any,
+    operation: 'create' | 'update' | 'save',
+): Promise<unknown> => {
     try {
-        if (operation === 'create' && data.expectedManifestBlobHash !== undefined) {
+        if (
+            operation === 'create'
+            && data.expectedManifestBlobHash !== undefined
+        )
             throw new Error('EXPECTED_MANIFEST_BLOB_HASH_NOT_ALLOWED')
-        }
-        if (operation === 'update' && typeof data.expectedManifestBlobHash !== 'string') {
+
+        if (
+            operation === 'update'
+            && typeof data.expectedManifestBlobHash !== 'string'
+        )
             throw new Error('EXPECTED_MANIFEST_BLOB_HASH_REQUIRED')
-        }
+
         const requester = await getRequester(data.user.userId)
+
         if (operation === 'update') {
             const existing = await CapabilityModel.authorize({
                 capabilityId: data.manifest?.capabilityId,
                 requester,
                 access: 'edit',
             })
-            if ('error' in existing) throw new Error(existing.error)
+
+            if ('error' in existing)
+                throw new Error(existing.error)
         }
+
         const record = await CapabilityModel.save({
             manifest: data.manifest,
             scope: data.scope,
@@ -115,19 +143,27 @@ async function saveCatalog(data: any, operation: 'create' | 'update' | 'save'): 
             manifestBlobHash: record.manifestBlobHash,
             updatedAt: record.updatedAt,
         })
+
         return record
     } catch (error) {
         return { error: (error as Error).message }
     }
 }
 
-async function updateCatalog(data: any): Promise<unknown> {
-    if (data.status === undefined) return await saveCatalog(data, 'update')
+const updateCatalog = async (data: any): Promise<unknown> => {
+    if (data.status === undefined)
+        return await saveCatalog(data, 'update')
+
     try {
-        if (data.manifest !== undefined) throw new Error('CAPABILITY_STATUS_UPDATE_MUST_NOT_INCLUDE_MANIFEST')
-        if (typeof data.capabilityId !== 'string' || typeof data.expectedManifestBlobHash !== 'string') {
+        if (data.manifest !== undefined)
+            throw new Error('CAPABILITY_STATUS_UPDATE_MUST_NOT_INCLUDE_MANIFEST')
+
+        if (
+            typeof data.capabilityId !== 'string'
+            || typeof data.expectedManifestBlobHash !== 'string'
+        )
             throw new Error('CAPABILITY_STATUS_UPDATE_INVALID')
-        }
+
         const updated = await CapabilityModel.setStatus({
             capabilityId: data.capabilityId,
             expectedManifestBlobHash: data.expectedManifestBlobHash,
@@ -144,6 +180,7 @@ async function updateCatalog(data: any): Promise<unknown> {
             manifestBlobHash: updated.record.manifestBlobHash,
             updatedAt: updated.record.updatedAt,
         })
+
         return updated.record
     } catch (error) {
         return { error: (error as Error).message }
@@ -157,14 +194,20 @@ export const capabilitySubjects = [
         subject: CATALOG.SEARCH,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.SEARCH] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [CATALOG.SEARCH] },
+            sub: { allow: [] },
+        },
         handler: searchCatalog,
     },
     {
         subject: CATALOG.GET,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.GET] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [CATALOG.GET] },
+            sub: { allow: [] },
+        },
         handler: async (data: any) => {
             try {
                 const requester = await getRequester(data.user.userId)
@@ -172,41 +215,63 @@ export const capabilitySubjects = [
                     capabilityId: data.capabilityId,
                     requester,
                 })
-                const references = await Promise.all(result.manifest.references.map(async (reference) => {
-                    try {
-                        const resolved = await CapabilityModel.readManifest({
-                            capabilityId: reference.capabilityId,
-                            requester,
-                        })
-                        return {
-                            capabilityId: reference.capabilityId,
-                            kind: reference.kind,
-                            name: resolved.manifest.name,
-                            manifestBlobHash: resolved.record.manifestBlobHash,
-                            status: resolved.record.status,
+                const references = await Promise.all(
+                    result.manifest.references.map(async reference => {
+                        try {
+                            const resolved = await CapabilityModel.readManifest({
+                                capabilityId: reference.capabilityId,
+                                requester,
+                            })
+
+                            return {
+                                capabilityId: reference.capabilityId,
+                                kind: reference.kind,
+                                name: resolved.manifest.name,
+                                manifestBlobHash: resolved.record.manifestBlobHash,
+                                status: resolved.record.status,
+                            }
+                        } catch {
+                            return {
+                                capabilityId: reference.capabilityId,
+                                kind: reference.kind,
+                                unavailable: true,
+                            }
                         }
-                    } catch {
-                        return { capabilityId: reference.capabilityId, kind: reference.kind, unavailable: true }
-                    }
-                }))
-                const resources = await Promise.all(result.manifest.resources.map(async (resource) => {
-                    const detail = {
-                        ...resource,
-                        url: `/api/capabilities/${encodeURIComponent(result.record.capabilityId)}/resources/${encodeURIComponent(resource.resourceId)}?manifestBlobHash=${encodeURIComponent(result.record.manifestBlobHash)}`,
-                    }
-                    if (resource.mediaType.startsWith('image/')) return detail
-                    const resolved = await CapabilityModel.readResource({
-                        capabilityId: result.record.capabilityId,
-                        resourceId: resource.resourceId,
-                        requester,
-                        manifestBlobHash: result.record.manifestBlobHash,
-                    })
-                    const text = new TextDecoder().decode(resolved.bytes)
-                    if (resource.mediaType === 'application/json' || resource.mediaType === 'application/schema+json') {
-                        return { ...detail, content: JSON.parse(text) }
-                    }
-                    return { ...detail, content: text }
-                }))
+                    }),
+                )
+                const resources = await Promise.all(
+                    result.manifest.resources.map(async resource => {
+                        const detail = {
+                            ...resource,
+                            url: `/api/capabilities/${encodeURIComponent(result.record.capabilityId)}/resources/${encodeURIComponent(resource.resourceId)}?manifestBlobHash=${encodeURIComponent(result.record.manifestBlobHash)}`,
+                        }
+
+                        if (resource.mediaType.startsWith('image/'))
+                            return detail
+
+                        const resolved = await CapabilityModel.readResource({
+                            capabilityId: result.record.capabilityId,
+                            resourceId: resource.resourceId,
+                            requester,
+                            manifestBlobHash: result.record.manifestBlobHash,
+                        })
+                        const text = new TextDecoder().decode(resolved.bytes)
+
+                        if (
+                            resource.mediaType === 'application/json'
+                            || resource.mediaType === 'application/schema+json'
+                        )
+                            return {
+                                ...detail,
+                                content: JSON.parse(text),
+                            }
+
+                        return {
+                            ...detail,
+                            content: text,
+                        }
+                    }),
+                )
                 const editable = await CapabilityModel.authorize({
                     capabilityId: result.record.capabilityId,
                     requester,
@@ -214,8 +279,12 @@ export const capabilitySubjects = [
                 })
                 const canManage = !('error' in editable)
                 const grants = canManage
-                    ? await CapabilityModel.listAccessGrants({ capabilityId: result.record.capabilityId, requester })
+                    ? await CapabilityModel.listAccessGrants({
+                        capabilityId: result.record.capabilityId,
+                        requester,
+                    })
                     : []
+
                 return {
                     record: result.record,
                     manifest: result.manifest,
@@ -247,14 +316,20 @@ export const capabilitySubjects = [
         subject: CATALOG.UPDATE,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.UPDATE] }, ...catalogEventPermission },
+        permissions: {
+            pub: { allow: [CATALOG.UPDATE] },
+            ...catalogEventPermission,
+        },
         handler: updateCatalog,
     },
     {
         subject: CATALOG.DELETE,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.DELETE] }, ...catalogEventPermission },
+        permissions: {
+            pub: { allow: [CATALOG.DELETE] },
+            ...catalogEventPermission,
+        },
         handler: async (data: any) => {
             try {
                 const removed = await CapabilityModel.remove({
@@ -272,6 +347,7 @@ export const capabilitySubjects = [
                     manifestBlobHash: removed.record.manifestBlobHash,
                     updatedAt: removed.record.updatedAt,
                 })
+
                 return removed.record
             } catch (error) {
                 return { error: (error as Error).message }
@@ -282,12 +358,21 @@ export const capabilitySubjects = [
         subject: CATALOG.GRANT,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.GRANT] }, ...catalogEventPermission },
+        permissions: {
+            pub: { allow: [CATALOG.GRANT] },
+            ...catalogEventPermission,
+        },
         handler: async (data: any) => {
             try {
                 const requester = await getRequester(data.user.userId)
-                const record = await CapabilityModel.authorize({ capabilityId: data.capabilityId, requester })
-                if ('error' in record) throw new Error(record.error)
+                const record = await CapabilityModel.authorize({
+                    capabilityId: data.capabilityId,
+                    requester,
+                })
+
+                if ('error' in record)
+                    throw new Error(record.error)
+
                 const grant = await CapabilityModel.grantAccess({
                     capabilityId: data.capabilityId,
                     principalId: data.principalId,
@@ -304,6 +389,7 @@ export const capabilitySubjects = [
                     manifestBlobHash: record.manifestBlobHash,
                     updatedAt: grant.updatedAt,
                 })
+
                 return grant
             } catch (error) {
                 return { error: (error as Error).message }
@@ -314,12 +400,21 @@ export const capabilitySubjects = [
         subject: CATALOG.REVOKE,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.REVOKE] }, ...catalogEventPermission },
+        permissions: {
+            pub: { allow: [CATALOG.REVOKE] },
+            ...catalogEventPermission,
+        },
         handler: async (data: any) => {
             try {
                 const requester = await getRequester(data.user.userId)
-                const record = await CapabilityModel.authorize({ capabilityId: data.capabilityId, requester })
-                if ('error' in record) throw new Error(record.error)
+                const record = await CapabilityModel.authorize({
+                    capabilityId: data.capabilityId,
+                    requester,
+                })
+
+                if ('error' in record)
+                    throw new Error(record.error)
+
                 await CapabilityModel.revokeAccess({
                     capabilityId: data.capabilityId,
                     principalId: data.principalId,
@@ -335,7 +430,12 @@ export const capabilitySubjects = [
                     manifestBlobHash: record.manifestBlobHash,
                     updatedAt: Date.now(),
                 })
-                return { success: true, capabilityId: data.capabilityId, principalId: data.principalId }
+
+                return {
+                    success: true,
+                    capabilityId: data.capabilityId,
+                    principalId: data.principalId,
+                }
             } catch (error) {
                 return { error: (error as Error).message }
             }
@@ -345,14 +445,20 @@ export const capabilitySubjects = [
         subject: CATALOG.LIST,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.LIST] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [CATALOG.LIST] },
+            sub: { allow: [] },
+        },
         handler: searchCatalog,
     },
     {
         subject: CATALOG.SAVE,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [CATALOG.SAVE] }, ...catalogEventPermission },
+        permissions: {
+            pub: { allow: [CATALOG.SAVE] },
+            ...catalogEventPermission,
+        },
         handler: async (data: any) => await saveCatalog(data, 'save'),
     },
     {
@@ -365,9 +471,15 @@ export const capabilitySubjects = [
         },
         handler: async (data: any) => {
             const userId = data.user.userId
-            if (!runDispatcher) return { error: 'CAPABILITY_RUNNER_NOT_INITIALIZED' }
+
+            if (!runDispatcher)
+                return { error: 'CAPABILITY_RUNNER_NOT_INITIALIZED' }
+
             const organizationId = await getAuthorizedWorkspaceOrganizationId(userId, data.workspaceId)
-            if (!organizationId) return { error: 'WORKSPACE_ACCESS_DENIED' }
+
+            if (!organizationId)
+                return { error: 'WORKSPACE_ACCESS_DENIED' }
+
             return await runDispatcher.start({
                 userId,
                 workspaceId: data.workspaceId,
@@ -383,7 +495,10 @@ export const capabilitySubjects = [
         subject: RUN.STATUS,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [RUN.STATUS] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [RUN.STATUS] },
+            sub: { allow: [] },
+        },
         handler: async (data: any) =>
             await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
@@ -395,25 +510,35 @@ export const capabilitySubjects = [
         subject: RUN.RESUME,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [RUN.RESUME] }, sub: { allow: [`${RUN.STATUS}.{userIdToken}.>`] } },
+        permissions: {
+            pub: { allow: [RUN.RESUME] },
+            sub: { allow: [`${RUN.STATUS}.{userIdToken}.>`] },
+        },
         handler: async (data: any) => {
             const run = await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
             })
-            if ('error' in run) return run
+
+            if ('error' in run)
+                return run
+
             const startStreamSequence = typeof data.startStreamSequence === 'number'
                 ? data.startStreamSequence
-                : typeof data.cursor === 'string' && Number.isSafeInteger(Number(data.cursor))
-                ? Number(data.cursor)
-                : 1
+                : typeof data.cursor === 'string'
+                    && Number.isSafeInteger(
+                        Number(data.cursor),
+                    )
+                    ? Number(data.cursor)
+                    : 1
             const replay = await CapabilityRunEventLog.fromSingleton().replay({
                 workspaceId: run.workspaceId,
                 runId: run.runId,
                 startStreamSequence,
                 maxMessages: data.maxMessages,
             })
+
             return {
                 run,
                 liveSubject: [
@@ -429,25 +554,42 @@ export const capabilitySubjects = [
         subject: RUN.STOP,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [RUN.STOP] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [RUN.STOP] },
+            sub: { allow: [] },
+        },
         handler: async (data: any) => {
-            if (!runDispatcher) return { error: 'CAPABILITY_RUNNER_NOT_INITIALIZED' }
+            if (!runDispatcher)
+                return { error: 'CAPABILITY_RUNNER_NOT_INITIALIZED' }
+
             const run = await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
             })
-            if ('error' in run) return run
-            if (!['pending', 'running'].includes(run.status)) return { error: 'CAPABILITY_RUN_NOT_ACTIVE' }
+
+            if ('error' in run)
+                return run
+
+            if (!['pending', 'running'].includes(run.status))
+                return { error: 'CAPABILITY_RUN_NOT_ACTIVE' }
+
             await runDispatcher.stop(run)
-            return { success: true, runId: run.runId }
+
+            return {
+                success: true,
+                runId: run.runId,
+            }
         },
     },
     {
         subject: RUN.GET,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [RUN.GET] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [RUN.GET] },
+            sub: { allow: [] },
+        },
         handler: async (data: any) =>
             await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
@@ -459,14 +601,20 @@ export const capabilitySubjects = [
         subject: RUN.REPLAY,
         type: 'reply',
         payloadType: 'json',
-        permissions: { pub: { allow: [RUN.REPLAY] }, sub: { allow: [] } },
+        permissions: {
+            pub: { allow: [RUN.REPLAY] },
+            sub: { allow: [] },
+        },
         handler: async (data: any) => {
             const run = await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
             })
-            if ('error' in run) return run
+
+            if ('error' in run)
+                return run
+
             return await CapabilityRunEventLog.fromSingleton().replay({
                 workspaceId: data.workspaceId,
                 runId: data.runId,

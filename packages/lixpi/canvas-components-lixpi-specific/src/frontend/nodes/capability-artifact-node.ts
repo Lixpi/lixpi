@@ -31,14 +31,26 @@ export type WorkspaceCapabilityEditorOptions = EditorRequest & {
 export type WorkspaceCapabilityNodePorts = {
     ensureStyles: (document: Document) => void
     getAsset: (assetId: string) => Asset | undefined
-    getDocument: (assetId: string) => { doc: object; version: number } | undefined
+    getDocument: (assetId: string) => {
+        doc: object
+        version: number
+    } | undefined
     refreshAsset: (assetId: string) => Promise<Asset | { error: string }>
     ensureAssetsLoaded: (assetIds: readonly string[]) => Promise<readonly Asset[]>
-    getDefinitions: (artifactTypeId: string) => { frontend: CapabilityArtifactFrontendDefinition; shared: CapabilityArtifactSharedDefinition }
+    getDefinitions: (artifactTypeId: string) => {
+        frontend: CapabilityArtifactFrontendDefinition
+        shared: CapabilityArtifactSharedDefinition
+    }
     createAssetReferenceView: CapabilityArtifactCanvasHost['createAssetReferenceView']
     mountEditor: (options: WorkspaceCapabilityEditorOptions) => ReturnType<NonNullable<CapabilityArtifactCanvasHost['mountEditor']>>
-    onHeightChange: (nodeId: string, height: number) => void
-    onError: (error: unknown, nodeId: string) => void
+    onHeightChange: (
+        nodeId: string,
+        height: number,
+    ) => void
+    onError: (
+        error: unknown,
+        nodeId: string,
+    ) => void
 }
 
 export class WorkspaceCapabilityNode {
@@ -49,8 +61,19 @@ export class WorkspaceCapabilityNode {
     private referenceLoad = false
     private heightFrame: number | null = null
 
-    constructor(private readonly node: CapabilityArtifactCanvasNode, shells: WorkspaceNodeShells, private readonly ports: WorkspaceCapabilityNodePorts) {
-        const shell = shells.create(node, 'workspace-capability-artifact-node', { assetId: node.assetId, artifactTypeId: node.artifactTypeId })
+    constructor(
+        private readonly node: CapabilityArtifactCanvasNode,
+        shells: WorkspaceNodeShells,
+        private readonly ports: WorkspaceCapabilityNodePorts,
+    ) {
+        const shell = shells.create(
+            node,
+            'workspace-capability-artifact-node',
+            {
+                assetId: node.assetId,
+                artifactTypeId: node.artifactTypeId,
+            },
+        )
         this.element = shell.nodeEl
         shell.own(() => this.destroy())
         shell.dragOverlay.className = 'capability-artifact-drag-overlay nopan'
@@ -60,11 +83,15 @@ export class WorkspaceCapabilityNode {
         this.lifetime.own(() => this.host.remove())
         this.lifetime.own(() => this.cancelHeight())
         this.content = this.lifetime.child()
+
         try {
             ports.ensureStyles(this.element.ownerDocument)
-            if (!this.render()) void this.refresh()
+
+            if (!this.render())
+                void this.refresh()
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
@@ -74,33 +101,55 @@ export class WorkspaceCapabilityNode {
         this.content.destroy()
         this.content = this.lifetime.child()
         this.host.replaceChildren()
+
         return this.content
     }
 
     private render(): boolean {
-        if (this.lifetime.signal.aborted) return false
+        if (this.lifetime.signal.aborted)
+            return false
+
         const content = this.resetContent()
         const asset = this.ports.getAsset(this.node.assetId)
         const snapshot = this.ports.getDocument(this.node.assetId)
-        if (!asset || !snapshot) {
+
+        if (
+            !asset
+            || !snapshot
+        ) {
             const loading = createLoadingPlaceholder({ document: this.element.ownerDocument })
             content.own(() => loading.destroy())
             this.host.append(loading.dom)
+
             return false
         }
+
         try {
-            const { shared, frontend } = this.ports.getDefinitions(this.node.artifactTypeId)
+            const {
+                shared,
+                frontend,
+            } = this.ports.getDefinitions(this.node.artifactTypeId)
             shared.assertInitialDocument(snapshot.doc)
-            void this.ensureReferences(shared.collectReferencedAssetIds(snapshot.doc))
+            void this.ensureReferences(
+                shared.collectReferencedAssetIds(snapshot.doc),
+            )
             const view = frontend.createCanvasNodeView({
                 container: this.host,
                 node: this.node,
                 document: snapshot.doc,
                 createAssetReferenceView: request => {
-                    if (content.signal.aborted) return undefined
+                    if (content.signal.aborted)
+                        return undefined
+
                     const reference = this.ports.createAssetReferenceView(request)
-                    if (!reference) return undefined
-                    return { dom: reference.dom, destroy: content.own(() => reference.destroy()) }
+
+                    if (!reference)
+                        return undefined
+
+                    return {
+                        dom: reference.dom,
+                        destroy: content.own(() => reference.destroy()),
+                    }
                 },
                 onHeightChange: height => this.scheduleHeight(height, content),
                 mountEditor: request => {
@@ -113,7 +162,8 @@ export class WorkspaceCapabilityNode {
                         version: snapshot.version,
                         signal: content.signal,
                         onLeaseStateChange: state => {
-                            if (!content.signal.aborted) this.element.classList.toggle('is-asset-lease-read-only', state.readOnly)
+                            if (!content.signal.aborted)
+                                this.element.classList.toggle('is-asset-lease-read-only', state.readOnly)
                         },
                         onContentChange,
                     })
@@ -121,9 +171,11 @@ export class WorkspaceCapabilityNode {
                     const observer = new ResizeObserver(onContentChange)
                     const releaseObserver = content.own(() => observer.disconnect())
                     observer.observe(request.container)
+
                     return {
                         updateDocument: document => {
-                            if (!content.signal.aborted) editor.updateDocument(document)
+                            if (!content.signal.aborted)
+                                editor.updateDocument(document)
                         },
                         destroy: () => {
                             releaseObserver()
@@ -134,63 +186,111 @@ export class WorkspaceCapabilityNode {
             })
             content.own(() => view.destroy())
         } catch (error) {
-            this.showError(error, 'This Artifact cannot be rendered', () => {
-                this.render()
-            })
+            this.showError(
+                error,
+                'This Artifact cannot be rendered',
+                () => void this.render(),
+            )
         }
+
         return true
     }
 
     private async refresh(): Promise<void> {
         try {
             const asset = await this.ports.refreshAsset(this.node.assetId)
-            if (this.lifetime.signal.aborted) return
-            if ('error' in asset) throw new Error(asset.error)
+
+            if (this.lifetime.signal.aborted)
+                return
+
+            if ('error' in asset)
+                throw new Error(asset.error)
+
             await this.ports.ensureAssetsLoaded(asset.lineage?.sourceAssetIds ?? [])
-            if (!this.lifetime.signal.aborted) this.render()
+
+            if (!this.lifetime.signal.aborted)
+                this.render()
         } catch (error) {
             if (!this.lifetime.signal.aborted) {
-                this.showError(error, 'This Artifact could not be loaded', () => {
-                    void this.refresh()
-                })
+                this.showError(
+                    error,
+                    'This Artifact could not be loaded',
+                    () => void this.refresh(),
+                )
             }
         }
     }
 
     private cancelHeight(): void {
-        if (this.heightFrame !== null) cancelAnimationFrame(this.heightFrame)
+        if (this.heightFrame !== null)
+            cancelAnimationFrame(this.heightFrame)
+
         this.heightFrame = null
     }
 
-    private scheduleHeight(height: number, content: Lifetime): void {
-        if (content.signal.aborted) return
+    private scheduleHeight(
+        height: number,
+        content: Lifetime,
+    ): void {
+        if (content.signal.aborted)
+            return
+
         this.cancelHeight()
         this.heightFrame = requestAnimationFrame(() => {
             this.heightFrame = null
-            if (!content.signal.aborted) this.ports.onHeightChange(this.node.nodeId, height)
+
+            if (!content.signal.aborted)
+                this.ports.onHeightChange(this.node.nodeId, height)
         })
     }
 
     private async ensureReferences(assetIds: readonly string[]): Promise<void> {
-        if (this.referenceLoad || this.lifetime.signal.aborted) return
+        if (
+            this.referenceLoad
+            || this.lifetime.signal.aborted
+        )
+            return
+
         const missing = [...new Set(assetIds)].filter(assetId => !this.ports.getAsset(assetId))
-        if (!missing.length) return
+
+        if (!missing.length)
+            return
+
         this.referenceLoad = true
+
         try {
             await this.ports.ensureAssetsLoaded(missing)
-            if (!this.lifetime.signal.aborted && missing.some(assetId => this.ports.getAsset(assetId))) this.render()
+
+            if (
+                !this.lifetime.signal.aborted
+                && missing.some(assetId => this.ports.getAsset(assetId))
+            )
+                this.render()
         } catch (error) {
-            if (!this.lifetime.signal.aborted) this.ports.onError(error, this.node.nodeId)
+            if (!this.lifetime.signal.aborted)
+                this.ports.onError(error, this.node.nodeId)
         } finally {
             this.referenceLoad = false
         }
     }
 
-    private showError(error: unknown, message: string, retry: () => void): void {
+    private showError(
+        error: unknown,
+        message: string,
+        retry: () => void,
+    ): void {
         const content = this.resetContent()
         this.ports.onError(error, this.node.nodeId)
-        if (content.signal.aborted) return
-        const placeholder = createErrorPlaceholder({ document: this.element.ownerDocument, message, retryLabel: 'Retry', onRetry: retry })
+
+        if (content.signal.aborted)
+            return
+
+        const placeholder = createErrorPlaceholder({
+            document: this.element.ownerDocument,
+            message,
+            retryLabel: 'Retry',
+            onRetry: retry,
+        })
         content.own(() => placeholder.destroy())
         this.host.append(placeholder.dom)
     }

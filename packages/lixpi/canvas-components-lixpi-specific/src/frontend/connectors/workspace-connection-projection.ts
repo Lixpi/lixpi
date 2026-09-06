@@ -23,8 +23,17 @@ export type WorkspaceConnectionProjectionOptions<Data extends WorkspaceConnectio
     connectorBounds: (worldNode: EngineNode<Data>) => CanvasEngineRect
 }
 
-function fraction(value: number | undefined, fallback: number): number {
-    return value !== undefined && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback
+const fraction = (
+    value: number | undefined,
+    fallback: number,
+): number => {
+    return value !== undefined
+        && Number.isFinite(value)
+        ? Math.max(
+            0,
+            Math.min(1, value),
+        )
+        : fallback
 }
 
 // Projects logical attachments onto each node's connector footprint. Port
@@ -37,50 +46,125 @@ export class WorkspaceConnectionProjection<Data extends WorkspaceConnectionNodeD
         this.ports = new WorkspaceEdgePorts(options.settings.lineCurve)
     }
 
-    project(nodes: readonly EngineNode<Data>[], edges: readonly WorkspaceEdge[]) {
+    project(
+        nodes: readonly EngineNode<Data>[],
+        edges: readonly WorkspaceEdge[],
+    ) {
         const byId = buildNodesById(nodes)
-        const worlds = new Map(nodes.map(node => [node.nodeId, computeWorldPosition(node, byId)]))
+        const worlds = new Map(
+            nodes.map(node => [node.nodeId, computeWorldPosition(node, byId)]),
+        )
         const connectionNodes = nodes.map(node => {
-            const worldNode = { ...node, parentId: undefined, position: worlds.get(node.nodeId)! }
+            const worldNode = {
+                ...node,
+                parentId: undefined,
+                position: worlds.get(node.nodeId)!,
+            }
             const bounds = this.options.connectorBounds(worldNode)
-            return { ...worldNode, position: { x: bounds.x, y: bounds.y }, dimensions: { width: bounds.width, height: bounds.height } }
+
+            return {
+                ...worldNode,
+                position: {
+                    x: bounds.x,
+                    y: bounds.y,
+                },
+                dimensions: {
+                    width: bounds.width,
+                    height: bounds.height,
+                },
+            }
         })
-        const wireNodes = connectionNodes.map(node => ({ ...node.data.node, parentId: undefined, position: node.position, dimensions: node.dimensions } as CanvasNode))
-        const spread = computeSpreadTValues([...edges], wireNodes, this.options.settings)
-        const projected = this.ports.project(connectionNodes, edges, spread)
+        const wireNodes = connectionNodes.map(
+            node => ({
+                ...node.data.node,
+                parentId: undefined,
+                position: node.position,
+                dimensions: node.dimensions,
+            } as CanvasNode),
+        )
+        const spread = computeSpreadTValues(
+            [...edges],
+            wireNodes,
+            this.options.settings,
+        )
+        const projected = this.ports.project(
+            connectionNodes,
+            edges,
+            spread,
+        )
         const connectionById = buildNodesById(projected.nodes)
-        this.edgeIds = new Set(edges.map(edge => edge.edgeId))
+        this.edgeIds = new Set(
+            edges.map(edge => edge.edgeId),
+        )
+
         return {
             nodes: nodes.map(node => {
                 const connection = connectionById.get(node.nodeId)!
                 const world = worlds.get(node.nodeId)!
+
                 return {
                     ...node,
-                    ports: connection.ports.map(port => ({
-                        ...port,
-                        anchor: { x: port.anchor.x + connection.position.x - world.x, y: port.anchor.y + connection.position.y - world.y },
-                    })),
+                    ports: connection.ports.map(
+                        port => ({
+                            ...port,
+                            anchor: {
+                                x: port.anchor.x + connection.position.x - world.x,
+                                y: port.anchor.y + connection.position.y - world.y,
+                            },
+                        }),
+                    ),
                 }
             }),
             edges: projected.edges,
         }
     }
 
-    applyChanges(allEdges: readonly WorkspaceEdge[], changes: readonly ConnectionEdge[]): WorkspaceEdge[] {
-        const previous = new Map(allEdges.map(edge => [edge.edgeId, edge]))
+    applyChanges(
+        allEdges: readonly WorkspaceEdge[],
+        changes: readonly ConnectionEdge[],
+    ): WorkspaceEdge[] {
+        const previous = new Map(
+            allEdges.map(edge => [edge.edgeId, edge]),
+        )
         const updated = allEdges.filter(edge => !this.edgeIds.has(edge.edgeId))
         const seen = new Set<string>()
+
         for (const change of changes) {
-            if (seen.has(change.edgeId)) throw new Error(`Duplicate connection change: ${change.edgeId}`)
+            if (seen.has(change.edgeId))
+                throw new Error(`Duplicate connection change: ${change.edgeId}`)
+
             seen.add(change.edgeId)
-            const source = { nodeId: change.sourceNodeId, portId: change.sourceHandle ?? 'right' }
-            const target = { nodeId: change.targetNodeId, portId: change.targetHandle ?? 'left' }
-            const sourceAttachment = this.ports.resolve(source), targetAttachment = this.ports.resolve(target)
-            if (!sourceAttachment || !targetAttachment) throw new Error(`Unknown connection endpoint: ${change.edgeId}`)
+            const source = {
+                nodeId: change.sourceNodeId,
+                portId: change.sourceHandle ?? 'right',
+            }
+            const target = {
+                nodeId: change.targetNodeId,
+                portId: change.targetHandle ?? 'left',
+            }
+            const sourceAttachment = this.ports.resolve(source)
+            const targetAttachment = this.ports.resolve(target)
+
+            if (
+                !sourceAttachment
+                || !targetAttachment
+            )
+                throw new Error(`Unknown connection endpoint: ${change.edgeId}`)
+
             const existing = previous.get(change.edgeId)
-            if (!existing && this.edgeIds.has(change.edgeId)) continue
-            const sourceUnchanged = existing && source.nodeId === existing.sourceNodeId && source.portId === `edge:${encodeURIComponent(existing.edgeId)}:source`
-            const targetUnchanged = existing && target.nodeId === existing.targetNodeId && target.portId === `edge:${encodeURIComponent(existing.edgeId)}:target`
+
+            if (
+                !existing
+                && this.edgeIds.has(change.edgeId)
+            )
+                continue
+
+            const sourceUnchanged = existing
+                && source.nodeId === existing.sourceNodeId
+                && source.portId === `edge:${encodeURIComponent(existing.edgeId)}:source`
+            const targetUnchanged = existing
+                && target.nodeId === existing.targetNodeId
+                && target.portId === `edge:${encodeURIComponent(existing.edgeId)}:target`
             updated.push({
                 ...existing,
                 edgeId: change.edgeId,
@@ -93,6 +177,7 @@ export class WorkspaceConnectionProjection<Data extends WorkspaceConnectionNodeD
                 pathType: change.pathType ?? existing?.pathType,
             })
         }
+
         return updated
     }
 

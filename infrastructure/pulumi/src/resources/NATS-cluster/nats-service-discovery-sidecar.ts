@@ -8,9 +8,16 @@ import {
 import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
 // Local helper function (avoiding import issues)
-const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`
+const formatStageResourceName = (
+    resourceName: string,
+    orgName: string,
+    stageName: string,
+): string => `${resourceName}-${orgName}-${stageName}`
 
-const { ORG_NAME, STAGE } = process.env
+const {
+    ORG_NAME,
+    STAGE,
+} = process.env
 
 export type ServiceDiscoverySidecarArgs = {
     // Route53 configuration for public IP registration
@@ -52,7 +59,11 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
     } = args
 
     // Build and push Lambda Docker image to ECR
-    const { repository, image, imageRef } = buildDockerImage({
+    const {
+        repository,
+        image,
+        imageRef,
+    } = buildDockerImage({
         imageName: functionName,
         dockerBuildContext,
         dockerfilePath,
@@ -61,177 +72,215 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
     }) as DockerImageBuildResult
 
     // Lambda execution role
-    const lambdaRole = new aws.iam.Role(`${functionName}-role`, {
-        assumeRolePolicy: JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [{
-                Action: 'sts:AssumeRole',
-                Effect: 'Allow',
-                Principal: {
-                    Service: 'lambda.amazonaws.com',
-                },
-            }],
-        }),
-    })
+    const lambdaRole = new aws.iam.Role(
+        `${functionName}-role`,
+        {
+            assumeRolePolicy: JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Action: 'sts:AssumeRole',
+                    Effect: 'Allow',
+                    Principal: {
+                        Service: 'lambda.amazonaws.com',
+                    },
+                }],
+            }),
+        },
+    )
 
     // Attach basic Lambda execution policy
-    new aws.iam.RolePolicyAttachment(`${functionName}-basic-execution`, {
-        role: lambdaRole.name,
-        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${functionName}-basic-execution`,
+        {
+            role: lambdaRole.name,
+            policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+        },
+    )
 
     // Attach VPC execution policy for Lambda in VPC
-    new aws.iam.RolePolicyAttachment(`${functionName}-vpc-execution`, {
-        role: lambdaRole.name,
-        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${functionName}-vpc-execution`,
+        {
+            role: lambdaRole.name,
+            policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
+        },
+    )
 
     // Custom policy for Route53, ECS operations
-    const lambdaPolicy = new aws.iam.Policy(`${functionName}-policy`, {
-        policy: pulumi.all([route53HostedZoneId]).apply(([hostedZoneId]: [string]) =>
-            JSON.stringify({
-                Version: '2012-10-17',
-                Statement: [
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            'route53:ChangeResourceRecordSets',
-                            'route53:ListResourceRecordSets',
-                            'route53:GetChange',
+    const lambdaPolicy = new aws.iam.Policy(
+        `${functionName}-policy`,
+        {
+            policy: pulumi.all([route53HostedZoneId]).apply(
+                ([hostedZoneId]: [string]) =>
+                    JSON.stringify({
+                        Version: '2012-10-17',
+                        Statement: [
+                            {
+                                Effect: 'Allow',
+                                Action: [
+                                    'route53:ChangeResourceRecordSets',
+                                    'route53:ListResourceRecordSets',
+                                    'route53:GetChange',
+                                ],
+                                Resource: [
+                                    `arn:aws:route53:::hostedzone/${hostedZoneId}`,
+                                    'arn:aws:route53:::change/*',
+                                ],
+                            },
+                            {
+                                Effect: 'Allow',
+                                Action: [
+                                    'ecs:DescribeTasks',
+                                    'ecs:DescribeContainerInstances',
+                                    'ecs:ListTasks',
+                                ],
+                                Resource: '*',
+                            },
+                            {
+                                Effect: 'Allow',
+                                Action: [
+                                    'ec2:DescribeInstances',
+                                    'ec2:DescribeNetworkInterfaces',
+                                ],
+                                Resource: '*',
+                            },
+                            {
+                                Effect: 'Allow',
+                                Action: [
+                                    'route53:CreateHealthCheck',
+                                    'route53:DeleteHealthCheck',
+                                    'route53:UpdateHealthCheck',
+                                    'route53:GetHealthCheck',
+                                    'route53:ListHealthChecks',
+                                ],
+                                Resource: '*',
+                            },
                         ],
-                        Resource: [
-                            `arn:aws:route53:::hostedzone/${hostedZoneId}`,
-                            'arn:aws:route53:::change/*',
-                        ],
-                    },
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            'ecs:DescribeTasks',
-                            'ecs:DescribeContainerInstances',
-                            'ecs:ListTasks',
-                        ],
-                        Resource: '*',
-                    },
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            'ec2:DescribeInstances',
-                            'ec2:DescribeNetworkInterfaces',
-                        ],
-                        Resource: '*',
-                    },
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            'route53:CreateHealthCheck',
-                            'route53:DeleteHealthCheck',
-                            'route53:UpdateHealthCheck',
-                            'route53:GetHealthCheck',
-                            'route53:ListHealthChecks',
-                        ],
-                        Resource: '*',
-                    },
-                ],
-            })
-        ),
-    })
+                    }),
+            ),
+        },
+    )
 
-    new aws.iam.RolePolicyAttachment(`${functionName}-policy-attachment`, {
-        role: lambdaRole.name,
-        policyArn: lambdaPolicy.arn,
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${functionName}-policy-attachment`,
+        {
+            role: lambdaRole.name,
+            policyArn: lambdaPolicy.arn,
+        },
+    )
 
     // Security group for Lambda
-    const lambdaSecurityGroup = new aws.ec2.SecurityGroup(`${functionName}-sg`, {
-        vpcId: vpc.id,
-        description: 'Security group for NATS service discovery Lambda',
-        egress: [
-            {
-                protocol: '-1',
-                fromPort: 0,
-                toPort: 0,
-                cidrBlocks: ['0.0.0.0/0'],
-                description: 'Allow all outbound traffic',
-            },
-        ],
-        tags: { Name: `${functionName}-SG` },
-    }, {
-        // Ensure security group is created after VPC but deleted before VPC
-        deleteBeforeReplace: true,
-    })
+    const lambdaSecurityGroup = new aws.ec2.SecurityGroup(
+        `${functionName}-sg`,
+        {
+            vpcId: vpc.id,
+            description: 'Security group for NATS service discovery Lambda',
+            egress: [
+                {
+                    protocol: '-1',
+                    fromPort: 0,
+                    toPort: 0,
+                    cidrBlocks: ['0.0.0.0/0'],
+                    description: 'Allow all outbound traffic',
+                },
+            ],
+            tags: { Name: `${functionName}-SG` },
+        },
+        {
+            // Ensure security group is created after VPC but deleted before VPC
+            deleteBeforeReplace: true,
+        },
+    )
 
     // CloudWatch Log Group for Lambda
-    const logGroup = new aws.cloudwatch.LogGroup(`${functionName}-logs`, {
-        name: `/aws/lambda/${functionName}`,
-        retentionInDays: LOG_RETENTION_DAYS,
-    })
+    const logGroup = new aws.cloudwatch.LogGroup(
+        `${functionName}-logs`,
+        {
+            name: `/aws/lambda/${functionName}`,
+            retentionInDays: LOG_RETENTION_DAYS,
+        },
+    )
 
     // Lambda function using Container Image
     // Create Lambda function
-    const lambdaFunction = new aws.lambda.Function(`${functionName}-func`, {
-        name: functionName,
-        packageType: 'Image',
-        imageUri: imageRef,
-        role: lambdaRole.arn,
-        timeout,
-        memorySize,
-        environment: {
-            variables: {
-                ROUTE53_HOSTED_ZONE_ID: pulumi.output(route53HostedZoneId).apply((id: string) => id),
-                NATS_RECORD_NAME: natsRecordName,
-                ECS_CLUSTER_ARN: ecsCluster.arn,
+    const lambdaFunction = new aws.lambda.Function(
+        `${functionName}-func`,
+        {
+            name: functionName,
+            packageType: 'Image',
+            imageUri: imageRef,
+            role: lambdaRole.arn,
+            timeout,
+            memorySize,
+            environment: {
+                variables: {
+                    ROUTE53_HOSTED_ZONE_ID: pulumi.output(route53HostedZoneId).apply((id: string) => id),
+                    NATS_RECORD_NAME: natsRecordName,
+                    ECS_CLUSTER_ARN: ecsCluster.arn,
+                },
+            },
+            vpcConfig: {
+                subnetIds: privateSubnets.map(subnet => subnet.id),
+                securityGroupIds: [lambdaSecurityGroup.id],
             },
         },
-        vpcConfig: {
-            subnetIds: privateSubnets.map(subnet => subnet.id),
-            securityGroupIds: [lambdaSecurityGroup.id],
+        {
+            dependsOn: [image, logGroup, lambdaRole],
+            // Ensure Lambda is deleted before VPC components by marking VPC dependencies
+            deleteBeforeReplace: true,
+            // Add custom timeouts for faster cleanup and explicit dependency on VPC resources
+            customTimeouts: {
+                create: '5m',
+                update: '5m',
+                delete: '15m', // Longer delete timeout for ENI cleanup
+            },
+            // Ensure deletion order by depending on VPC resources
+            ignoreChanges: ['vpcConfig'],
+            // Force replacement when Route53 configuration changes
+            replaceOnChanges: ['environment.variables.ROUTE53_HOSTED_ZONE_ID', 'environment.variables.NATS_RECORD_NAME'],
         },
-    }, {
-        dependsOn: [image, logGroup, lambdaRole],
-        // Ensure Lambda is deleted before VPC components by marking VPC dependencies
-        deleteBeforeReplace: true,
-        // Add custom timeouts for faster cleanup and explicit dependency on VPC resources
-        customTimeouts: {
-            create: '5m',
-            update: '5m',
-            delete: '15m', // Longer delete timeout for ENI cleanup
-        },
-        // Ensure deletion order by depending on VPC resources
-        ignoreChanges: ['vpcConfig'],
-        // Force replacement when Route53 configuration changes
-        replaceOnChanges: ['environment.variables.ROUTE53_HOSTED_ZONE_ID', 'environment.variables.NATS_RECORD_NAME'],
-    })
+    )
 
     // CloudWatch Event Rule for ECS Task State Changes
-    const ecsTaskStateRule = new aws.cloudwatch.EventRule(`${functionName}-rule`, {
-        description: 'Capture ECS task state changes for NATS service discovery',
-        eventPattern: ecsCluster.arn.apply((clusterArn: string) =>
-            JSON.stringify({
-                source: ['aws.ecs'],
-                'detail-type': ['ECS Task State Change'],
-                detail: {
-                    clusterArn: [clusterArn],
-                },
-            })
-        ),
-    })
+    const ecsTaskStateRule = new aws.cloudwatch.EventRule(
+        `${functionName}-rule`,
+        {
+            description: 'Capture ECS task state changes for NATS service discovery',
+            eventPattern: ecsCluster.arn.apply(
+                (clusterArn: string) =>
+                    JSON.stringify({
+                        source: ['aws.ecs'],
+                        'detail-type': ['ECS Task State Change'],
+                        detail: {
+                            clusterArn: [clusterArn],
+                        },
+                    }),
+            ),
+        },
+    )
 
     // Permission for CloudWatch Events to invoke Lambda
-    const lambdaPermission = new aws.lambda.Permission(`${functionName}-perm`, {
-        action: 'lambda:InvokeFunction',
-        function: lambdaFunction.name,
-        principal: 'events.amazonaws.com',
-        sourceArn: ecsTaskStateRule.arn,
-    })
+    const lambdaPermission = new aws.lambda.Permission(
+        `${functionName}-perm`,
+        {
+            action: 'lambda:InvokeFunction',
+            function: lambdaFunction.name,
+            principal: 'events.amazonaws.com',
+            sourceArn: ecsTaskStateRule.arn,
+        },
+    )
 
     // CloudWatch Event Target - Lambda function
-    const ecsTaskStateTarget = new aws.cloudwatch.EventTarget(`${functionName}-target`, {
-        rule: ecsTaskStateRule.name,
-        arn: lambdaFunction.arn,
-    }, {
-        dependsOn: [lambdaPermission],
-    })
+    const ecsTaskStateTarget = new aws.cloudwatch.EventTarget(
+        `${functionName}-target`,
+        {
+            rule: ecsTaskStateRule.name,
+            arn: lambdaFunction.arn,
+        },
+        {
+            dependsOn: [lambdaPermission],
+        },
+    )
 
     return {
         repository,
@@ -243,7 +292,6 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
         logGroup,
         ecsTaskStateRule,
         ecsTaskStateTarget,
-
         outputs: {
             functionName: lambdaFunction.name,
             functionArn: lambdaFunction.arn,

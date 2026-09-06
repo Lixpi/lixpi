@@ -5,7 +5,7 @@ import {
     type MediaRunLineageAssignment,
 } from '@lixpi/constants'
 
-export function buildActionTimelineLineageAssignment(args: {
+export const buildActionTimelineLineageAssignment = (args: {
     assetId: string
     generationRequestId: string
     reasoningRunId: string
@@ -13,9 +13,10 @@ export function buildActionTimelineLineageAssignment(args: {
     prompt: string
     referenceAssetIds: string[]
     createdAt: number
-}): MediaRunLineageAssignment {
+}): MediaRunLineageAssignment => {
     const branchId = `branch-${args.generationRequestId}`
     const branchForkNodeId = `branch-fork-${args.generationRequestId}-reasoning-${args.variant.reasoningIndex}`
+
     return {
         assetId: args.assetId,
         generationRequestId: args.generationRequestId,

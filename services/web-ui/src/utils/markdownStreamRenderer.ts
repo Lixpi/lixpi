@@ -19,47 +19,83 @@ import { html } from '@lixpi/ui-primitives/dom'
 // not export its segment types. A newer @lixpi/markdown-stream-parser that exports proper types
 // is in development — once it ships, import the token type from the package instead.
 
-function wrapInline(child: Node, style: string): Node {
+const wrapInline = (
+    child: Node,
+    style: string,
+): Node => {
     if (style === 'bold') {
         const el = html`<strong></strong>` as HTMLElement
         el.appendChild(child)
+
         return el
     }
+
     if (style === 'italic') {
         const el = html`<em></em>` as HTMLElement
         el.appendChild(child)
+
         return el
     }
+
     if (style === 'strikethrough') {
         const el = html`<del></del>` as HTMLElement
         el.appendChild(child)
+
         return el
     }
+
     if (style === 'code') {
         const el = html`<code className="lixpi-md-code-inline"></code>` as HTMLElement
         el.appendChild(child)
+
         return el
     }
+
     return child
 }
 
 // Wraps the text node from inner to outer so the outermost element is bold.
-function styledTextNode(text: string, styles: string[], blockType: string): Node {
-    if (blockType === 'code') return document.createTextNode(text)
+const styledTextNode = (
+    text: string,
+    styles: string[],
+    blockType: string,
+): Node => {
+    if (blockType === 'code')
+        return document.createTextNode(text)
+
     let node: Node = document.createTextNode(text)
-    if (styles.includes('code')) node = wrapInline(node, 'code')
-    if (styles.includes('strikethrough')) node = wrapInline(node, 'strikethrough')
-    if (styles.includes('italic')) node = wrapInline(node, 'italic')
-    if (styles.includes('bold')) node = wrapInline(node, 'bold')
+
+    if (styles.includes('code'))
+        node = wrapInline(node, 'code')
+
+    if (styles.includes('strikethrough'))
+        node = wrapInline(node, 'strikethrough')
+
+    if (styles.includes('italic'))
+        node = wrapInline(node, 'italic')
+
+    if (styles.includes('bold'))
+        node = wrapInline(node, 'bold')
+
     return node
 }
 
-function createBlock(type: string, level: number | undefined): HTMLElement {
+const createBlock = (
+    type: string,
+    level: number | undefined,
+): HTMLElement => {
     if (type === 'header') {
-        const lvl = Math.min(Math.max(level ?? 3, 1), 6)
+        const lvl = Math.min(
+            Math.max(level ?? 3, 1),
+            6,
+        )
+
         return html`<div className=${`lixpi-md-heading lixpi-md-h${lvl}`}></div>` as HTMLElement
     }
-    if (type === 'code') return html`<pre className="lixpi-md-pre"><code></code></pre>` as HTMLElement
+
+    if (type === 'code')
+        return html`<pre className="lixpi-md-pre"><code></code></pre>` as HTMLElement
+
     return html`<p className="lixpi-md-paragraph"></p>` as HTMLElement
 }
 
@@ -71,7 +107,10 @@ export class MarkdownStreamRenderer {
     private currentBlock: HTMLElement | null = null
     private currentType: string | null = null
 
-    constructor(instanceId: string, className = 'lixpi-markdown') {
+    constructor(
+        instanceId: string,
+        className = 'lixpi-markdown',
+    ) {
         this.instanceId = instanceId
         this.contentEl = html`<div className=${className}></div>` as HTMLElement
         this.parser = MarkdownStreamParser.getInstance(instanceId)
@@ -80,7 +119,9 @@ export class MarkdownStreamRenderer {
     }
 
     push(text: string): void {
-        if (!text) return
+        if (!text)
+            return
+
         this.parser.parseToken(text)
     }
 
@@ -96,41 +137,68 @@ export class MarkdownStreamRenderer {
     private cleanup(): void {
         this.unsubscribe?.()
         this.unsubscribe = null
+
         try {
             MarkdownStreamParser.removeInstance(this.instanceId)
         } catch {}
     }
 
     private handleSegment(parsed: MarkdownStreamToken): void {
-        if (!parsed) return
+        if (!parsed)
+            return
+
         if (parsed.status === 'END_STREAM') {
             this.cleanup()
+
             return
         }
+
         const seg = parsed.segment
-        if (!seg) return
+
+        if (!seg)
+            return
+
         const type = seg.type ?? 'paragraph'
         const text = seg.segment ?? ''
         const styles = seg.styles ?? []
-        if (seg.isBlockDefining || !this.currentBlock || type !== this.currentType) {
+
+        if (
+            seg.isBlockDefining
+            || !this.currentBlock
+            || type !== this.currentType
+        ) {
             this.currentBlock = createBlock(type, seg.level)
             this.currentType = type
             this.contentEl.appendChild(this.currentBlock)
         }
-        if (!text) return
+
+        if (!text)
+            return
+
         const target = type === 'code'
             ? (this.currentBlock.querySelector('code') ?? this.currentBlock)
             : this.currentBlock
-        target.appendChild(styledTextNode(text, styles, type))
+        target.appendChild(
+            styledTextNode(
+                text,
+                styles,
+                type,
+            ),
+        )
     }
 }
 
 let staticRenderCounter = 0
 
 // One-shot render of a complete markdown string into a fresh element.
-export function renderMarkdownStatic(text: string, idBase: string, className = 'lixpi-markdown'): HTMLElement {
+export const renderMarkdownStatic = (
+    text: string,
+    idBase: string,
+    className = 'lixpi-markdown',
+): HTMLElement => {
     const renderer = new MarkdownStreamRenderer(`${idBase}:static:${staticRenderCounter++}`, className)
     renderer.push(text)
     renderer.finalize()
+
     return renderer.contentEl
 }

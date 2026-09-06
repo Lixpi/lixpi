@@ -16,7 +16,10 @@ import {
 } from '../models/asset.ts'
 import { deriveSubjectIdentityFromLineage } from '../services/asset-subject-identity-service.ts'
 
-const { ORG_NAME, STAGE } = process.env
+const {
+    ORG_NAME,
+    STAGE,
+} = process.env
 
 type LegacyUploadPlaceholderCanvasNode = {
     nodeId: string
@@ -44,21 +47,25 @@ export type UnifiedMediaReferenceMigrationAudit = {
     }>
 }
 
-export function migrateAssetMediaIdentity(asset: Asset | Record<string, unknown>): Asset {
+export const migrateAssetMediaIdentity = (asset: Asset | Record<string, unknown>): Asset => {
     const next = {
         ...asset,
         depictionMedium: asset.depictionMedium ?? 'unknown',
         subjectIdentity: asset.subjectIdentity ?? structuredClone(DEFAULT_ASSET_SUBJECT_IDENTITY),
     } as Asset
     assertAssetComponents(next)
+
     return next
 }
 
-export function migrateOperationStatusCanvasNodes(canvasState: CanvasState): CanvasState {
+export const migrateOperationStatusCanvasNodes = (canvasState: CanvasState): CanvasState => {
     let changed = false
     const nodes = (canvasState.nodes as Array<CanvasNode | LegacyUploadPlaceholderCanvasNode>).map(node => {
-        if (node.type !== 'uploadPlaceholder') return node as CanvasNode
+        if (node.type !== 'uploadPlaceholder')
+            return node as CanvasNode
+
         changed = true
+
         return {
             nodeId: node.nodeId,
             type: 'operationStatus',
@@ -76,7 +83,11 @@ export function migrateOperationStatusCanvasNodes(canvasState: CanvasState): Can
             updatedAt: node.updatedAt,
         } satisfies OperationStatusCanvasNode
     })
-    return changed ? { ...canvasState, nodes } : canvasState
+
+    return changed ? {
+        ...canvasState,
+        nodes,
+    } : canvasState
 }
 
 export class UnifiedMediaReferenceMigration {
@@ -87,16 +98,27 @@ export class UnifiedMediaReferenceMigration {
             quarantined: [],
         }
         const assetResult = await dynamoDBService.scanItems({
-            tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'ASSETS',
+                ORG_NAME,
+                STAGE,
+            ),
             limit: 1000,
             fetchAllItems: true,
             consistentRead: true,
             origin: 'UnifiedMediaReferenceMigration.auditAssets',
         })
+
         for (const rawAsset of (assetResult?.items ?? []) as Asset[]) {
             try {
                 const migrated = migrateAssetMediaIdentity(rawAsset)
-                if (!rawAsset.depictionMedium || !rawAsset.subjectIdentity) audit.legacyAssetIds.push(rawAsset.assetId)
+
+                if (
+                    !rawAsset.depictionMedium
+                    || !rawAsset.subjectIdentity
+                )
+                    audit.legacyAssetIds.push(rawAsset.assetId)
+
                 assertAssetComponents(migrated)
             } catch (error) {
                 audit.quarantined.push({
@@ -106,20 +128,28 @@ export class UnifiedMediaReferenceMigration {
                 })
             }
         }
+
         const workspaceResult = await dynamoDBService.scanItems({
-            tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'WORKSPACES',
+                ORG_NAME,
+                STAGE,
+            ),
             limit: 1000,
             fetchAllItems: true,
             consistentRead: true,
             origin: 'UnifiedMediaReferenceMigration.auditWorkspaces',
         })
+
         for (const workspace of (workspaceResult?.items ?? []) as Workspace[]) {
             try {
                 const migrated = migrateOperationStatusCanvasNodes(workspace.canvasState)
-                if (migrated !== workspace.canvasState) audit.legacyWorkspaceIds.push(workspace.workspaceId)
-                if ((migrated.nodes as Array<{ type?: string }>).some(node => node.type === 'uploadPlaceholder')) {
+
+                if (migrated !== workspace.canvasState)
+                    audit.legacyWorkspaceIds.push(workspace.workspaceId)
+
+                if ((migrated.nodes as Array<{ type?: string }>).some(node => node.type === 'uploadPlaceholder'))
                     throw new Error('LEGACY_UPLOAD_PLACEHOLDER_REMAINED')
-                }
             } catch (error) {
                 audit.quarantined.push({
                     entityType: 'workspace',
@@ -128,16 +158,25 @@ export class UnifiedMediaReferenceMigration {
                 })
             }
         }
+
         return audit
     }
 
-    async run(): Promise<{ migratedAssets: number; migratedWorkspaces: number }> {
+    async run(): Promise<{
+        migratedAssets: number
+        migratedWorkspaces: number
+    }> {
         const preflight = await this.audit()
-        if (preflight.quarantined.length > 0) {
+
+        if (preflight.quarantined.length > 0)
             throw new Error(`UNIFIED_MEDIA_REFERENCE_MIGRATION_QUARANTINE_REQUIRED:${JSON.stringify(preflight.quarantined)}`)
-        }
+
         const assetResult = await dynamoDBService.scanItems({
-            tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'ASSETS',
+                ORG_NAME,
+                STAGE,
+            ),
             limit: 1000,
             fetchAllItems: true,
             consistentRead: true,
@@ -145,19 +184,33 @@ export class UnifiedMediaReferenceMigration {
         })
         let migratedAssets = 0
         const assetsById = new Map<string, Asset>()
+
         for (const rawAsset of (assetResult?.items ?? []) as Asset[]) {
-            if (rawAsset.depictionMedium && rawAsset.subjectIdentity) {
+            if (
+                rawAsset.depictionMedium
+                && rawAsset.subjectIdentity
+            ) {
                 assetsById.set(rawAsset.assetId, rawAsset)
+
                 continue
             }
+
             const next = migrateAssetMediaIdentity(rawAsset)
             const now = Date.now()
-            const migrated = { ...next, revision: rawAsset.revision + 1, updatedAt: now }
+            const migrated = {
+                ...next,
+                revision: rawAsset.revision + 1,
+                updatedAt: now,
+            }
             await dynamoDBService.transactWrite({
                 operations: [
                     {
                         type: 'update',
-                        tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ASSETS',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { assetId: rawAsset.assetId },
                         updates: {
                             depictionMedium: next.depictionMedium,
@@ -179,11 +232,20 @@ export class UnifiedMediaReferenceMigration {
 
         for (const asset of assetsById.values()) {
             const sourceAssetIds = asset.lineage?.sourceAssetIds ?? []
-            if (sourceAssetIds.length === 0) continue
+
+            if (sourceAssetIds.length === 0)
+                continue
+
             const sourceAssets = sourceAssetIds.flatMap(assetId => assetsById.get(assetId) ?? [])
-            if (sourceAssets.length !== sourceAssetIds.length) continue
+
+            if (sourceAssets.length !== sourceAssetIds.length)
+                continue
+
             const subjectIdentity = deriveSubjectIdentityFromLineage(sourceAssets, { generatedOutput: true })
-            if (JSON.stringify(subjectIdentity) === JSON.stringify(asset.subjectIdentity)) continue
+
+            if (JSON.stringify(subjectIdentity) === JSON.stringify(asset.subjectIdentity))
+                continue
+
             const now = Date.now()
             const migrated = {
                 ...asset,
@@ -195,9 +257,17 @@ export class UnifiedMediaReferenceMigration {
                 operations: [
                     {
                         type: 'update',
-                        tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ASSETS',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { assetId: asset.assetId },
-                        updates: { subjectIdentity, revision: migrated.revision, updatedAt: now },
+                        updates: {
+                            subjectIdentity,
+                            revision: migrated.revision,
+                            updatedAt: now,
+                        },
                         conditionExpression: '#revision = :expectedRevision',
                         expressionAttributeNames: { '#revision': 'revision' },
                         expressionAttributeValues: { ':expectedRevision': asset.revision },
@@ -211,24 +281,43 @@ export class UnifiedMediaReferenceMigration {
         }
 
         const workspaceResult = await dynamoDBService.scanItems({
-            tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'WORKSPACES',
+                ORG_NAME,
+                STAGE,
+            ),
             limit: 1000,
             fetchAllItems: true,
             consistentRead: true,
             origin: 'UnifiedMediaReferenceMigration.workspaces',
         })
         let migratedWorkspaces = 0
+
         for (const workspace of (workspaceResult?.items ?? []) as Workspace[]) {
             const canvasState = migrateOperationStatusCanvasNodes(workspace.canvasState)
-            if (canvasState === workspace.canvasState) continue
-            const now = Math.max(Date.now(), (workspace.canvasStateUpdatedAt ?? workspace.updatedAt) + 1)
+
+            if (canvasState === workspace.canvasState)
+                continue
+
+            const now = Math.max(
+                Date.now(),
+                (workspace.canvasStateUpdatedAt ?? workspace.updatedAt) + 1,
+            )
             await dynamoDBService.transactWrite({
                 operations: [
                     {
                         type: 'update',
-                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'WORKSPACES',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { workspaceId: workspace.workspaceId },
-                        updates: { canvasState, canvasStateUpdatedAt: now, updatedAt: now },
+                        updates: {
+                            canvasState,
+                            canvasStateUpdatedAt: now,
+                            updatedAt: now,
+                        },
                         conditionExpression: '(#canvasStateUpdatedAt = :expected OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expected))',
                         expressionAttributeNames: {
                             '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
@@ -238,7 +327,11 @@ export class UnifiedMediaReferenceMigration {
                     },
                     {
                         type: 'update',
-                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'WORKSPACES_META',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { workspaceId: workspace.workspaceId },
                         updates: { updatedAt: now },
                     },
@@ -247,6 +340,10 @@ export class UnifiedMediaReferenceMigration {
             })
             migratedWorkspaces += 1
         }
-        return { migratedAssets, migratedWorkspaces }
+
+        return {
+            migratedAssets,
+            migratedWorkspaces,
+        }
     }
 }

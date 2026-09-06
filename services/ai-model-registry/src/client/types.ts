@@ -31,7 +31,12 @@ export type CatalogParam = SelectionEntry & {
     availability: 'supported' | 'unsupported' | 'unverified'
     summary: string
     combines: string[]
-    usage?: { setIn: string; code: string; from: string; what: string }
+    usage?: {
+        setIn: string
+        code: string
+        from: string
+        what: string
+    }
     supportedModels: string[]
     unsupportedModels: string[]
     supportedApis: string[]
@@ -59,7 +64,10 @@ export type CatalogProvider = {
     groups: CatalogGroup[]
 }
 
-export type CategoryMeta = { title: string; order: number }
+export type CategoryMeta = {
+    title: string
+    order: number
+}
 
 export type Catalog = {
     catalogVersion: string

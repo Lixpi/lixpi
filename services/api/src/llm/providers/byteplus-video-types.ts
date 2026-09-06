@@ -68,7 +68,10 @@ export type RetrieveVideoGenerationTaskResponse = {
         [key: string]: unknown
     }
     usage?: SeedanceUsage
-    error?: { code?: string; message?: string }
+    error?: {
+        code?: string
+        message?: string
+    }
     // Echoed generation parameters (present on success).
     duration?: number
     resolution?: string
@@ -89,7 +92,13 @@ export class BytePlusModelArkError extends Error {
     readonly code?: string
     readonly httpStatus?: number
 
-    constructor(message: string, opts: { code?: string; httpStatus?: number } = {}) {
+    constructor(
+        message: string,
+        opts: {
+            code?: string
+            httpStatus?: number
+        } = {},
+    ) {
         super(message)
         this.name = 'BytePlusModelArkError'
         this.code = opts.code
@@ -97,9 +106,13 @@ export class BytePlusModelArkError extends Error {
     }
 }
 
-const parseJsonOrThrow = async (res: Response, action: string): Promise<any> => {
+const parseJsonOrThrow = async (
+    res: Response,
+    action: string,
+): Promise<any> => {
     const text = await res.text()
     let json: any
+
     try {
         json = text ? JSON.parse(text) : {}
     } catch {
@@ -108,19 +121,21 @@ const parseJsonOrThrow = async (res: Response, action: string): Promise<any> => 
 
     if (!res.ok) {
         const code = json?.error?.code
-        const message = json?.error?.message ?? (text || res.statusText)
+        const message = json?.error?.message
+            ?? (text || res.statusText)
+
         throw new BytePlusModelArkError(
             `ModelArk ${action} failed (HTTP ${res.status}${code ? `, code=${code}` : ''}): ${message}`,
-            { code, httpStatus: res.status },
+            {
+                code,
+                httpStatus: res.status,
+            },
         )
     }
 
-    if (json === undefined) {
-        throw new BytePlusModelArkError(
-            `ModelArk ${action} returned a non-JSON response (HTTP ${res.status})`,
-            { httpStatus: res.status },
-        )
-    }
+    if (json === undefined)
+        throw new BytePlusModelArkError(`ModelArk ${action} returned a non-JSON response (HTTP ${res.status})`, { httpStatus: res.status })
+
     return json
 }
 
@@ -129,15 +144,19 @@ export const createVideoGenerationTask = async (
     payload: CreateVideoGenerationTaskPayload,
     signal?: AbortSignal,
 ): Promise<CreateVideoGenerationTaskResponse> => {
-    const res = await fetch(`${config.baseUrl}/contents/generations/tasks`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${config.apiKey}`,
-            'Content-Type': 'application/json',
+    const res = await fetch(
+        `${config.baseUrl}/contents/generations/tasks`,
+        {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${config.apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+            signal,
         },
-        body: JSON.stringify(payload),
-        signal,
-    })
+    )
+
     return parseJsonOrThrow(res, 'create video generation task')
 }
 
@@ -146,11 +165,15 @@ export const retrieveVideoGenerationTask = async (
     taskId: string,
     signal?: AbortSignal,
 ): Promise<RetrieveVideoGenerationTaskResponse> => {
-    const res = await fetch(`${config.baseUrl}/contents/generations/tasks/${encodeURIComponent(taskId)}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${config.apiKey}` },
-        signal,
-    })
+    const res = await fetch(
+        `${config.baseUrl}/contents/generations/tasks/${encodeURIComponent(taskId)}`,
+        {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${config.apiKey}` },
+            signal,
+        },
+    )
+
     return parseJsonOrThrow(res, 'retrieve video generation task')
 }
 
@@ -162,21 +185,39 @@ const downloadModelArkOutput = async (
     signal?: AbortSignal,
 ): Promise<Buffer> => {
     const res = await fetch(outputUrl, { signal })
-    if (!res.ok) {
-        throw new BytePlusModelArkError(
-            `Failed to download Seedance ${outputLabel} (HTTP ${res.status})`,
-            { httpStatus: res.status },
-        )
-    }
+
+    if (!res.ok)
+        throw new BytePlusModelArkError(`Failed to download Seedance ${outputLabel} (HTTP ${res.status})`, { httpStatus: res.status })
+
     const arrayBuffer = await res.arrayBuffer()
+
     return Buffer.from(arrayBuffer)
 }
 
-export const downloadVideo = async (videoUrl: string, signal?: AbortSignal): Promise<Buffer> => downloadModelArkOutput(videoUrl, 'video', signal)
+export const downloadVideo = async (
+    videoUrl: string,
+    signal?: AbortSignal,
+): Promise<Buffer> => downloadModelArkOutput(
+    videoUrl,
+    'video',
+    signal,
+)
 
-export const downloadLastFrame = async (frameUrl: string, signal?: AbortSignal): Promise<Buffer> => downloadModelArkOutput(frameUrl, 'last frame', signal)
+export const downloadLastFrame = async (
+    frameUrl: string,
+    signal?: AbortSignal,
+): Promise<Buffer> => downloadModelArkOutput(
+    frameUrl,
+    'last frame',
+    signal,
+)
 
-export const SEEDANCE_TERMINAL_STATUSES: ReadonlySet<SeedanceTaskStatus> = new Set(['succeeded', 'failed', 'cancelled', 'expired'])
+export const SEEDANCE_TERMINAL_STATUSES: ReadonlySet<SeedanceTaskStatus> = new Set([
+    'succeeded',
+    'failed',
+    'cancelled',
+    'expired',
+])
 
 export const SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE = 'Seedance video extension requires provider-fetchable video URLs. '
     + 'Use VEO for extension until external asset handoff is implemented.'
@@ -190,14 +231,20 @@ export type SeedanceContentInputs = {
 // Seedance reads inline base64 data URLs (the resolver already supplies them) or
 // public https URLs. Internal nats-obj:// URIs are private and must never reach
 // ModelArk — fail explicitly rather than emit an opaque vendor error.
-const toModelArkImageUrl = (url: string, label: string): string => {
-    if (!url) throw new Error(`Seedance: empty ${label} URL`)
+const toModelArkImageUrl = (
+    url: string,
+    label: string,
+): string => {
+    if (!url)
+        throw new Error(`Seedance: empty ${label} URL`)
+
     if (url.startsWith('nats-obj://')) {
         throw new Error(
             `Seedance: refusing to send a private object-store URI as a ${label}. `
                 + `The resolver must supply a base64 data URL.`,
         )
     }
+
     return url
 }
 
@@ -208,12 +255,17 @@ const toModelArkImageUrl = (url: string, label: string): string => {
 // (the optional stop frame): the first becomes role=first_frame, the second
 // role=last_frame. Source-video extension has no provider-fetchable asset handoff
 // yet, so it is rejected with a capability error.
-export const buildSeedanceContent = (prompt: string, inputs: SeedanceContentInputs): SeedanceContentItem[] => {
-    const content: SeedanceContentItem[] = [{ type: 'text', text: prompt }]
+export const buildSeedanceContent = (
+    prompt: string,
+    inputs: SeedanceContentInputs,
+): SeedanceContentItem[] => {
+    const content: SeedanceContentItem[] = [{
+        type: 'text',
+        text: prompt,
+    }]
 
-    if (inputs.videoSourceForExtension) {
+    if (inputs.videoSourceForExtension)
         throw new Error(SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE)
-    }
 
     const frameUrls = [inputs.videoFirstFrameImage, ...(inputs.videoReferenceImages ?? [])]
         .filter((url): url is string => typeof url === 'string' && url.length > 0)
@@ -225,6 +277,7 @@ export const buildSeedanceContent = (prompt: string, inputs: SeedanceContentInpu
             role: 'first_frame',
         })
     }
+
     if (frameUrls[1]) {
         content.push({
             type: 'image_url',
@@ -232,6 +285,7 @@ export const buildSeedanceContent = (prompt: string, inputs: SeedanceContentInpu
             role: 'last_frame',
         })
     }
+
     return content
 }
 
@@ -244,7 +298,11 @@ export type PollVideoGenerationTaskOptions = {
     onKeepalive?: () => void
     // Injectable so the caller can add transport retry around a poll, and for
     // tests; defaults to the real retrieve + setTimeout sleep.
-    retrieve?: (config: BytePlusClientConfig, taskId: string, signal?: AbortSignal) => Promise<RetrieveVideoGenerationTaskResponse>
+    retrieve?: (
+        config: BytePlusClientConfig,
+        taskId: string,
+        signal?: AbortSignal,
+    ) => Promise<RetrieveVideoGenerationTaskResponse>
     sleep?: (ms: number) => Promise<void>
 }
 
@@ -257,12 +315,21 @@ export const pollVideoGenerationTask = async (
     opts: PollVideoGenerationTaskOptions,
 ): Promise<RetrieveVideoGenerationTaskResponse> => {
     const retrieve = opts.retrieve ?? retrieveVideoGenerationTask
-    const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+    const sleep = opts.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)))
 
     for (;;) {
-        if (opts.shouldStop?.()) throw new Error('Video generation aborted')
-        const task = await retrieve(config, taskId, opts.signal)
-        if (SEEDANCE_TERMINAL_STATUSES.has(task.status)) return task
+        if (opts.shouldStop?.())
+            throw new Error('Video generation aborted')
+
+        const task = await retrieve(
+            config,
+            taskId,
+            opts.signal,
+        )
+
+        if (SEEDANCE_TERMINAL_STATUSES.has(task.status))
+            return task
+
         opts.onKeepalive?.()
         await sleep(opts.pollIntervalMs)
     }

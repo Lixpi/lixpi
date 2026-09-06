@@ -83,7 +83,10 @@ export type WorkspaceGeneratedOutputDetailsPorts = {
     getCapabilityProgressStatus: (node: CapabilityArtifactCanvasNode) => string | undefined
     findNode: (nodeId: string | undefined) => CanvasNode | undefined
     now: () => number
-    reportError: (message: string, error: unknown) => void
+    reportError: (
+        message: string,
+        error: unknown,
+    ) => void
 }
 
 export class WorkspaceGeneratedOutputDetails {
@@ -95,34 +98,48 @@ export class WorkspaceGeneratedOutputDetails {
         this.html = createDocumentHtml(ports.document)
     }
 
-    getTraceState = (node: ImageCanvasNode | VideoCanvasNode): MediaGenerationProgressState | null => {
-        return this.ports.history.getMediaGenerationTraceState(node)
-    }
+    getTraceState = (node: ImageCanvasNode | VideoCanvasNode): MediaGenerationProgressState | null =>
+        this.ports.history.getMediaGenerationTraceState(node)
 
     targetsMatch = (
         left: CanvasGeneratedOutputDetailsTarget | undefined,
         right: CanvasGeneratedOutputDetailsTarget,
     ): boolean => left?.kind === right.kind && left.nodeId === right.nodeId
 
-    open = (target: CanvasGeneratedOutputDetailsTarget, options: { toggle?: boolean } = {}): void => {
-        if (options.toggle && this.targetsMatch(this.ports.getPanelState().generatedOutputDetailsTarget, target)) {
+    open = (
+        target: CanvasGeneratedOutputDetailsTarget,
+        options: { toggle?: boolean } = {},
+    ): void => {
+        if (
+            options.toggle
+            && this.targetsMatch(this.ports.getPanelState().generatedOutputDetailsTarget, target)
+        ) {
             this.close()
+
             return
         }
+
         this.ports.persistPanelState({
             ...this.ports.getPanelState(),
             isOpen: true,
             topLevelMode: 'aiThreads',
             generatedOutputDetailsTarget: target,
         })
-        this.ports.syncFooters(this.ports.getState())
+        this.ports.syncFooters(
+            this.ports.getState(),
+        )
         this.render()
     }
 
     close = (): void => {
-        const { generatedOutputDetailsTarget: _removedTarget, ...panelState } = this.ports.getPanelState()
+        const {
+            generatedOutputDetailsTarget: _removedTarget,
+            ...panelState
+        } = this.ports.getPanelState()
         this.ports.persistPanelState(panelState)
-        this.ports.syncFooters(this.ports.getState())
+        this.ports.syncFooters(
+            this.ports.getState(),
+        )
         this.render()
     }
 
@@ -130,63 +147,83 @@ export class WorkspaceGeneratedOutputDetails {
 
     isReviewReady = (node: GeneratedOutputCanvasNode): boolean => this.ports.review.isGeneratedOutputReviewReady(node)
 
-    accept = async (scope: 'output-node' | 'branch-lineage', nodeId: string): Promise<void> => {
-        await this.ports.review.acceptGeneratedOutput(scope, nodeId)
-    }
+    accept = async (
+        scope: 'output-node' | 'branch-lineage',
+        nodeId: string,
+    ): Promise<void> => void (await this.ports.review.acceptGeneratedOutput(scope, nodeId))
 
-    reject = async (scope: 'output-node' | 'branch-lineage', nodeId: string): Promise<'applied' | 'not-found' | 'failed'> => {
-        return await this.ports.review.rejectGeneratedOutput(scope, nodeId)
-    }
+    reject = async (
+        scope: 'output-node' | 'branch-lineage',
+        nodeId: string,
+    ): Promise<'applied' | 'not-found' | 'failed'> => await this.ports.review.rejectGeneratedOutput(scope, nodeId)
 
-    regenerate = async (request: GeneratedOutputRegenerationRequest): Promise<void> => {
-        await this.ports.review.regenerateGeneratedOutputs(request)
-    }
+    regenerate = async (request: GeneratedOutputRegenerationRequest): Promise<void> =>
+        void (await this.ports.review.regenerateGeneratedOutputs(request))
 
     isProgressActive = (node: GeneratedOutputCanvasNode): boolean => {
         if (node.type === 'capabilityArtifact') {
             const status = this.ports.getCapabilityProgressStatus(node)
+
             return status === 'pending' || status === 'running'
         }
+
         const status = this.getTraceState(node)?.status
+
         return status === 'pending' || status === 'running' || status === 'awaiting-provider-verification'
     }
 
-    resolveNode = (
-        target: CanvasGeneratedOutputDetailsTarget | undefined,
-    ): GeneratedOutputCanvasNode | BranchMarkerNode | null => this.ports.history.resolveGeneratedOutputDetailsNode(target)
+    resolveNode = (target: CanvasGeneratedOutputDetailsTarget | undefined): GeneratedOutputCanvasNode | BranchMarkerNode | null =>
+        this.ports.history.resolveGeneratedOutputDetailsNode(target)
 
-    mountContent = (host: HTMLElement, mode: CanvasRightSidePanelMode): () => void => {
+    mountContent = (
+        host: HTMLElement,
+        mode: CanvasRightSidePanelMode,
+    ): () => void => {
         const lifetime = new Lifetime()
+
         try {
             const unmountLibrary = this.ports.libraries.mount(host, mode)
-            if (unmountLibrary) {
+
+            if (unmountLibrary)
                 lifetime.own(unmountLibrary)
-            } else {
+            else {
                 lifetime.own(this.destroyProjection)
                 const node = this.resolveNode(this.ports.getPanelState().generatedOutputDetailsTarget)
+
                 if (node) {
                     this.activePanel = createGeneratedOutputDetailsSidebar({
                         onClose: this.close,
                         renderContent: body => this.renderContent(body, node),
                     })
                     host.appendChild(this.activePanel.element)
-                } else {
-                    host.appendChild(this.html`<div className="workspace-generated-output-details-empty nopan">Select a media item or lineage marker to view its details.</div>` as HTMLDivElement)
-                }
+                } else
+                    host.appendChild(
+                        this.html`<div className="workspace-generated-output-details-empty nopan">Select a media item or lineage marker to view its details.</div>` as HTMLDivElement,
+                    )
             }
         } catch (error) {
             lifetime.destroy()
+
             throw error
         }
+
         return () => lifetime.destroy()
     }
 
     render = (options: WorkspaceRightPanelRenderOptions = {}): void => {
         const target = this.ports.getPanelState().generatedOutputDetailsTarget
-        if (target && !this.resolveNode(target)) {
-            const { generatedOutputDetailsTarget: _removed, ...state } = this.ports.getPanelState()
+
+        if (
+            target
+            && !this.resolveNode(target)
+        ) {
+            const {
+                generatedOutputDetailsTarget: _removed,
+                ...state
+            } = this.ports.getPanelState()
             this.ports.persistPanelState(state)
         }
+
         this.ports.renderPanel(options)
     }
 
@@ -201,8 +238,13 @@ export class WorkspaceGeneratedOutputDetails {
         const panel = this.activePanel
         this.activeDetails = null
         this.activePanel = null
-        if (panel) cleanup.own(() => panel.destroy())
-        if (details) cleanup.own(() => details.destroy())
+
+        if (panel)
+            cleanup.own(() => panel.destroy())
+
+        if (details)
+            cleanup.own(() => details.destroy())
+
         cleanup.destroy()
     }
 
@@ -217,8 +259,14 @@ export class WorkspaceGeneratedOutputDetails {
             renditionPath: this.ports.host.media.renditionPath,
             getMediaContent: this.ports.getMediaContent,
             getProgress: this.getTraceState,
-            createReasoningBadge: modelId => this.ports.host.models.createBadge({ modelId, monochromeIcon: true }),
-            styleReasoningHeader: header => this.ports.host.models.styleBadge(header, { scale: this.ports.host.settings.mediaNode.generatedMediaChrome.chatScale }),
+            createReasoningBadge: modelId => this.ports.host.models.createBadge({
+                modelId,
+                monochromeIcon: true,
+            }),
+            styleReasoningHeader: header => this.ports.host.models.styleBadge(
+                header,
+                { scale: this.ports.host.settings.mediaNode.generatedMediaChrome.chatScale },
+            ),
             progressDetails: this.ports.context.getExecutionTraceTimelineDetail(),
             onError: error => this.ports.reportError('[CANVAS][generation-history]', error),
             mountEditor: request =>
@@ -230,21 +278,55 @@ export class WorkspaceGeneratedOutputDetails {
         }
     }
 
-    private renderContent(body: HTMLElement, node: GeneratedOutputCanvasNode | BranchMarkerNode): WorkspaceOutputDetails {
-        this.activeDetails = new WorkspaceOutputDetails(body, node, {
-            assets: this.ports.createAssetViewPorts(),
-            getDescriptor: candidate => this.ports.host.assets.read(candidate.assetId)?.descriptor as MediaDescriptor | undefined,
-            getArtifactDefinition: typeId => this.ports.host.capabilities.frontend.require(typeId),
-            getArtifactDocument: assetId => this.ports.host.assets.readDocument(assetId, 'capabilityArtifact')?.doc,
-            getBranchMediaTarget: marker => this.ports.history.getBranchMarkerMediaProjectionTarget(marker),
-            getMediaBranchTarget: candidate => this.ports.history.getMediaNodeBranchMarkerProjectionTarget(candidate),
-            getProgress: this.getTraceState,
-            progressDetails: this.ports.context.getExecutionTraceTimelineDetail(),
-            now: this.ports.now,
-            mountMediaHistory: ({ host, target, onProgress, signal }) => this.mountMediaHistory(host, target, onProgress, signal),
-            mountBranchHistory: ({ host, target, signal }) => this.mountBranchHistory(host, target, signal),
-            mountArtifactHistory: ({ host, node: artifact, signal }) => this.mountArtifactHistory(host, artifact, signal),
-        })
+    private renderContent(
+        body: HTMLElement,
+        node: GeneratedOutputCanvasNode | BranchMarkerNode,
+    ): WorkspaceOutputDetails {
+        this.activeDetails = new WorkspaceOutputDetails(
+            body,
+            node,
+            {
+                assets: this.ports.createAssetViewPorts(),
+                getDescriptor: candidate => this.ports.host.assets.read(candidate.assetId)?.descriptor as MediaDescriptor | undefined,
+                getArtifactDefinition: typeId => this.ports.host.capabilities.frontend.require(typeId),
+                getArtifactDocument: assetId => this.ports.host.assets.readDocument(assetId, 'capabilityArtifact')?.doc,
+                getBranchMediaTarget: marker => this.ports.history.getBranchMarkerMediaProjectionTarget(marker),
+                getMediaBranchTarget: candidate => this.ports.history.getMediaNodeBranchMarkerProjectionTarget(candidate),
+                getProgress: this.getTraceState,
+                progressDetails: this.ports.context.getExecutionTraceTimelineDetail(),
+                now: this.ports.now,
+                mountMediaHistory: ({
+                    host,
+                    target,
+                    onProgress,
+                    signal,
+                }) => this.mountMediaHistory(
+                    host,
+                    target,
+                    onProgress,
+                    signal,
+                ),
+                mountBranchHistory: ({
+                    host,
+                    target,
+                    signal,
+                }) => this.mountBranchHistory(
+                    host,
+                    target,
+                    signal,
+                ),
+                mountArtifactHistory: ({
+                    host,
+                    node: artifact,
+                    signal,
+                }) => this.mountArtifactHistory(
+                    host,
+                    artifact,
+                    signal,
+                ),
+            },
+        )
+
         return this.activeDetails
     }
 
@@ -254,14 +336,17 @@ export class WorkspaceGeneratedOutputDetails {
         onProgress: (progress: MediaGenerationProgressInstance) => void,
         signal: AbortSignal,
     ): WorkspaceHistoryView | null {
-        return mountWorkspaceMediaHistory({
-            host,
-            node: target.node,
-            lineageProjectionScope: target.lineageProjectionScope,
-            limitToSelectedMedia: target.limitProjectionToSelectedMedia,
-            onProgress,
-            signal,
-        }, this.getGenerationHistoryPorts())
+        return mountWorkspaceMediaHistory(
+            {
+                host,
+                node: target.node,
+                lineageProjectionScope: target.lineageProjectionScope,
+                limitToSelectedMedia: target.limitProjectionToSelectedMedia,
+                onProgress,
+                signal,
+            },
+            this.getGenerationHistoryPorts(),
+        )
     }
 
     private mountBranchHistory(
@@ -270,8 +355,16 @@ export class WorkspaceGeneratedOutputDetails {
         signal: AbortSignal,
     ): WorkspaceHistoryView | null {
         const projection = this.ports.history.buildBranchMarkerTurnProjectionContent(target.marker, target.lineageProjectionScope)
+
         return projection
-            ? new WorkspaceGenerationHistory({ host, projection, signal }, this.getGenerationHistoryPorts())
+            ? new WorkspaceGenerationHistory(
+                {
+                    host,
+                    projection,
+                    signal,
+                },
+                this.getGenerationHistoryPorts(),
+            )
             : null
     }
 
@@ -285,8 +378,16 @@ export class WorkspaceGeneratedOutputDetails {
             content: ProseMirrorJsonNode
             lineageProjectionScope: AiLineageProjectionScope
         } | null
+
         return projection
-            ? new WorkspaceGenerationHistory({ host, projection, signal }, this.getGenerationHistoryPorts())
+            ? new WorkspaceGenerationHistory(
+                {
+                    host,
+                    projection,
+                    signal,
+                },
+                this.getGenerationHistoryPorts(),
+            )
             : null
     }
 }

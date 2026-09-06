@@ -21,7 +21,11 @@ const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
 // client unit-testable. The spend guard is synchronous now, so this is a request,
 // not a fire-and-forget publish.
 export type MetricsNats = {
-    request<Req = any, Res = any>(subject: string, data: Req, timeoutMs: number): Promise<Res>
+    request<Req = any, Res = any>(
+        subject: string,
+        data: Req,
+        timeoutMs: number,
+    ): Promise<Res>
 }
 
 export type MetricsClientOptions = {
@@ -37,7 +41,7 @@ export type MetricsClientOptions = {
 }
 
 // metricsConfigFromEnv reads the integration flags from the environment.
-export function metricsConfigFromEnv(): MetricsClientOptions {
+export const metricsConfigFromEnv = (): MetricsClientOptions => {
     return {
         enabled: process.env.METRICS_ENABLED === 'true',
         requestTimeoutMs: Number(process.env.METRICS_REQUEST_TIMEOUT_MS ?? 3000),
@@ -63,7 +67,9 @@ export class MetricsClient {
     // check runs before a paid provider call. Disabled → approve (plug). On a
     // transport error the decision follows the fail-closed/open policy.
     async check(req: CheckRequest): Promise<CheckResponse> {
-        if (!this.opts.enabled) return { approved: true }
+        if (!this.opts.enabled)
+            return { approved: true }
+
         try {
             return await this.nats.request<CheckRequest, CheckResponse>(
                 METRICS_SUBJECTS.USAGE_CHECK,
@@ -72,7 +78,11 @@ export class MetricsClient {
             )
         } catch (error: any) {
             warn(`[metrics] check failed: ${error?.message ?? String(error)}`)
-            return { approved: !this.opts.failClosed, reason: 'metrics_unreachable' }
+
+            return {
+                approved: !this.opts.failClosed,
+                reason: 'metrics_unreachable',
+            }
         }
     }
 
@@ -81,7 +91,9 @@ export class MetricsClient {
     // thrown, so a metering hiccup never fails the user's completed request. The
     // caller may retry — confirm is idempotent on providerRequestId.
     async confirm(req: ConfirmRequest): Promise<ConfirmResponse | undefined> {
-        if (!this.opts.enabled) return undefined
+        if (!this.opts.enabled)
+            return undefined
+
         try {
             return await this.nats.request<ConfirmRequest, ConfirmResponse>(
                 METRICS_SUBJECTS.USAGE_CONFIRM,
@@ -90,6 +102,7 @@ export class MetricsClient {
             )
         } catch (error: any) {
             warn(`[metrics] confirm failed (providerRequestId=${req.providerRequestId}): ${error?.message ?? String(error)}`)
+
             return undefined
         }
     }

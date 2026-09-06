@@ -27,8 +27,7 @@ export const scopeAssetRequesterToWorkspace = (
 export const requesterHasWorkspaceScope = (
     requester: AssetRequesterContext,
     workspace: WorkspaceScope,
-): boolean =>
-    requester.workspaceIds.includes(workspace.workspaceId)
+): boolean => requester.workspaceIds.includes(workspace.workspaceId)
     && requester.organizationIds.includes(workspace.organizationId)
 
 export const createAssetRequesterForWorkspaceUser = (
@@ -36,14 +35,24 @@ export const createAssetRequesterForWorkspaceUser = (
     userId: string,
     hasOrganizationAccess: boolean,
 ): AssetRequesterContext => {
-    const access = workspace.accessList.find((entry) => entry.userId === userId)
-    if (!access || !hasOrganizationAccess) {
-        return { userId, workspaceIds: [], editableWorkspaceIds: [], organizationIds: [] }
-    }
+    const access = workspace.accessList.find(entry => entry.userId === userId)
+
+    if (
+        !access
+        || !hasOrganizationAccess
+    )
+        return {
+            userId,
+            workspaceIds: [],
+            editableWorkspaceIds: [],
+            organizationIds: [],
+        }
+
     return {
         userId,
         workspaceIds: [workspace.workspaceId],
-        editableWorkspaceIds: access.accessLevel === 'owner' || access.accessLevel === 'editor'
+        editableWorkspaceIds: access.accessLevel === 'owner'
+            || access.accessLevel === 'editor'
             ? [workspace.workspaceId]
             : [],
         organizationIds: [workspace.organizationId],
@@ -55,5 +64,5 @@ export const isAssetAvailableInWorkspaceScope = (
     workspace: WorkspaceScope,
 ): boolean =>
     asset.organizationId === workspace.organizationId
-    && (asset.scope !== 'workspace' || asset.scopeOwnerId === workspace.workspaceId)
-    && (asset.scope !== 'organization' || asset.scopeOwnerId === workspace.organizationId)
+        && (asset.scope !== 'workspace' || asset.scopeOwnerId === workspace.workspaceId)
+        && (asset.scope !== 'organization' || asset.scopeOwnerId === workspace.organizationId)

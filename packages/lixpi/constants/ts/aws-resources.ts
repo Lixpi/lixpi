@@ -27,6 +27,18 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     BLOB_REFERENCES: 'Blob-References',
 }
 
-export const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`
+export const formatStageResourceName = (
+    resourceName: string,
+    orgName: string,
+    stageName: string,
+): string => `${resourceName}-${orgName}-${stageName}`
 
-export const getDynamoDbTableStageName = (tableName: keyof typeof DYNAMODB_TABLES, orgName: string, stageName: string): string => formatStageResourceName(DYNAMODB_TABLES[tableName]!, orgName, stageName)
+export const getDynamoDbTableStageName = (
+    tableName: keyof typeof DYNAMODB_TABLES,
+    orgName: string,
+    stageName: string,
+): string => formatStageResourceName(
+    DYNAMODB_TABLES[tableName]!,
+    orgName,
+    stageName,
+)

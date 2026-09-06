@@ -64,7 +64,11 @@ export type AssetSubmitStepsPayload = AssetDocCoordinate & {
     holderId: string
     baseVersion: number
     expectedVersion: number
-    steps: Array<{ step: object; msgId?: string; clientId?: string }>
+    steps: Array<{
+        step: object
+        msgId?: string
+        clientId?: string
+    }>
     origin?: 'client-edit'
 }
 
@@ -84,15 +88,12 @@ export type AssetDocSnapshotReference = AssetDocCoordinate & {
 
 export const ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX = 'asset.document.steps'
 
-export function getOrganizationAssetStepStreamName(organizationId: string): string {
-    return `ASSET_STEPS_${sanitizeStreamToken(organizationId)}`
-}
+export const getOrganizationAssetStepStreamName = (organizationId: string): string => `ASSET_STEPS_${sanitizeStreamToken(organizationId)}`
 
-export function getOrganizationAssetStepStreamSubject(organizationId: string): string {
-    return `${ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX}.${sanitizeSubjectToken(organizationId)}.>`
-}
+export const getOrganizationAssetStepStreamSubject = (organizationId: string): string =>
+    `${ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX}.${sanitizeSubjectToken(organizationId)}.>`
 
-export function getAssetStepSubject(coordinate: AssetDocCoordinate): string {
+export const getAssetStepSubject = (coordinate: AssetDocCoordinate): string => {
     return [
         ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX,
         sanitizeSubjectToken(coordinate.organizationId),
@@ -101,7 +102,10 @@ export function getAssetStepSubject(coordinate: AssetDocCoordinate): string {
     ].join('.')
 }
 
-export function getAssetDocumentEventSubject(userId: string, coordinate: AssetDocCoordinate): string {
+export const getAssetDocumentEventSubject = (
+    userId: string,
+    coordinate: AssetDocCoordinate,
+): string => {
     return [
         NATS_SUBJECTS.ASSET_SUBJECTS.DOCUMENT_EVENTS,
         getNatsUserSubjectToken(userId),
@@ -112,8 +116,14 @@ export function getAssetDocumentEventSubject(userId: string, coordinate: AssetDo
 }
 
 export type SubmitResult =
-    | { status: 'ACCEPTED'; version: number }
-    | { status: 'CONFLICT'; currentVersion: number }
+    | {
+        status: 'ACCEPTED'
+        version: number
+    }
+    | {
+        status: 'CONFLICT'
+        currentVersion: number
+    }
 
 function sanitizeStreamToken(value: string): string {
     return value.replace(/[^A-Za-z0-9_-]/g, '_')

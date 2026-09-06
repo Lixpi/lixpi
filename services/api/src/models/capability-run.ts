@@ -6,14 +6,21 @@ import {
     type CapabilityRunStatus,
 } from '@lixpi/constants'
 
-const { ORG_NAME, STAGE } = process.env
-const capabilityRunsTableName = (): string => getDynamoDbTableStageName('CAPABILITY_RUNS', ORG_NAME, STAGE)
+const {
+    ORG_NAME,
+    STAGE,
+} = process.env
+const capabilityRunsTableName = (): string => getDynamoDbTableStageName(
+    'CAPABILITY_RUNS',
+    ORG_NAME,
+    STAGE,
+)
 
 export type StoredCapabilityRun = CapabilityRun & {
     ownerUserId: string
 }
 
-export async function createCapabilityRun(run: StoredCapabilityRun): Promise<StoredCapabilityRun> {
+export const createCapabilityRun = async (run: StoredCapabilityRun): Promise<StoredCapabilityRun> => {
     await dynamoDBService.transactWrite({
         operations: [{
             type: 'put',
@@ -24,10 +31,11 @@ export async function createCapabilityRun(run: StoredCapabilityRun): Promise<Sto
         }],
         origin: 'CapabilityRun.create',
     })
+
     return run
 }
 
-export async function getAuthorizedCapabilityRun({
+export const getAuthorizedCapabilityRun = async ({
     runId,
     workspaceId,
     userId,
@@ -35,19 +43,27 @@ export async function getAuthorizedCapabilityRun({
     runId: string
     workspaceId: string
     userId: string
-}): Promise<StoredCapabilityRun | { error: 'NOT_FOUND' | 'PERMISSION_DENIED' }> {
-    const run = await dynamoDBService.getItem({
+}): Promise<StoredCapabilityRun | { error: 'NOT_FOUND' | 'PERMISSION_DENIED' }> => {
+    const run = (await dynamoDBService.getItem({
         tableName: capabilityRunsTableName(),
-        key: { runId, workspaceId },
+        key: {
+            runId,
+            workspaceId,
+        },
         consistentRead: true,
         origin: 'CapabilityRun.getAuthorized',
-    }) as StoredCapabilityRun | undefined
-    if (!run) return { error: 'NOT_FOUND' }
-    if (run.ownerUserId !== userId) return { error: 'PERMISSION_DENIED' }
+    })) as StoredCapabilityRun | undefined
+
+    if (!run)
+        return { error: 'NOT_FOUND' }
+
+    if (run.ownerUserId !== userId)
+        return { error: 'PERMISSION_DENIED' }
+
     return run
 }
 
-export async function updateCapabilityRunStatus({
+export const updateCapabilityRunStatus = async ({
     runId,
     workspaceId,
     expectedStatuses,
@@ -61,12 +77,19 @@ export async function updateCapabilityRunStatus({
     status: CapabilityRunStatus
     currentStepIds?: string[]
     outputAssetIds?: string[]
-}): Promise<void> {
-    if (expectedStatuses.length === 0) throw new Error('EXPECTED_RUN_STATUS_REQUIRED')
-    const statusValues = Object.fromEntries(expectedStatuses.map((value, index) => [`:expectedStatus${index}`, value]))
+}): Promise<void> => {
+    if (expectedStatuses.length === 0)
+        throw new Error('EXPECTED_RUN_STATUS_REQUIRED')
+
+    const statusValues = Object.fromEntries(
+        expectedStatuses.map((value, index) => [`:expectedStatus${index}`, value]),
+    )
     await dynamoDBService.updateItem({
         tableName: capabilityRunsTableName(),
-        key: { runId, workspaceId },
+        key: {
+            runId,
+            workspaceId,
+        },
         updates: {
             status,
             updatedAt: Date.now(),

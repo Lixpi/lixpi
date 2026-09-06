@@ -46,16 +46,18 @@ export type InstructionSkillStorage = {
     }) => Promise<unknown>
 }
 
-export function createInstructionSkillPackage(
+export const createInstructionSkillPackage = (
     definition: InstructionSkillDefinition,
     storage: InstructionSkillStorage,
-): CapabilitySkillPackageInstaller {
+): CapabilitySkillPackageInstaller => {
     return {
         kind: 'skill',
         capabilityId: definition.capabilityId,
-        seed: async (context: CapabilityPackageSeedContext): Promise<void> => {
-            await seedInstructionSkill(definition, storage, context)
-        },
+        seed: async (context: CapabilityPackageSeedContext): Promise<void> => void (await seedInstructionSkill(
+            definition,
+            storage,
+            context,
+        )),
     }
 }
 

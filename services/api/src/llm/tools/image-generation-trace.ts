@@ -12,8 +12,16 @@ import {
     type ProviderState,
 } from '../graph/state.ts'
 
-export const normalizeImageSize = (imageProvider: ProviderName | undefined, imageSize: string | undefined): string => {
-    if (!imageSize || imageSize === 'auto') return 'auto'
+export const normalizeImageSize = (
+    imageProvider: ProviderName | undefined,
+    imageSize: string | undefined,
+): string => {
+    if (
+        !imageSize
+        || imageSize === 'auto'
+    )
+        return 'auto'
+
     const ratioForSize: Record<string, string> = {
         '1024x1024': '1:1',
         '1536x1024': '3:2',
@@ -24,25 +32,37 @@ export const normalizeImageSize = (imageProvider: ProviderName | undefined, imag
         '3:2': '1536x1024',
         '2:3': '1024x1536',
     }
-    if (imageProvider === 'OpenAI') return sizeForRatio[imageSize] ?? imageSize
-    if (imageProvider === 'Google' || imageProvider === 'Stability') return ratioForSize[imageSize] ?? imageSize
+
+    if (imageProvider === 'OpenAI')
+        return sizeForRatio[imageSize] ?? imageSize
+
+    if (
+        imageProvider === 'Google'
+        || imageProvider === 'Stability'
+    )
+        return ratioForSize[imageSize] ?? imageSize
+
     return imageSize
 }
 
 export const getImageSourceReferenceImages = (state: ProviderState): string[] => {
     const selectedCandidateIds = state.mediaBranchResolution?.referenceCandidateIds ?? []
-    if (selectedCandidateIds.length === 0) return [...new Set(state.referenceImages ?? [])]
+
+    if (selectedCandidateIds.length === 0)
+        return [...new Set(state.referenceImages ?? [])]
 
     const candidateById = new Map(
         (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
     const selectedReferences = selectedCandidateIds.map(candidateId => {
         const imageUrl = candidateById.get(candidateId)?.imageUrl
-        if (!imageUrl) {
+
+        if (!imageUrl)
             throw new Error(`IMAGE_GENERATION_SELECTED_REFERENCE_MISSING:${candidateId}`)
-        }
+
         return imageUrl
     })
+
     return [...new Set(selectedReferences)]
 }
 
@@ -52,9 +72,14 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
     const hasCapabilityReferences = capabilityReferenceImages.length > 0
     const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
 
-    if (!hasCapabilityReferences && !capabilityUsagePrompt) return prompt
+    if (
+        !hasCapabilityReferences
+        && !capabilityUsagePrompt
+    )
+        return prompt
 
-    if (state.capabilityUsageMode === 'character-creator') return prompt
+    if (state.capabilityUsageMode === 'character-creator')
+        return prompt
 
     return [
         'MANDATORY VISUAL CAPABILITY TRANSFER: the attached capability reference image(s) and capability brief are not optional inspiration. They define the medium the generated image must be made of.',
@@ -66,14 +91,25 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
     ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
 }
 
-const shortText = (value: string | undefined, fallback: string): string => {
+const shortText = (
+    value: string | undefined,
+    fallback: string,
+): string => {
     const trimmed = value?.replace(/\s+/g, ' ').trim()
-    if (!trimmed) return fallback
+
+    if (!trimmed)
+        return fallback
+
     return trimmed.length > 80 ? `${trimmed.slice(0, 77).trim()}...` : trimmed
 }
 
-const getCandidateLabel = (candidate: MediaBranchCandidateImage | undefined, fallback: string): string => {
-    if (!candidate) return fallback
+const getCandidateLabel = (
+    candidate: MediaBranchCandidateImage | undefined,
+    fallback: string,
+): string => {
+    if (!candidate)
+        return fallback
+
     return shortText(
         candidate.visualEntitySummary
             ?? candidate.visualStyleSummary
@@ -82,24 +118,34 @@ const getCandidateLabel = (candidate: MediaBranchCandidateImage | undefined, fal
     )
 }
 
-const getDecisionByCandidateId = (
-    decisions: MediaBranchVlmReferenceDecision[] | undefined,
-): Map<string, MediaBranchVlmReferenceDecision> => {
-    return new Map((decisions ?? []).map((decision) => [
-        decision.candidateId ?? (decision as { nodeId?: string }).nodeId ?? '',
-        decision,
-    ]))
+const getDecisionByCandidateId = (decisions: MediaBranchVlmReferenceDecision[] | undefined): Map<string, MediaBranchVlmReferenceDecision> => {
+    return new Map(
+        (decisions ?? []).map(
+            decision => [
+                decision.candidateId ?? (decision as { nodeId?: string }).nodeId ?? '',
+                decision,
+            ],
+        ),
+    )
 }
 
-const getTraceSafeImageUrl = (imageUrl: string, candidate?: MediaBranchCandidateImage): string => {
+const getTraceSafeImageUrl = (
+    imageUrl: string,
+    candidate?: MediaBranchCandidateImage,
+): string => {
     if (candidate?.assetId) {
         const rendition = candidate.mediaKind === 'video' ? 'representativeFrame' : 'preview'
+
         return `/api/assets/${encodeURIComponent(candidate.assetId)}/renditions/${rendition}`
     }
-    if (!imageUrl.startsWith('/api/')) return ''
+
+    if (!imageUrl.startsWith('/api/'))
+        return ''
+
     try {
         const url = new URL(imageUrl, 'http://trace.local')
         url.searchParams.delete('token')
+
         return `${url.pathname}${url.search}`
     } catch {
         return ''
@@ -114,6 +160,7 @@ const buildBranchReference = (args: {
     decision: MediaBranchVlmReferenceDecision | undefined
 }): ImageGenerationTraceReference => {
     const fallback = `Reference image ${args.index + 1}`
+
     return {
         id: `branch:${args.candidateId}`,
         imageUrl: getTraceSafeImageUrl(args.candidate?.imageUrl ?? args.imageUrl, args.candidate),
@@ -128,7 +175,10 @@ const buildBranchReference = (args: {
     }
 }
 
-const buildCapabilityReference = (imageUrl: string, index: number): ImageGenerationTraceReference => ({
+const buildCapabilityReference = (
+    imageUrl: string,
+    index: number,
+): ImageGenerationTraceReference => ({
     id: `capability:${index + 1}`,
     imageUrl: getTraceSafeImageUrl(imageUrl),
     source: 'capability-reference',
@@ -136,12 +186,20 @@ const buildCapabilityReference = (imageUrl: string, index: number): ImageGenerat
     role: 'capability-reference',
 })
 
-const buildCapabilityReferenceWithTraceUrl = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
+const buildCapabilityReferenceWithTraceUrl = (
+    imageUrl: string,
+    traceImageUrl: string | undefined,
+    index: number,
+): ImageGenerationTraceReference => ({
     ...buildCapabilityReference(imageUrl, index),
     imageUrl: traceImageUrl ?? getTraceSafeImageUrl(imageUrl),
 })
 
-const buildMessageReference = (imageUrl: string, index: number, traceImageUrl?: string): ImageGenerationTraceReference => ({
+const buildMessageReference = (
+    imageUrl: string,
+    index: number,
+    traceImageUrl?: string,
+): ImageGenerationTraceReference => ({
     id: `message:${index + 1}`,
     imageUrl: traceImageUrl ?? getTraceSafeImageUrl(imageUrl),
     source: 'message-reference',
@@ -151,35 +209,53 @@ const buildMessageReference = (imageUrl: string, index: number, traceImageUrl?: 
 
 const extractTraceImageUrlsFromMessages = (messages: ProviderState['messages']): string[] => {
     const urls: string[] = []
+
     for (const message of messages) {
-        if (!Array.isArray(message.content)) continue
+        if (!Array.isArray(message.content))
+            continue
+
         for (const block of message.content) {
-            if (typeof block !== 'object' || block === null) continue
-            if ((block as any).type !== 'input_image') continue
+            if (
+                typeof block !== 'object'
+                || block === null
+            )
+                continue
+
+            if ((block as any).type !== 'input_image')
+                continue
+
             const imageUrl = (block as any).image_url
-            if (typeof imageUrl === 'string') urls.push(getTraceSafeImageUrl(imageUrl))
+
+            if (typeof imageUrl === 'string')
+                urls.push(
+                    getTraceSafeImageUrl(imageUrl),
+                )
         }
     }
+
     return urls
 }
 
 const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const resolution = state.mediaBranchResolution
-    if (!resolution) return []
+
+    if (!resolution)
+        return []
 
     const candidatesById = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId ?? candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
     const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
-    return resolution.referenceCandidateIds.map((candidateId, index) =>
-        buildBranchReference({
-            imageUrl: '',
-            index,
-            candidateId,
-            candidate: candidatesById.get(candidateId),
-            decision: decisionsById.get(candidateId),
-        })
+    return resolution.referenceCandidateIds.map(
+        (candidateId, index) =>
+            buildBranchReference({
+                imageUrl: '',
+                index,
+                candidateId,
+                candidate: candidatesById.get(candidateId),
+                decision: decisionsById.get(candidateId),
+            }),
     )
 }
 
@@ -192,16 +268,22 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
     const messageTraceImageUrls = extractTraceImageUrlsFromMessages(state.messages)
     const capabilityStartIndex = branchReferences.length
     const messageStartIndex = capabilityStartIndex + capabilityReferenceImagesCount
-    const capabilityReferences = capabilityReferenceImages.map((imageUrl, capabilityIndex) =>
-        buildCapabilityReferenceWithTraceUrl(
-            imageUrl,
-            capabilityReferenceImageTraceUrls[capabilityIndex] ?? messageTraceImageUrls[capabilityStartIndex + capabilityIndex],
-            capabilityIndex,
-        )
+    const capabilityReferences = capabilityReferenceImages.map(
+        (imageUrl, capabilityIndex) =>
+            buildCapabilityReferenceWithTraceUrl(
+                imageUrl,
+                capabilityReferenceImageTraceUrls[capabilityIndex] ?? messageTraceImageUrls[capabilityStartIndex + capabilityIndex],
+                capabilityIndex,
+            ),
     )
     const messageReferences = referenceImages.slice(messageStartIndex).map((imageUrl, index) => {
         const sourceIndex = messageStartIndex + index
-        return buildMessageReference(imageUrl, sourceIndex, messageTraceImageUrls[sourceIndex])
+
+        return buildMessageReference(
+            imageUrl,
+            sourceIndex,
+            messageTraceImageUrls[sourceIndex],
+        )
     })
 
     return [
@@ -213,16 +295,19 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
 
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
     const resolution = state.mediaBranchResolution
-    if (!resolution) return []
+
+    if (!resolution)
+        return []
 
     const candidatesById = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId ?? candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
     const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
-    return resolution.excludedCandidateIds.map((candidateId) => {
+    return resolution.excludedCandidateIds.map(candidateId => {
         const candidate = candidatesById.get(candidateId)
         const decision = decisionsById.get(candidateId)
+
         return {
             candidateId,
             nodeId: candidate?.nodeId,
@@ -236,8 +321,15 @@ const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedR
 }
 
 const readCapabilityReviewTrace = (value: unknown): CapabilityMediaReviewTrace | undefined => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    if (
+        !value
+        || typeof value !== 'object'
+        || Array.isArray(value)
+    )
+        return undefined
+
     const candidate = value as Partial<CapabilityMediaReviewTrace>
+
     if (
         candidate.traceVersion !== 'capability-media-review-v1'
         || typeof candidate.capabilityId !== 'string'
@@ -245,19 +337,19 @@ const readCapabilityReviewTrace = (value: unknown): CapabilityMediaReviewTrace |
         || candidate.automaticRetries !== 0
         || (candidate.recommendation !== undefined && typeof candidate.recommendation !== 'string')
         || !Array.isArray(candidate.steps)
-        || candidate.steps.some(step =>
-            !step
-            || typeof step.stepId !== 'string'
-            || typeof step.title !== 'string'
-            || !['completed', 'needs-review', 'unavailable'].includes(step.status)
-            || (step.score !== undefined && (typeof step.score !== 'number'
-                || !Number.isFinite(step.score)
-                || step.score < 0
-                || step.score > 1))
-            || !Array.isArray(step.issues)
-            || step.issues.some(issue => typeof issue !== 'string')
+        || candidate.steps.some(
+            step =>
+                !step ||
+                typeof step.stepId !== 'string' ||
+                typeof step.title !== 'string' ||
+                !['completed', 'needs-review', 'unavailable'].includes(step.status) ||
+                (step.score !== undefined && (typeof step.score !== 'number' || !Number.isFinite(step.score) || step.score < 0 || step.score > 1)) ||
+                !Array.isArray(step.issues) ||
+                step.issues.some(issue => typeof issue !== 'string'),
         )
-    ) return undefined
+    )
+        return undefined
+
     return candidate as CapabilityMediaReviewTrace
 }
 
@@ -265,7 +357,13 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
     const imageProvider = state.imageProviderName
     const imageModel = state.imageModelVersion
     const toolPrompt = state.generatedImagePrompt ?? ''
-    if (!imageProvider || !imageModel || !toolPrompt) return undefined
+
+    if (
+        !imageProvider
+        || !imageModel
+        || !toolPrompt
+    )
+        return undefined
 
     const imageSize = normalizeImageSize(imageProvider, state.imageSize)
     const finalPrompt = buildImageModelPrompt(state)
