@@ -136,30 +136,30 @@ const printHelp = (): void => {
             ${c.bold(
                 c.cyan('Lixpi Environment Setup'),
             )}
-    
+
             ${c.bold('Usage:')}
             ${c.dim('# Interactive mode')}
             docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
-    
+
             ${c.dim('# Non-interactive mode (CI/automation)')}
             docker run --rm -v "$(pwd):/workspace" lixpi/setup --non-interactive --name=<name> --env=<env>
-    
+
             ${c.bold('Options:')}
             -h, --help              Show this help message
             --non-interactive       Run without prompts (requires --name and --env)
             --name=<name>           Developer name (e.g., "kitty")
             --env=<environment>     Environment type: local, dev, production
-    
+
             ${c.bold('Examples:')}
             docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
             docker run --rm -v "$(pwd):/workspace" lixpi/setup --non-interactive --name=kitty --env=local
-    
+
             ${c.bold('Windows CMD:')}
             docker run -it --rm -v "%cd%:/workspace" lixpi/setup
-    
+
             ${c.bold('Windows PowerShell:')}
             docker run -it --rm -v "\${PWD}:/workspace" lixpi/setup
-    
+
             ${c.bold('Output:')}
             Creates .env.<name>-<env> file in the project root
             Optionally creates .aws/config file
@@ -1311,7 +1311,7 @@ const main = async (): Promise<void> => {
     debugLog(
         c.bold('Next steps:'),
     )
-    debugLog(`  1. Run ${c.cyan(`docker-compose --env-file .env.${stageName} up`)}`)
+    debugLog(`  1. Run ${c.cyan(`docker compose --env-file .env.${stageName} up`)}`)
 
     if (config.configureAwsSso)
         debugLog(`  2. Run ${c.cyan('pnpm run aws-login')} to authenticate with AWS`)
