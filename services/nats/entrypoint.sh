@@ -10,7 +10,7 @@ env | grep -E "(AWS_|PUBLIC_|NATS_|ECS_)" | sort
 
 # Generate server name from hostname ONLY if NATS_SERVER_NAME is not already set
 # AWS (Pulumi): Sets NATS_SERVER_NAME_BASE, entrypoint generates unique name per container
-# Local (docker-compose): Sets NATS_SERVER_NAME explicitly, entrypoint respects it
+# Local (docker compose): Sets NATS_SERVER_NAME explicitly, entrypoint respects it
 HOSTNAME=$(hostname)
 if [ -z "$NATS_SERVER_NAME" ]; then
     export NATS_SERVER_NAME="${NATS_SERVER_NAME_BASE:-Lixpi-NATS}-${HOSTNAME}"

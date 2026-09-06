@@ -1,8 +1,8 @@
 #!/bin/bash
 # Wipes all cached state for lixpi-typescript-test-runner: the shared pnpm
 # content store and every per-workspace node_modules volume (see
-# docker-compose.typescript-test-runner.yml, included from the root
-# docker-compose.yml, for how these are wired into the container).
+# docker compose.typescript-test-runner.yml, included from the root
+# docker compose.yml, for how these are wired into the container).
 #
 # Use this when the cache itself is suspected to be the problem — e.g. a
 # corrupted store, a stale node_modules link surviving a dependency

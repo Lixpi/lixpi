@@ -12,4 +12,4 @@ echo.
 
 :: Start the application
 echo Starting application...
-docker-compose --env-file "%selected_env%" --profile main up
+docker compose --env-file "%selected_env%" --profile main up

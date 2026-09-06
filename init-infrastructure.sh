@@ -31,7 +31,7 @@ echo ""
 
 # Start Caddy to generate certificates
 echo "Starting Caddy to generate TLS certificates..."
-docker-compose --env-file "$selected_env" up -d lixpi-caddy
+docker compose --env-file "$selected_env" up -d lixpi-caddy
 
 # Wait for certificates to be generated
 echo "Waiting for certificates to be generated..."
@@ -95,7 +95,7 @@ echo ""
 
 # Stop Caddy
 echo "Stopping Caddy..."
-docker-compose --env-file "$selected_env" down
+docker compose --env-file "$selected_env" down
 
 echo ""
 
@@ -103,7 +103,7 @@ echo ""
 echo "Initializing DynamoDB tables..."
 
 # Start DynamoDB first and wait for it to be healthy
-docker-compose --env-file "$selected_env" up -d lixpi-dynamodb
+docker compose --env-file "$selected_env" up -d lixpi-dynamodb
 echo "Waiting for DynamoDB to be ready..."
 until docker inspect lixpi-dynamodb --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; do
     echo "Waiting for DynamoDB..."
@@ -112,11 +112,11 @@ done
 echo "DynamoDB is ready!"
 
 # Run pulumi-init and wait for it to complete
-docker-compose --env-file "$selected_env" up --build lixpi-pulumi-init
+docker compose --env-file "$selected_env" up --build lixpi-pulumi-init
 init_exit_code=$?
 
 # Stop DynamoDB
-docker-compose --env-file "$selected_env" down
+docker compose --env-file "$selected_env" down
 
 if [ $init_exit_code -ne 0 ]; then
     echo "Database initialization failed."

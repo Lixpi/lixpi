@@ -25,7 +25,7 @@ COPY ./services/ai-model-registry/src ./src
 # development Vite serves it instead, see the compose command.
 RUN npm run build
 
-# Parameter files live here. docker-compose mounts the host directory over it.
+# Parameter files live here. docker compose mounts the host directory over it.
 RUN mkdir -p /usr/src/service/data
 
 EXPOSE 3010

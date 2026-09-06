@@ -21,7 +21,7 @@ echo "Base image: $BASE_IMAGE"
 echo "Stopping and removing containers..."
 for container in "$@"; do
     echo "Processing container: $container"
-    docker-compose down "$container"
+    docker compose down "$container"
 done
 
 # Step 2: Remove the base image
@@ -36,7 +36,7 @@ docker images -q -f dangling=true | xargs -r docker rmi
 echo "Rebuilding containers..."
 for container in "$@"; do
     echo "Building container: $container"
-    docker-compose build "$container" --no-cache --progress plain
+    docker compose build "$container" --no-cache --progress plain
 done
 
 echo "Process completed for all containers!"

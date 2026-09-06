@@ -4,7 +4,7 @@ LocalAuth0 is a zero-configuration Auth0 mock service for local development, ena
 
 ## Purpose
 
-- **Zero-configuration setup**: Automatically initializes on first `docker-compose up`
+- **Zero-configuration setup**: Automatically initializes on first `docker compose up`
 - **No Auth0 account required**: Perfect for open-source contributors and local development
 - **Production-like behavior**: Uses same RS256 JWT signatures and OAuth flows as real Auth0
 - **Persistent state**: User configurations and permissions persist between container restarts
@@ -152,9 +152,9 @@ LocalAuth0 state is persisted in the `localauth0-data` Docker volume. This inclu
 
 To reset to defaults, remove the volume:
 ```bash
-docker-compose down
+docker compose down
 docker volume rm lixpi_localauth0-data
-docker-compose up
+docker compose up
 ```
 
 ## Troubleshooting
@@ -168,7 +168,7 @@ docker logs lixpi-localauth0
 
 Verify health check:
 ```bash
-docker-compose ps lixpi-localauth0
+docker compose ps lixpi-localauth0
 ```
 
 ### Init Script Fails

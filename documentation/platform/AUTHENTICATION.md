@@ -235,7 +235,7 @@ The `serviceAuthConfigs` array in `services/api/src/server.ts` is currently **em
 
 **LocalAuth0** is a mock identity provider that makes the entire stack runnable offline, with no Auth0 account and no internet connection. It stands in for Auth0 in Mode 1 during local development.
 
-- **Zero configuration** — initializes automatically on first `docker-compose up` when `VITE_MOCK_AUTH=true`.
+- **Zero configuration** — initializes automatically on first `docker compose up` when `VITE_MOCK_AUTH=true`.
 - **Production-like behavior** — generates RS256 keypairs and issues JWTs that match production Auth0's OAuth flows, so the same verification path exercises the same code.
 - **Persistent state** — keypairs, the user record, custom claims, and permissions persist in the `localauth0-data` Docker volume across container restarts.
 - **Default test user** — `test@local.dev` (`local|test-user-001`), preconfigured with permissions for the API audience.
