@@ -1,0 +1,36 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Lyria 3.5",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 1048576,
+    "maxCompletionSize": 65536,
+    "model": "lyria-3.5",
+    "modelVersion": "lyria-3.5",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "provider-api": "lyria-3.5"
+            },
+            "title": "Lyria 3.5",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1
+        }
+    },
+    "pricing": {
+        "currency": "USD"
+    }
+}

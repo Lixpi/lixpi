@@ -4,12 +4,38 @@
     "type": "module",
     "scripts": {
         "dev": "vite --host 0.0.0.0",
-        "build": "vite build"
+        "build": "vite build",
+        "start": "node --experimental-transform-types ./src/server.ts",
+        "build-and-serve": "pnpm run build && pnpm run start"
     },
     "dependencies": {
-        "@lixpi/debug-tools": "file:../../packages/lixpi/debug-tools/ts"
+        "@aws-sdk/client-bedrock": "*",
+        "@aws-sdk/client-pricing": "*",
+        "@aws-sdk/credential-providers": "*",
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/debug-tools": "workspace:*",
+        "@lixpi/dynamodb-service": "workspace:*",
+        "@lixpi/nats-service": "workspace:*",
+        "@codemirror/lang-json": "*",
+        "@codemirror/language": "*",
+        "@codemirror/state": "*",
+        "@codemirror/view": "*",
+        "@lezer/highlight": "*",
+        "@lixpi/ui-primitives": "workspace:*",
+        "@nats-io/nats-core": "*",
+        "@nats-io/transport-node": "*",
+        "cm6-theme-basic-dark": "*",
+        "cm6-theme-basic-light": "*",
+        "cm6-theme-gruvbox-dark": "*",
+        "cm6-theme-gruvbox-light": "*",
+        "cm6-theme-material-dark": "*",
+        "cm6-theme-nord": "*",
+        "cm6-theme-solarized-dark": "*",
+        "cm6-theme-solarized-light": "*",
+        "nanostores": "*"
     },
     "devDependencies": {
+        "gentelella": "^4",
         "sass": "*",
         "vite": "^6"
     }

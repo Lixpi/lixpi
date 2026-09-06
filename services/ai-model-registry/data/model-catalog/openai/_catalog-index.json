@@ -1,0 +1,328 @@
+{
+    "providerKey": "OpenAI",
+    "description": "Which OpenAI models this catalog syncs. Model discovery comes from the OpenAI /v1/models endpoint.",
+    "syncMode": "all",
+    "whatSyncModeMeans": {
+        "all": "Sync every model discovered on the provider, except the ones in modelsToSkip.",
+        "onlyListed": "Sync only the models named in modelsToSync."
+    },
+    "modelsToSync": [],
+    "modelsToSkip": [
+        {
+            "model": "babbage-002",
+            "reason": "Legacy babbage completion model"
+        },
+        {
+            "model": "chat-latest",
+            "reason": "Moving chat-latest alias, not a pinned model"
+        },
+        {
+            "model": "chatgpt-image-latest",
+            "reason": "Moving chat-latest alias, not a pinned model"
+        },
+        {
+            "model": "computer-use-preview",
+            "reason": "Computer use, not a route Lixpi offers"
+        },
+        {
+            "model": "davinci-002",
+            "reason": "Legacy davinci completion model"
+        },
+        {
+            "model": "gpt-3.5-turbo",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-3.5-turbo-16k",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-3.5-turbo-instruct",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4-turbo",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4.1",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4.1-mini",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4.1-nano",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-mini",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-mini-search-preview",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-mini-transcribe",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-mini-tts",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-search-preview",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-transcribe",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-4o-transcribe-diarize",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5-chat-latest",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5-codex",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5-mini",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5-nano",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5-pro",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5-search-api",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.1",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.1-chat-latest",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.1-codex",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.1-codex-max",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.1-codex-mini",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.2",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.2-chat-latest",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.2-codex",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.2-pro",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.3-chat-latest",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.3-codex",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.4",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.4-mini",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.4-nano",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.4-pro",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.5",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-5.5-pro",
+            "reason": "GPT series older than 5.6"
+        },
+        {
+            "model": "gpt-audio",
+            "reason": "Audio speech and transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-audio-1.5",
+            "reason": "Audio speech and transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-audio-mini",
+            "reason": "Audio speech and transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-image-1",
+            "reason": "GPT Image series older than 2"
+        },
+        {
+            "model": "gpt-image-1-mini",
+            "reason": "GPT Image series older than 2"
+        },
+        {
+            "model": "gpt-image-1.5",
+            "reason": "GPT Image series older than 2"
+        },
+        {
+            "model": "gpt-live-transcribe",
+            "reason": "Transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-1.5",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-2",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-2.1",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-2.1-mini",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-mini",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-translate",
+            "reason": "Realtime API, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-realtime-whisper",
+            "reason": "Transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "gpt-transcribe",
+            "reason": "Transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "o1",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o1-pro",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o3",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o3-deep-research",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o3-mini",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o3-pro",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o4-mini",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "o4-mini-deep-research",
+            "reason": "o series, superseded by the GPT 5.6 line"
+        },
+        {
+            "model": "omni-moderation",
+            "reason": "Moderation, not a route Lixpi offers"
+        },
+        {
+            "model": "omni-moderation-latest",
+            "reason": "Moderation, not a route Lixpi offers"
+        },
+        {
+            "model": "sora-2",
+            "reason": "Sora is dead"
+        },
+        {
+            "model": "sora-2-pro",
+            "reason": "Sora is dead"
+        },
+        {
+            "model": "text-embedding-3-large",
+            "reason": "Embeddings, not a route Lixpi offers"
+        },
+        {
+            "model": "text-embedding-3-small",
+            "reason": "Embeddings, not a route Lixpi offers"
+        },
+        {
+            "model": "text-embedding-ada-002",
+            "reason": "Embeddings, not a route Lixpi offers"
+        },
+        {
+            "model": "tts-1",
+            "reason": "Audio speech and transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "tts-1-hd",
+            "reason": "Audio speech and transcription, not a route Lixpi offers"
+        },
+        {
+            "model": "whisper-1",
+            "reason": "Transcription, not a route Lixpi offers"
+        }
+    ]
+}

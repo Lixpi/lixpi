@@ -1,0 +1,23 @@
+{
+    "byInferenceProvider": {
+        "openai": {
+            "model": "gpt-5.6-luna",
+            "modelVersion": "gpt-5.6-luna",
+            "modelKeyAtSource": "gpt-5.6-luna"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "openai"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.108Z",
+        "publishedVersions": {
+            "currentVersion": "gpt-5.6-luna",
+            "allPublishedVersions": [
+                "gpt-5.6-luna"
+            ]
+        }
+    }
+}

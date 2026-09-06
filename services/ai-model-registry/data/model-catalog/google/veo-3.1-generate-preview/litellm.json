@@ -1,0 +1,24 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 1024,
+            "pricing": {
+                "currency": "USD",
+                "video": {
+                    "measuringUnit": "seconds",
+                    "pricePer": "1",
+                    "price": "0.40"
+                }
+            },
+            "modelKeyAtSource": "gemini/veo-3.1-generate-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.297Z"
+    }
+}

@@ -1,0 +1,60 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini Embedding 2 Preview",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": null,
+    "contextWindow": 8192,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.20",
+                    "completion": "0.00"
+                }
+            }
+        }
+    },
+    "maxCompletionSize": 1,
+    "model": "gemini-embedding-2-preview",
+    "modelVersion": "gemini-embedding-2-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini-embedding-2-preview",
+                "provider-api": "gemini-embedding-2-preview"
+            },
+            "contextWindow": 8192,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.20",
+                            "completion": "0.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini Embedding 2 Preview",
+            "maxCompletionSize": 1
+        }
+    }
+}

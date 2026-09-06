@@ -1,0 +1,36 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Model that performs Attributed Question Answering.",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 0.2,
+    "contextWindow": 7168,
+    "maxCompletionSize": 1024,
+    "model": "aqa",
+    "modelVersion": "aqa",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "provider-api": "aqa"
+            },
+            "title": "Model that performs Attributed Question Answering.",
+            "contextWindow": 7168,
+            "maxCompletionSize": 1024,
+            "defaultTemperature": 0.2
+        }
+    },
+    "pricing": {
+        "currency": "USD"
+    }
+}

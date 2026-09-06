@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Nano Banana Pro",
+            "contextWindow": 131072,
+            "maxCompletionSize": 32768,
+            "defaultTemperature": 1,
+            "model": "gemini-3-pro-image",
+            "modelVersion": "gemini-3-pro-image",
+            "modelKeyAtSource": "gemini-3-pro-image"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.200Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-3-pro-image",
+            "allPublishedVersions": [
+                "gemini-3-pro-image"
+            ]
+        }
+    }
+}

@@ -1,0 +1,68 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "title": "Claude Sonnet 5",
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.20",
+                            "completion": "11.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "claude-sonnet-5",
+            "sourceOnlyFacts": {
+                "bedrockModelIds": [
+                    "anthropic.claude-sonnet-5"
+                ],
+                "modelIdToInvoke": "us.anthropic.claude-sonnet-5",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "TEXT"
+                ],
+                "supportsResponseStreaming": true,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "ratesByTier": {
+                    "regional": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_input_tokens_standard-Units",
+                            "USE1-MP:USE1_output_tokens_standard-Units"
+                        ],
+                        "promptPerMillionTokens": "2.20",
+                        "completionPerMillionTokens": "11.00"
+                    },
+                    "global-profile": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_output_tokens_global_standard-Units",
+                            "USE1-MP:USE1_input_tokens_global_standard-Units"
+                        ],
+                        "completionPerMillionTokens": "10.00",
+                        "promptPerMillionTokens": "2.00"
+                    }
+                }
+            }
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "bedrock",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.137Z"
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 3.5 Transcribe Live",
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "gemini-3.5-transcribe-live",
+            "modelVersion": "gemini-3.5-transcribe-live",
+            "modelKeyAtSource": "gemini-3.5-transcribe-live"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.240Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-3.5-transcribe-live",
+            "allPublishedVersions": [
+                "gemini-3.5-transcribe-live"
+            ]
+        }
+    }
+}

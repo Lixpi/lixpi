@@ -1,0 +1,30 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.30",
+                            "completion": "2.50"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gemini-2.5-flash"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.174Z"
+    }
+}

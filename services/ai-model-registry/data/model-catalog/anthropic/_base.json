@@ -1,0 +1,10 @@
+{
+    "providerKey": "Anthropic",
+    "description": "Fields every Anthropic model in this directory inherits. A model's own -lixpi.json overrides anything stated here.",
+    "fieldsInheritedByEveryModel": {
+        "providerTitle": "Anthropic",
+        "color": "#D97757",
+        "iconName": "claudeIcon",
+        "colorIconName": "claudeIcon"
+    }
+}

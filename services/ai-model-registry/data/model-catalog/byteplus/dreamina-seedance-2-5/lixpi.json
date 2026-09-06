@@ -1,0 +1,457 @@
+{
+    "model": "dreamina-seedance-2-5-260628",
+    "title": "Seedance 2.5",
+    "shortTitle": "Seedance 2.5",
+    "sortingPosition": 254,
+    "modalities": [
+        {
+            "modality": "video",
+            "title": "Video",
+            "shortTitle": "VID"
+        },
+        {
+            "modality": "video_generation",
+            "title": "Video Generation",
+            "shortTitle": "VID GEN"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "none",
+        "requiresAutoToolChoiceWithThinking": false,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": false,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "document-text"
+        ]
+    },
+    "videoAspectRatios": [
+        {
+            "value": "16:9",
+            "label": "16:9"
+        },
+        {
+            "value": "4:3",
+            "label": "4:3"
+        },
+        {
+            "value": "1:1",
+            "label": "1:1"
+        },
+        {
+            "value": "3:4",
+            "label": "3:4"
+        },
+        {
+            "value": "9:16",
+            "label": "9:16"
+        },
+        {
+            "value": "21:9",
+            "label": "21:9"
+        },
+        {
+            "value": "adaptive",
+            "label": "Auto"
+        }
+    ],
+    "videoResolutions": [
+        {
+            "value": "480p",
+            "label": "480p"
+        },
+        {
+            "value": "720p",
+            "label": "720p"
+        },
+        {
+            "value": "1080p",
+            "label": "1080p"
+        }
+    ],
+    "videoDurations": [
+        {
+            "value": "-1",
+            "label": "Smart length",
+            "description": "Smart length lets Seedance choose any duration from 4 to 30 seconds."
+        },
+        {
+            "value": "4",
+            "label": "4s"
+        },
+        {
+            "value": "5",
+            "label": "5s"
+        },
+        {
+            "value": "6",
+            "label": "6s"
+        },
+        {
+            "value": "7",
+            "label": "7s"
+        },
+        {
+            "value": "8",
+            "label": "8s"
+        },
+        {
+            "value": "9",
+            "label": "9s"
+        },
+        {
+            "value": "10",
+            "label": "10s"
+        },
+        {
+            "value": "11",
+            "label": "11s"
+        },
+        {
+            "value": "12",
+            "label": "12s"
+        },
+        {
+            "value": "13",
+            "label": "13s"
+        },
+        {
+            "value": "14",
+            "label": "14s"
+        },
+        {
+            "value": "15",
+            "label": "15s"
+        },
+        {
+            "value": "16",
+            "label": "16s"
+        },
+        {
+            "value": "17",
+            "label": "17s"
+        },
+        {
+            "value": "18",
+            "label": "18s"
+        },
+        {
+            "value": "19",
+            "label": "19s"
+        },
+        {
+            "value": "20",
+            "label": "20s"
+        },
+        {
+            "value": "21",
+            "label": "21s"
+        },
+        {
+            "value": "22",
+            "label": "22s"
+        },
+        {
+            "value": "23",
+            "label": "23s"
+        },
+        {
+            "value": "24",
+            "label": "24s"
+        },
+        {
+            "value": "25",
+            "label": "25s"
+        },
+        {
+            "value": "26",
+            "label": "26s"
+        },
+        {
+            "value": "27",
+            "label": "27s"
+        },
+        {
+            "value": "28",
+            "label": "28s"
+        },
+        {
+            "value": "29",
+            "label": "29s"
+        },
+        {
+            "value": "30",
+            "label": "30s"
+        }
+    ],
+    "videoGenerationControls": [
+        {
+            "key": "aspectRatio",
+            "label": "Aspect ratio",
+            "kind": "aspect-ratio",
+            "options": [
+                {
+                    "value": "16:9",
+                    "label": "16:9"
+                },
+                {
+                    "value": "4:3",
+                    "label": "4:3"
+                },
+                {
+                    "value": "1:1",
+                    "label": "1:1"
+                },
+                {
+                    "value": "3:4",
+                    "label": "3:4"
+                },
+                {
+                    "value": "9:16",
+                    "label": "9:16"
+                },
+                {
+                    "value": "21:9",
+                    "label": "21:9"
+                },
+                {
+                    "value": "adaptive",
+                    "label": "Auto"
+                }
+            ],
+            "defaultValue": "adaptive"
+        },
+        {
+            "key": "resolution",
+            "label": "Resolution",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "480p",
+                    "label": "480p"
+                },
+                {
+                    "value": "720p",
+                    "label": "720p"
+                },
+                {
+                    "value": "1080p",
+                    "label": "1080p"
+                }
+            ],
+            "defaultValue": "720p"
+        },
+        {
+            "key": "duration",
+            "label": "Duration",
+            "kind": "duration",
+            "options": [
+                {
+                    "value": "-1",
+                    "label": "Smart length",
+                    "description": "Smart length lets Seedance choose any duration from 4 to 30 seconds."
+                },
+                {
+                    "value": "4",
+                    "label": "4s"
+                },
+                {
+                    "value": "5",
+                    "label": "5s"
+                },
+                {
+                    "value": "6",
+                    "label": "6s"
+                },
+                {
+                    "value": "7",
+                    "label": "7s"
+                },
+                {
+                    "value": "8",
+                    "label": "8s"
+                },
+                {
+                    "value": "9",
+                    "label": "9s"
+                },
+                {
+                    "value": "10",
+                    "label": "10s"
+                },
+                {
+                    "value": "11",
+                    "label": "11s"
+                },
+                {
+                    "value": "12",
+                    "label": "12s"
+                },
+                {
+                    "value": "13",
+                    "label": "13s"
+                },
+                {
+                    "value": "14",
+                    "label": "14s"
+                },
+                {
+                    "value": "15",
+                    "label": "15s"
+                },
+                {
+                    "value": "16",
+                    "label": "16s"
+                },
+                {
+                    "value": "17",
+                    "label": "17s"
+                },
+                {
+                    "value": "18",
+                    "label": "18s"
+                },
+                {
+                    "value": "19",
+                    "label": "19s"
+                },
+                {
+                    "value": "20",
+                    "label": "20s"
+                },
+                {
+                    "value": "21",
+                    "label": "21s"
+                },
+                {
+                    "value": "22",
+                    "label": "22s"
+                },
+                {
+                    "value": "23",
+                    "label": "23s"
+                },
+                {
+                    "value": "24",
+                    "label": "24s"
+                },
+                {
+                    "value": "25",
+                    "label": "25s"
+                },
+                {
+                    "value": "26",
+                    "label": "26s"
+                },
+                {
+                    "value": "27",
+                    "label": "27s"
+                },
+                {
+                    "value": "28",
+                    "label": "28s"
+                },
+                {
+                    "value": "29",
+                    "label": "29s"
+                },
+                {
+                    "value": "30",
+                    "label": "30s"
+                }
+            ],
+            "defaultValue": "-1"
+        },
+        {
+            "key": "generateAudio",
+            "label": "Generate audio",
+            "kind": "toggle",
+            "options": [
+                {
+                    "value": "true",
+                    "label": "On"
+                },
+                {
+                    "value": "false",
+                    "label": "Off"
+                }
+            ],
+            "defaultValue": "true",
+            "description": "Generates synchronized dialogue, sound effects, and music for the video."
+        },
+        {
+            "key": "outputFormat",
+            "label": "Output format",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "mp4",
+                    "label": "MP4"
+                },
+                {
+                    "value": "mov",
+                    "label": "MOV",
+                    "description": "MOV preserves higher color precision for post-production but has narrower playback support."
+                }
+            ],
+            "defaultValue": "mov"
+        },
+        {
+            "key": "watermark",
+            "label": "Watermark",
+            "kind": "toggle",
+            "options": [
+                {
+                    "value": "true",
+                    "label": "On"
+                },
+                {
+                    "value": "false",
+                    "label": "Off"
+                }
+            ],
+            "defaultValue": "false",
+            "description": "Adds an AI-generated watermark to the lower-right corner of the output video."
+        },
+        {
+            "key": "returnLastFrame",
+            "label": "Return last frame",
+            "kind": "toggle",
+            "options": [
+                {
+                    "value": "true",
+                    "label": "On"
+                },
+                {
+                    "value": "false",
+                    "label": "Off"
+                }
+            ],
+            "defaultValue": "false",
+            "description": "Returns the final video frame as a separate image that can continue a video sequence."
+        }
+    ],
+    "videoMaxReferenceImages": 30,
+    "pricing": {
+        "video": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "price": "11.7",
+            "tiers": {
+                "480p": {
+                    "withoutVideoInput": "10.7",
+                    "withVideoInput": "6.4"
+                },
+                "720p": {
+                    "withoutVideoInput": "10.7",
+                    "withVideoInput": "6.4"
+                },
+                "1080p": {
+                    "withoutVideoInput": "11.7",
+                    "withVideoInput": "7.0"
+                }
+            }
+        }
+    }
+}

@@ -125,6 +125,31 @@ const subscriptions = [
 //   with the service that is proving its identity.
 const serviceAuthConfigs: ServiceAuthConfig[] = []
 
+if (env.NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC) {
+    // The AI Model Registry owns the model catalog and announces each sync run.
+    // Unlike NEX it is an ordinary Lixpi service, so it authenticates with a
+    // self-issued NKey-signed JWT rather than a raw NKey challenge, and it lands
+    // in the default auth account alongside the API that subscribes to it.
+    serviceAuthConfigs.push({
+        publicKey: env.NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC,
+        // Must match the `sub` claim the registry puts in its self-issued JWT,
+        // which is NATS_AI_MODEL_REGISTRY_USER_ID in that service's environment.
+        userId: 'svc:ai-model-registry',
+        permissions: {
+            pub: {
+                allow: [
+                    // The only subject the registry publishes: run totals and
+                    // drift counts after each catalog sync.
+                    'aiModels.syncCompleted',
+                ],
+            },
+            sub: {
+                allow: ['_INBOX.>'],
+            },
+        },
+    })
+}
+
 if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
     // NEX is a NATS-native tool, not a browser or normal API client. It connects
     // with standard NATS NKey auth (`--nats.nkey` + `--nats.seed`), which means
@@ -176,10 +201,6 @@ if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
                     // by consumers/producers when JetStream is involved.
                     '$JS.FC.>',
                     '$JS.ACK.>',
-                    // Completion event published by the ai-models-sync workload
-                    // in the NEX account and exported/imported into AUTH for the
-                    // API subscriber.
-                    'aiModels.syncCompleted',
                 ],
             },
             sub: {

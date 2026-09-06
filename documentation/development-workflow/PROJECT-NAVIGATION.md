@@ -24,7 +24,7 @@ For the architecture and service map, start with [`documentation/PRODUCT-OVERVIE
 | Code style | `documentation/coding-style-guides/` |
 | Documentation style | `documentation/documentation-style-guides/` |
 | Development workflow | `documentation/development-workflow/` |
-| AI provider model and parameter synchronization | `documentation/development-workflow/AI-MODEL-REGISTRY.md` and `services/ai-model-registry/` |
+| AI model catalog, provider models, parameters, and their synchronization | `services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md` and `services/ai-model-registry/` |
 
 ## Working Notes
 

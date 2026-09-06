@@ -7,7 +7,7 @@ import {
     bytedanceIcon,
 } from '@lixpi/ui-kit/svg'
 
-// Resolves a model's iconName/colorIconName (synced from ai-models-synchronization)
+// Resolves a model's iconName/colorIconName (authored in the AI Model Registry)
 // to its SVG markup. Keyed by the icon-name string, not by provider, so colored
 // variants such as geminiColorIcon resolve directly.
 const AI_MODEL_ICONS: Record<string, string> = {

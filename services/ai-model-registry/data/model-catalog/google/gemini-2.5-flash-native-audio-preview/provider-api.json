@@ -1,0 +1,29 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 2.5 Flash Native Audio Preview 09-2025",
+            "contextWindow": 131072,
+            "maxCompletionSize": 8192,
+            "defaultTemperature": 1,
+            "model": "gemini-2.5-flash-native-audio-preview",
+            "modelVersion": "gemini-2.5-flash-native-audio-preview",
+            "modelKeyAtSource": "gemini-2.5-flash-native-audio-preview-09-2025"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.186Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-2.5-flash-native-audio-preview",
+            "allPublishedVersions": [
+                "gemini-2.5-flash-native-audio-preview",
+                "gemini-2.5-flash-native-audio-preview-09-2025",
+                "gemini-2.5-flash-native-audio-preview-12-2025"
+            ]
+        }
+    }
+}

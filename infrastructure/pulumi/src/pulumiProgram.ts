@@ -10,6 +10,7 @@ import { createEcsEc2Cluster } from './resources/ECS-EC2-cluster.ts'
 import { createNatsClusterService } from './resources/NATS-cluster/NATS-cluster.ts'
 import { createMainApiService } from './resources/main-api-service.ts'
 import { createNexNodeService } from './resources/nex-node/nex-node.ts'
+import { createAiModelRegistryService } from './resources/ai-model-registry/ai-model-registry-service.ts'
 import { createCertificate } from './resources//certificate.ts'
 import {
     createDnsRecords,
@@ -49,6 +50,9 @@ const {
     NATS_REGULAR_USER_PASSWORD,
     NATS_NEX_NODE_NKEY_PUBLIC,
     NATS_NEX_NODE_NKEY_SEED,
+    NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC,
+    NATS_AI_MODEL_REGISTRY_NKEY_SEED,
+    NATS_AI_MODEL_REGISTRY_USER_ID,
     NATS_AUTH_NKEY_ISSUER_SEED,
     NATS_AUTH_NKEY_ISSUER_PUBLIC,
     NATS_AUTH_XKEY_ISSUER_SEED,
@@ -377,6 +381,7 @@ export const createInfrastructure = async () => {
             NATS_AUTH_XKEY_ISSUER_SEED: NATS_AUTH_XKEY_ISSUER_SEED!,
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC ?? '',
             NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
             NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             ORIGIN_HOST_URL: ORIGIN_HOST_URL!,
@@ -405,8 +410,8 @@ export const createInfrastructure = async () => {
     })
 
     // Deploy the NATS NEX execution-engine node (internal, single instance).
-    // Runs the hourly ai-models-sync workload. Connects to the cluster over the
-    // internal CloudMap URL — the Go nex client needs a plain nats:// endpoint
+    // Connects to the cluster over the internal CloudMap URL — the Go nex client
+    // needs a plain nats:// endpoint
     // (the :4222 client port is not TLS), so we pass natsUrl, NOT the tls://
     // NATS_SERVERS env the JS API client tolerates.
     const nexNodeService = await createNexNodeService({
@@ -425,9 +430,7 @@ export const createInfrastructure = async () => {
         cpu: 512,
         memory: 1024,
         desiredCount: 1,
-        tables: {
-            aiModelsListTable: dynamoDBtables.aiModelsListTable,
-        },
+        tables: {},
         environment: {
             NATS_SERVERS: natsClusterService.outputs.natsUrl, // internal plain nats:// CloudMap URL
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
@@ -439,22 +442,61 @@ export const createInfrastructure = async () => {
             STAGE: STAGE!,
             ENVIRONMENT: ENVIRONMENT!,
             AWS_REGION: AWS_REGION!,
-            // No DYNAMODB_ENDPOINT / AWS_PROFILE on AWS: real DynamoDB via the task role
-            // (creds arrive through the ECS metadata endpoint, forwarded to the workload
-            // by the entrypoint via AWS_CONTAINER_CREDENTIALS_RELATIVE_URI).
-            OPENAI_API_KEY: OPENAI_API_KEY!,
-            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ?? '',
-            // With Bedrock inference on there may be no Anthropic api key, so the models-sync
-            // workload lists Anthropic models from the Bedrock foundation-model catalog instead.
-            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ANTHROPIC_USE_AWS_BEDROCK_INFERENCE ?? 'false',
-            GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
-            STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
-            // Forwarded for parity with the API task def + nex entrypoint key set; the
-            // models-sync workload injects Seedance statically and makes no BytePlus call.
-            ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',
+            // No DYNAMODB_ENDPOINT / AWS_PROFILE on AWS: the remaining workloads reach
+            // AWS through the task role (creds arrive on the ECS metadata endpoint and
+            // the entrypoint forwards AWS_CONTAINER_CREDENTIALS_RELATIVE_URI).
         },
         dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/nex/Dockerfile',
+        dependencies: [natsClusterService.ecsService],
+    })
+
+    // Deploy the AI Model Registry (internal, single instance). It owns the model
+    // catalog and writes AI_MODELS_LIST on an hourly loop, which is the job the
+    // ai-models-synchronization NEX workload used to do.
+    const aiModelRegistryService = await createAiModelRegistryService({
+        ecsCluster: {
+            id: ecsCluster.outputs.clusterId,
+            arn: ecsCluster.outputs.clusterArn,
+            name: ecsCluster.outputs.clusterName,
+        },
+        vpc: networkInfrastructure.vpc,
+        privateSubnets: networkInfrastructure.privateSubnets,
+        serviceName: formatStageResourceName(
+            'ai-model-registry',
+            ORG_NAME!,
+            STAGE!,
+        ).toLowerCase(),
+        cpu: 256,
+        memory: 512,
+        desiredCount: 1,
+        tables: {
+            aiModelsListTable: dynamoDBtables.aiModelsListTable,
+        },
+        environment: {
+            NATS_SERVERS: natsClusterService.outputs.natsUrl,
+            NATS_AI_MODEL_REGISTRY_NKEY_SEED: NATS_AI_MODEL_REGISTRY_NKEY_SEED ?? '',
+            NATS_AI_MODEL_REGISTRY_USER_ID: NATS_AI_MODEL_REGISTRY_USER_ID ?? 'svc:ai-model-registry',
+            ORG_NAME: ORG_NAME!,
+            STAGE: STAGE!,
+            ENVIRONMENT: ENVIRONMENT!,
+            AWS_REGION: AWS_REGION!,
+            MODEL_CATALOG_SYNC_ENABLED: 'true',
+            // The deployed catalog tree ships in the image and is read-only, so a
+            // production run merges in memory and writes only DynamoDB.
+            MODEL_CATALOG_WRITE_FILES: 'false',
+            MODEL_CATALOG_WRITE_DYNAMODB: 'true',
+            OPENAI_API_KEY: OPENAI_API_KEY!,
+            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ?? '',
+            // With Bedrock inference on there may be no Anthropic key at all, so the
+            // registry lists Anthropic models from the Bedrock catalog instead.
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ANTHROPIC_USE_AWS_BEDROCK_INFERENCE ?? 'false',
+            GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
+            STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',
+        },
+        dockerBuildContext: '/usr/src/service',
+        dockerfilePath: '/usr/src/service/services/ai-model-registry/Dockerfile',
         dependencies: [natsClusterService.ecsService],
     })
 
@@ -535,6 +577,7 @@ export const createInfrastructure = async () => {
         natsClusterService,
         mainApiService,
         nexNodeService,
+        aiModelRegistryService,
         webUI,
         certificateResources,
         dnsRecords,

@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 3.1 Pro Preview Custom Tools",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "gemini-3.1-pro-preview-customtools",
+            "modelVersion": "gemini-3.1-pro-preview-customtools",
+            "modelKeyAtSource": "gemini-3.1-pro-preview-customtools"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.227Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-3.1-pro-preview-customtools",
+            "allPublishedVersions": [
+                "gemini-3.1-pro-preview-customtools"
+            ]
+        }
+    }
+}

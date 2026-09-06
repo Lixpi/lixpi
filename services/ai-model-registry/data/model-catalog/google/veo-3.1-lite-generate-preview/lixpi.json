@@ -1,0 +1,182 @@
+{
+    "title": "Veo 3.1 Lite",
+    "shortTitle": "Veo 3.1 Lite",
+    "isDefaultFor": [
+        "video"
+    ],
+    "sortingPosition": 163,
+    "modalities": [
+        {
+            "modality": "video",
+            "title": "Video",
+            "shortTitle": "VID"
+        },
+        {
+            "modality": "video_generation",
+            "title": "Video Generation",
+            "shortTitle": "VID GEN"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "none",
+        "requiresAutoToolChoiceWithThinking": false,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": false,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "document-text"
+        ]
+    },
+    "imageSizeMode": "aspectRatio",
+    "imageSizes": [
+        {
+            "value": "1:1",
+            "label": "1:1"
+        },
+        {
+            "value": "3:2",
+            "label": "3:2"
+        },
+        {
+            "value": "2:3",
+            "label": "2:3"
+        },
+        {
+            "value": "16:9",
+            "label": "16:9"
+        },
+        {
+            "value": "9:16",
+            "label": "9:16"
+        },
+        {
+            "value": "4:3",
+            "label": "4:3"
+        },
+        {
+            "value": "3:4",
+            "label": "3:4"
+        },
+        {
+            "value": "4:5",
+            "label": "4:5"
+        },
+        {
+            "value": "5:4",
+            "label": "5:4"
+        },
+        {
+            "value": "21:9",
+            "label": "21:9"
+        },
+        {
+            "value": "auto",
+            "label": "Auto"
+        }
+    ],
+    "videoAspectRatios": [
+        {
+            "value": "16:9",
+            "label": "16:9"
+        },
+        {
+            "value": "9:16",
+            "label": "9:16"
+        }
+    ],
+    "videoResolutions": [
+        {
+            "value": "720p",
+            "label": "720p"
+        },
+        {
+            "value": "1080p",
+            "label": "1080p",
+            "description": "1080p requires an 8 second duration."
+        }
+    ],
+    "videoDurations": [
+        {
+            "value": "4",
+            "label": "4s"
+        },
+        {
+            "value": "6",
+            "label": "6s"
+        },
+        {
+            "value": "8",
+            "label": "8s",
+            "description": "Required for reference-image, extension, and high-resolution requests."
+        }
+    ],
+    "videoGenerationControls": [
+        {
+            "key": "aspectRatio",
+            "label": "Aspect ratio",
+            "kind": "aspect-ratio",
+            "options": [
+                {
+                    "value": "16:9",
+                    "label": "16:9"
+                },
+                {
+                    "value": "9:16",
+                    "label": "9:16"
+                }
+            ],
+            "defaultValue": "16:9"
+        },
+        {
+            "key": "resolution",
+            "label": "Resolution",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "720p",
+                    "label": "720p"
+                },
+                {
+                    "value": "1080p",
+                    "label": "1080p",
+                    "description": "1080p requires an 8 second duration."
+                }
+            ],
+            "defaultValue": "720p"
+        },
+        {
+            "key": "duration",
+            "label": "Duration",
+            "kind": "duration",
+            "options": [
+                {
+                    "value": "4",
+                    "label": "4s"
+                },
+                {
+                    "value": "6",
+                    "label": "6s"
+                },
+                {
+                    "value": "8",
+                    "label": "8s",
+                    "description": "Required for reference-image, extension, and high-resolution requests."
+                }
+            ],
+            "defaultValue": "8"
+        }
+    ],
+    "pricing": {
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.00",
+                    "completion": "0.00"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "byInferenceProvider": {
+        "openai": {
+            "contextWindow": 922000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "4.00",
+                            "completion": "20.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gpt-5.6-sol"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "openai"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.110Z"
+    }
+}

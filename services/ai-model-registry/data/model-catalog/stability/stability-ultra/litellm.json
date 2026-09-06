@@ -1,0 +1,38 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "contextWindow": 77,
+            "pricing": {
+                "currency": "USD",
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.14"
+                }
+            },
+            "modelKeyAtSource": "stability.stable-image-ultra-v1:0"
+        },
+        "stability": {
+            "pricing": {
+                "currency": "USD",
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.08"
+                }
+            },
+            "modelKeyAtSource": "stability/stable-image-ultra"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock",
+            "stability"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.310Z"
+    }
+}

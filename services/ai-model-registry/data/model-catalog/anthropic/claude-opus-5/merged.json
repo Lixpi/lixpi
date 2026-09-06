@@ -1,0 +1,190 @@
+{
+    "providerTitle": "Anthropic",
+    "color": "#D97757",
+    "iconName": "claudeIcon",
+    "colorIconName": "claudeIcon",
+    "title": "Claude Opus 5",
+    "shortTitle": "Opus 5",
+    "sortingPosition": 102,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "anthropic-adaptive",
+        "requiresAutoToolChoiceWithThinking": true,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": true,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "image",
+            "video-frame",
+            "document-text"
+        ]
+    },
+    "reasoningGenerationControls": [
+        {
+            "key": "reasoningEffort",
+            "label": "Reasoning effort",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "low",
+                    "label": "Low",
+                    "description": "Lowest token use and latency, with less depth on difficult work."
+                },
+                {
+                    "value": "medium",
+                    "label": "Medium",
+                    "description": "Balanced capability, speed, and output-token usage."
+                },
+                {
+                    "value": "high",
+                    "label": "High",
+                    "description": "Provider default for strong reasoning and tool use."
+                },
+                {
+                    "value": "xhigh",
+                    "label": "X-high",
+                    "description": "Extended capability for long-running coding and agentic work."
+                },
+                {
+                    "value": "max",
+                    "label": "Max",
+                    "description": "Maximum capability without a token-efficiency constraint."
+                }
+            ],
+            "defaultValue": "high",
+            "description": "Controls total response effort, including reasoning, answer text, and tool calls. Lower levels reduce latency and cost; higher levels spend more tokens for difficult work."
+        }
+    ],
+    "contextWindow": 1000000,
+    "maxCompletionSize": 128000,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "5.50",
+                    "completion": "27.50"
+                }
+            }
+        }
+    },
+    "model": "claude-opus-5",
+    "modelVersion": "claude-opus-5",
+    "provider": "Anthropic",
+    "inferenceProviderCalledByThePlatform": "aws-bedrock",
+    "inferenceProviders": {
+        "anthropic": {
+            "inferenceProviderTitle": "Anthropic",
+            "isCalledByThePlatform": false,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "claude-opus-5",
+                "models.dev": "claude-opus-5",
+                "provider-api": "claude-opus-5"
+            },
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "5.00",
+                            "completion": "25.00"
+                        }
+                    }
+                }
+            },
+            "title": "Claude Opus 5"
+        },
+        "aws-bedrock": {
+            "inferenceProviderTitle": "AWS Bedrock",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "anthropic.claude-opus-5",
+                "models.dev": "anthropic.claude-opus-5",
+                "bedrock": "claude-opus-5"
+            },
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "5.50",
+                            "completion": "27.50"
+                        }
+                    }
+                }
+            },
+            "title": "Claude Opus 5",
+            "providerReportedFacts": {
+                "bedrockModelIds": [
+                    "anthropic.claude-opus-5"
+                ],
+                "modelIdToInvoke": "us.anthropic.claude-opus-5",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "TEXT"
+                ],
+                "supportsResponseStreaming": true,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "ratesByTier": {
+                    "regional": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_input_tokens_standard-Units",
+                            "USE1-MP:USE1_output_tokens_standard-Units"
+                        ],
+                        "promptPerMillionTokens": "5.50",
+                        "completionPerMillionTokens": "27.50"
+                    },
+                    "global-profile": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_input_tokens_global_standard-Units",
+                            "USE1-MP:USE1_output_tokens_global_standard-Units"
+                        ],
+                        "promptPerMillionTokens": "5.00",
+                        "completionPerMillionTokens": "25.00"
+                    }
+                }
+            }
+        }
+    }
+}

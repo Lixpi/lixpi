@@ -1,0 +1,5 @@
+// Global stylesheet. The Gentelella theme supplies the design system: the reset,
+// the tokens, the layout, and the components the pages build from. Everything
+// Lixpi owns lives beside the component that uses it.
+
+@use "gentelella/scss/v4/main.scss";

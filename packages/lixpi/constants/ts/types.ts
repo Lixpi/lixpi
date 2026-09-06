@@ -455,7 +455,7 @@ export type MediaGenerationConfigSelectionGroup = {
 export type DefaultAiModelCapability = 'reasoning' | 'image' | 'video'
 
 // Default model selection per capability. Configured in
-// ai-models-synchronization (which flags the matching catalog records), derived
+// the AI Model Registry (which flags the matching catalog records), derived
 // by the API, and projected to the UI so dropdowns pre-select a sensible model
 // instead of falling back to whatever happens to sort first.
 export type DefaultAiModelSelection = Record<DefaultAiModelCapability, AiModelId>
@@ -2290,7 +2290,7 @@ export type AiModel = {
     title: string
     shortTitle?: string
     // Human-facing provider brand name, e.g. "OpenAI" or "ByteDance" (the provider field
-    // stays the internal key). Synced per model by ai-models-synchronization; consumers
+    // stays the internal key). Authored per model in the AI Model Registry; consumers
     // concatenate it with title for a provider-attributed name ("ByteDance Seedance 2.0"),
     // or use it standalone where only the provider brand is needed.
     providerTitle?: string
@@ -2303,8 +2303,8 @@ export type AiModel = {
     color: string
     iconName: string
     // Colored brand-icon variant key (e.g. geminiColorIcon). Synced per model by
-    // ai-models-synchronization, which falls back to iconName when a provider has
-    // no colored variant, so synced models always carry a usable value here.
+    // the AI Model Registry, which falls back to iconName when a provider has
+    // no colored variant, so catalog models always carry a usable value here.
     colorIconName?: string
     sortingPosition: number
     modalities: Array<{
@@ -2318,7 +2318,7 @@ export type AiModel = {
     // Required for image-generation models. Describes reference budgets and
     // conditioning controls without leaking provider request syntax upstream.
     imageReferenceCapabilities?: ImageReferenceCapabilities
-    // Provider/model-specific controls authored by ai-models-synchronization.
+    // Provider/model-specific controls authored in the AI Model Registry.
     // The API projects these directly into the shared configuration matrix.
     reasoningGenerationControls?: MediaGenerationConfigControl[]
     imageGenerationControls?: MediaGenerationConfigControl[]
@@ -2327,60 +2327,82 @@ export type AiModel = {
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
     videoDurations?: ImageSizeOption[]
-    // Provider/model-specific video controls authored by ai-models-synchronization.
+    // Provider/model-specific video controls authored in the AI Model Registry.
     // Catalog, UI, orchestration, and provider adapters consume this profile
     // without reconstructing vendor capabilities elsewhere.
     videoGenerationControls?: MediaGenerationConfigControl[]
     // Max reference images this video model accepts (VEO 3, Seedance 9). Absent => 3.
     videoMaxReferenceImages?: number
     // Capabilities for which this model is the catalog default, set by
-    // ai-models-synchronization. The API derives AiModelsCatalogResponse.defaultModels
+    // the AI Model Registry. The API derives AiModelsCatalogResponse.defaultModels
     // from these flags so the UI can pre-select the configured defaults.
     isDefaultFor?: DefaultAiModelCapability[]
-    pricing: {
-        currency: string
-        resaleMargin: string
-        text?: {
-            measuringUnit: string
-            pricePer: string
-            tiers: {
-                default: {
-                    prompt: string
-                    completion: string
-                }
-            }
-        }
-        audio?: {
-            measuringUnit: string
-            pricePer: string
-            prompt: string
-            completion: string
-        }
-        image?: {
-            measuringUnit: string
-            pricePer: string
-            prompt: string
-            completion: string
-        }
-        // Video models are billed per second of generated video (VEO) or per
-        // vendor video token (Seedance). `price` is the flat rate and stays the
-        // fallback for models that publish one. `tiers` carries the per-resolution
-        // rates for vendors that price by output resolution AND by whether the
-        // input contained video, keyed by the same resolution values as
-        // videoResolutions. Consumers use a matching tier when there is one and
-        // fall back to `price` otherwise.
-        video?: {
-            measuringUnit: string
-            pricePer: string
-            price: string
-            tiers?: Record<string, {
-                withoutVideoInput: string
-                withVideoInput: string
-            }>
-        }
-    }
+    // Which endpoint the platform is calling this model through, and what the same
+    // model costs and allows through every endpoint it can be reached on. The
+    // top-level fields describe the current call; this says what the alternatives
+    // are, so a routing change is a lookup rather than a re-fetch. Written by the
+    // AI Model Registry from `_base-index.json`.
+    inferenceProviderCalledByThePlatform?: string
+    inferenceProviders?: Record<string, {
+        inferenceProviderTitle: string
+        isCalledByThePlatform: boolean
+        // What that endpoint calls the model, which is not always what the vendor
+        // calls it.
+        title?: string
+        reportedBySources: string[]
+        modelKeyAtSource: Record<string, string>
+        contextWindow?: number
+        maxCompletionSize?: number
+        pricing?: AiModelPricing
+        // What that endpoint reports that no model field holds, such as AWS Bedrock's
+        // lifecycle status and the id to invoke.
+        providerReportedFacts?: Record<string, unknown>
+    }>
+    pricing: AiModelPricing
     createdAt: number
     updatedAt: number
+}
+
+export type AiModelPricing = {
+    currency: string
+    text?: {
+        measuringUnit: string
+        pricePer: string
+        tiers: {
+            default: {
+                prompt: string
+                completion: string
+            }
+        }
+    }
+    audio?: {
+        measuringUnit: string
+        pricePer: string
+        prompt: string
+        completion: string
+    }
+    image?: {
+        measuringUnit: string
+        pricePer: string
+        prompt: string
+        completion: string
+    }
+    // Video models are billed per second of generated video (VEO) or per
+    // vendor video token (Seedance). `price` is the flat rate and stays the
+    // fallback for models that publish one. `tiers` carries the per-resolution
+    // rates for vendors that price by output resolution AND by whether the
+    // input contained video, keyed by the same resolution values as
+    // videoResolutions. Consumers use a matching tier when there is one and
+    // fall back to `price` otherwise.
+    video?: {
+        measuringUnit: string
+        pricePer: string
+        price: string
+        tiers?: Record<string, {
+            withoutVideoInput: string
+            withVideoInput: string
+        }>
+    }
 }
 
 export type EventMeta = {

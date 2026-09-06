@@ -1,0 +1,11 @@
+{
+    "providerKey": "BytePlus",
+    "description": "Which BytePlus models this catalog syncs. Model discovery comes from no listing endpoint. BytePlus publishes none, so the models here are the ones with a -lixpi.json.",
+    "syncMode": "all",
+    "whatSyncModeMeans": {
+        "all": "Sync every model discovered on the provider, except the ones in modelsToSkip.",
+        "onlyListed": "Sync only the models named in modelsToSync."
+    },
+    "modelsToSync": [],
+    "modelsToSkip": []
+}

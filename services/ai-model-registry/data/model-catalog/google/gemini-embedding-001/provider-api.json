@@ -1,0 +1,26 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini Embedding 001",
+            "contextWindow": 2048,
+            "maxCompletionSize": 1,
+            "model": "gemini-embedding-001",
+            "modelVersion": "gemini-embedding-001",
+            "modelKeyAtSource": "gemini-embedding-001"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.251Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-embedding-001",
+            "allPublishedVersions": [
+                "gemini-embedding-001"
+            ]
+        }
+    }
+}

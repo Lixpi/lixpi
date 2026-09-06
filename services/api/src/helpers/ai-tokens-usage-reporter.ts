@@ -22,14 +22,10 @@ export const reportAiTokensUsage = ({
     aiRequestReceivedAt,
     aiRequestFinishedAt,
 }: TokensUsage) => {
-    const resaleMargin = new Decimal(aiModelMetaInfo.pricing.resaleMargin)
     const pricePer = new Decimal(aiModelMetaInfo.pricing.text.pricePer)
 
     const textPromptPrice = new Decimal(aiModelMetaInfo.pricing.text.tiers.default.prompt)
     const textCompletionPrice = new Decimal(aiModelMetaInfo.pricing.text.tiers.default.completion)
-
-    const textPromptPriceResale = textPromptPrice.mul(resaleMargin)
-    const textCompletionPriceResale = textCompletionPrice.mul(resaleMargin)
 
     const message: TokensUsageEvent = {
         eventMeta,
@@ -40,21 +36,21 @@ export const reportAiTokensUsage = ({
         textPricePer: pricePer.toString(),
         textPromptPrice: textPromptPrice.toString(),
         textCompletionPrice: textCompletionPrice.toString(),
-        textPromptPriceResale: textPromptPriceResale.toString(),
-        textCompletionPriceResale: textCompletionPriceResale.toString(),
+        textPromptPriceResale: textPromptPrice.toString(),
+        textCompletionPriceResale: textCompletionPrice.toString(),
         prompt: {
             usageTokens: promptTokens,
             cachedTokens: promptCachedTokens,
             audioTokens: promptAudioTokens,
             purchasedFor: textPromptPrice.div(pricePer).mul(promptTokens).toString(),
-            soldToClientFor: textPromptPriceResale.div(pricePer).mul(promptTokens).toString(),
+            soldToClientFor: textPromptPrice.div(pricePer).mul(promptTokens).toString(),
         },
         completion: {
             usageTokens: completionTokens,
             purchasedFor: textCompletionPrice.div(pricePer).mul(completionTokens).toString(),
             reasoningTokens: completionReasoningTokens,
             audioTokens: completionAudioTokens,
-            soldToClientFor: textCompletionPriceResale.div(pricePer).mul(completionTokens).toString(),
+            soldToClientFor: textCompletionPrice.div(pricePer).mul(completionTokens).toString(),
         },
         get total() {
             return {

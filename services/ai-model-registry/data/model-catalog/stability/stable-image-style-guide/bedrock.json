@@ -1,0 +1,38 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "title": "Stable Image Style Guide",
+            "modelKeyAtSource": "stable-image-style-guide",
+            "sourceOnlyFacts": {
+                "bedrockModelIds": [
+                    "stability.stable-image-style-guide-v1:0"
+                ],
+                "modelIdToInvoke": "us.stability.stable-image-style-guide-v1:0",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "IMAGE"
+                ],
+                "supportsResponseStreaming": false,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "noRatesInPriceList": true
+            }
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "bedrock",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.342Z"
+    }
+}

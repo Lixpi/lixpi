@@ -1,0 +1,29 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 8192,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.20",
+                            "completion": "0.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gemini-embedding-2"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.253Z"
+    }
+}

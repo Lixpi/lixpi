@@ -1,0 +1,181 @@
+{
+    "title": "Gemini 3 Pro Image",
+    "shortTitle": "Gemini 3 Pro Image",
+    "sortingPosition": 160,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        },
+        {
+            "modality": "image_generation",
+            "title": "Image Generation",
+            "shortTitle": "IMG GEN"
+        }
+    ],
+    "defaultTemperature": 1,
+    "inferenceCapabilities": {
+        "thinkingMode": "google-level",
+        "requiresAutoToolChoiceWithThinking": false,
+        "supportsTemperature": true,
+        "supportsSystemPrompt": true,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "image",
+            "video-frame",
+            "audio",
+            "document-text"
+        ]
+    },
+    "imageSizeMode": "aspectRatio",
+    "imageSizes": [
+        {
+            "value": "1:1",
+            "label": "1:1"
+        },
+        {
+            "value": "3:2",
+            "label": "3:2"
+        },
+        {
+            "value": "2:3",
+            "label": "2:3"
+        },
+        {
+            "value": "3:4",
+            "label": "3:4"
+        },
+        {
+            "value": "4:3",
+            "label": "4:3"
+        },
+        {
+            "value": "4:5",
+            "label": "4:5"
+        },
+        {
+            "value": "5:4",
+            "label": "5:4"
+        },
+        {
+            "value": "9:16",
+            "label": "9:16"
+        },
+        {
+            "value": "16:9",
+            "label": "16:9"
+        },
+        {
+            "value": "21:9",
+            "label": "21:9"
+        }
+    ],
+    "imageGenerationControls": [
+        {
+            "key": "imageSize",
+            "label": "Aspect ratio",
+            "kind": "aspect-ratio",
+            "options": [
+                {
+                    "value": "1:1",
+                    "label": "1:1"
+                },
+                {
+                    "value": "3:2",
+                    "label": "3:2"
+                },
+                {
+                    "value": "2:3",
+                    "label": "2:3"
+                },
+                {
+                    "value": "3:4",
+                    "label": "3:4"
+                },
+                {
+                    "value": "4:3",
+                    "label": "4:3"
+                },
+                {
+                    "value": "4:5",
+                    "label": "4:5"
+                },
+                {
+                    "value": "5:4",
+                    "label": "5:4"
+                },
+                {
+                    "value": "9:16",
+                    "label": "9:16"
+                },
+                {
+                    "value": "16:9",
+                    "label": "16:9"
+                },
+                {
+                    "value": "21:9",
+                    "label": "21:9"
+                }
+            ],
+            "defaultValue": "1:1",
+            "description": "Controls the output shape. Gemini defaults to the input image ratio when editing and otherwise to a square."
+        },
+        {
+            "key": "resolution",
+            "label": "Resolution",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "1K",
+                    "label": "1K"
+                },
+                {
+                    "value": "2K",
+                    "label": "2K"
+                },
+                {
+                    "value": "4K",
+                    "label": "4K"
+                }
+            ],
+            "defaultValue": "1K",
+            "description": "Controls output resolution and image-token cost. Larger outputs take longer and cost more."
+        }
+    ],
+    "imageReferenceCapabilities": {
+        "maxReferenceImages": 14,
+        "maxIdentityReferenceImages": 5,
+        "conditioningModes": [
+            "edit",
+            "identity",
+            "style",
+            "structure",
+            "pose"
+        ],
+        "inputFidelity": "provider-managed",
+        "supportsIterativeEdit": true,
+        "supportsMask": false,
+        "supportsStructureControl": true,
+        "supportsPoseControl": true,
+        "supportsDeterministicSeed": false,
+        "maxOutputPixels": 16777216,
+        "supportedAspectRatios": [
+            "1:1",
+            "3:2",
+            "2:3",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9"
+        ]
+    }
+}

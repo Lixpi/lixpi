@@ -1,0 +1,10 @@
+{
+    "providerKey": "OpenAI",
+    "description": "Fields every OpenAI model in this directory inherits. A model's own -lixpi.json overrides anything stated here.",
+    "fieldsInheritedByEveryModel": {
+        "providerTitle": "OpenAI",
+        "color": "#56967c",
+        "iconName": "gptAvatarIcon",
+        "colorIconName": "gptAvatarIcon"
+    }
+}

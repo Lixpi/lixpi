@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "anthropic": {
+            "title": "Claude Haiku 4.5",
+            "contextWindow": 200000,
+            "maxCompletionSize": 64000,
+            "model": "claude-haiku-4-5",
+            "modelVersion": "claude-haiku-4-5",
+            "modelKeyAtSource": "claude-haiku-4-5-20251001"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "anthropic"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.131Z",
+        "publishedVersions": {
+            "currentVersion": "claude-haiku-4-5",
+            "allPublishedVersions": [
+                "claude-haiku-4-5",
+                "claude-haiku-4-5-20251001"
+            ]
+        }
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "byInferenceProvider": {
+        "anthropic": {
+            "title": "Claude Fable 5.1",
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "model": "claude-fable-5-1",
+            "modelVersion": "claude-fable-5-1",
+            "modelKeyAtSource": "claude-fable-5-1"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "anthropic"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.127Z",
+        "publishedVersions": {
+            "currentVersion": "claude-fable-5-1",
+            "allPublishedVersions": [
+                "claude-fable-5-1"
+            ]
+        }
+    }
+}

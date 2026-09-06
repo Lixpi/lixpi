@@ -1,0 +1,26 @@
+{
+    "byInferenceProvider": {
+        "anthropic": {
+            "title": "Claude Sonnet 5",
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "model": "claude-sonnet-5",
+            "modelVersion": "claude-sonnet-5",
+            "modelKeyAtSource": "claude-sonnet-5"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "anthropic"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.137Z",
+        "publishedVersions": {
+            "currentVersion": "claude-sonnet-5",
+            "allPublishedVersions": [
+                "claude-sonnet-5"
+            ]
+        }
+    }
+}

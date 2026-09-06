@@ -58,20 +58,58 @@ services:
             CLIENT_PORT: 3010
             PORT: 3011
             PARAMS_DIR: /usr/src/service/data/params
+            MODEL_CATALOG_DIR: /usr/src/service/data/model-catalog
+            # The scheduled sync stays off locally. Run one by hand with
+            # `docker compose exec lixpi-ai-model-registry node --experimental-transform-types ./src/catalog/cli.ts`,
+            # which writes the fetched files and, without --no-write, the local DynamoDB.
+            MODEL_CATALOG_SYNC_ENABLED: "false"
+            NATS_SERVERS: ${NATS_SERVERS}
+            NATS_AI_MODEL_REGISTRY_NKEY_SEED: ${NATS_AI_MODEL_REGISTRY_NKEY_SEED}
+            NATS_AI_MODEL_REGISTRY_USER_ID: ${NATS_AI_MODEL_REGISTRY_USER_ID}
+            MODEL_CATALOG_WRITE_FILES: "true"
+            ORG_NAME: ${ORG_NAME}
+            STAGE: ${STAGE}
+            AWS_REGION: ${AWS_REGION}
+            AWS_PROFILE: ${AWS_PROFILE}
+            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT}
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
         volumes:
             # Only sources are mounted. public/ is build output and stays inside
             # the container, where node_modules also lives.
             - ./services/ai-model-registry/src:/usr/src/service/src:cached
             - ./services/ai-model-registry/vite.config.ts:/usr/src/service/vite.config.ts:cached
+            # Mounted so a dependency added on the host is installed by the next
+            # container start, without rebuilding the image.
+            #
+            # NOT mounted: pnpm-workspace.yaml. pnpm@11 rewrites it during install
+            # (write-temp + atomic rename), which fails EBUSY against a single-file
+            # bind mount. The image bakes it, so a change there needs a rebuild.
+            - ./services/ai-model-registry/package.json:/usr/src/service/package.json:cached
+            # Host packages, mounted read-only outside the pnpm workspace root and
+            # rsynced into the container's own copy, so host edits reach a running
+            # service and pnpm never writes node_modules back to the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
             # Directory mount: the parameter tree lives here and the server
             # writes each file through a temp file and a rename.
             - ./services/ai-model-registry/data:/usr/src/service/data
+            - aws-config:/root/.aws:cached    # AWS SSO credentials
+            - ./.aws/config:/root/.aws/config:cached    # AWS SSO profile definitions
         working_dir: /usr/src/service
-        # Vite serves the client with HMR; `node --watch` restarts the API server
-        # when its own sources change.
+        # Install first, so a dependency added on the host is present before either
+        # process starts. Then Vite serves the client with HMR while `node --watch`
+        # restarts the API server when its own sources change.
+        # --config.confirm-modules-purge=false: let pnpm purge and reinstall a stale
+        # node_modules non-interactively, since the container has no TTY to ask.
         command: >
-            sh -c "node --watch ./src/server.ts &
-            ./node_modules/.bin/vite --host 0.0.0.0"
+            /usr/local/bin/workspace-package-sync.sh run
+            sh -c "pnpm i --config.confirm-modules-purge=false
+            && { node --watch --experimental-transform-types ./src/server.ts & }
+            && exec ./node_modules/.bin/vite --host 0.0.0.0"
         stop_signal: SIGTERM
         ports:
             - 3010:3010
@@ -145,6 +183,7 @@ services:
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -192,6 +231,7 @@ services:
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -239,6 +279,7 @@ services:
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -301,6 +342,7 @@ services:
             NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
             NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             # AUTH-account regular_user password — the file-conversion workload
             # connects with this (not the NEX node creds) so it can read/write the
             # workspace Object Store buckets that live in the AUTH account.
@@ -503,6 +545,7 @@ services:
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
 
             # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
             OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -656,6 +699,7 @@ services:
             # NEX node nkey — passed through so `createNexNodeService` can put it in the node's task definition
             NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
 
             # App host addresses

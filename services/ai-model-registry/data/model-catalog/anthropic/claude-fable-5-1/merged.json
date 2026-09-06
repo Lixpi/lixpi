@@ -1,0 +1,131 @@
+{
+    "providerTitle": "Anthropic",
+    "color": "#D97757",
+    "iconName": "claudeIcon",
+    "colorIconName": "claudeIcon",
+    "title": "Claude Fable 5.1",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": null,
+    "contextWindow": 1000000,
+    "maxCompletionSize": 128000,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "11.00",
+                    "completion": "55.00"
+                }
+            }
+        }
+    },
+    "model": "claude-fable-5-1",
+    "modelVersion": "claude-fable-5-1",
+    "provider": "Anthropic",
+    "inferenceProviderCalledByThePlatform": "aws-bedrock",
+    "inferenceProviders": {
+        "anthropic": {
+            "inferenceProviderTitle": "Anthropic",
+            "isCalledByThePlatform": false,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "claude-fable-5-1",
+                "models.dev": "claude-fable-5-1",
+                "provider-api": "claude-fable-5-1"
+            },
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "10.00",
+                            "completion": "50.00"
+                        }
+                    }
+                }
+            },
+            "title": "Claude Fable 5.1"
+        },
+        "aws-bedrock": {
+            "inferenceProviderTitle": "AWS Bedrock",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "anthropic.claude-fable-5-1",
+                "models.dev": "anthropic.claude-fable-5-1",
+                "bedrock": "claude-fable-5-1"
+            },
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "11.00",
+                            "completion": "55.00"
+                        }
+                    }
+                }
+            },
+            "title": "Claude Fable 5.1",
+            "providerReportedFacts": {
+                "bedrockModelIds": [
+                    "anthropic.claude-fable-5-1"
+                ],
+                "modelIdToInvoke": "us.anthropic.claude-fable-5-1",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "TEXT"
+                ],
+                "supportsResponseStreaming": true,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "ratesByTier": {
+                    "regional": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_output_tokens_standard-Units",
+                            "USE1-MP:USE1_input_tokens_standard-Units"
+                        ],
+                        "completionPerMillionTokens": "55.00",
+                        "promptPerMillionTokens": "11.00"
+                    },
+                    "global-profile": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_output_tokens_global_standard-Units",
+                            "USE1-MP:USE1_input_tokens_global_standard-Units"
+                        ],
+                        "completionPerMillionTokens": "50.00",
+                        "promptPerMillionTokens": "10.00"
+                    }
+                }
+            }
+        }
+    }
+}

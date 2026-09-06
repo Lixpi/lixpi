@@ -5,7 +5,7 @@
     "description": "Lixpi NATS NEX execution-engine node — runs Lixpi background workloads on NATS",
     "author": "Lixpi <lixpi@lixpi.com>",
     "license": "",
-    "main": "workloads/ai-models-synchronization/index.ts",
+    "main": "workloads/file-conversion/index.ts",
     "scripts": {
         "test:run": "vitest run",
         "test": "vitest"

@@ -1,0 +1,34 @@
+{
+    "title": "Claude Haiku 4.5",
+    "shortTitle": "Haiku 4.5",
+    "isDefaultFor": [
+        "reasoning"
+    ],
+    "sortingPosition": 108,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "anthropic-manual",
+        "requiresAutoToolChoiceWithThinking": true,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": true,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "image",
+            "video-frame",
+            "document-text"
+        ]
+    },
+    "reasoningGenerationControls": []
+}

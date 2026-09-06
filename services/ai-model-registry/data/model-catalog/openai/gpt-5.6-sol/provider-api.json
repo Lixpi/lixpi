@@ -1,0 +1,23 @@
+{
+    "byInferenceProvider": {
+        "openai": {
+            "model": "gpt-5.6-sol",
+            "modelVersion": "gpt-5.6-sol",
+            "modelKeyAtSource": "gpt-5.6-sol"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "openai"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.112Z",
+        "publishedVersions": {
+            "currentVersion": "gpt-5.6-sol",
+            "allPublishedVersions": [
+                "gpt-5.6-sol"
+            ]
+        }
+    }
+}

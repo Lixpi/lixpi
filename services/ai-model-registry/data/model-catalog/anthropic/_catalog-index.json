@@ -1,0 +1,52 @@
+{
+    "providerKey": "Anthropic",
+    "description": "Which Anthropic models this catalog syncs. Model discovery comes from the Anthropic /v1/models endpoint, or the Bedrock foundation-model list when ANTHROPIC_USE_AWS_BEDROCK_INFERENCE is on.",
+    "syncMode": "all",
+    "whatSyncModeMeans": {
+        "all": "Sync every model discovered on the provider, except the ones in modelsToSkip.",
+        "onlyListed": "Sync only the models named in modelsToSync."
+    },
+    "modelsToSync": [],
+    "modelsToSkip": [
+        {
+            "model": "claude-3-haiku",
+            "reason": "Haiku older than 4.5"
+        },
+        {
+            "model": "claude-fable-5",
+            "reason": "Fable older than 5.1"
+        },
+        {
+            "model": "claude-opus-4-1",
+            "reason": "Opus older than 5"
+        },
+        {
+            "model": "claude-opus-4-5",
+            "reason": "Opus older than 5"
+        },
+        {
+            "model": "claude-opus-4-6",
+            "reason": "Opus older than 5"
+        },
+        {
+            "model": "claude-opus-4-7",
+            "reason": "Opus older than 5"
+        },
+        {
+            "model": "claude-opus-4-8",
+            "reason": "Opus older than 5"
+        },
+        {
+            "model": "claude-sonnet-4",
+            "reason": "Sonnet older than 5"
+        },
+        {
+            "model": "claude-sonnet-4-5",
+            "reason": "Sonnet older than 5"
+        },
+        {
+            "model": "claude-sonnet-4-6",
+            "reason": "Sonnet older than 5"
+        }
+    ]
+}

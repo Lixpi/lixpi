@@ -1,0 +1,63 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini 3 Flash Preview",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 1048576,
+    "maxCompletionSize": 65535,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.50",
+                    "completion": "3.00"
+                }
+            }
+        }
+    },
+    "model": "gemini-3-flash-preview",
+    "modelVersion": "gemini-3-flash-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini-3-flash-preview",
+                "models.dev": "gemini-3-flash-preview",
+                "provider-api": "gemini-3-flash-preview"
+            },
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65535,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.50",
+                            "completion": "3.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini 3 Flash Preview",
+            "defaultTemperature": 1
+        }
+    }
+}

@@ -1,12 +1,10 @@
-import { err as debugError } from '@lixpi/debug-tools'
+import { VersionedJsonStore } from './versioned-json-store.ts'
 import {
     readFile,
     writeFile,
     rename,
     mkdir,
     readdir,
-    unlink,
-    copyFile,
 } from 'node:fs/promises'
 import {
     dirname,
@@ -161,12 +159,18 @@ const listParamFiles = async (path: string): Promise<string[]> => {
 export class ParamTree {
     private readonly root: string
     private readonly historyDir: string
+    private readonly versioned: VersionedJsonStore
 
     constructor(root: string) {
         this.root = root
         this.historyDir = join(
             dirname(root),
             'history',
+        )
+        this.versioned = new VersionedJsonStore(
+            root,
+            this.historyDir,
+            'params-',
         )
     }
 
@@ -251,58 +255,11 @@ export class ParamTree {
     // timestamped folder. Only bulk edits driven through the API ask for this;
     // a checkbox in the page writes straight to the file, because redoing one
     // tick is easier than digging a snapshot out.
+    //
+    // The versioning itself lives in VersionedJsonStore, shared with the model
+    // catalog so both trees keep history the same way.
     async snapshot(paths: string[]): Promise<void> {
-        if (paths.length === 0)
-            return
-
-        const stamp = new Date()
-            .toISOString()
-            .replaceAll(':', '-')
-            .replace(/\.\d+Z$/u, 'Z')
-        const target = join(this.historyDir, `params-${stamp}`)
-
-        try {
-            for (const path of paths) {
-                const relative = path.slice(this.root.length + 1)
-                const destination = join(target, relative)
-                await mkdir(
-                    dirname(destination),
-                    { recursive: true },
-                )
-                await copyFile(path, destination)
-            }
-
-            await this.prune()
-        } catch (error) {
-            debugError('[ai-model-registry] could not snapshot parameter files:', error)
-        }
-    }
-
-    private async prune(limit = 100): Promise<void> {
-        const entries = (await readdir(this.historyDir, { withFileTypes: true })).filter(e => e.isDirectory() && e.name.startsWith('params-')).map(
-            e => e.name,
-        )
-            .sort()
-
-        for (const stale of entries.slice(
-            0,
-            Math.max(0, entries.length - limit),
-        )) {
-            const dir = join(this.historyDir, stale)
-
-            for (const file of await readdir(
-                dir,
-                {
-                    recursive: true,
-                    withFileTypes: true,
-                },
-            )) {
-                if (file.isFile())
-                    await unlink(
-                        join(file.parentPath ?? dir, file.name),
-                    )
-            }
-        }
+        await this.versioned.snapshot(paths)
     }
 
     async writeParam(

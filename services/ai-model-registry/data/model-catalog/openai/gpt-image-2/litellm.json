@@ -1,0 +1,24 @@
+{
+    "byInferenceProvider": {
+        "openai": {
+            "pricing": {
+                "currency": "USD",
+                "image": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "prompt": "8.00",
+                    "completion": "30.00"
+                }
+            },
+            "modelKeyAtSource": "gpt-image-2"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "openai"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.120Z"
+    }
+}

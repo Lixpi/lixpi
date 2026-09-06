@@ -1,0 +1,61 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini Robotics-ER 2 Streaming Preview",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "2.00",
+                    "completion": "10.00"
+                }
+            }
+        }
+    },
+    "contextWindow": 131072,
+    "maxCompletionSize": 65536,
+    "model": "gemini-robotics-er-2-streaming-preview",
+    "modelVersion": "gemini-robotics-er-2-streaming-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/gemini-robotics-er-2-streaming-preview",
+                "provider-api": "gemini-robotics-er-2-streaming-preview"
+            },
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "10.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini Robotics-ER 2 Streaming Preview",
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1
+        }
+    }
+}

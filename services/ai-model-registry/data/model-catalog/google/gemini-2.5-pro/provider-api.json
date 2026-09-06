@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 2.5 Pro",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "gemini-2.5-pro",
+            "modelVersion": "gemini-2.5-pro",
+            "modelKeyAtSource": "gemini-2.5-pro"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.191Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-2.5-pro",
+            "allPublishedVersions": [
+                "gemini-2.5-pro"
+            ]
+        }
+    }
+}

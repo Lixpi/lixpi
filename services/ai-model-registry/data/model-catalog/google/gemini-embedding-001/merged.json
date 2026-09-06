@@ -1,0 +1,62 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini Embedding 001",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": null,
+    "contextWindow": 2048,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.15",
+                    "completion": "0.00"
+                }
+            }
+        }
+    },
+    "maxCompletionSize": 1,
+    "model": "gemini-embedding-001",
+    "modelVersion": "gemini-embedding-001",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini-embedding-001",
+                "models.dev": "gemini-embedding-001",
+                "provider-api": "gemini-embedding-001"
+            },
+            "contextWindow": 2048,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.15",
+                            "completion": "0.00"
+                        }
+                    }
+                }
+            },
+            "maxCompletionSize": 1,
+            "title": "Gemini Embedding 001"
+        }
+    }
+}

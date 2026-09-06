@@ -13,11 +13,10 @@ This page documents the Lixpi deployment and operation of that node. For how NEX
 
 | Workload | Type · lifecycle | What it does |
 |----------|------------------|--------------|
-| `ai-models-sync` | `native` · `service` | Runs `AiModelsSync.synchronizeModels()` at boot and every hour, writing the `AI_MODELS_LIST` DynamoDB table. |
 | `file-conversion` | `native` · `service` | Responds on active `blob.processing.generateRenditions`. It runs sharp/ffmpeg/libreoffice/poppler outside the API, reads organization Blob coordinates, and writes immutable canonical/preview/thumbnail/poster/representative-frame objects without DynamoDB access. |
 | `system-reporter` | `native` · `service` | A trivial smoke-test workload (echoes uptime every 30s). Deployed by hand to prove the substrate. |
 
-The API reads the catalog straight from DynamoDB on each request ([`getAvailableAiModels`](../../../services/api/src/models/ai-model.ts) scans `AI_MODELS_LIST`), so the hourly write reaches the UI on its next fetch with no restart. After each run the workload also publishes a completion event the API subscribes to (see [Completion event](#completion-event)).
+The model catalog is not here. [`services/ai-model-registry`](../../../services/ai-model-registry) owns it and writes `AI_MODELS_LIST` on its own hourly loop.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -29,14 +28,9 @@ graph TB
     subgraph Node["services/nex node"]
         N["nex node up"]
         NX["native nexlet"]
-        W["ai-models-sync<br/>node index.ts"]
         F["file-conversion<br/>node index.ts"]
         N --> NX
-        NX --> W
         NX --> F
-    end
-    subgraph Store["Persistence"]
-        DDB[("DynamoDB<br/>AI_MODELS_LIST")]
     end
     Providers(("AI Providers<br/>OpenAI · Anthropic · Google"))
     API["api service<br/>reads the catalog"]
@@ -66,8 +60,6 @@ The container entrypoint ([`services/nex/entrypoint.sh`](../../../services/nex/e
 2. `nex node up` — connects to the NATS `NEX` account with the node nkey and starts the native nexlet, in the background.
 3. Deploys service workloads — builds each workload start-request and runs `nex workload start`, retrying until the node is accepting auctions.
 4. Supervises the node in the foreground.
-
-The workload wrapper ([`workloads/ai-models-synchronization/index.ts`](../../../services/nex/workloads/ai-models-synchronization/index.ts)) runs the sync once, then re-runs it on a self-scheduling timer (`LIXPI_SYNC_INTERVAL_MS`, default one hour). Each run is wrapped in try/catch so a provider hiccup logs and waits for the next tick instead of killing the loop.
 
 The file-conversion workload ([`workloads/file-conversion/index.ts`](../../../services/nex/workloads/file-conversion/index.ts)) is a NATS responder. It subscribes to:
 
@@ -111,12 +103,6 @@ NKey challenge fields, so the API correctly rejects it. Use the shared volume
 path locally unless Lixpi moves to a compatible NATS JWT/operator setup or a
 patched NEX artifact fetcher.
 
-## Completion event
-
-After each run the workload publishes `aiModels.syncCompleted` (constant `AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED`) with the run totals — `{ totalNew, totalUpdated, totalDeleted, totalProcessed, ranAt }` — using the NATS credentials the native nexlet mints for it, so the event originates in the `NEX` account.
-
-Because the API runs in the `AUTH` account and NATS subjects are account-scoped, [`nats-server.conf`](../../../services/nats/nats-server.conf) bridges the boundary: the `NEX` account **exports** the `aiModels.syncCompleted` stream and the `AUTH` account **imports** it on the same subject. The API subscribes in [`ai-model-subjects.ts`](../../../services/api/src/NATS/subscriptions/ai-model-subjects.ts). Since the API reads the catalog from DynamoDB on demand, the event is a refresh/liveness signal, not the data path.
-
 ## Two things that surprise people
 
 {% callout type="important" %}
@@ -124,7 +110,7 @@ Because the API runs in the `AUTH` account and NATS subjects are account-scoped,
 {% /callout %}
 
 {% callout type="note" %}
-**NEX has no built-in scheduler, and the node keeps no persisted state.** "Every hour" is implemented by the workload wrapper, not declared to NEX. State persistence (`--state kv`) is deliberately off: the entrypoint re-deploys the workload on every boot (idempotent), so persisting *and* replaying it as well would run the sync twice. One node, one workload instance.
+**NEX has no built-in scheduler, and the node keeps no persisted state.** A workload that wants a schedule implements it in its own wrapper rather than declaring it to NEX. State persistence (`--state kv`) is deliberately off: the entrypoint re-deploys the workloads on every boot (idempotent), so persisting *and* replaying them would start each one twice. One node, one instance of each workload.
 {% /callout %}
 
 ## Local development
@@ -132,10 +118,10 @@ Because the API runs in the `AUTH` account and NATS subjects are account-scoped,
 `docker compose --profile main up` starts the three NATS nodes and then `lixpi-nex-1` (assumes `.env` is symlinked via `./set-env.sh` at the repo root — see `services/nex/README.md`). The node connects over plain `nats://lixpi-nats-*:4222` — the client port is not TLS locally. Watch it with:
 
 ```bash
-docker logs -f lixpi-nex-1     # node registration + "✅ ai-models sync done"
+docker logs -f lixpi-nex-1     # node registration + workload deploys
 ```
 
-The fastest confirmation that model sync ran is the `AI_MODELS_LIST` table being populated; set `LIXPI_SYNC_INTERVAL_MS` low to watch the loop tick. The fastest confirmation that rendition processing is live is a processing Asset whose `blob.processing.generateRenditions` request/reply advances it to ready or degraded with validated rendition hashes. Operator commands are in the [`services/nex` README](../../../services/nex/README.md).
+The fastest confirmation that rendition processing is live is a processing Asset whose `blob.processing.generateRenditions` request/reply advances it to ready or degraded with validated rendition hashes. Operator commands are in the [`services/nex` README](../../../services/nex/README.md).
 
 ## On AWS
 
@@ -145,7 +131,7 @@ Pulumi provisions the node as an internal Fargate service ([`nex-node.ts`](../..
 |---------|-----|--------|---------|-----------|---------|-------|
 | `nex` | 512 | 1024 MB | Private | no | none (egress-only) | single instance |
 
-The task role grants DynamoDB access to `AI_MODELS_LIST`, the same per-table pattern [`main-api-service.ts`](../../../infrastructure/pulumi/src/resources/main-api-service.ts) uses. The workload's AWS calls use the Fargate task-role credentials, which the entrypoint forwards into the start-request through the ECS credential-endpoint variable.
+The task role carries no DynamoDB grant. The node's workloads reach AWS through the Fargate task-role credentials, which the entrypoint forwards into each start-request through the ECS credential-endpoint variable, and `tables` in [`nex-node.ts`](../../../infrastructure/pulumi/src/resources/nex-node/nex-node.ts) is the binding point if a workload needs one.
 
 {% callout type="warning" %}
 **The node connects with `nats://`, not `tls://`.** The NEX node uses the Go NATS client, which treats `tls://` as a hard requirement. The client port is plain, so on AWS the node is pointed at the cluster's internal CloudMap URL (`nats://nats.<cloudmap>.internal:4222`) rather than the `tls://` endpoint the browser-facing API uses. This is the mirror image of the API's [`tls://` reply-path requirement](./NATS-CLUSTER.md).

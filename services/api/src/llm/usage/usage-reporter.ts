@@ -121,14 +121,10 @@ export class UsageReporter {
                 aiRequestFinishedAt,
             } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
-            const resaleMargin = dec(pricing.resaleMargin, '1.0')
             const pricePer = dec(pricing.text?.pricePer, '1000000')
             const tiers = pricing.text?.tiers?.default ?? {}
             const promptPrice = dec(tiers.prompt, '0')
             const completionPrice = dec(tiers.completion, '0')
-
-            const promptResale = promptPrice.mul(resaleMargin)
-            const completionResale = completionPrice.mul(resaleMargin)
 
             const promptTokens = usage.promptTokens ?? 0
             const completionTokens = usage.completionTokens ?? 0
@@ -137,13 +133,13 @@ export class UsageReporter {
             const promptPurchased = promptPrice.div(pricePer).mul(
                 dec(promptTokens),
             )
-            const promptSold = promptResale.div(pricePer).mul(
+            const promptSold = promptPrice.div(pricePer).mul(
                 dec(promptTokens),
             )
             const completionPurchased = completionPrice.div(pricePer).mul(
                 dec(completionTokens),
             )
-            const completionSold = completionResale.div(pricePer).mul(
+            const completionSold = completionPrice.div(pricePer).mul(
                 dec(completionTokens),
             )
             const totalPurchased = promptPurchased.plus(completionPurchased)
@@ -159,8 +155,8 @@ export class UsageReporter {
                 textPricePer: pricePer.toString(),
                 textPromptPrice: promptPrice.toString(),
                 textCompletionPrice: completionPrice.toString(),
-                textPromptPriceResale: promptResale.toString(),
-                textCompletionPriceResale: completionResale.toString(),
+                textPromptPriceResale: promptPrice.toString(),
+                textCompletionPriceResale: completionPrice.toString(),
                 prompt: {
                     usageTokens: promptTokens,
                     cachedTokens: usage.promptCachedTokens ?? 0,
@@ -211,15 +207,12 @@ export class UsageReporter {
                 aiRequestFinishedAt,
             } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
-            const resaleMargin = dec(pricing.resaleMargin, '1.0')
-
             const imagePricing = pricing.image ?? {}
             const sizePricing = imagePricing[imageSize]
                 ?? imagePricing.default
                 ?? {}
             const qualityKey = imageQuality in sizePricing ? imageQuality : 'high'
             const pricePerImage = dec(sizePricing[qualityKey], '0.04')
-            const pricePerImageResale = pricePerImage.mul(resaleMargin)
 
             const report: ImageUsageReport = {
                 eventMeta,
@@ -233,9 +226,9 @@ export class UsageReporter {
                     quality: imageQuality,
                     count: 1,
                     pricePerImage: pricePerImage.toString(),
-                    pricePerImageResale: pricePerImageResale.toString(),
+                    pricePerImageResale: pricePerImage.toString(),
                     purchasedFor: pricePerImage.toString(),
-                    soldToClientFor: pricePerImageResale.toString(),
+                    soldToClientFor: pricePerImage.toString(),
                 },
             }
 
@@ -280,11 +273,9 @@ export class UsageReporter {
                 aiRequestFinishedAt,
             } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
-            const resaleMargin = dec(pricing.resaleMargin, '1.0')
             const videoPricing = (pricing as any).video ?? {}
             const measuringUnit = videoPricing.measuringUnit ?? 'seconds'
             const price = dec(videoPricing.price, '0')
-            const priceResale = price.mul(resaleMargin)
 
             const video: VideoUsageReport['video'] = {
                 measuringUnit,
@@ -308,7 +299,7 @@ export class UsageReporter {
                 const pricePer = dec(videoPricing.pricePer, '1000000')
                 const tokens = dec(totalTokens, '0')
                 purchased = price.div(pricePer).mul(tokens)
-                sold = priceResale.div(pricePer).mul(tokens)
+                sold = price.div(pricePer).mul(tokens)
                 video.totalTokens = Number(totalTokens) || 0
                 video.completionTokens = Number(completionTokens) || 0
                 video.price = price.toString()
@@ -317,9 +308,9 @@ export class UsageReporter {
                 // seconds (VEO) — unchanged: price-per-second × duration.
                 const seconds = dec(durationSeconds, '0')
                 purchased = price.mul(seconds)
-                sold = priceResale.mul(seconds)
+                sold = price.mul(seconds)
                 video.pricePerSecond = price.toString()
-                video.pricePerSecondResale = priceResale.toString()
+                video.pricePerSecondResale = price.toString()
             }
 
             video.purchasedFor = purchased.toString()

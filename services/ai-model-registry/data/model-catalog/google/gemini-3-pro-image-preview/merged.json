@@ -1,0 +1,75 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Nano Banana Pro",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 65536,
+    "maxCompletionSize": 32768,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "2.00",
+                    "completion": "12.00"
+                }
+            }
+        },
+        "image": {
+            "measuringUnit": "images",
+            "pricePer": "1",
+            "prompt": "0.00",
+            "completion": "0.13"
+        }
+    },
+    "model": "gemini-3-pro-image-preview",
+    "modelVersion": "gemini-3-pro-image-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini-3-pro-image-preview",
+                "models.dev": "gemini-3-pro-image-preview",
+                "provider-api": "gemini-3-pro-image-preview"
+            },
+            "contextWindow": 65536,
+            "maxCompletionSize": 32768,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "12.00"
+                        }
+                    }
+                },
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.13"
+                }
+            },
+            "title": "Nano Banana Pro",
+            "defaultTemperature": 1
+        }
+    }
+}

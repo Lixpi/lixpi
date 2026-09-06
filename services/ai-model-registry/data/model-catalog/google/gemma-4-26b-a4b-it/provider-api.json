@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemma 4 26B A4B IT",
+            "contextWindow": 262144,
+            "maxCompletionSize": 32768,
+            "defaultTemperature": 1,
+            "model": "gemma-4-26b-a4b-it",
+            "modelVersion": "gemma-4-26b-a4b-it",
+            "modelKeyAtSource": "gemma-4-26b-a4b-it"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.279Z",
+        "publishedVersions": {
+            "currentVersion": "gemma-4-26b-a4b-it",
+            "allPublishedVersions": [
+                "gemma-4-26b-a4b-it"
+            ]
+        }
+    }
+}

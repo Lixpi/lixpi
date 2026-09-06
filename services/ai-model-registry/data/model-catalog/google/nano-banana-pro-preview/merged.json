@@ -1,0 +1,73 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Nano Banana Pro",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 131072,
+    "maxCompletionSize": 32768,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "2.00",
+                    "completion": "12.00"
+                }
+            }
+        },
+        "image": {
+            "measuringUnit": "images",
+            "pricePer": "1",
+            "prompt": "0.00",
+            "completion": "0.13"
+        }
+    },
+    "model": "nano-banana-pro-preview",
+    "modelVersion": "nano-banana-pro-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/nano-banana-pro-preview",
+                "provider-api": "nano-banana-pro-preview"
+            },
+            "contextWindow": 131072,
+            "maxCompletionSize": 32768,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "12.00"
+                        }
+                    }
+                },
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.13"
+                }
+            },
+            "title": "Nano Banana Pro",
+            "defaultTemperature": 1
+        }
+    }
+}

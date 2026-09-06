@@ -1,0 +1,160 @@
+{
+    "providerTitle": "Anthropic",
+    "color": "#D97757",
+    "iconName": "claudeIcon",
+    "colorIconName": "claudeIcon",
+    "title": "Claude Haiku 4.5",
+    "shortTitle": "Haiku 4.5",
+    "isDefaultFor": [
+        "reasoning"
+    ],
+    "sortingPosition": 108,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "anthropic-manual",
+        "requiresAutoToolChoiceWithThinking": true,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": true,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "image",
+            "video-frame",
+            "document-text"
+        ]
+    },
+    "reasoningGenerationControls": [],
+    "contextWindow": 200000,
+    "maxCompletionSize": 64000,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "1.00",
+                    "completion": "5.00"
+                }
+            }
+        }
+    },
+    "model": "claude-haiku-4-5",
+    "modelVersion": "claude-haiku-4-5",
+    "provider": "Anthropic",
+    "inferenceProviderCalledByThePlatform": "aws-bedrock",
+    "inferenceProviders": {
+        "anthropic": {
+            "inferenceProviderTitle": "Anthropic",
+            "isCalledByThePlatform": false,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "claude-haiku-4-5",
+                "models.dev": "claude-haiku-4-5",
+                "provider-api": "claude-haiku-4-5-20251001"
+            },
+            "contextWindow": 200000,
+            "maxCompletionSize": 64000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "1.00",
+                            "completion": "5.00"
+                        }
+                    }
+                }
+            },
+            "title": "Claude Haiku 4.5"
+        },
+        "aws-bedrock": {
+            "inferenceProviderTitle": "AWS Bedrock",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "anthropic.claude-haiku-4-5-20251001-v1:0",
+                "models.dev": "anthropic.claude-haiku-4-5-20251001-v1:0",
+                "bedrock": "claude-haiku-4-5-20251001"
+            },
+            "contextWindow": 200000,
+            "maxCompletionSize": 64000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "1.00",
+                            "completion": "5.00"
+                        }
+                    }
+                }
+            },
+            "title": "Claude Haiku 4.5",
+            "providerReportedFacts": {
+                "bedrockModelIds": [
+                    "anthropic.claude-haiku-4-5-20251001-v1:0"
+                ],
+                "modelIdToInvoke": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "global-profile",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "TEXT"
+                ],
+                "supportsResponseStreaming": true,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "ratesByTier": {
+                    "regional": {
+                        "usageTypes": [
+                            "USE1-anthropic.claude-haiku-4-5-mantle-input-tokens-standard",
+                            "USE1-anthropic.claude-haiku-4-5-mantle-output-tokens-standard",
+                            "USE1-MP:USE1_InputTokenCount-Units",
+                            "USE1-MP:USE1_OutputTokenCount-Units"
+                        ],
+                        "promptPerMillionTokens": "1.10",
+                        "completionPerMillionTokens": "5.50"
+                    },
+                    "global-profile": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_InputTokenCount_Global-Units",
+                            "USE1-MP:USE1_OutputTokenCount_Global-Units"
+                        ],
+                        "promptPerMillionTokens": "1.00",
+                        "completionPerMillionTokens": "5.00"
+                    }
+                }
+            }
+        }
+    }
+}

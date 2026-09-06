@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 2.5 Flash Preview TTS",
+            "contextWindow": 8192,
+            "maxCompletionSize": 16384,
+            "defaultTemperature": 1,
+            "model": "gemini-2.5-flash-preview-tts",
+            "modelVersion": "gemini-2.5-flash-preview-tts",
+            "modelKeyAtSource": "gemini-2.5-flash-preview-tts"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.189Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-2.5-flash-preview-tts",
+            "allPublishedVersions": [
+                "gemini-2.5-flash-preview-tts"
+            ]
+        }
+    }
+}

@@ -1,0 +1,61 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini 3.5 Transcribe Live",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "3.50",
+                    "completion": "21.00"
+                }
+            }
+        }
+    },
+    "contextWindow": 131072,
+    "maxCompletionSize": 65536,
+    "model": "gemini-3.5-transcribe-live",
+    "modelVersion": "gemini-3.5-transcribe-live",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/gemini-3.5-transcribe-live",
+                "provider-api": "gemini-3.5-transcribe-live"
+            },
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "3.50",
+                            "completion": "21.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini 3.5 Transcribe Live",
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1
+        }
+    }
+}

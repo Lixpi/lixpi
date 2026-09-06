@@ -1,0 +1,46 @@
+{
+    "description": "Catalog-wide settings: what is true for the whole tree rather than for one provider directory or one model. base-schema.json beside it says which fields a model carries; this says which inference providers those fields can be carried for.",
+    "whatAnInferenceProviderIs": "An endpoint Lixpi can send a generation request to. A vendor's own API is one, and AWS Bedrock is another, and the same model reached through each of them is the same model at a different price. Every model file records values per inference provider, and the merged record states which one the platform is calling today.",
+    "inferenceProviders": {
+        "anthropic": {
+            "title": "Anthropic",
+            "kind": "vendor-api",
+            "servesCatalogDirectories": ["anthropic"]
+        },
+        "openai": {
+            "title": "OpenAI",
+            "kind": "vendor-api",
+            "servesCatalogDirectories": ["openai"]
+        },
+        "google": {
+            "title": "Google",
+            "kind": "vendor-api",
+            "servesCatalogDirectories": ["google"]
+        },
+        "stability": {
+            "title": "Stability AI",
+            "kind": "vendor-api",
+            "servesCatalogDirectories": ["stability"]
+        },
+        "byteplus": {
+            "title": "BytePlus ModelArk",
+            "kind": "vendor-api",
+            "servesCatalogDirectories": ["byteplus"]
+        },
+        "aws-bedrock": {
+            "title": "AWS Bedrock",
+            "kind": "cloud-platform",
+            "servesCatalogDirectories": ["anthropic", "stability"],
+            "listedUnderProviderName": {
+                "anthropic": "Anthropic",
+                "stability": "Stability AI"
+            },
+            "selectedForDirectoryWhenEnvFlagIsTrue": {
+                "anthropic": "ANTHROPIC_USE_AWS_BEDROCK_INFERENCE",
+                "stability": "STABILITY_USE_AWS_BEDROCK_INFERENCE"
+            }
+        }
+    },
+    "whatServesCatalogDirectoriesControls": "The directories this provider can serve at all. A source that reports a model on a provider not listed for its directory is ignored, and AWS Bedrock fetches only the vendors named here, so adding one is how a new Bedrock-served vendor enters the catalog. Lixpi can only route what services/api/src/llm/providers/bedrock-inference.ts supports, so this list and that adapter change together.",
+    "howTheActiveProviderIsChosen": "A directory's vendor API is the default. A platform provider takes over for that directory when the environment flag it names is true, which is the same flag the API's provider adapters read, so the catalog is priced the way the calls are actually made."
+}

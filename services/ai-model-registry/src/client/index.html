@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
     <head>
         <meta charset="utf-8" />
         <meta
@@ -11,61 +11,26 @@
             rel="icon"
             href="data:,"
         />
-        <!-- Painted before the stylesheet loads, so a reload does not flash white.
-             color-scheme alone fixes the browser's own canvas and form controls;
-             the two colours have to be literals here because custom properties
-             are not defined yet. Keep them in step with --bg and --text in
-             src/client/styles.scss. -->
+        <!-- Painted before the stylesheet loads, so a reload does not flash a
+             light page. Keep the literal in step with --body-bg under
+             [data-theme="dark"] in the theme. -->
         <meta
             name="color-scheme"
             content="dark"
         />
         <style>
-            html { background: #1e242e; color: #c8d0dc; }
+            html { background: #0f1623; }
         </style>
     </head>
     <body>
-        <nav class="toolbar">
-            <input
-                id="search"
-                type="search"
-                autocomplete="off"
-            />
-            <select id="state-filter">
-                <option value="all">All</option>
-                <option value="exposed">Already exposed</option>
-                <option value="hidden">Sent but hidden</option>
-                <option value="absent">Never sent</option>
-                <option value="unreviewed">Unreviewed</option>
-                <option value="approved">Approved</option>
-                <option value="needs-param-clarification">Param clarification</option>
-                <option value="needs-implementation-investigation">Impl. investigation</option>
-            </select>
-            <select id="model-filter">
-                <option value="all">All models</option>
-            </select>
-            <div
-                class="tally"
-                id="tally"
-            ></div>
-            <div
-                id="save-state"
-                class="save-state"
-                data-state="idle"
-            >Loading</div>
-        </nav>
-
-        <main
-            id="providers"
-            class="providers"
-        ></main>
+        <div id="app"></div>
 
         <script>
             if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
         </script>
         <script
             type="module"
-            src="/app.ts"
+            src="/main.ts"
         ></script>
     </body>
 </html>

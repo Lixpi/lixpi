@@ -1,0 +1,35 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Antigravity Agent Preview",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": null,
+    "contextWindow": 131072,
+    "maxCompletionSize": 65536,
+    "model": "antigravity-preview",
+    "modelVersion": "antigravity-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "provider-api": "antigravity-preview-05-2026"
+            },
+            "title": "Antigravity Agent Preview",
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536
+        }
+    },
+    "pricing": {
+        "currency": "USD"
+    }
+}

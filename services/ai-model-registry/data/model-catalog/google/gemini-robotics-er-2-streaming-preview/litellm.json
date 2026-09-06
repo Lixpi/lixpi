@@ -1,0 +1,28 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "10.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gemini/gemini-robotics-er-2-streaming-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.276Z"
+    }
+}

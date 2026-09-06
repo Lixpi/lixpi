@@ -1,7 +1,7 @@
 # Nexfile — system-reporter (native / service): the canonical NEX smoke test.
 #
 # A trivial, dependency-free workload that proves the substrate end to end
-# (deploy -> run -> logs) before trusting the real ai-models-sync workload.
+# (deploy -> run -> logs) before trusting a real workload.
 # It needs no env, so it can be deployed directly with `-f`.
 #
 # Deploy manually against a running node (see services/nex/README.md):

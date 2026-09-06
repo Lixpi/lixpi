@@ -1,0 +1,215 @@
+{
+    "providerTitle": "OpenAI",
+    "color": "#56967c",
+    "iconName": "gptAvatarIcon",
+    "colorIconName": "gptAvatarIcon",
+    "title": "GPT Image 2",
+    "shortTitle": "GPT Image 2",
+    "sortingPosition": 208,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        },
+        {
+            "modality": "image_generation",
+            "title": "Image Generation",
+            "shortTitle": "IMG GEN"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "imagePromptMaxChars": 32000,
+    "inferenceCapabilities": {
+        "thinkingMode": "none",
+        "requiresAutoToolChoiceWithThinking": false,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": false,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "document-text"
+        ]
+    },
+    "imageSizeMode": "resolution",
+    "imageSizes": [
+        {
+            "value": "1024x1024",
+            "label": "1:1"
+        },
+        {
+            "value": "1536x1024",
+            "label": "3:2"
+        },
+        {
+            "value": "1024x1536",
+            "label": "2:3"
+        },
+        {
+            "value": "auto",
+            "label": "Auto"
+        }
+    ],
+    "imageGenerationControls": [
+        {
+            "key": "imageSize",
+            "label": "Resolution",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "1024x1024",
+                    "label": "1:1"
+                },
+                {
+                    "value": "1536x1024",
+                    "label": "3:2"
+                },
+                {
+                    "value": "1024x1536",
+                    "label": "2:3"
+                },
+                {
+                    "value": "auto",
+                    "label": "Auto"
+                }
+            ],
+            "defaultValue": "auto",
+            "description": "Selects the output dimensions. Auto lets GPT Image choose; the presets provide common square, landscape, and portrait sizes."
+        },
+        {
+            "key": "quality",
+            "label": "Quality",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "auto",
+                    "label": "Auto",
+                    "description": "Lets the provider balance quality, latency, and image-token usage."
+                },
+                {
+                    "value": "low",
+                    "label": "Low",
+                    "description": "Fastest and least expensive output."
+                },
+                {
+                    "value": "medium",
+                    "label": "Medium",
+                    "description": "Balanced detail, latency, and cost."
+                },
+                {
+                    "value": "high",
+                    "label": "High",
+                    "description": "Highest detail, with greater latency and image-token cost."
+                }
+            ],
+            "defaultValue": "auto",
+            "description": "Controls output detail and image-token cost. Higher quality generally takes longer and costs more."
+        },
+        {
+            "key": "background",
+            "label": "Background",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "auto",
+                    "label": "Auto",
+                    "description": "Lets the provider choose whether the output is opaque or transparent."
+                },
+                {
+                    "value": "opaque",
+                    "label": "Opaque",
+                    "description": "Always produces a filled background."
+                },
+                {
+                    "value": "transparent",
+                    "label": "Transparent",
+                    "description": "Requests an alpha channel. GPT Image 2 treats transparency as preview functionality and it requires PNG or WebP output."
+                }
+            ],
+            "defaultValue": "auto",
+            "description": "Controls background transparency. Lixpi keeps PNG output internally, so transparent output is compatible with the fixed output format."
+        }
+    ],
+    "imageReferenceCapabilities": {
+        "maxReferenceImages": 16,
+        "maxIdentityReferenceImages": 5,
+        "conditioningModes": [
+            "edit",
+            "identity",
+            "style"
+        ],
+        "inputFidelity": "provider-managed",
+        "supportsIterativeEdit": true,
+        "supportsMask": true,
+        "supportsStructureControl": false,
+        "supportsPoseControl": false,
+        "supportsDeterministicSeed": false,
+        "maxOutputPixels": 8294400,
+        "supportedAspectRatios": [
+            "1:1",
+            "3:2",
+            "2:3",
+            "16:9",
+            "9:16",
+            "4:3",
+            "3:4",
+            "4:5",
+            "5:4",
+            "21:9"
+        ]
+    },
+    "pricing": {
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "5.00",
+                    "completion": "10.00"
+                }
+            }
+        },
+        "currency": "USD",
+        "image": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "prompt": "8.00",
+            "completion": "30.00"
+        }
+    },
+    "model": "gpt-image-2",
+    "modelVersion": "gpt-image-2",
+    "provider": "OpenAI",
+    "inferenceProviderCalledByThePlatform": "openai",
+    "inferenceProviders": {
+        "openai": {
+            "inferenceProviderTitle": "OpenAI",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gpt-image-2",
+                "models.dev": "gpt-image-2",
+                "provider-api": "gpt-image-2"
+            },
+            "pricing": {
+                "currency": "USD",
+                "image": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "prompt": "8.00",
+                    "completion": "30.00"
+                }
+            }
+        }
+    },
+    "contextWindow": 0,
+    "maxCompletionSize": 0
+}
