@@ -18,7 +18,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [Product Overview](PRODUCT-OVERVIEW.md) | The product thesis: canvas primitives, artifact piping, character consistency, the image/video pipelines, multi-model support |
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, Capability ownership boundaries, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
-| [AI Model Registry](development-workflow/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
+| [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
 | [Implementation Plans](development-workflow/research-and-development/WRITING-IMPLEMENTATION-PLANS.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
 | [Spike Reports](development-workflow/research-and-development/SPIKE-REPORT-GUIDELINES.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
 | [TypeScript Linting and Formatting](../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
@@ -108,7 +108,7 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
-| [AI Model Registry](development-workflow/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
+| [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
 | [TypeScript Linting and Formatting](../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
 | [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
 | [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |

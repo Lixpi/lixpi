@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 3.6 Flash",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "gemini-3.6-flash",
+            "modelVersion": "gemini-3.6-flash",
+            "modelKeyAtSource": "gemini-3.6-flash"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.243Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-3.6-flash",
+            "allPublishedVersions": [
+                "gemini-3.6-flash"
+            ]
+        }
+    }
+}

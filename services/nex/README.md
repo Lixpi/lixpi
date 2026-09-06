@@ -9,12 +9,11 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 
 | Workload | Type / lifecycle | What it does |
 |---|---|---|
-| `ai-models-sync` | `native` / `service` | Runs `AiModelsSync.synchronizeModels()` at boot and **every hour**, writing the `AI_MODELS_LIST` DynamoDB table. ([`workloads/ai-models-synchronization`](./workloads/ai-models-synchronization)) |
 | `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as the AUTH-account `regular_user` to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
 | `character-fidelity` | `native` / `service` | Active responder for photographic Character Creator panel checks. It runs pinned OpenCV Zoo YuNet and SFace ONNX artifacts through single-threaded WASM, reads only validated organization-scoped transient objects, and returns detections plus scalar cosine similarity without embeddings. ([`workloads/character-fidelity`](./workloads/character-fidelity)) |
 | `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
 
-`ai-models-sync` defines model-specific inference and media behavior. Every model record carries `inferenceCapabilities`, including temperature support, provider-native thinking mode, system-prompt support, structured-schema requirements, and accepted input kinds. Image-generation records also declare `imageReferenceCapabilities`: total and identity-reference limits, conditioning modes, fidelity behavior, iterative-edit and control support, maximum output pixels, and aspect ratios. OpenAI image options use `imageSizeMode: 'aspectRatio'` and store reduced ratios in `imageSizes[].label`, while `imageSizes[].value` keeps the provider resolution sent to the Image API. Video resolution controls keep their provider-authored values and labels. Google video constraints are descriptions on the affected resolution and duration options, so the UI can surface them inside the dropdown. The Google sync admits active Veo 3.1 models and filters every shut-down Veo id before database reconciliation. The BytePlus static list contains the four active Seedance 2.x model IDs: Standard, Fast, Mini, and 2.5. Seedance toggle controls include synchronized descriptions for generated audio, watermark output, and last-frame return; Seedance 2.5 also publishes MP4/MOV output format for the shared sliding dropdown. Negative prompting, moderation policy, and provider output count remain pipeline-owned. Synchronization rejects missing or inconsistent profiles. API routing and provider adapters consume these fields without matching model names. Anthropic models sourced from Bedrock retain dated vendor snapshot IDs and accept pinned, dateless catalog IDs such as `claude-sonnet-5`, so synchronized selections use the exact model identifiers Bedrock exposes.
+The model catalog is not here. [`services/ai-model-registry`](../ai-model-registry) owns it, including the per-model rule files, the provider fetch, the merge, and the DynamoDB write.
 
 ## How it works
 
@@ -22,10 +21,10 @@ The image (`Dockerfile`) is a `node:24-alpine` base + the pinned static `nex` bi
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from the pnpm workspace (mirrors `services/api`).
 2. `nex node up` — connects with the NEX nkey; the API auth callout verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.
-3. Deploys service workloads via `nex workload start`, **injecting** the runtime env into each start-request — the native nexlet does **not** inherit the container env. `ai-models-sync` receives `ORG_NAME`, `STAGE`, `AWS_*`, `DYNAMODB_ENDPOINT`, and provider keys. `file-conversion` and `character-fidelity` receive `NATS_SERVERS`, `NATS_REGULAR_USER_PASSWORD`, `HOME`, and `PATH`.
+3. Deploys service workloads via `nex workload start`, **injecting** the runtime env into each start-request — the native nexlet does **not** inherit the container env. `file-conversion` and `character-fidelity` receive `NATS_SERVERS`, `NATS_REGULAR_USER_PASSWORD`, `HOME`, and `PATH`.
 4. Supervises the node in the foreground.
 
-State is intentionally **not** persisted (`--state kv` omitted): the entrypoint re-deploys the workload on every boot (idempotent), so there is exactly one workload instance per node and no orphaned KV buckets. See the proposal's "Re-evaluation notes" for the full rationale.
+State is intentionally **not** persisted (`--state kv` omitted): the entrypoint re-deploys the workloads on every boot (idempotent), so there is exactly one instance of each per node and no orphaned KV buckets. See the proposal's "Re-evaluation notes" for the full rationale.
 
 ## Run it locally
 
@@ -68,7 +67,7 @@ For Character fidelity, the API writes source crops and panel candidates to the 
 
 ## Adding a workload
 
-Add `workloads/<name>/` with a thin entrypoint wrapper + a `Nexfile`, declare any new deps in `package.json`, and point the entrypoint deploy at it (or deploy it manually). Heavy Node workloads run `native` (as `ai-models-sync` does); see the proposal for the `job`/`function` tradeoffs.
+Add `workloads/<name>/` with a thin entrypoint wrapper + a `Nexfile`, declare any new deps in `package.json`, and point the entrypoint deploy at it (or deploy it manually). Heavy Node workloads run `native` (as `file-conversion` does); see the proposal for the `job`/`function` tradeoffs.
 
 Private repos should not bake private binaries into this public image. For local Docker, put native executable artifacts in the shared Docker volume `lixpi-nex-workloads`, which this node mounts read-only at `/opt/nex/private-workloads`, then deploy a Nexfile with a `file://` URI pointing at that path. This avoids the NEX 0.4.1 `nats://` Object Store artifact fetch credential mismatch in the current `--issuer-nkey` + centralized auth-callout setup.
 

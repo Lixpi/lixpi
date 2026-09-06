@@ -1,0 +1,316 @@
+{
+    "modelFamily": "gemini-3.1-flash-lite-image",
+    "mergedAt": "2026-09-06T22:40:47.433Z",
+    "baseSchemaVersion": 1,
+    "syncStatus": "written-to-database",
+    "sources": {
+        "sourcesQueried": [
+            "litellm",
+            "models.dev",
+            "provider-api",
+            "bedrock"
+        ],
+        "sourcesWithDataForThisModel": [
+            "litellm",
+            "models.dev",
+            "provider-api"
+        ],
+        "inferenceProviderCalledByThePlatform": "google",
+        "sourcesWithoutRatesForThatProvider": [],
+        "confirmedByMoreThanOneSource": true,
+        "fieldsWhereSourcesDisagree": [
+            "maxCompletionSize"
+        ]
+    },
+    "lixpi": {
+        "fieldsOnlyLixpiSupplies": [
+            "imageGenerationControls",
+            "imageReferenceCapabilities.conditioningModes",
+            "imageReferenceCapabilities.inputFidelity",
+            "imageReferenceCapabilities.maxIdentityReferenceImages",
+            "imageReferenceCapabilities.maxOutputPixels",
+            "imageReferenceCapabilities.maxReferenceImages",
+            "imageReferenceCapabilities.supportedAspectRatios",
+            "imageReferenceCapabilities.supportsDeterministicSeed",
+            "imageReferenceCapabilities.supportsIterativeEdit",
+            "imageReferenceCapabilities.supportsMask",
+            "imageReferenceCapabilities.supportsPoseControl",
+            "imageReferenceCapabilities.supportsStructureControl",
+            "imageSizeMode",
+            "imageSizes",
+            "inferenceCapabilities.requiresAutoToolChoiceWithThinking",
+            "inferenceCapabilities.requiresClosedJsonSchema",
+            "inferenceCapabilities.supportedInputKinds",
+            "inferenceCapabilities.supportsSystemPrompt",
+            "inferenceCapabilities.supportsTemperature",
+            "inferenceCapabilities.thinkingMode",
+            "modalities",
+            "shortTitle",
+            "sortingPosition"
+        ],
+        "fieldsWhereLixpiOverridesSources": [
+            "title"
+        ],
+        "fieldsInheritedFromProviderBaseFile": [
+            "color",
+            "colorIconName",
+            "iconName",
+            "providerTitle"
+        ]
+    },
+    "requiredFieldsStillMissing": [],
+    "fieldsFilledFromSchemaDefault": [],
+    "ratesRefusedBecauseUnitsDiffer": [],
+    "fieldOrigins": {
+        "providerTitle": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "color": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "iconName": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "colorIconName": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "title": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ],
+            "lixpiOverridesSource": true
+        },
+        "shortTitle": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "sortingPosition": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "modalities": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "defaultTemperature": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "inferenceCapabilities.thinkingMode": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.requiresAutoToolChoiceWithThinking": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.supportsTemperature": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.supportsSystemPrompt": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.requiresClosedJsonSchema": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.supportedInputKinds": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageSizeMode": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageSizes": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageGenerationControls": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.maxReferenceImages": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.maxIdentityReferenceImages": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.conditioningModes": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.inputFidelity": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.supportsIterativeEdit": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.supportsMask": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.supportsStructureControl": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.supportsPoseControl": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.supportsDeterministicSeed": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.maxOutputPixels": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "imageReferenceCapabilities.supportedAspectRatios": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "contextWindow": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ]
+        },
+        "maxCompletionSize": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "sources-disagree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ]
+        },
+        "pricing.currency": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.measuringUnit": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.pricePer": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.tiers.default.prompt": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.tiers.default.completion": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.image.measuringUnit": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.image.pricePer": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.image.prompt": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.image.completion": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "model": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "modelVersion": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "provider": {
+            "valueCameFrom": "derived-from-file-name",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        }
+    }
+}

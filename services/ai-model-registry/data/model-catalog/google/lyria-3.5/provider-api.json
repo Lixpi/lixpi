@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Lyria 3.5",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "lyria-3.5",
+            "modelVersion": "lyria-3.5",
+            "modelKeyAtSource": "lyria-3.5"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.290Z",
+        "publishedVersions": {
+            "currentVersion": "lyria-3.5",
+            "allPublishedVersions": [
+                "lyria-3.5"
+            ]
+        }
+    }
+}

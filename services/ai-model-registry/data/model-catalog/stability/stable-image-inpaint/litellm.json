@@ -1,0 +1,25 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "contextWindow": 77,
+            "pricing": {
+                "currency": "USD",
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.07"
+                }
+            },
+            "modelKeyAtSource": "stability.stable-image-inpaint-v1:0"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.329Z"
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 131072,
+            "maxCompletionSize": 32768,
+            "modelKeyAtSource": "gemini-3-pro-image"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.199Z"
+    }
+}

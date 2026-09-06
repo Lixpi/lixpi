@@ -1,0 +1,30 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65535,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "1.00",
+                            "completion": "20.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gemini-2.5-pro-preview-tts"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.193Z"
+    }
+}

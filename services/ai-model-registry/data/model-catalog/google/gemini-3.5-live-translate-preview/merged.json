@@ -1,0 +1,63 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini 3.5 Live Translate Preview",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 131072,
+    "maxCompletionSize": 65536,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "3.50",
+                    "completion": "21.00"
+                }
+            }
+        }
+    },
+    "model": "gemini-3.5-live-translate-preview",
+    "modelVersion": "gemini-3.5-live-translate-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/gemini-3.5-live-translate-preview",
+                "models.dev": "gemini-3.5-live-translate-preview",
+                "provider-api": "gemini-3.5-live-translate-preview"
+            },
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "3.50",
+                            "completion": "21.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini 3.5 Live Translate Preview",
+            "defaultTemperature": 1
+        }
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "providerKey": "BytePlus",
+    "description": "Fields every ByteDance model in this directory inherits. A model's own -lixpi.json overrides anything stated here.",
+    "fieldsInheritedByEveryModel": {
+        "providerTitle": "ByteDance",
+        "color": "#1664FF",
+        "iconName": "bytedanceIcon",
+        "colorIconName": "bytedanceIcon"
+    }
+}

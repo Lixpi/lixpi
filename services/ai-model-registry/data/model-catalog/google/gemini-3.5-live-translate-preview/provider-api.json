@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 3.5 Live Translate Preview",
+            "contextWindow": 16384,
+            "maxCompletionSize": 32768,
+            "defaultTemperature": 1,
+            "model": "gemini-3.5-live-translate-preview",
+            "modelVersion": "gemini-3.5-live-translate-preview",
+            "modelKeyAtSource": "gemini-3.5-live-translate-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.235Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-3.5-live-translate-preview",
+            "allPublishedVersions": [
+                "gemini-3.5-live-translate-preview"
+            ]
+        }
+    }
+}

@@ -1,0 +1,24 @@
+// Shell chrome. The theme owns .sidebar and .main; these rules are only what
+// this application adds on top of them.
+
+.registry-shell {
+    // What a page's sticky headers sit under. There is no chrome above the
+    // content, so the pages start at the top of the viewport.
+    --page-top: 0px;
+}
+
+// The theme reserves room for its own fixed topbar, which this shell does not use.
+.registry-shell .main {
+    padding-top: 0;
+}
+
+.registry-content {
+    min-height: 100vh;
+}
+
+.registry-sidebar-note {
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--sidebar-text);
+}

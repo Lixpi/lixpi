@@ -1,0 +1,17 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 262144,
+            "maxCompletionSize": 32768,
+            "modelKeyAtSource": "gemma-4-31b-it"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.281Z"
+    }
+}

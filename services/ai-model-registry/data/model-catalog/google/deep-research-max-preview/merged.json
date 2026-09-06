@@ -1,0 +1,38 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Deep Research Max Preview (Apr-21-2026)",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 131072,
+    "maxCompletionSize": 65536,
+    "model": "deep-research-max-preview",
+    "modelVersion": "deep-research-max-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "models.dev": "deep-research-max-preview-04-2026",
+                "provider-api": "deep-research-max-preview-04-2026"
+            },
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "title": "Deep Research Max Preview (Apr-21-2026)",
+            "defaultTemperature": 1
+        }
+    },
+    "pricing": {
+        "currency": "USD"
+    }
+}

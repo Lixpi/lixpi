@@ -3,10 +3,10 @@
 // Mirrors NATS-cluster.ts (ECR build, exec/task roles, log group, task def, ECS
 // service) but much simpler: the node is a NATS *client*, not a server, so it
 // needs no public IP, no Route53, no CloudMap registration, and no cert sidecar.
-// It runs a single instance (desiredCount: 1 — the hourly workload must be a
-// singleton; see the proposal's Risk "duplicate hourly runs") on the private
-// subnets, with a task role granting DynamoDB access to AI_MODELS_LIST so the
-// relocated ai-models-sync workload can write the catalog.
+// It runs a single instance (desiredCount: 1) on the private subnets. The model
+// catalog moved to services/ai-model-registry, so this node no longer needs
+// DynamoDB or Bedrock access; `tables` stays as the binding point for a workload
+// that does.
 
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
@@ -187,35 +187,6 @@ export const createNexNodeService = async (args: NexNodeServiceArgs) => {
             },
         )
     })
-
-    // Read-only Bedrock catalog access. With ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true the
-    // models-sync workload lists Anthropic models from Bedrock instead of the Anthropic API,
-    // because that setup may carry no Anthropic api key at all. No invoke permissions here —
-    // the workload never runs inference.
-    const bedrockCatalogPolicy = new aws.iam.Policy(
-        `${serviceName}-bedrock-catalog-policy`,
-        {
-            policy: JSON.stringify({
-                Version: '2012-10-17',
-                Statement: [{
-                    Effect: 'Allow',
-                    Action: [
-                        'bedrock:ListFoundationModels',
-                        'bedrock:GetFoundationModel',
-                    ],
-                    Resource: '*',
-                }],
-            }),
-        },
-    )
-
-    new aws.iam.RolePolicyAttachment(
-        `${serviceName}-bedrock-catalog-attachment`,
-        {
-            role: taskRole.name,
-            policyArn: bedrockCatalogPolicy.arn,
-        },
-    )
 
     // Egress-only security group: the node is a client (connects out to NATS,
     // DynamoDB, and provider APIs). Nothing connects to it, so no ingress.

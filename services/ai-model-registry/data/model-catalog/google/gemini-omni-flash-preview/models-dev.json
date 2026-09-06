@@ -1,0 +1,17 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "modelKeyAtSource": "gemini-omni-flash-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.268Z"
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Model that performs Attributed Question Answering.",
+            "contextWindow": 7168,
+            "maxCompletionSize": 1024,
+            "defaultTemperature": 0.2,
+            "model": "aqa",
+            "modelVersion": "aqa",
+            "modelKeyAtSource": "aqa"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.161Z",
+        "publishedVersions": {
+            "currentVersion": "aqa",
+            "allPublishedVersions": [
+                "aqa"
+            ]
+        }
+    }
+}

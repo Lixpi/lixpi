@@ -7,4 +7,4 @@ description: 'Use whenever changing or reviewing AI provider models, model IDs, 
 
 Before running any command, follow the Docker-only command rule in `AGENTS.md` and `documentation/development-workflow/AGENT-SKILLS.md`.
 
-Read and follow `documentation/development-workflow/AI-MODEL-REGISTRY.md`. It defines the required synchronization contract and container-only registry workflow.
+Read and follow `services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md`. It defines the required synchronization contract and container-only registry workflow.

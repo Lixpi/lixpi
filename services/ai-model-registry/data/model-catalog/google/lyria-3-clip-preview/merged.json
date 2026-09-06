@@ -1,0 +1,75 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Lyria 3 Clip Preview",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 131072,
+    "maxCompletionSize": 8192,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.00",
+                    "completion": "0.00"
+                }
+            }
+        },
+        "image": {
+            "measuringUnit": "images",
+            "pricePer": "1",
+            "prompt": "0.00",
+            "completion": "0.04"
+        }
+    },
+    "model": "lyria-3-clip-preview",
+    "modelVersion": "lyria-3-clip-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/lyria-3-clip-preview",
+                "models.dev": "lyria-3-clip-preview",
+                "provider-api": "lyria-3-clip-preview"
+            },
+            "contextWindow": 131072,
+            "maxCompletionSize": 8192,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.00",
+                            "completion": "0.00"
+                        }
+                    }
+                },
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.04"
+                }
+            },
+            "title": "Lyria 3 Clip Preview",
+            "defaultTemperature": 1
+        }
+    }
+}

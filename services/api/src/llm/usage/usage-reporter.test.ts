@@ -22,14 +22,14 @@ const veoMeta = {
     provider: 'Google',
     model: 'veo-3.1',
     modelVersion: 'veo-3.1-generate-preview',
-    pricing: { currency: 'USD', resaleMargin: '1', video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } },
+    pricing: { currency: 'USD', video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } },
 } as unknown as AiModelMetaInfo
 
 const seedanceMeta = {
     provider: 'BytePlus',
     model: 'dreamina-seedance-2-0-260128',
     modelVersion: 'dreamina-seedance-2-0-260128',
-    pricing: { currency: 'USD', resaleMargin: '1', video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' } },
+    pricing: { currency: 'USD', video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' } },
 } as unknown as AiModelMetaInfo
 
 describe('UsageReporter.reportVideoUsage', () => {
@@ -47,22 +47,6 @@ describe('UsageReporter.reportVideoUsage', () => {
         expect(report?.video.purchasedFor).toBe('3.2')
         expect(report?.video.soldToClientFor).toBe('3.2')
         expect(report?.video.totalTokens).toBeUndefined()
-    })
-
-    it('applies the resale margin to the per-second sold price', () => {
-        const report = reporter.reportVideoUsage({
-            ...baseArgs,
-            aiModelMetaInfo: {
-                ...veoMeta,
-                pricing: { currency: 'USD', resaleMargin: '1.5', video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } },
-            } as unknown as AiModelMetaInfo,
-            durationSeconds: 8,
-            resolution: '1080p',
-            aspectRatio: '16:9',
-        })
-
-        expect(report?.video.purchasedFor).toBe('3.2')
-        expect(report?.video.soldToClientFor).toBe('4.8') // 0.40 × 1.5 × 8
     })
 
     it('bills Seedance per token: total_tokens × price / pricePer', () => {

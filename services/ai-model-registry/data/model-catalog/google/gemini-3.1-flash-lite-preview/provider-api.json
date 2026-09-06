@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Gemini 3.1 Flash Lite Preview",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "gemini-3.1-flash-lite-preview",
+            "modelVersion": "gemini-3.1-flash-lite-preview",
+            "modelKeyAtSource": "gemini-3.1-flash-lite-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.216Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-3.1-flash-lite-preview",
+            "allPublishedVersions": [
+                "gemini-3.1-flash-lite-preview"
+            ]
+        }
+    }
+}

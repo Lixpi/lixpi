@@ -9,8 +9,8 @@
 # regular-user password) therefore cannot live in this committed file; the
 # entrypoint supplies them at deploy time.
 #
-# Unlike ai-models-sync (which connects with the NEX-account creds the native
-# nexlet mints), this workload connects to NATS as the AUTH-account `regular_user`
+# Rather than using the NEX-account credentials the native nexlet mints, this
+# workload connects to NATS as the AUTH-account `regular_user`
 # so it can read/write organization Blob Object Store buckets that live in AUTH. The
 # NEX node only supervises this process.
 #

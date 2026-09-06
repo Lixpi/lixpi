@@ -20,7 +20,7 @@ type AiModelsStore = {
     data: AiModel[]
     mediaGenerationConfigMatrix: MediaGenerationConfigMatrix
     // API-projected default model selection per capability (configured in
-    // ai-models-synchronization). Empty ids mean "no configured default".
+    // the AI Model Registry). Empty ids mean "no configured default".
     defaultModels: DefaultAiModelSelection
 }
 

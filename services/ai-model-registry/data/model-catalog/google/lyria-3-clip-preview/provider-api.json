@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Lyria 3 Clip Preview",
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "lyria-3-clip-preview",
+            "modelVersion": "lyria-3-clip-preview",
+            "modelKeyAtSource": "lyria-3-clip-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.285Z",
+        "publishedVersions": {
+            "currentVersion": "lyria-3-clip-preview",
+            "allPublishedVersions": [
+                "lyria-3-clip-preview"
+            ]
+        }
+    }
+}

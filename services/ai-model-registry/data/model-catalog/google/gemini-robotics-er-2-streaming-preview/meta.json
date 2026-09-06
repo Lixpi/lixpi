@@ -1,0 +1,162 @@
+{
+    "modelFamily": "gemini-robotics-er-2-streaming-preview",
+    "mergedAt": "2026-09-06T22:40:47.482Z",
+    "baseSchemaVersion": 1,
+    "syncStatus": "missing-required-fields",
+    "sources": {
+        "sourcesQueried": [
+            "litellm",
+            "models.dev",
+            "provider-api",
+            "bedrock"
+        ],
+        "sourcesWithDataForThisModel": [
+            "litellm",
+            "provider-api"
+        ],
+        "inferenceProviderCalledByThePlatform": "google",
+        "sourcesWithoutRatesForThatProvider": [],
+        "confirmedByMoreThanOneSource": true,
+        "fieldsWhereSourcesDisagree": []
+    },
+    "lixpi": {
+        "fieldsOnlyLixpiSupplies": [
+            "modalities"
+        ],
+        "fieldsWhereLixpiOverridesSources": [],
+        "fieldsInheritedFromProviderBaseFile": [
+            "color",
+            "colorIconName",
+            "iconName",
+            "providerTitle"
+        ]
+    },
+    "requiredFieldsStillMissing": [
+        "shortTitle",
+        "sortingPosition",
+        "modalities",
+        "inferenceCapabilities"
+    ],
+    "fieldsFilledFromSchemaDefault": [],
+    "ratesRefusedBecauseUnitsDiffer": [],
+    "fieldOrigins": {
+        "providerTitle": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "color": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "iconName": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "colorIconName": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "title": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "shortTitle": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "sortingPosition": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "modalities": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "defaultTemperature": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "pricing.currency": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.measuringUnit": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.pricePer": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.tiers.default.prompt": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "pricing.text.tiers.default.completion": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "litellm"
+            ]
+        },
+        "contextWindow": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "maxCompletionSize": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "model": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "modelVersion": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "provider": {
+            "valueCameFrom": "derived-from-file-name",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        }
+    },
+    "note": "Not written to the database: its authored fields are not filled in yet."
+}

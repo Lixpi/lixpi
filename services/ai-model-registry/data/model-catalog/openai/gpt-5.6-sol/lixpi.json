@@ -1,0 +1,133 @@
+{
+    "title": "GPT 5.6 Sol",
+    "shortTitle": "GPT 5.6 Sol",
+    "sortingPosition": 201,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "none",
+        "requiresAutoToolChoiceWithThinking": false,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": true,
+        "requiresClosedJsonSchema": true,
+        "supportedInputKinds": [
+            "image",
+            "video-frame",
+            "document-text"
+        ]
+    },
+    "reasoningGenerationControls": [
+        {
+            "key": "reasoningEffort",
+            "label": "Reasoning effort",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "none",
+                    "label": "None",
+                    "description": "Lowest latency. The model answers without allocating reasoning tokens."
+                },
+                {
+                    "value": "low",
+                    "label": "Low",
+                    "description": "Uses a small reasoning budget for latency-sensitive work."
+                },
+                {
+                    "value": "medium",
+                    "label": "Medium",
+                    "description": "Balanced quality, latency, and token usage. This is the provider default."
+                },
+                {
+                    "value": "high",
+                    "label": "High",
+                    "description": "Spends more reasoning tokens on difficult or multi-step work."
+                },
+                {
+                    "value": "xhigh",
+                    "label": "X-high",
+                    "description": "Uses extended reasoning for the hardest asynchronous work."
+                },
+                {
+                    "value": "max",
+                    "label": "Max",
+                    "description": "Maximum exploration and verification, with the highest latency and token usage."
+                }
+            ],
+            "defaultValue": "medium",
+            "description": "Controls how many reasoning tokens the model may spend. Higher levels can improve complex work but increase latency and output-token cost."
+        },
+        {
+            "key": "reasoningMode",
+            "label": "Reasoning mode",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "standard",
+                    "label": "Standard",
+                    "description": "Normal execution for routine, latency-sensitive, or high-volume work."
+                },
+                {
+                    "value": "pro",
+                    "label": "Pro",
+                    "description": "Applies more model work before returning one final answer. It can improve difficult tasks but increases latency and billed token usage."
+                }
+            ],
+            "defaultValue": "standard",
+            "description": "Pro mode performs additional internal model work before returning a single answer. It is independent of reasoning effort and is available only on GPT-5.6."
+        },
+        {
+            "key": "reasoningVerbosity",
+            "label": "Response detail",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "low",
+                    "label": "Low",
+                    "description": "More concise answers while preserving the requested result."
+                },
+                {
+                    "value": "medium",
+                    "label": "Medium",
+                    "description": "Balanced response detail. This is the provider default."
+                },
+                {
+                    "value": "high",
+                    "label": "High",
+                    "description": "More detailed explanations and supporting context."
+                }
+            ],
+            "defaultValue": "medium",
+            "description": "Controls the default amount of detail in the final answer. It does not change the reasoning budget."
+        }
+    ],
+    "imageSizeMode": "aspectRatio",
+    "imageSizes": [
+        {
+            "value": "1024x1024",
+            "label": "1:1"
+        },
+        {
+            "value": "1536x1024",
+            "label": "3:2"
+        },
+        {
+            "value": "1024x1536",
+            "label": "2:3"
+        },
+        {
+            "value": "auto",
+            "label": "Auto"
+        }
+    ]
+}

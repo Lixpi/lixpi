@@ -30,8 +30,6 @@ LIXPI_WORKLOAD_NAMESPACE="${LIXPI_WORKLOAD_NAMESPACE:-lixpi}"    # workload name
 NEX_NODE_NAME="${NEX_NODE_NAME:-lixpi-nex-$(hostname)}"
 NATS_JS_DOMAIN="${NATS_JS_DOMAIN:-lixpi}"                        # nats-server.conf -> jetstream.domain
 SERVICE_DIR="${SERVICE_DIR:-/usr/src/service}"
-WORKLOAD_NAME="${LIXPI_WORKLOAD_NAME:-ai-models-sync}"
-WORKLOAD_ENTRY="${LIXPI_WORKLOAD_ENTRY:-${SERVICE_DIR}/workloads/ai-models-synchronization/index.ts}"
 
 # --- NEX command wrapper -------------------------------------------------------
 # Locally the client port (4222) is PLAIN nats:// (no top-level tls block in
@@ -130,8 +128,8 @@ trap 'echo "Stopping NEX node..."; kill -TERM "$NODE_PID" 2>/dev/null' TERM INT
 # nexlet does NOT inherit the container env (agents/native/state.go sets cmd.Env
 # to ONLY start_request.environment + NEX_WORKLOAD_* creds), so each workload's
 # config MUST be passed in here. Args: <entry> [env-key ...]. Node builds the JSON
-# so values are escaped safely. Default interval handling for ai-models lives in
-# its index.ts, so no key needs a shell-side default.
+# so values are escaped safely. A workload that wants a default supplies it in its
+# own index.ts, so no key needs a shell-side default.
 build_start_request() {
     entry="$1"
     shift
@@ -193,15 +191,6 @@ deploy_workload() {
     echo "WARN: workload ${wl_name} deploy did not succeed after retries; node stays up"
 }
 
-# ai-models-sync: AWS/DynamoDB/provider config (NEX-account creds minted by the
-# native nexlet for its own NATS publish).
-AI_MODELS_KEYS="ORG_NAME STAGE ENVIRONMENT AWS_REGION AWS_PROFILE \
-AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_CREDENTIALS_FULL_URI \
-DYNAMODB_ENDPOINT OPENAI_API_KEY ANTHROPIC_API_KEY \
-ANTHROPIC_USE_AWS_BEDROCK_INFERENCE GOOGLE_API_KEY \
-STABLE_DIFFUSION_API_KEY ARK_API_KEY LIXPI_SYNC_INTERVAL_MS"
-
 # file-conversion: connects to NATS as the AUTH-account regular_user (not the
 # NEX-account creds) so it can read/write organization Blob Object Store buckets.
 FILE_CONVERSION_ENTRY="${SERVICE_DIR}/workloads/file-conversion/index.ts"
@@ -210,8 +199,6 @@ CHARACTER_FIDELITY_ENTRY="${SERVICE_DIR}/workloads/character-fidelity/index.ts"
 CHARACTER_FIDELITY_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
 
 # shellcheck disable=SC2086  # intentional word-splitting of the key lists
-deploy_workload "${WORKLOAD_NAME}" "${WORKLOAD_ENTRY}" \
-    "$(build_start_request "${WORKLOAD_ENTRY}" ${AI_MODELS_KEYS})"
 deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" \
     "$(build_start_request "${FILE_CONVERSION_ENTRY}" ${FILE_CONVERSION_KEYS})"
 deploy_workload "character-fidelity" "${CHARACTER_FIDELITY_ENTRY}" \

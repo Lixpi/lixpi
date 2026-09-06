@@ -1,0 +1,148 @@
+{
+    "schemaVersion": 1,
+    "description": "Fields every catalogued model carries, whatever its provider or modality, and who owns each one. The merge reads this to know which fields to demand, which to leave to a source, and what an empty -lixpi.json should look like when a new model is discovered.",
+    "whatOwnedByMeans": {
+        "lixpi": "Authored by hand in <model>-lixpi.json. No source can supply it.",
+        "source": "Supplied by an aggregator or a provider API. Present in the authored file only as a deliberate override, and then it wins.",
+        "derived": "Worked out by the sync from the directory and file name. Never authored, never fetched."
+    },
+    "requiredForEveryModel": {
+        "provider": {
+            "valueType": "string",
+            "ownedBy": "derived",
+            "note": "Internal provider key, from the directory name."
+        },
+        "providerTitle": {
+            "valueType": "string",
+            "ownedBy": "lixpi",
+            "note": "Human-facing brand name, e.g. ByteDance for the byteplus directory."
+        },
+        "model": {
+            "valueType": "string",
+            "ownedBy": "derived",
+            "note": "Exact provider model id, from the file name."
+        },
+        "modelVersion": {
+            "valueType": "string",
+            "ownedBy": "derived"
+        },
+        "title": {
+            "valueType": "string",
+            "ownedBy": "lixpi"
+        },
+        "shortTitle": {
+            "valueType": "string",
+            "ownedBy": "lixpi"
+        },
+        "sortingPosition": {
+            "valueType": "number",
+            "ownedBy": "lixpi"
+        },
+        "color": {
+            "valueType": "string",
+            "ownedBy": "lixpi"
+        },
+        "iconName": {
+            "valueType": "string",
+            "ownedBy": "lixpi"
+        },
+        "colorIconName": {
+            "valueType": "string",
+            "ownedBy": "lixpi"
+        },
+        "modalities": {
+            "valueType": "array",
+            "ownedBy": "lixpi",
+            "note": "Each entry is { modality, title, shortTitle }. Drives which conditional fields apply."
+        },
+        "contextWindow": {
+            "valueType": "number",
+            "ownedBy": "source",
+            "defaultWhenNoSourceHasIt": 0
+        },
+        "maxCompletionSize": {
+            "valueType": "number",
+            "ownedBy": "source",
+            "defaultWhenNoSourceHasIt": 0
+        },
+        "defaultTemperature": {
+            "valueType": "number",
+            "ownedBy": "lixpi"
+        },
+        "inferenceCapabilities": {
+            "valueType": "object",
+            "ownedBy": "lixpi"
+        },
+        "pricing": {
+            "valueType": "object",
+            "ownedBy": "source",
+            "note": "Rates come from a source. A bucket appears in the Lixpi file only when no source covers it or a source measures it differently."
+        },
+        "pricing.currency": {
+            "valueType": "string",
+            "ownedBy": "source",
+            "defaultWhenNoSourceHasIt": "USD",
+            "note": "Sources publish this. Defaults for a model no source covers."
+        }
+    },
+    "requiredForModelsWithModality": {
+        "image_generation": {
+            "imageReferenceCapabilities": {
+                "valueType": "object",
+                "ownedBy": "lixpi"
+            },
+            "imageGenerationControls": {
+                "valueType": "array",
+                "ownedBy": "lixpi"
+            },
+            "imageSizeMode": {
+                "valueType": "string",
+                "ownedBy": "lixpi"
+            },
+            "imageSizes": {
+                "valueType": "array",
+                "ownedBy": "lixpi"
+            }
+        },
+        "video_generation": {
+            "videoGenerationControls": {
+                "valueType": "array",
+                "ownedBy": "lixpi"
+            },
+            "videoAspectRatios": {
+                "valueType": "array",
+                "ownedBy": "lixpi"
+            },
+            "videoResolutions": {
+                "valueType": "array",
+                "ownedBy": "lixpi"
+            },
+            "videoDurations": {
+                "valueType": "array",
+                "ownedBy": "lixpi"
+            }
+        }
+    },
+    "optionalFields": {
+        "isDefaultFor": {
+            "valueType": "array",
+            "ownedBy": "lixpi",
+            "note": "Capabilities this model is the catalog default for."
+        },
+        "imagePromptMaxChars": {
+            "valueType": "number",
+            "ownedBy": "lixpi",
+            "note": "Only providers that cap prompt length publish one."
+        },
+        "videoMaxReferenceImages": {
+            "valueType": "number",
+            "ownedBy": "lixpi",
+            "note": "Absent means the platform default of 3."
+        },
+        "reasoningGenerationControls": {
+            "valueType": "array",
+            "ownedBy": "lixpi",
+            "note": "Only reasoning models publish these. A model without them exposes no reasoning control."
+        }
+    }
+}

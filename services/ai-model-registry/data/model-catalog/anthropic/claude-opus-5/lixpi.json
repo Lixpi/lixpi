@@ -1,0 +1,66 @@
+{
+    "title": "Claude Opus 5",
+    "shortTitle": "Opus 5",
+    "sortingPosition": 102,
+    "modalities": [
+        {
+            "modality": "text",
+            "title": "Text",
+            "shortTitle": "TXT"
+        },
+        {
+            "modality": "image",
+            "title": "Image",
+            "shortTitle": "IMG"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "anthropic-adaptive",
+        "requiresAutoToolChoiceWithThinking": true,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": true,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "image",
+            "video-frame",
+            "document-text"
+        ]
+    },
+    "reasoningGenerationControls": [
+        {
+            "key": "reasoningEffort",
+            "label": "Reasoning effort",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "low",
+                    "label": "Low",
+                    "description": "Lowest token use and latency, with less depth on difficult work."
+                },
+                {
+                    "value": "medium",
+                    "label": "Medium",
+                    "description": "Balanced capability, speed, and output-token usage."
+                },
+                {
+                    "value": "high",
+                    "label": "High",
+                    "description": "Provider default for strong reasoning and tool use."
+                },
+                {
+                    "value": "xhigh",
+                    "label": "X-high",
+                    "description": "Extended capability for long-running coding and agentic work."
+                },
+                {
+                    "value": "max",
+                    "label": "Max",
+                    "description": "Maximum capability without a token-efficiency constraint."
+                }
+            ],
+            "defaultValue": "high",
+            "description": "Controls total response effort, including reasoning, answer text, and tool calls. Lower levels reduce latency and cost; higher levels spend more tokens for difficult work."
+        }
+    ]
+}

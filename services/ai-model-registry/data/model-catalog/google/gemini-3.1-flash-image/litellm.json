@@ -1,0 +1,36 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 65536,
+            "maxCompletionSize": 32768,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.50",
+                            "completion": "3.00"
+                        }
+                    }
+                },
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.07"
+                }
+            },
+            "modelKeyAtSource": "gemini-3.1-flash-image"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.204Z"
+    }
+}

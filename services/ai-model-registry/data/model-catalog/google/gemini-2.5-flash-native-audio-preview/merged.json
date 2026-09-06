@@ -1,0 +1,61 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini 2.5 Flash Native Audio Preview 09-2025",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 1048576,
+    "maxCompletionSize": 8192,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.50",
+                    "completion": "2.00"
+                }
+            }
+        }
+    },
+    "model": "gemini-2.5-flash-native-audio-preview",
+    "modelVersion": "gemini-2.5-flash-native-audio-preview",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini-2.5-flash-native-audio-preview-09-2025",
+                "provider-api": "gemini-2.5-flash-native-audio-preview-09-2025"
+            },
+            "contextWindow": 1048576,
+            "maxCompletionSize": 8192,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.50",
+                            "completion": "2.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini 2.5 Flash Native Audio Preview 09-2025",
+            "defaultTemperature": 1
+        }
+    }
+}

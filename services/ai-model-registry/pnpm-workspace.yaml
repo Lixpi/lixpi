@@ -1,0 +1,12 @@
+packages:
+  - "packages/lixpi/constants/ts"
+  - "packages/lixpi/debug-tools/ts"
+  - "packages/lixpi/dynamodb-service"
+  - "packages/lixpi/nats-service/ts"
+  - "packages/lixpi/ui-primitives"
+
+# Vite's own toolchain. Without these pnpm refuses the install rather than
+# silently skipping their build scripts.
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true

@@ -1,0 +1,70 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "title": "Claude Haiku 4.5",
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "1.00",
+                            "completion": "5.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "claude-haiku-4-5-20251001",
+            "sourceOnlyFacts": {
+                "bedrockModelIds": [
+                    "anthropic.claude-haiku-4-5-20251001-v1:0"
+                ],
+                "modelIdToInvoke": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "global-profile",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "TEXT"
+                ],
+                "supportsResponseStreaming": true,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "ratesByTier": {
+                    "regional": {
+                        "usageTypes": [
+                            "USE1-anthropic.claude-haiku-4-5-mantle-input-tokens-standard",
+                            "USE1-anthropic.claude-haiku-4-5-mantle-output-tokens-standard",
+                            "USE1-MP:USE1_InputTokenCount-Units",
+                            "USE1-MP:USE1_OutputTokenCount-Units"
+                        ],
+                        "promptPerMillionTokens": "1.10",
+                        "completionPerMillionTokens": "5.50"
+                    },
+                    "global-profile": {
+                        "usageTypes": [
+                            "USE1-MP:USE1_InputTokenCount_Global-Units",
+                            "USE1-MP:USE1_OutputTokenCount_Global-Units"
+                        ],
+                        "promptPerMillionTokens": "1.00",
+                        "completionPerMillionTokens": "5.00"
+                    }
+                }
+            }
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "bedrock",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.131Z"
+    }
+}

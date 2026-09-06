@@ -1,0 +1,28 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Deep Research Pro Preview (Dec-12-2025)",
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "defaultTemperature": 1,
+            "model": "deep-research-pro-preview",
+            "modelVersion": "deep-research-pro-preview",
+            "modelKeyAtSource": "deep-research-pro-preview-12-2025"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.170Z",
+        "publishedVersions": {
+            "currentVersion": "deep-research-pro-preview",
+            "allPublishedVersions": [
+                "deep-research-pro-preview",
+                "deep-research-pro-preview-12-2025"
+            ]
+        }
+    }
+}

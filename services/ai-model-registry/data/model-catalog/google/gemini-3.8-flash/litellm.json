@@ -1,0 +1,30 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 1048576,
+            "maxCompletionSize": 65536,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.75",
+                            "completion": "3.75"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gemini-3.8-flash"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "litellm",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.248Z"
+    }
+}

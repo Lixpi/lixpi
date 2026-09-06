@@ -73,6 +73,12 @@ Rendering-engine manuals live in `packages/lixpi/canvas-engine/docs/`; reusable 
 
 The [site source registry](site/source-registry.mjs) records authored source paths and output routes. Register package documentation explicitly; do not copy manuals into `documentation/` or ingest an entire package source tree. Keep package links relative to the original file. The same resolver validates and renders links, including package assets and heading fragments.
 
+## Service Documentation
+
+A service that owns a body of documentation keeps it in `services/<service>/documentation/`, beside the code it describes. The AI Model Registry is the one that does today: its contract and its maintenance guide live in `services/ai-model-registry/documentation/`, and the service README introduces them.
+
+The central tree links to those pages instead of holding a copy. A domain page, the docs index, or a navigation table gets one line pointing at the service page; nothing is duplicated, and no routing-only file is added to carry the link. Register the service in `SERVICE_NAMES` in the site source registry so its README and documentation directory render with everything else.
+
 ## Moving or Renaming Pages
 
 

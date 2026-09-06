@@ -1,0 +1,23 @@
+{
+    "byInferenceProvider": {
+        "openai": {
+            "model": "gpt-6-astra",
+            "modelVersion": "gpt-6-astra",
+            "modelKeyAtSource": "gpt-6-astra"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "openai"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.118Z",
+        "publishedVersions": {
+            "currentVersion": "gpt-6-astra",
+            "allPublishedVersions": [
+                "gpt-6-astra"
+            ]
+        }
+    }
+}

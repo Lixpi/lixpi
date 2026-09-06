@@ -1,0 +1,30 @@
+{
+    "byInferenceProvider": {
+        "openai": {
+            "contextWindow": 1050000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "12.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gpt-5.6-terra"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "openai"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.114Z"
+    }
+}

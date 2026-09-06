@@ -1,0 +1,63 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemma 4 26B A4B IT",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 262144,
+    "maxCompletionSize": 32768,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "0.00",
+                    "completion": "0.00"
+                }
+            }
+        }
+    },
+    "model": "gemma-4-26b-a4b-it",
+    "modelVersion": "gemma-4-26b-a4b-it",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/gemma-4-26b-a4b-it",
+                "models.dev": "gemma-4-26b-a4b-it",
+                "provider-api": "gemma-4-26b-a4b-it"
+            },
+            "contextWindow": 262144,
+            "maxCompletionSize": 32768,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.00",
+                            "completion": "0.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemma 4 26B A4B IT",
+            "defaultTemperature": 1
+        }
+    }
+}

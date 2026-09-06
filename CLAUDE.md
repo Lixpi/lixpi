@@ -16,7 +16,7 @@ Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm mono
 | **api** | Node.js / TypeScript | `services/api/` | Gateway + in-process LLM orchestration (LangGraph), JWT auth, CRUD, DynamoDB |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for local dev |
-| **ai-model-registry** | Node.js / TypeScript | `services/ai-model-registry/` | Development-only registry for provider models, parameters, compatibility, implementation state, and configuration controls |
+| **ai-model-registry** | Node.js / TypeScript | `services/ai-model-registry/` | Owns the model catalog: per-model rule files, provider and models.dev fetch, merge, drift reporting, and the `AI_MODELS_LIST` DynamoDB write. Also the parameter registry and its review UI |
 
 The LLM orchestration workflow (validate → stream → image gen → usage → cleanup) lives at `services/api/src/llm/` and uses [`@langchain/langgraph`](https://github.com/langchain-ai/langgraphjs). It used to be a separate Python `services/llm-api/` Fargate task; for the internal-service NATS auth pattern that Python service used, see [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
 
@@ -28,11 +28,11 @@ At the start of every implementation iteration, read [`documentation/coding-styl
 
 ## AI Model Registry
 
-Before changing or reviewing an AI provider model, model ID, model list, parameter, request payload, configuration control, default, option, compatibility rule, price, capability, SDK surface, or related documentation, resolve and read the `ai-model-registry` skill. Its authoritative contract is [`documentation/development-workflow/AI-MODEL-REGISTRY.md`](documentation/development-workflow/AI-MODEL-REGISTRY.md).
+Before changing or reviewing an AI provider model, model ID, model list, parameter, request payload, configuration control, default, option, compatibility rule, price, capability, SDK surface, or related documentation, resolve and read the `ai-model-registry` skill. Its authoritative contract is [`services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md`](services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md).
 
 Registry data and production code MUST stay synchronized in the same implementation iteration. A code change requires the matching registry update, and a registry change requires the matching model-sync, provider, matrix, UI, test, and documentation review.
 
-Agents MUST NOT edit `services/ai-model-registry/data/params/` directly or access the registry with host HTTP/JSON tools. Start the service with Docker Compose and execute registry reads, writes, validation, and provider-document fetches inside the appropriate container. If the container or required API operation is unavailable, stop instead of bypassing the registry boundary.
+Agents MUST NOT edit `services/ai-model-registry/data/params/` directly, edit the fetched `services/ai-model-registry/data/model-catalog/<provider>/<model>.json` files by hand, or access the registry with host HTTP/JSON tools. The `-lixpi.json` beside each fetched file is the hand-authored half and is the one to change. Start the service with Docker Compose and execute registry reads, writes, validation, and provider-document fetches inside the appropriate container. If the container or required API operation is unavailable, stop instead of bypassing the registry boundary.
 
 ## Command Execution
 

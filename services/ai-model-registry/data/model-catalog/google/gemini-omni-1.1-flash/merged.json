@@ -1,0 +1,61 @@
+{
+    "providerTitle": "Google",
+    "color": "#4285F4",
+    "iconName": "geminiIcon",
+    "colorIconName": "geminiColorIcon",
+    "title": "Gemini Omni 1.1 Flash",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": 1,
+    "contextWindow": 131072,
+    "maxCompletionSize": 65536,
+    "pricing": {
+        "currency": "USD",
+        "text": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "tiers": {
+                "default": {
+                    "prompt": "1.50",
+                    "completion": "9.00"
+                }
+            }
+        }
+    },
+    "model": "gemini-omni-1.1-flash",
+    "modelVersion": "gemini-omni-1.1-flash",
+    "provider": "Google",
+    "inferenceProviderCalledByThePlatform": "google",
+    "inferenceProviders": {
+        "google": {
+            "inferenceProviderTitle": "Google",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [
+                "litellm",
+                "provider-api"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "gemini/gemini-omni-1.1-flash",
+                "provider-api": "gemini-omni-1.1-flash"
+            },
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "1.50",
+                            "completion": "9.00"
+                        }
+                    }
+                }
+            },
+            "title": "Gemini Omni 1.1 Flash",
+            "defaultTemperature": 1
+        }
+    }
+}

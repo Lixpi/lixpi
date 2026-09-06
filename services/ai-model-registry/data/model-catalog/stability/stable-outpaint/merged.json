@@ -1,0 +1,73 @@
+{
+    "providerTitle": "Stability",
+    "color": "#A855F7",
+    "iconName": "stabilityIcon",
+    "colorIconName": "stabilityIcon",
+    "title": "Stable Image Outpaint",
+    "shortTitle": "",
+    "sortingPosition": null,
+    "modalities": [],
+    "defaultTemperature": null,
+    "contextWindow": 77,
+    "provider": "Stability",
+    "model": "stable-outpaint",
+    "modelVersion": "stable-outpaint",
+    "inferenceProviderCalledByThePlatform": "stability",
+    "inferenceProviders": {
+        "stability": {
+            "inferenceProviderTitle": "Stability AI",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [],
+            "modelKeyAtSource": {}
+        },
+        "aws-bedrock": {
+            "inferenceProviderTitle": "AWS Bedrock",
+            "isCalledByThePlatform": false,
+            "reportedBySources": [
+                "litellm",
+                "bedrock"
+            ],
+            "modelKeyAtSource": {
+                "litellm": "stability.stable-outpaint-v1:0",
+                "bedrock": "stable-outpaint"
+            },
+            "contextWindow": 77,
+            "pricing": {
+                "currency": "USD",
+                "image": {
+                    "measuringUnit": "images",
+                    "pricePer": "1",
+                    "prompt": "0.00",
+                    "completion": "0.06"
+                }
+            },
+            "title": "Stable Image Outpaint",
+            "providerReportedFacts": {
+                "bedrockModelIds": [
+                    "stability.stable-outpaint-v1:0"
+                ],
+                "modelIdToInvoke": "us.stability.stable-outpaint-v1:0",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "IMAGE"
+                ],
+                "supportsResponseStreaming": false,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "noRatesInPriceList": true
+            }
+        }
+    },
+    "maxCompletionSize": 0,
+    "pricing": {
+        "currency": "USD"
+    }
+}

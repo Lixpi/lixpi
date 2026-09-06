@@ -19,7 +19,7 @@ export const aiModelSubjects = [
     },
 
     {
-        // Published by the ai-models-sync workload on the NEX node after each run
+        // Published by the AI Model Registry after each catalog sync
         // (exported from the NEX account, imported into AUTH). The API reads the
         // catalog live from DynamoDB, so this is a refresh/liveness signal the API
         // (and any UI granted the subject) can react to.

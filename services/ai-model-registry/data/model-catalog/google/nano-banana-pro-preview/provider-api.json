@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Nano Banana Pro",
+            "contextWindow": 131072,
+            "maxCompletionSize": 32768,
+            "defaultTemperature": 1,
+            "model": "nano-banana-pro-preview",
+            "modelVersion": "nano-banana-pro-preview",
+            "modelKeyAtSource": "nano-banana-pro-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.293Z",
+        "publishedVersions": {
+            "currentVersion": "nano-banana-pro-preview",
+            "allPublishedVersions": [
+                "nano-banana-pro-preview"
+            ]
+        }
+    }
+}

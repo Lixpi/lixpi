@@ -1,0 +1,350 @@
+{
+    "providerTitle": "ByteDance",
+    "color": "#1664FF",
+    "iconName": "bytedanceIcon",
+    "colorIconName": "bytedanceIcon",
+    "model": "dreamina-seedance-2-0-260128",
+    "title": "Seedance 2.0",
+    "shortTitle": "Seedance 2.0",
+    "sortingPosition": 251,
+    "modalities": [
+        {
+            "modality": "video",
+            "title": "Video",
+            "shortTitle": "VID"
+        },
+        {
+            "modality": "video_generation",
+            "title": "Video Generation",
+            "shortTitle": "VID GEN"
+        }
+    ],
+    "defaultTemperature": 0.7,
+    "inferenceCapabilities": {
+        "thinkingMode": "none",
+        "requiresAutoToolChoiceWithThinking": false,
+        "supportsTemperature": false,
+        "supportsSystemPrompt": false,
+        "requiresClosedJsonSchema": false,
+        "supportedInputKinds": [
+            "document-text"
+        ]
+    },
+    "videoAspectRatios": [
+        {
+            "value": "16:9",
+            "label": "16:9"
+        },
+        {
+            "value": "4:3",
+            "label": "4:3"
+        },
+        {
+            "value": "1:1",
+            "label": "1:1"
+        },
+        {
+            "value": "3:4",
+            "label": "3:4"
+        },
+        {
+            "value": "9:16",
+            "label": "9:16"
+        },
+        {
+            "value": "21:9",
+            "label": "21:9"
+        },
+        {
+            "value": "adaptive",
+            "label": "Auto"
+        }
+    ],
+    "videoResolutions": [
+        {
+            "value": "480p",
+            "label": "480p"
+        },
+        {
+            "value": "720p",
+            "label": "720p"
+        },
+        {
+            "value": "1080p",
+            "label": "1080p"
+        },
+        {
+            "value": "4k",
+            "label": "4K"
+        }
+    ],
+    "videoDurations": [
+        {
+            "value": "-1",
+            "label": "Smart length",
+            "description": "Smart length lets Seedance choose any duration from 4 to 15 seconds."
+        },
+        {
+            "value": "4",
+            "label": "4s"
+        },
+        {
+            "value": "5",
+            "label": "5s"
+        },
+        {
+            "value": "6",
+            "label": "6s"
+        },
+        {
+            "value": "7",
+            "label": "7s"
+        },
+        {
+            "value": "8",
+            "label": "8s"
+        },
+        {
+            "value": "9",
+            "label": "9s"
+        },
+        {
+            "value": "10",
+            "label": "10s"
+        },
+        {
+            "value": "11",
+            "label": "11s"
+        },
+        {
+            "value": "12",
+            "label": "12s"
+        },
+        {
+            "value": "13",
+            "label": "13s"
+        },
+        {
+            "value": "14",
+            "label": "14s"
+        },
+        {
+            "value": "15",
+            "label": "15s"
+        }
+    ],
+    "videoGenerationControls": [
+        {
+            "key": "aspectRatio",
+            "label": "Aspect ratio",
+            "kind": "aspect-ratio",
+            "options": [
+                {
+                    "value": "16:9",
+                    "label": "16:9"
+                },
+                {
+                    "value": "4:3",
+                    "label": "4:3"
+                },
+                {
+                    "value": "1:1",
+                    "label": "1:1"
+                },
+                {
+                    "value": "3:4",
+                    "label": "3:4"
+                },
+                {
+                    "value": "9:16",
+                    "label": "9:16"
+                },
+                {
+                    "value": "21:9",
+                    "label": "21:9"
+                },
+                {
+                    "value": "adaptive",
+                    "label": "Auto"
+                }
+            ],
+            "defaultValue": "adaptive"
+        },
+        {
+            "key": "resolution",
+            "label": "Resolution",
+            "kind": "segmented",
+            "options": [
+                {
+                    "value": "480p",
+                    "label": "480p"
+                },
+                {
+                    "value": "720p",
+                    "label": "720p"
+                },
+                {
+                    "value": "1080p",
+                    "label": "1080p"
+                },
+                {
+                    "value": "4k",
+                    "label": "4K"
+                }
+            ],
+            "defaultValue": "720p"
+        },
+        {
+            "key": "duration",
+            "label": "Duration",
+            "kind": "duration",
+            "options": [
+                {
+                    "value": "-1",
+                    "label": "Smart length",
+                    "description": "Smart length lets Seedance choose any duration from 4 to 15 seconds."
+                },
+                {
+                    "value": "4",
+                    "label": "4s"
+                },
+                {
+                    "value": "5",
+                    "label": "5s"
+                },
+                {
+                    "value": "6",
+                    "label": "6s"
+                },
+                {
+                    "value": "7",
+                    "label": "7s"
+                },
+                {
+                    "value": "8",
+                    "label": "8s"
+                },
+                {
+                    "value": "9",
+                    "label": "9s"
+                },
+                {
+                    "value": "10",
+                    "label": "10s"
+                },
+                {
+                    "value": "11",
+                    "label": "11s"
+                },
+                {
+                    "value": "12",
+                    "label": "12s"
+                },
+                {
+                    "value": "13",
+                    "label": "13s"
+                },
+                {
+                    "value": "14",
+                    "label": "14s"
+                },
+                {
+                    "value": "15",
+                    "label": "15s"
+                }
+            ],
+            "defaultValue": "-1"
+        },
+        {
+            "key": "generateAudio",
+            "label": "Generate audio",
+            "kind": "toggle",
+            "options": [
+                {
+                    "value": "true",
+                    "label": "On"
+                },
+                {
+                    "value": "false",
+                    "label": "Off"
+                }
+            ],
+            "defaultValue": "true",
+            "description": "Generates synchronized dialogue, sound effects, and music for the video."
+        },
+        {
+            "key": "watermark",
+            "label": "Watermark",
+            "kind": "toggle",
+            "options": [
+                {
+                    "value": "true",
+                    "label": "On"
+                },
+                {
+                    "value": "false",
+                    "label": "Off"
+                }
+            ],
+            "defaultValue": "false",
+            "description": "Adds an AI-generated watermark to the lower-right corner of the output video."
+        },
+        {
+            "key": "returnLastFrame",
+            "label": "Return last frame",
+            "kind": "toggle",
+            "options": [
+                {
+                    "value": "true",
+                    "label": "On"
+                },
+                {
+                    "value": "false",
+                    "label": "Off"
+                }
+            ],
+            "defaultValue": "false",
+            "description": "Returns the final video frame as a separate image that can continue a video sequence."
+        }
+    ],
+    "videoMaxReferenceImages": 9,
+    "pricing": {
+        "video": {
+            "measuringUnit": "tokens",
+            "pricePer": "1000000",
+            "price": "7.7",
+            "tiers": {
+                "480p": {
+                    "withoutVideoInput": "7.0",
+                    "withVideoInput": "4.3"
+                },
+                "720p": {
+                    "withoutVideoInput": "7.0",
+                    "withVideoInput": "4.3"
+                },
+                "1080p": {
+                    "withoutVideoInput": "7.7",
+                    "withVideoInput": "4.7"
+                },
+                "4k": {
+                    "withoutVideoInput": "4.0",
+                    "withVideoInput": "2.4"
+                }
+            }
+        },
+        "currency": "USD"
+    },
+    "provider": "BytePlus",
+    "modelVersion": "dreamina-seedance-2-0-260128",
+    "inferenceProviderCalledByThePlatform": "byteplus",
+    "inferenceProviders": {
+        "byteplus": {
+            "inferenceProviderTitle": "BytePlus ModelArk",
+            "isCalledByThePlatform": true,
+            "reportedBySources": [],
+            "modelKeyAtSource": {}
+        }
+    },
+    "contextWindow": 0,
+    "maxCompletionSize": 0
+}

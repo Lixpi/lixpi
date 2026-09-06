@@ -1,0 +1,11 @@
+{
+    "providerKey": "Google",
+    "description": "Which Google models this catalog syncs. Model discovery comes from the Google generativelanguage /v1beta/models endpoint.",
+    "syncMode": "all",
+    "whatSyncModeMeans": {
+        "all": "Sync every model discovered on the provider, except the ones in modelsToSkip.",
+        "onlyListed": "Sync only the models named in modelsToSync."
+    },
+    "modelsToSync": [],
+    "modelsToSkip": []
+}

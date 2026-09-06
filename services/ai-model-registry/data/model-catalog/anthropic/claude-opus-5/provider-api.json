@@ -1,0 +1,26 @@
+{
+    "byInferenceProvider": {
+        "anthropic": {
+            "title": "Claude Opus 5",
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "model": "claude-opus-5",
+            "modelVersion": "claude-opus-5",
+            "modelKeyAtSource": "claude-opus-5"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "anthropic"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.134Z",
+        "publishedVersions": {
+            "currentVersion": "claude-opus-5",
+            "allPublishedVersions": [
+                "claude-opus-5"
+            ]
+        }
+    }
+}

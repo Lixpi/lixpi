@@ -1,0 +1,17 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 480,
+            "maxCompletionSize": 8192,
+            "modelKeyAtSource": "veo-3.1-generate-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.298Z"
+    }
+}

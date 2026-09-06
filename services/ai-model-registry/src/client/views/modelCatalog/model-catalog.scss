@@ -1,0 +1,474 @@
+// Model catalog page. The theme owns the card, table, form, chip, status, and
+// drawer styles; these rules are what this page adds on top of them.
+
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+
+.model-catalog-page {
+    padding-bottom: 64px;
+}
+
+.model-catalog-status {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.model-catalog-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.model-catalog-error {
+    color: var(--red);
+}
+
+// The counts carry themselves through size, weight, and colour. No boxes: a
+// border around each one would draw more attention than the numbers do.
+.model-catalog-stats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 36px;
+    margin-bottom: 24px;
+}
+
+.model-catalog-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.model-catalog-stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+
+.model-catalog-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+// The total is the headline the rest are read against.
+.model-catalog-stat-lead .model-catalog-stat-value {
+    font-size: 28px;
+    color: var(--text);
+}
+
+.model-catalog-stat-lead .model-catalog-stat-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.model-catalog-stat-good .model-catalog-stat-value {
+    color: var(--green);
+}
+
+.model-catalog-stat-warn .model-catalog-stat-value {
+    color: var(--orange);
+}
+
+.model-catalog-filters {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.model-catalog-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.model-catalog-search {
+    width: 240px;
+}
+
+.model-catalog-filter-controls .form-control {
+    width: auto;
+    min-width: 160px;
+}
+
+.model-catalog-row {
+    cursor: pointer;
+}
+
+.model-catalog-row-selected {
+    background: var(--primary-lt);
+}
+
+.model-catalog-cell-name {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+// The theme gives `code` a bordered, padded box. A model id under its title is a
+// label rather than a snippet, so it drops the box and keeps the monospace.
+.model-catalog-model-id {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.model-catalog-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.model-catalog-muted {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.model-catalog-sources {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+
+// The theme owns the panel: it slides in when it carries `open` and sits
+// off-screen otherwise. These rules only widen it, because a model's
+// provenance and its authored record need the room.
+// The panel covers the content area exactly: everything right of the sidebar,
+// which stays visible so the page it belongs to is still there behind it.
+.drawer.model-catalog-drawer {
+    top: var(--page-top, 0px);
+    left: var(--sidebar-w);
+    right: 0;
+    width: auto;
+    height: calc(100vh - var(--page-top, 0px));
+    border-left: 1px solid var(--border-color);
+}
+
+// Two columns wherever a section is short enough to share a row, and full width
+// for the ones that are not.
+.drawer.model-catalog-drawer .drawer-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 0 32px;
+    padding: 0 24px 24px;
+    // Reaching the end of the panel stops there instead of handing the rest of
+    // the gesture to the page behind it.
+    overscroll-behavior: contain;
+}
+
+// Set on the document while the panel is open.
+.model-catalog-scroll-locked,
+.model-catalog-scroll-locked body {
+    overflow: hidden;
+}
+
+.model-catalog-section-wide {
+    grid-column: 1 / -1;
+}
+
+// The panel is where a model is read and edited, not a compact list, so it
+// carries a larger type scale than the table behind it. These sizes are set on
+// the panel rather than on each rule so the table keeps its own.
+.drawer.model-catalog-drawer {
+    .drawer-title {
+        font-size: 18px;
+    }
+
+    .model-catalog-drawer-subtitle,
+    .model-catalog-muted {
+        font-size: 14px;
+    }
+
+    .model-catalog-section-title {
+        font-size: 13px;
+    }
+
+    .model-catalog-definitions {
+        font-size: 14px;
+    }
+
+    .model-catalog-field-chip {
+        font-size: 13px;
+        padding: 2px 7px;
+    }
+
+    .form-label {
+        font-size: 13px;
+    }
+
+    .form-control {
+        font-size: 14px;
+    }
+
+    p {
+        font-size: 14px;
+    }
+
+    .table {
+        font-size: 14px;
+    }
+}
+
+.model-catalog-drawer-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.model-catalog-section {
+    min-width: 0;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-color-light);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.model-catalog-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.model-catalog-facts {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.model-catalog-definitions {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 8px 16px;
+    align-items: baseline;
+    font-size: 12px;
+
+    dt {
+        color: var(--text-muted);
+    }
+
+    dd {
+        margin: 0;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+}
+
+.model-catalog-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px 16px;
+}
+
+// A field path, shown as a value rather than as a snippet to be copied.
+.model-catalog-field-chip {
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-secondary);
+    border: 1px solid var(--border-color-light);
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+// The record is shown in full: no height cap and no scroller of its own, so the
+// panel scrolls once instead of trapping a second scrollbar inside itself. The
+// block sits on the page's own surface; the theme colours the tokens and
+// nothing else.
+.model-catalog-json {
+    overflow: hidden;
+
+    .cm-editor,
+    .cm-editor .cm-scroller,
+    .cm-editor .cm-content,
+    .cm-editor .cm-gutters {
+        background: transparent;
+    }
+
+    .cm-editor {
+        font-size: var(--model-catalog-json-font-size, 13px);
+        color: var(--text-secondary);
+    }
+
+    .cm-scroller {
+        overflow: visible;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.55;
+    }
+
+    .cm-content {
+        padding: 12px 0;
+    }
+
+    // The fold markers are chrome, not content, so they stay quiet until the
+    // pointer is on them.
+    .cm-gutters {
+        border: 0;
+        color: var(--text-disabled);
+    }
+
+    // The cell is exactly one line tall, so centring in it puts the marker on
+    // the middle of the line it belongs to.
+    .cm-foldGutter .cm-gutterElement {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+
+    .model-catalog-fold-marker {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+    }
+
+    .model-catalog-fold-marker svg {
+        width: 11px;
+        height: 11px;
+    }
+
+    .model-catalog-fold-marker-open svg {
+        transform: rotate(90deg);
+    }
+
+    // Hover lifts an open marker out of the gutter's grey. A closed one already
+    // carries the brace colour, so hovering brightens that rather than
+    // replacing it with something duller.
+    .model-catalog-fold-marker-open:hover {
+        color: var(--text);
+    }
+
+    .model-catalog-fold-marker-closed:hover {
+        filter: brightness(1.3);
+    }
+
+    // A collapsed range carries the brace colour from the active theme, which is
+    // the same colour as the `{` and `}` it stands in for.
+
+    .cm-foldPlaceholder {
+        padding: 0 6px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        background: var(--bg-surface-secondary);
+        color: var(--text-muted);
+    }
+}
+
+// A provider's band opens its group of rows. It reads as a heading rather than
+// as a card: the name carries the weight and nothing boxes it in.
+//
+// The two class names are what beat `table.table td` in the theme. Without them
+// the cell keeps the theme's padding and the band inside it adds its own on top,
+// which is what pushed the provider name in from the column edge.
+.model-catalog-table .model-catalog-group-header-row td {
+    padding: 10px 16px;
+    background: var(--bg-surface-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.model-catalog-group-body + .model-catalog-group-body .model-catalog-group-header-row td {
+    border-top: 1px solid var(--border-color);
+}
+
+// The whole band is the collapse control, so it is a button stripped back to
+// looking like the heading it is.
+.model-catalog-group-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.model-catalog-group-chevron {
+    align-self: center;
+    display: flex;
+    color: var(--text-muted);
+    transition: hoverTransition(transform);
+}
+
+.model-catalog-group-bar[aria-expanded="true"] .model-catalog-group-chevron {
+    transform: rotate(90deg);
+}
+
+.model-catalog-group-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.model-catalog-group-bar:hover .model-catalog-group-name {
+    color: var(--primary);
+}
+
+.model-catalog-group-count {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.model-catalog-group-settings {
+    padding-top: 8px;
+
+    summary {
+        display: inline-block;
+        font-size: 12px;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: hoverTransition(color);
+    }
+
+    summary:hover {
+        color: var(--primary);
+    }
+}
+
+.model-catalog-group-settings-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    padding-top: 12px;
+}
+
+.model-catalog-skip-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.model-catalog-skip-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+}
+
+.model-catalog-skip-model {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text-secondary);
+    margin-right: 8px;
+}

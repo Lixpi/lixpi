@@ -37,7 +37,7 @@ TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only comma
 
 Lixpi exposes `ai-model-registry` through matching aliases in `.github/skills/`, `.claude/skills/`, `.cursor/skills/`, and `.agents/skills/`. Its description covers changes to provider models, parameters, request payloads, configuration controls, defaults, options, compatibility, pricing, SDK surfaces, and registry documentation, so each harness loads the rule when either production code or registry data can drift.
 
-The aliases point to [`AI-MODEL-REGISTRY.md`](AI-MODEL-REGISTRY.md). That document requires registry data and production code to change together and requires registry reads, writes, validation, and provider-document fetches to run inside Docker. The non-negotiable synchronization and container-boundary rules are repeated in `AGENTS.md` and `CLAUDE.md` so they are available before task-specific skill selection.
+The aliases point to [`AI-MODEL-REGISTRY.md`](../../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md). That document requires registry data and production code to change together and requires registry reads, writes, validation, and provider-document fetches to run inside Docker. The non-negotiable synchronization and container-boundary rules are repeated in `AGENTS.md` and `CLAUDE.md` so they are available before task-specific skill selection.
 
 ## Why Aliases, Not Copied Instructions
 

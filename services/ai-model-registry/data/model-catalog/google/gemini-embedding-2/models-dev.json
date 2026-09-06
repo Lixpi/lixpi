@@ -1,0 +1,30 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 8192,
+            "maxCompletionSize": 1,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "0.20",
+                            "completion": "0.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "gemini-embedding-2"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.254Z"
+    }
+}

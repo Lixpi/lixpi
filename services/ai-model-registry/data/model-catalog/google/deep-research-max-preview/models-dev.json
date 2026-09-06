@@ -1,0 +1,17 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "contextWindow": 131072,
+            "maxCompletionSize": 65536,
+            "modelKeyAtSource": "deep-research-max-preview-04-2026"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.163Z"
+    }
+}

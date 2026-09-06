@@ -1,0 +1,26 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Veo 3.1 fast",
+            "contextWindow": 480,
+            "maxCompletionSize": 8192,
+            "model": "veo-3.1-fast-generate-preview",
+            "modelVersion": "veo-3.1-fast-generate-preview",
+            "modelKeyAtSource": "veo-3.1-fast-generate-preview"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.296Z",
+        "publishedVersions": {
+            "currentVersion": "veo-3.1-fast-generate-preview",
+            "allPublishedVersions": [
+                "veo-3.1-fast-generate-preview"
+            ]
+        }
+    }
+}

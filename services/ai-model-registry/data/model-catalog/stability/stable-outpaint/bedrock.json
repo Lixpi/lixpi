@@ -1,0 +1,38 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "title": "Stable Image Outpaint",
+            "modelKeyAtSource": "stable-outpaint",
+            "sourceOnlyFacts": {
+                "bedrockModelIds": [
+                    "stability.stable-outpaint-v1:0"
+                ],
+                "modelIdToInvoke": "us.stability.stable-outpaint-v1:0",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "IMAGE"
+                ],
+                "supportsResponseStreaming": false,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "noRatesInPriceList": true
+            }
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "bedrock",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.345Z"
+    }
+}

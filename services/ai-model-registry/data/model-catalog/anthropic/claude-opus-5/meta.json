@@ -1,0 +1,221 @@
+{
+    "modelFamily": "claude-opus-5",
+    "mergedAt": "2026-09-06T22:40:47.379Z",
+    "baseSchemaVersion": 1,
+    "syncStatus": "written-to-database",
+    "sources": {
+        "sourcesQueried": [
+            "litellm",
+            "models.dev",
+            "provider-api",
+            "bedrock"
+        ],
+        "sourcesWithDataForThisModel": [
+            "litellm",
+            "models.dev",
+            "provider-api",
+            "bedrock"
+        ],
+        "inferenceProviderCalledByThePlatform": "aws-bedrock",
+        "sourcesWithoutRatesForThatProvider": [
+            "provider-api"
+        ],
+        "confirmedByMoreThanOneSource": true,
+        "fieldsWhereSourcesDisagree": [
+            "pricing.text.tiers.default.prompt",
+            "pricing.text.tiers.default.completion"
+        ]
+    },
+    "lixpi": {
+        "fieldsOnlyLixpiSupplies": [
+            "defaultTemperature",
+            "inferenceCapabilities.requiresAutoToolChoiceWithThinking",
+            "inferenceCapabilities.requiresClosedJsonSchema",
+            "inferenceCapabilities.supportedInputKinds",
+            "inferenceCapabilities.supportsSystemPrompt",
+            "inferenceCapabilities.supportsTemperature",
+            "inferenceCapabilities.thinkingMode",
+            "modalities",
+            "reasoningGenerationControls",
+            "shortTitle",
+            "sortingPosition"
+        ],
+        "fieldsWhereLixpiOverridesSources": [],
+        "fieldsInheritedFromProviderBaseFile": [
+            "color",
+            "colorIconName",
+            "iconName",
+            "providerTitle"
+        ]
+    },
+    "requiredFieldsStillMissing": [],
+    "fieldsFilledFromSchemaDefault": [],
+    "ratesRefusedBecauseUnitsDiffer": [],
+    "fieldOrigins": {
+        "providerTitle": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "color": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "iconName": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "colorIconName": {
+            "valueCameFrom": "provider-base-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "title": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "provider-api",
+                "bedrock"
+            ]
+        },
+        "shortTitle": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "sortingPosition": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "modalities": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "defaultTemperature": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.thinkingMode": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.requiresAutoToolChoiceWithThinking": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.supportsTemperature": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.supportsSystemPrompt": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.requiresClosedJsonSchema": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "inferenceCapabilities.supportedInputKinds": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "reasoningGenerationControls": {
+            "valueCameFrom": "lixpi-authored-file",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        },
+        "contextWindow": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ]
+        },
+        "maxCompletionSize": {
+            "valueCameFrom": "litellm",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "provider-api"
+            ]
+        },
+        "pricing.currency": {
+            "valueCameFrom": "bedrock",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ]
+        },
+        "pricing.text.measuringUnit": {
+            "valueCameFrom": "bedrock",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ]
+        },
+        "pricing.text.pricePer": {
+            "valueCameFrom": "bedrock",
+            "sourceAgreement": "all-sources-agree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ]
+        },
+        "pricing.text.tiers.default.prompt": {
+            "valueCameFrom": "bedrock",
+            "sourceAgreement": "sources-disagree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ]
+        },
+        "pricing.text.tiers.default.completion": {
+            "valueCameFrom": "bedrock",
+            "sourceAgreement": "sources-disagree",
+            "sourcesThatAnswered": [
+                "litellm",
+                "models.dev",
+                "bedrock"
+            ]
+        },
+        "model": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "modelVersion": {
+            "valueCameFrom": "provider-api",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": [
+                "provider-api"
+            ]
+        },
+        "provider": {
+            "valueCameFrom": "derived-from-file-name",
+            "sourceAgreement": "only-one-source-answered",
+            "sourcesThatAnswered": []
+        }
+    }
+}

@@ -7,8 +7,12 @@ NEX supports containers, VMs, and WASM through pluggable nexlets and ships an of
 
 ## Workloads
 
-- **`ai-models-synchronization`** — the hourly AI-models catalog sync, at
-  [`services/nex/workloads/ai-models-synchronization`](../../../nex/workloads/ai-models-synchronization).
+- **`file-conversion`** — heavy image, video, audio, and document transcoding, at
+  [`services/nex/workloads/file-conversion`](../../../nex/workloads/file-conversion).
+- **`character-fidelity`** — photographic Character Creator panel checks, at
+  [`services/nex/workloads/character-fidelity`](../../../nex/workloads/character-fidelity).
+
+The AI-models catalog sync is not a NEX workload. [`services/ai-model-registry`](../../../ai-model-registry) owns it.
 
 ## Adding a workload
 

@@ -1,0 +1,38 @@
+{
+    "byInferenceProvider": {
+        "aws-bedrock": {
+            "title": "Stable Image Erase Object",
+            "modelKeyAtSource": "stable-image-erase-object",
+            "sourceOnlyFacts": {
+                "bedrockModelIds": [
+                    "stability.stable-image-erase-object-v1:0"
+                ],
+                "modelIdToInvoke": "us.stability.stable-image-erase-object-v1:0",
+                "invokedThroughInferenceProfile": true,
+                "ratesReadFromTier": "regional",
+                "inferenceTypesSupported": [
+                    "INFERENCE_PROFILE"
+                ],
+                "inputModalities": [
+                    "TEXT",
+                    "IMAGE"
+                ],
+                "outputModalities": [
+                    "IMAGE"
+                ],
+                "supportsResponseStreaming": false,
+                "customizationsSupported": [],
+                "lifecycleStatus": "ACTIVE",
+                "noRatesInPriceList": true
+            }
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "bedrock",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.327Z"
+    }
+}

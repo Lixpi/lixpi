@@ -1,0 +1,49 @@
+{
+    "byInferenceProvider": {
+        "anthropic": {
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "10.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "claude-sonnet-5"
+        },
+        "aws-bedrock": {
+            "contextWindow": 1000000,
+            "maxCompletionSize": 128000,
+            "pricing": {
+                "currency": "USD",
+                "text": {
+                    "measuringUnit": "tokens",
+                    "pricePer": "1000000",
+                    "tiers": {
+                        "default": {
+                            "prompt": "2.00",
+                            "completion": "10.00"
+                        }
+                    }
+                }
+            },
+            "modelKeyAtSource": "anthropic.claude-sonnet-5"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "models.dev",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "anthropic",
+            "aws-bedrock"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.136Z"
+    }
+}

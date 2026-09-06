@@ -1,0 +1,27 @@
+{
+    "byInferenceProvider": {
+        "google": {
+            "title": "Nano Banana",
+            "contextWindow": 32768,
+            "maxCompletionSize": 32768,
+            "defaultTemperature": 1,
+            "model": "gemini-2.5-flash-image",
+            "modelVersion": "gemini-2.5-flash-image",
+            "modelKeyAtSource": "gemini-2.5-flash-image"
+        }
+    },
+    "_fetchedFrom": {
+        "sourceName": "provider-api",
+        "hasDataForThisModel": true,
+        "inferenceProvidersWithData": [
+            "google"
+        ],
+        "fetchedAt": "2026-09-06T22:40:47.178Z",
+        "publishedVersions": {
+            "currentVersion": "gemini-2.5-flash-image",
+            "allPublishedVersions": [
+                "gemini-2.5-flash-image"
+            ]
+        }
+    }
+}
