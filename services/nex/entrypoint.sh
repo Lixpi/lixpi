@@ -28,6 +28,7 @@ env | grep -E "^(AWS_REGION|AWS_PROFILE|NATS_SERVERS|NATS_JS_DOMAIN|NATS_TLS_|NE
 NEX_NAMESPACE="${NEX_NAMESPACE:-system}"                         # node admin namespace
 LIXPI_WORKLOAD_NAMESPACE="${LIXPI_WORKLOAD_NAMESPACE:-lixpi}"    # workload namespace
 NEX_NODE_NAME="${NEX_NODE_NAME:-lixpi-nex-$(hostname)}"
+LIXPI_NODE_TAGS="${LIXPI_NODE_TAGS:-app=lixpi}"                  # node advertises these; workloads require them
 NATS_JS_DOMAIN="${NATS_JS_DOMAIN:-lixpi}"                        # nats-server.conf -> jetstream.domain
 SERVICE_DIR="${SERVICE_DIR:-/usr/src/service}"
 WORKLOAD_NAME="${LIXPI_WORKLOAD_NAME:-ai-models-sync}"
@@ -118,7 +119,7 @@ run_nex \
     node up \
     --node-name "${NEX_NODE_NAME}" \
     --events nats \
-    --tags app=lixpi \
+    --tags "${LIXPI_NODE_TAGS}" \
     --issuer-nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
     --issuer-nkey-seed "${NATS_NEX_NODE_NKEY_SEED}" &
 NODE_PID=$!
@@ -153,7 +154,8 @@ build_start_request() {
 }
 
 # Deploy a single workload, retrying until the node accepts auctions. Args:
-# <name> <entry> <start-request-json>.
+# <name> <entry> <start-request-json>. --tags restricts the auction to nodes
+# advertising LIXPI_NODE_TAGS, the same set this node passes to `node up`.
 deploy_workload() {
     wl_name="$1"
     wl_entry="$2"
@@ -170,6 +172,7 @@ deploy_workload() {
         i=$((i + 1))
         if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
             --type native --lifecycle service --name "${wl_name}" \
+            --tags "${LIXPI_NODE_TAGS}" \
             --start-request "${wl_start_request}" 2>&1)"; then
             case "${DEPLOY_OUTPUT}" in
                 *"error:"*|*"no NATS connection available"*)

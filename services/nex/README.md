@@ -22,7 +22,7 @@ The image (`Dockerfile`) is a `node:24-alpine` base + the pinned static `nex` bi
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from the pnpm workspace (mirrors `services/api`).
 2. `nex node up` — connects with the NEX nkey; the API auth callout verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.
-3. Deploys service workloads via `nex workload start`, **injecting** the runtime env into each start-request — the native nexlet does **not** inherit the container env. `ai-models-sync` receives `ORG_NAME`, `STAGE`, `AWS_*`, `DYNAMODB_ENDPOINT`, and provider keys. `file-conversion` and `character-fidelity` receive `NATS_SERVERS`, `NATS_REGULAR_USER_PASSWORD`, `HOME`, and `PATH`.
+3. Deploys service workloads via `nex workload start`, **injecting** the runtime env into each start-request — the native nexlet does **not** inherit the container env. `ai-models-sync` receives `ORG_NAME`, `STAGE`, `AWS_*`, `DYNAMODB_ENDPOINT`, and provider keys. `file-conversion` and `character-fidelity` receive `NATS_SERVERS`, `NATS_REGULAR_USER_PASSWORD`, `HOME`, and `PATH`. Each deploy passes `--tags "$LIXPI_NODE_TAGS"`, so only nodes advertising those tags (the same set the node passes to `node up`) can win the auction.
 4. Supervises the node in the foreground.
 
 State is intentionally **not** persisted (`--state kv` omitted): the entrypoint re-deploys the workload on every boot (idempotent), so there is exactly one workload instance per node and no orphaned KV buckets. See the proposal's "Re-evaluation notes" for the full rationale.
@@ -37,7 +37,7 @@ docker compose --profile main up -d --build lixpi-nex-1   # rebuild just this no
 docker logs -f lixpi-nex-1              # node + workload startup output
 ```
 
-Required env (supplied by `docker-compose.yml` from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_REGULAR_USER_PASSWORD`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`).
+Required env (supplied by `docker-compose.yml` from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_REGULAR_USER_PASSWORD`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
 
 Credential ownership matters:
 
