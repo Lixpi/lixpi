@@ -52,7 +52,7 @@ export type CharacterEvidenceProfile = {
     }>
 }
 
-export function emptyCharacterEvidenceProfile(): CharacterEvidenceProfile {
+export const emptyCharacterEvidenceProfile = (): CharacterEvidenceProfile => {
     return {
         medium: 'unknown',
         editTargetPolicy: 'not-present',

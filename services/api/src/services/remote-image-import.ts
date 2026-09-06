@@ -8,8 +8,15 @@ import { isIP } from 'node:net'
 
 const isPrivateIPv4 = (address: string): boolean => {
     const octets = address.split('.').map(Number)
-    if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) return true
+
+    if (
+        octets.length !== 4
+        || octets.some(octet => !Number.isInteger(octet))
+    )
+        return true
+
     const [first, second] = octets
+
     return first === 0
         || first === 10
         || first === 127
@@ -22,9 +29,21 @@ const isPrivateIPv4 = (address: string): boolean => {
 
 export const isPrivateNetworkAddress = (address: string): boolean => {
     const normalized = address.toLowerCase()
-    if (isIP(normalized) === 4) return isPrivateIPv4(normalized)
-    if (normalized === '::' || normalized === '::1') return true
-    if (normalized.startsWith('::ffff:')) return isPrivateIPv4(normalized.substring(7))
+
+    if (isIP(normalized) === 4)
+        return isPrivateIPv4(normalized)
+
+    if (
+        normalized === '::'
+        || normalized === '::1'
+    )
+        return true
+
+    if (normalized.startsWith('::ffff:'))
+        return isPrivateIPv4(
+            normalized.substring(7),
+        )
+
     return normalized.startsWith('fc')
         || normalized.startsWith('fd')
         || normalized.startsWith('fe8')
@@ -34,21 +53,36 @@ export const isPrivateNetworkAddress = (address: string): boolean => {
 }
 
 export const assertRemoteImageUrlIsPublic = async (url: URL): Promise<void> => {
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    if (
+        url.protocol !== 'http:'
+        && url.protocol !== 'https:'
+    )
         throw new Error('Only public HTTP or HTTPS URLs are supported')
-    }
-    if (url.username || url.password) {
+
+    if (
+        url.username
+        || url.password
+    )
         throw new Error('Remote URL credentials are not allowed')
-    }
+
     const hostname = url.hostname.replace(/^\[/, '').replace(/\]$/, '')
-    if (hostname.toLowerCase() === 'localhost') {
+
+    if (hostname.toLowerCase() === 'localhost')
         throw new Error('Private network URLs are not allowed')
-    }
 
     const addresses = isIP(hostname)
         ? [{ address: hostname }]
-        : await lookup(hostname, { all: true, verbatim: true })
-    if (!addresses.length || addresses.some(({ address }) => isPrivateNetworkAddress(address))) {
+        : await lookup(
+            hostname,
+            {
+                all: true,
+                verbatim: true,
+            },
+        )
+
+    if (
+        !addresses.length
+        || addresses.some(({ address }) => isPrivateNetworkAddress(address))
+    )
         throw new Error('Private network URLs are not allowed')
-    }
 }

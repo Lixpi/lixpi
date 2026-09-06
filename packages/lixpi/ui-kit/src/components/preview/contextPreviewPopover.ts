@@ -9,8 +9,14 @@ import {
 } from '../helpTooltip/index.ts'
 import { InteractivePreviewPopover } from '../popover/interactivePreviewPopover.ts'
 
-export type ContextPreviewTileInstance = { dom: HTMLElement; destroy: () => void }
-export type ContextPreviewPortal = { root: HTMLElement; scale: number }
+export type ContextPreviewTileInstance = {
+    dom: HTMLElement
+    destroy: () => void
+}
+export type ContextPreviewPortal = {
+    root: HTMLElement
+    scale: number
+}
 export type ContextPreviewPopoverPlacement = 'top' | 'bottom' | 'left' | 'right'
 
 export type ContextPreviewPopoverContent = {
@@ -46,13 +52,13 @@ const portalCssVariables = [
     '--help-tooltip-content-z-index',
 ]
 
-function positionContextPreviewCanvasPopover(
+const positionContextPreviewCanvasPopover = (
     trigger: HTMLElement,
     popover: HTMLElement,
     portal: ContextPreviewPortal,
     placement: ContextPreviewPopoverPlacement,
     gap: number,
-): void {
+): void => {
     const triggerRect = trigger.getBoundingClientRect()
     const paneRect = portal.root.getBoundingClientRect()
     const triggerLeft = triggerRect.left - paneRect.left
@@ -86,12 +92,15 @@ function positionContextPreviewCanvasPopover(
             transform: `scale(${portal.scale}) translateX(${scaledGap})`,
         },
     }
-    applyStyle(popover, {
-        ...positionByPlacement[placement],
-        right: 'auto',
-        bottom: 'auto',
-        transformOrigin: 'top left',
-    })
+    applyStyle(
+        popover,
+        {
+            ...positionByPlacement[placement],
+            right: 'auto',
+            bottom: 'auto',
+            transformOrigin: 'top left',
+        },
+    )
 }
 
 // Inline content may be portaled to a supplied root while preserving view scale.
@@ -112,21 +121,29 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
         const html = createDocumentHtml(options.triggerContent.ownerDocument)
         this.view = options.triggerContent.ownerDocument.defaultView ?? window
         this.preferredPlacement = options.preferredPlacement ?? 'top'
+
         if (options.inlinePopover) {
             const rootClassName = [
                 'context-preview-main',
                 'context-preview-inline',
                 options.inlineLabelTrigger ? 'context-preview-inline-label' : '',
             ].filter(Boolean).join(' ')
-            this.trigger = html`<div
-                className="context-preview-trigger context-preview-inline-trigger"
-                tabindex="0"
-                aria-label=${options.accessibleLabel}
-                aria-expanded="false"
-            >${options.triggerContent}</div>` as HTMLElement
-            this.popover = html`<div className=${this.getInlinePopoverClassName(options.contentClassName, false)} role="tooltip">
+            this.trigger = html`
+                <div
+                    className="context-preview-trigger context-preview-inline-trigger"
+                    tabindex="0"
+                    aria-label=${options.accessibleLabel}
+                    aria-expanded="false"
+                >${options.triggerContent}</div>
+            ` as HTMLElement
+            this.popover = html`
+                <div
+                    className=${this.getInlinePopoverClassName(options.contentClassName, false)}
+                    role="tooltip"
+                >
                 ${options.content}
-            </div>` as HTMLElement
+            </div>
+            ` as HTMLElement
             this.dom = html`<div className=${rootClassName}>${this.trigger}${this.popover}</div>` as HTMLElement
             this.helpTooltip = null
             this.inlineController = new InteractivePreviewPopover({
@@ -136,9 +153,11 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
                 beforeOpen: options.beforeOpen,
                 afterOpen: this.portalPopoverToCanvasPane,
                 afterClose: () => {
-                    if (this.popover.parentElement !== this.dom) this.restorePopoverToTile()
+                    if (this.popover.parentElement !== this.dom)
+                        this.restorePopoverToTile()
                 },
             })
+
             return
         }
 
@@ -167,18 +186,37 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
             ? this.helpTooltip.dom
             : html`<div className="context-preview-main">${this.helpTooltip.dom}</div>` as HTMLElement
         this.inlineController = null
-        this.trigger.addEventListener('pointerenter', this.handleBeforeOpen, true)
-        this.trigger.addEventListener('focusin', this.handleBeforeOpen, true)
+        this.trigger.addEventListener(
+            'pointerenter',
+            this.handleBeforeOpen,
+            true,
+        )
+        this.trigger.addEventListener(
+            'focusin',
+            this.handleBeforeOpen,
+            true,
+        )
     }
 
-    updateContent = ({ accessibleLabel, content, contentClassName }: ContextPreviewPopoverContent): void => {
-        if (this.destroyed) return
+    updateContent = ({
+        accessibleLabel,
+        content,
+        contentClassName,
+    }: ContextPreviewPopoverContent): void => {
+        if (this.destroyed)
+            return
+
         this.popover.replaceChildren(content)
         this.trigger.setAttribute('aria-label', accessibleLabel)
+
         if (this.options.inlinePopover) {
             const isPortaled = this.popover.classList.contains('context-preview-inline-popover-portaled')
-            this.popover.className = this.getInlinePopoverClassName(contentClassName, this.dom.classList.contains('is-open'))
+            this.popover.className = this.getInlinePopoverClassName(
+                contentClassName,
+                this.dom.classList.contains('is-open'),
+            )
             this.popover.classList.toggle('context-preview-inline-popover-portaled', isPortaled)
+
             return
         }
 
@@ -192,20 +230,36 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
     }
 
     destroy = (): void => {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.stopPortalPositionSync()
+
         if (this.helpTooltip) {
-            this.trigger.removeEventListener('pointerenter', this.handleBeforeOpen, true)
-            this.trigger.removeEventListener('focusin', this.handleBeforeOpen, true)
+            this.trigger.removeEventListener(
+                'pointerenter',
+                this.handleBeforeOpen,
+                true,
+            )
+            this.trigger.removeEventListener(
+                'focusin',
+                this.handleBeforeOpen,
+                true,
+            )
             this.helpTooltip.destroy()
             this.dom.remove()
+
             return
         }
+
         this.inlineController?.destroy()
     }
 
-    private getInlinePopoverClassName(contentClassName: string, isOpen: boolean): string {
+    private getInlinePopoverClassName(
+        contentClassName: string,
+        isOpen: boolean,
+    ): string {
         return [
             contentClassName,
             'context-preview-inline-popover',
@@ -214,12 +268,12 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
         ].filter(Boolean).join(' ')
     }
 
-    private handleBeforeOpen = (): void => {
-        this.options.beforeOpen?.()
-    }
+    private handleBeforeOpen = (): void => void this.options.beforeOpen?.()
 
     private stopPortalPositionSync(): void {
-        if (this.portalPositionFrame === null) return
+        if (this.portalPositionFrame === null)
+            return
+
         this.view.cancelAnimationFrame(this.portalPositionFrame)
         this.portalPositionFrame = null
     }
@@ -229,17 +283,31 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
         this.portal = null
         this.popover.classList.remove('context-preview-inline-popover-portaled')
         this.popover.removeAttribute('style')
+
         if (this.dom.isConnected) {
             this.dom.appendChild(this.popover)
+
             return
         }
+
         this.popover.remove()
     }
 
     private syncPortalPosition(): void {
-        if (!this.portal || !this.dom.isConnected) return
+        if (
+            !this.portal
+            || !this.dom.isConnected
+        )
+            return
+
         this.portal = this.options.getPortal?.(this.dom) ?? this.portal
-        positionContextPreviewCanvasPopover(this.trigger, this.popover, this.portal, this.preferredPlacement, this.options.gap ?? 10)
+        positionContextPreviewCanvasPopover(
+            this.trigger,
+            this.popover,
+            this.portal,
+            this.preferredPlacement,
+            this.options.gap ?? 10,
+        )
     }
 
     private startPortalPositionSync(): void {
@@ -247,8 +315,10 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
         const update = (): void => {
             if (!this.dom.isConnected) {
                 this.restorePopoverToTile()
+
                 return
             }
+
             this.syncPortalPosition()
             this.portalPositionFrame = this.view.requestAnimationFrame(update)
         }
@@ -257,9 +327,16 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
 
     private portalPopoverToCanvasPane = (): void => {
         const nextPortal = this.options.getPortal?.(this.dom)
-        if (!nextPortal) return
+
+        if (!nextPortal)
+            return
+
         this.portal = nextPortal
-        copyCssCustomProperties(this.dom, this.popover, [...this.options.contentCssVariableNames ?? [], ...portalCssVariables])
+        copyCssCustomProperties(
+            this.dom,
+            this.popover,
+            [...(this.options.contentCssVariableNames ?? []), ...portalCssVariables],
+        )
         this.popover.classList.add('context-preview-inline-popover-portaled')
         nextPortal.root.appendChild(this.popover)
         this.syncPortalPosition()
@@ -267,8 +344,5 @@ class ContextPreviewPopover implements ContextPreviewPopoverInstance {
     }
 }
 
-export function createContextPreviewPopover(
-    options: CreateContextPreviewPopoverOptions,
-): ContextPreviewPopoverInstance {
-    return new ContextPreviewPopover(options)
-}
+export const createContextPreviewPopover = (options: CreateContextPreviewPopoverOptions): ContextPreviewPopoverInstance =>
+    new ContextPreviewPopover(options)

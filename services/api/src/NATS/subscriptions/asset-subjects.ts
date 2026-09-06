@@ -36,6 +36,7 @@ const assetSubjectIdentityService = new AssetSubjectIdentityService()
 export const getRequesterContext = async (userId: string) => {
     const requester = await getAssetRequesterContext(userId)
     ensureAssetEventRelay({ requester })
+
     return requester
 }
 
@@ -46,13 +47,36 @@ const getWorkspaceRequesterContext = async ({
     workspaceId: string
     userId: string
 }) => {
-    const workspace = await Workspace.getWorkspace({ workspaceId, userId })
-    if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' as const }
-    const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
-    if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' as const }
-    const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+    const workspace = await Workspace.getWorkspace({
+        workspaceId,
+        userId,
+    })
+
+    if (
+        'error' in workspace
+        || workspace.deletingAt
+    )
+        return { error: 'WORKSPACE_ACCESS_DENIED' as const }
+
+    const organization = await Organization.getOrganization({
+        organizationId: workspace.organizationId,
+        userId,
+    })
+
+    if ('error' in organization)
+        return { error: 'ORGANIZATION_ACCESS_DENIED' as const }
+
+    const requester = createAssetRequesterForWorkspaceUser(
+        workspace,
+        userId,
+        true,
+    )
     ensureAssetEventRelay({ requester })
-    return { requester, workspace }
+
+    return {
+        requester,
+        workspace,
+    }
 }
 
 const authorizeAssetWorkspaceBoundary = async ({
@@ -66,24 +90,62 @@ const authorizeAssetWorkspaceBoundary = async ({
     requester: Awaited<ReturnType<typeof getRequesterContext>>
     workspace?: Exclude<Awaited<ReturnType<typeof Workspace.getWorkspace>>, { error: string }>
 }) => {
-    if (!requester.editableWorkspaceIds.includes(workspaceId)) return { error: 'WORKSPACE_ACCESS_DENIED' as const }
+    if (!requester.editableWorkspaceIds.includes(workspaceId))
+        return { error: 'WORKSPACE_ACCESS_DENIED' as const }
+
     const [workspace, asset] = await Promise.all([
-        suppliedWorkspace ?? Workspace.getWorkspace({ workspaceId, userId: requester.userId }),
-        AssetModel.get({ assetId, requester }),
+        suppliedWorkspace ?? Workspace.getWorkspace({
+            workspaceId,
+            userId: requester.userId,
+        }),
+        AssetModel.get({
+            assetId,
+            requester,
+        }),
     ])
-    if ('error' in workspace) return { error: workspace.error }
-    if ('error' in asset) return asset
-    if (workspace.deletingAt) return { error: 'WORKSPACE_DELETING' as const }
-    if (workspace.organizationId !== asset.organizationId) return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' as const }
-    return { workspace, asset }
+
+    if ('error' in workspace)
+        return { error: workspace.error }
+
+    if ('error' in asset)
+        return asset
+
+    if (workspace.deletingAt)
+        return { error: 'WORKSPACE_DELETING' as const }
+
+    if (workspace.organizationId !== asset.organizationId)
+        return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' as const }
+
+    return {
+        workspace,
+        asset,
+    }
 }
 
-const hasMismatchedConversationIdentity = (node: unknown, assetId: string): boolean => {
-    if (!node || typeof node !== 'object') return false
-    const record = node as { type?: unknown; attrs?: { threadId?: unknown }; content?: unknown }
-    if (record.type === 'aiChatThread' && record.attrs?.threadId !== assetId) return true
+const hasMismatchedConversationIdentity = (
+    node: unknown,
+    assetId: string,
+): boolean => {
+    if (
+        !node
+        || typeof node !== 'object'
+    )
+        return false
+
+    const record = node as {
+        type?: unknown
+        attrs?: { threadId?: unknown }
+        content?: unknown
+    }
+
+    if (
+        record.type === 'aiChatThread'
+        && record.attrs?.threadId !== assetId
+    )
+        return true
+
     return Array.isArray(record.content)
-        && record.content.some((child) => hasMismatchedConversationIdentity(child, assetId))
+        && record.content.some(child => hasMismatchedConversationIdentity(child, assetId))
 }
 
 export const assetSubjects = [
@@ -98,40 +160,104 @@ export const assetSubjects = [
         handler: async (data: any) => {
             const userId = data.user.userId as string
             const requester = await getRequesterContext(userId)
-            if (!['workspace', 'user', 'organization'].includes(data.scope)) return { error: 'INVALID_SCOPE' }
-            if (typeof data.title !== 'string' || !data.title.trim()) return { error: 'TITLE_REQUIRED' }
-            if (!requester.organizationIds.includes(data.organizationId)) return { error: 'ORGANIZATION_ACCESS_DENIED' }
-            if (!requester.editableWorkspaceIds.includes(data.originWorkspaceId)) return { error: 'WORKSPACE_ACCESS_DENIED' }
-            const workspace = await Workspace.getWorkspace({ workspaceId: data.originWorkspaceId, userId })
-            if ('error' in workspace) return workspace
-            if (workspace.organizationId !== data.organizationId) return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
-            if (data.scope === 'workspace' && data.scopeOwnerId !== data.originWorkspaceId) return { error: 'INVALID_SCOPE_OWNER' }
-            if (data.scope === 'user' && data.scopeOwnerId !== userId) return { error: 'INVALID_SCOPE_OWNER' }
-            if (data.scope === 'organization' && data.scopeOwnerId !== data.organizationId) return { error: 'INVALID_SCOPE_OWNER' }
+
+            if (!['workspace', 'user', 'organization'].includes(data.scope))
+                return { error: 'INVALID_SCOPE' }
+
+            if (
+                typeof data.title !== 'string'
+                || !data.title.trim()
+            )
+                return { error: 'TITLE_REQUIRED' }
+
+            if (!requester.organizationIds.includes(data.organizationId))
+                return { error: 'ORGANIZATION_ACCESS_DENIED' }
+
+            if (!requester.editableWorkspaceIds.includes(data.originWorkspaceId))
+                return { error: 'WORKSPACE_ACCESS_DENIED' }
+
+            const workspace = await Workspace.getWorkspace({
+                workspaceId: data.originWorkspaceId,
+                userId,
+            })
+
+            if ('error' in workspace)
+                return workspace
+
+            if (workspace.organizationId !== data.organizationId)
+                return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+
+            if (
+                data.scope === 'workspace'
+                && data.scopeOwnerId !== data.originWorkspaceId
+            )
+                return { error: 'INVALID_SCOPE_OWNER' }
+
+            if (
+                data.scope === 'user'
+                && data.scopeOwnerId !== userId
+            )
+                return { error: 'INVALID_SCOPE_OWNER' }
+
+            if (
+                data.scope === 'organization'
+                && data.scopeOwnerId !== data.organizationId
+            )
+                return { error: 'INVALID_SCOPE_OWNER' }
+
             const primaryCategory = data.primaryCategory as AssetPrimaryCategory | undefined
-            if (primaryCategory !== 'document' && primaryCategory !== 'conversation') return { error: 'INVALID_PRIMARY_CATEGORY' }
-            if (data.assetId !== undefined && (typeof data.assetId !== 'string' || !isUuid(data.assetId))) {
+
+            if (
+                primaryCategory !== 'document'
+                && primaryCategory !== 'conversation'
+            )
+                return { error: 'INVALID_PRIMARY_CATEGORY' }
+
+            if (
+                data.assetId !== undefined
+                && (typeof data.assetId !== 'string' || !isUuid(data.assetId))
+            )
                 return { error: 'INVALID_ASSET_ID' }
-            }
+
             const assetId = data.assetId ?? uuid()
             const role = primaryCategory === 'conversation' ? 'conversation' : 'content'
             const defaultSnapshot = primaryCategory === 'conversation'
-                ? { type: 'doc', content: [{ type: 'aiChatThread', attrs: { threadId: assetId, status: 'active' } }] }
-                : { type: 'doc', content: [{ type: 'paragraph' }] }
+                ? {
+                    type: 'doc',
+                    content: [{
+                        type: 'aiChatThread',
+                        attrs: {
+                            threadId: assetId,
+                            status: 'active',
+                        },
+                    }],
+                }
+                : {
+                    type: 'doc',
+                    content: [{ type: 'paragraph' }],
+                }
             const initialDoc = data.initialDoc ?? defaultSnapshot
-            if (primaryCategory === 'conversation' && hasMismatchedConversationIdentity(initialDoc, assetId)) {
+
+            if (
+                primaryCategory === 'conversation'
+                && hasMismatchedConversationIdentity(initialDoc, assetId)
+            )
                 return { error: 'CONVERSATION_IDENTITY_MISMATCH' }
-            }
+
             AssetDocumentService.assertAssetBackedMediaNodes(initialDoc)
-            if (AssetDocumentService.getEmbeddedAssetIds(initialDoc, role).length > 0) {
+
+            if (AssetDocumentService.getEmbeddedAssetIds(initialDoc, role).length > 0)
                 return { error: 'INITIAL_EMBEDDED_ASSETS_REQUIRE_ATTACH' }
-            }
+
             const snapshot = new HeadlessProseMirrorEngine({
                 documentType: primaryCategory === 'conversation' ? DOCUMENT_TYPE.ASSET_CONVERSATION : DOCUMENT_TYPE.ASSET_CONTENT,
                 doc: initialDoc,
                 version: 0,
             }).snapshot()
-            const snapshotBytes = Buffer.from(JSON.stringify(snapshot), 'utf8')
+            const snapshotBytes = Buffer.from(
+                JSON.stringify(snapshot),
+                'utf8',
+            )
             const snapshotBlob = await BlobModel.store({
                 organizationId: data.organizationId,
                 bytes: snapshotBytes,
@@ -158,13 +284,24 @@ export const assetSubjects = [
                     },
                 },
                 states: primaryCategory === 'conversation'
-                    ? { lifecycle: 'active', media: 'none', conversation: 'idle', provenance: 'none' }
-                    : { lifecycle: 'active', media: 'none', conversation: 'none', provenance: 'none' },
+                    ? {
+                        lifecycle: 'active',
+                        media: 'none',
+                        conversation: 'idle',
+                        provenance: 'none',
+                    }
+                    : {
+                        lifecycle: 'active',
+                        media: 'none',
+                        conversation: 'none',
+                        provenance: 'none',
+                    },
                 workspaceReference: {
                     workspaceId: data.originWorkspaceId,
                     surfaceIds: [`${primaryCategory}#${assetId}`],
                 },
             })
+
             return asset
         },
     },
@@ -175,29 +312,49 @@ export const assetSubjects = [
         permissions: {
             pub: { allow: [ASSET_SUBJECTS.GET] },
             sub: {
-                allow: Object.values(ASSET_SUBJECTS.EVENTS).map((subject) => `${subject}.{userIdToken}`),
+                allow: Object.values(ASSET_SUBJECTS.EVENTS).map(subject => `${subject}.{userIdToken}`),
             },
         },
         handler: async (data: any) => {
             const userId = data.user.userId as string
-            if (typeof data.workspaceId === 'string' && data.workspaceId) {
-                const context = await getWorkspaceRequesterContext({ workspaceId: data.workspaceId, userId })
-                if ('error' in context) return context
+
+            if (
+                typeof data.workspaceId === 'string'
+                && data.workspaceId
+            ) {
+                const context = await getWorkspaceRequesterContext({
+                    workspaceId: data.workspaceId,
+                    userId,
+                })
+
+                if ('error' in context)
+                    return context
+
                 const result = await AssetModel.get({
                     assetId: data.assetId,
                     requester: context.requester,
                 })
-                if (!('error' in result) && result.organizationId !== context.workspace.organizationId) {
+
+                if (
+                    !('error' in result)
+                    && result.organizationId !== context.workspace.organizationId
+                )
                     return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
-                }
-                if (!('error' in result)) rememberAuthorizedAssetEvent(userId, result.assetId)
+
+                if (!('error' in result))
+                    rememberAuthorizedAssetEvent(userId, result.assetId)
+
                 return result
             }
+
             const result = await AssetModel.get({
                 assetId: data.assetId,
                 requester: await getRequesterContext(userId),
             })
-            if (!('error' in result)) rememberAuthorizedAssetEvent(userId, result.assetId)
+
+            if (!('error' in result))
+                rememberAuthorizedAssetEvent(userId, result.assetId)
+
             return result
         },
     },
@@ -210,19 +367,26 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            const context = typeof data.workspaceId === 'string' && data.workspaceId
+            const context = typeof data.workspaceId === 'string'
+                && data.workspaceId
                 ? await getWorkspaceRequesterContext({
                     workspaceId: data.workspaceId,
                     userId: data.user.userId,
                 })
                 : null
-            if (context && 'error' in context) return context
+
+            if (
+                context
+                && 'error' in context
+            )
+                return context
+
             const requester = context?.requester ?? await getRequesterContext(data.user.userId)
             const result = await AssetModel.listAvailable({
                 scopeAndOwners: [
-                    ...requester.workspaceIds.map((workspaceId) => buildAssetScopeAndOwnerKey('workspace', workspaceId)),
+                    ...requester.workspaceIds.map(workspaceId => buildAssetScopeAndOwnerKey('workspace', workspaceId)),
                     buildAssetScopeAndOwnerKey('user', requester.userId),
-                    ...requester.organizationIds.map((organizationId) => buildAssetScopeAndOwnerKey('organization', organizationId)),
+                    ...requester.organizationIds.map(organizationId => buildAssetScopeAndOwnerKey('organization', organizationId)),
                 ],
                 principalId: requester.userId,
                 organizationIds: requester.organizationIds,
@@ -230,7 +394,10 @@ export const assetSubjects = [
                 cursor: data.cursor,
                 primaryCategory: data.primaryCategory as AssetPrimaryCategory | undefined,
             })
-            for (const item of result.items) rememberAuthorizedAssetEvent(requester.userId, item.assetId)
+
+            for (const item of result.items)
+                rememberAuthorizedAssetEvent(requester.userId, item.assetId)
+
             return result
         },
     },
@@ -250,6 +417,7 @@ export const assetSubjects = [
                 ...(data.title !== undefined ? { title: data.title } : {}),
                 ...(data.descriptor !== undefined ? { descriptor: data.descriptor } : {}),
             })
+
             return result
         },
     },
@@ -278,16 +446,22 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (!['workspace', 'user', 'organization'].includes(data.scope)) return { error: 'INVALID_SCOPE' }
+            if (!['workspace', 'user', 'organization'].includes(data.scope))
+                return { error: 'INVALID_SCOPE' }
+
             const requester = await getRequesterContext(data.user.userId)
+
             if (data.scope === 'workspace') {
                 const boundary = await authorizeAssetWorkspaceBoundary({
                     assetId: data.assetId,
                     workspaceId: data.scopeOwnerId,
                     requester,
                 })
-                if ('error' in boundary) return boundary
+
+                if ('error' in boundary)
+                    return boundary
             }
+
             return await AssetModel.changeScope({
                 assetId: data.assetId,
                 requester,
@@ -306,14 +480,25 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (!['output-node', 'branch-lineage'].includes(data.scope)) return { error: 'INVALID_REVIEW_SCOPE' }
-            if (!['accept', 'supersede', 'reject'].includes(data.action)) return { error: 'INVALID_REVIEW_ACTION' }
-            if (data.action === 'supersede' && data.scope === 'output-node' && data.preserveLineage !== true) {
+            if (!['output-node', 'branch-lineage'].includes(data.scope))
+                return { error: 'INVALID_REVIEW_SCOPE' }
+
+            if (!['accept', 'supersede', 'reject'].includes(data.action))
+                return { error: 'INVALID_REVIEW_ACTION' }
+
+            if (
+                data.action === 'supersede'
+                && data.scope === 'output-node'
+                && data.preserveLineage !== true
+            )
                 return { error: 'MEDIA_NODE_PROMPT_REGENERATION_NOT_SUPPORTED' }
-            }
-            if (typeof data.workspaceId !== 'string' || typeof data.nodeId !== 'string') {
+
+            if (
+                typeof data.workspaceId !== 'string'
+                || typeof data.nodeId !== 'string'
+            )
                 return { error: 'INVALID_REVIEW_TARGET' }
-            }
+
             return await generatedOutputReviewService.review({
                 request: {
                     workspaceId: data.workspaceId,
@@ -341,7 +526,10 @@ export const assetSubjects = [
                 workspaceId: data.workspaceId,
                 requester,
             })
-            if ('error' in boundary) return boundary
+
+            if ('error' in boundary)
+                return boundary
+
             return await AssetModel.attachWorkspaceReference({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
@@ -362,22 +550,33 @@ export const assetSubjects = [
         },
         handler: async (data: any) => {
             const requester = await getRequesterContext(data.user.userId)
-            if (data.referenceType === 'catalog') {
-                return await AssetModel.detachCatalogReference({ assetId: data.assetId, requester })
-            }
+
+            if (data.referenceType === 'catalog')
+                return await AssetModel.detachCatalogReference({
+                    assetId: data.assetId,
+                    requester,
+                })
+
             const boundary = await authorizeAssetWorkspaceBoundary({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
                 requester,
             })
-            if ('error' in boundary) return boundary
-            if (boundary.asset.documents.conversation && data.surfaceId === `conversation#${data.assetId}`) {
+
+            if ('error' in boundary)
+                return boundary
+
+            if (
+                boundary.asset.documents.conversation
+                && data.surfaceId === `conversation#${data.assetId}`
+            ) {
                 await AssetModel.removeWorkspaceSurfaceReferencesByPrefix({
                     workspaceId: data.workspaceId,
                     surfacePrefix: `conversation#${data.assetId}#media#`,
                     requester,
                 })
             }
+
             return await AssetModel.detachWorkspaceReference({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
@@ -397,19 +596,30 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
+            if (
+                typeof data.holderId !== 'string'
+                || !data.holderId
+            )
+                return { error: 'LEASE_HOLDER_REQUIRED' }
+
             const context = await getWorkspaceRequesterContext({
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
             })
-            if ('error' in context) return context
+
+            if ('error' in context)
+                return context
+
             const boundary = await authorizeAssetWorkspaceBoundary({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
                 requester: context.requester,
                 workspace: context.workspace,
             })
-            if ('error' in boundary) return boundary
+
+            if ('error' in boundary)
+                return boundary
+
             return await AssetModel.acquireLease({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
@@ -427,19 +637,30 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
+            if (
+                typeof data.holderId !== 'string'
+                || !data.holderId
+            )
+                return { error: 'LEASE_HOLDER_REQUIRED' }
+
             const context = await getWorkspaceRequesterContext({
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
             })
-            if ('error' in context) return context
+
+            if ('error' in context)
+                return context
+
             const boundary = await authorizeAssetWorkspaceBoundary({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
                 requester: context.requester,
                 workspace: context.workspace,
             })
-            if ('error' in boundary) return boundary
+
+            if ('error' in boundary)
+                return boundary
+
             return await AssetModel.renewLease({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
@@ -457,19 +678,30 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
+            if (
+                typeof data.holderId !== 'string'
+                || !data.holderId
+            )
+                return { error: 'LEASE_HOLDER_REQUIRED' }
+
             const context = await getWorkspaceRequesterContext({
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
             })
-            if ('error' in context) return context
+
+            if ('error' in context)
+                return context
+
             const boundary = await authorizeAssetWorkspaceBoundary({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
                 requester: context.requester,
                 workspace: context.workspace,
             })
-            if ('error' in boundary) return boundary
+
+            if ('error' in boundary)
+                return boundary
+
             return await AssetModel.releaseLease({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
@@ -488,11 +720,26 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
+            if (
+                typeof data.holderId !== 'string'
+                || !data.holderId
+            )
+                return { error: 'LEASE_HOLDER_REQUIRED' }
+
             const requester = await getRequesterContext(data.user.userId)
-            const boundary = await authorizeAssetWorkspaceBoundary({ assetId: data.assetId, workspaceId: data.workspaceId, requester })
-            if ('error' in boundary) return boundary
-            return await AssetDocumentService.submitSteps({ payload: data, requester })
+            const boundary = await authorizeAssetWorkspaceBoundary({
+                assetId: data.assetId,
+                workspaceId: data.workspaceId,
+                requester,
+            })
+
+            if ('error' in boundary)
+                return boundary
+
+            return await AssetDocumentService.submitSteps({
+                payload: data,
+                requester,
+            })
         },
     },
     {
@@ -508,17 +755,44 @@ export const assetSubjects = [
             const userId = data.user.userId as string
             const activateLiveRelay = data.activateLiveRelay === true
             let requester: Awaited<ReturnType<typeof getRequesterContext>>
+
             if (activateLiveRelay) {
-                if (typeof data.workspaceId !== 'string' || !data.workspaceId) return { error: 'WORKSPACE_ID_REQUIRED' }
-                const workspace = await Workspace.getWorkspace({ workspaceId: data.workspaceId, userId })
-                if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' }
-                if (workspace.organizationId !== data.organizationId) return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
-                const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
-                if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' }
-                requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
-            } else {
+                if (
+                    typeof data.workspaceId !== 'string'
+                    || !data.workspaceId
+                )
+                    return { error: 'WORKSPACE_ID_REQUIRED' }
+
+                const workspace = await Workspace.getWorkspace({
+                    workspaceId: data.workspaceId,
+                    userId,
+                })
+
+                if (
+                    'error' in workspace
+                    || workspace.deletingAt
+                )
+                    return { error: 'WORKSPACE_ACCESS_DENIED' }
+
+                if (workspace.organizationId !== data.organizationId)
+                    return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+
+                const organization = await Organization.getOrganization({
+                    organizationId: workspace.organizationId,
+                    userId,
+                })
+
+                if ('error' in organization)
+                    return { error: 'ORGANIZATION_ACCESS_DENIED' }
+
+                requester = createAssetRequesterForWorkspaceUser(
+                    workspace,
+                    userId,
+                    true,
+                )
+            } else
                 requester = await getRequesterContext(userId)
-            }
+
             return await AssetDocumentService.resume({
                 coordinate: {
                     organizationId: data.organizationId,

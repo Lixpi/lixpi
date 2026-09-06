@@ -9,7 +9,7 @@ import {
     type LixpiCanvasSettings,
 } from './types.ts'
 
-export function createLixpiCanvasSettings(palette: Partial<LixpiCanvasPalette> = {}): LixpiCanvasSettings {
+export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> = {}): LixpiCanvasSettings => {
     const colorPalette: LixpiCanvasPalette = {
         steelBlue: '#5d656d',
         offWhite: '#f5f3f3',

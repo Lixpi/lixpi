@@ -92,9 +92,10 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
         }
     }
 
-    for (const inputPath of inputPaths) await visit(
-        resolve(inputPath),
-    )
+    for (const inputPath of inputPaths)
+        await visit(
+            resolve(inputPath),
+        )
 
     return {
         files: files.sort(),
@@ -377,7 +378,8 @@ const runCli = async (): Promise<void> => {
     } = await collectTypeScriptFiles(inputPaths)
 
     if (prohibitedFiles.length > 0) {
-        for (const file of prohibitedFiles) err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
+        for (const file of prohibitedFiles)
+            err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
 
         process.exit(1)
     }
@@ -407,9 +409,8 @@ const runCli = async (): Promise<void> => {
             continue
         }
 
-        if (mode === 'check') for (const line of violations) err(
-            `${file}:${line}: named imports and exports must use the repository value/type layout`,
-        )
+        if (mode === 'check') for (const line of violations)
+            err(`${file}:${line}: named imports and exports must use the repository value/type layout`)
     }
 
     if (mode === 'fix') {

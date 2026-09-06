@@ -19,13 +19,19 @@ const AI_MODEL_ICONS: Record<string, string> = {
     bytedanceIcon,
 }
 
-export function getAiModelIcon(iconName: string | null | undefined): string | null {
-    if (!iconName) return null
+export const getAiModelIcon = (iconName: string | null | undefined): string | null => {
+    if (!iconName)
+        return null
+
     return AI_MODEL_ICONS[iconName] ?? null
 }
 
-export function getAiProviderIcon(provider: string | null | undefined): string | null {
-    switch (String(provider ?? '').trim().toLowerCase()) {
+export const getAiProviderIcon = (provider: string | null | undefined): string | null => {
+    switch (
+        String(provider ?? '')
+            .trim()
+            .toLowerCase()
+    ) {
         case 'anthropic':
             return claudeIcon
         case 'openai':
@@ -41,8 +47,12 @@ export function getAiProviderIcon(provider: string | null | undefined): string |
     }
 }
 
-export function getAiProviderColorIcon(provider: string | null | undefined): string | null {
-    switch (String(provider ?? '').trim().toLowerCase()) {
+export const getAiProviderColorIcon = (provider: string | null | undefined): string | null => {
+    switch (
+        String(provider ?? '')
+            .trim()
+            .toLowerCase()
+    ) {
         case 'google':
             return geminiColorIcon
         default:
@@ -50,6 +60,7 @@ export function getAiProviderColorIcon(provider: string | null | undefined): str
     }
 }
 
-export function getAiProviderClassSuffix(provider: string | null | undefined): string {
-    return (provider || 'unknown').toLowerCase().replace(/[^a-z0-9-]+/g, '-')
-}
+export const getAiProviderClassSuffix = (provider: string | null | undefined): string => (provider || 'unknown').toLowerCase().replace(
+    /[^a-z0-9-]+/g,
+    '-',
+)

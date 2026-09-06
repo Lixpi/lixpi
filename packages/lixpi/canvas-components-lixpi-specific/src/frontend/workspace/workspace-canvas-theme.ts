@@ -4,7 +4,10 @@ import {
 
 type WorkspaceCanvasSettings = WorkspaceCanvasHost['settings']
 
-export function applyWorkspaceCanvasTheme(pane: HTMLElement, settings: WorkspaceCanvasSettings): void {
+export const applyWorkspaceCanvasTheme = (
+    pane: HTMLElement,
+    settings: WorkspaceCanvasSettings,
+): void => {
     const connector = settings.connector.styles
     const selection = settings.selection.styles
     const mediaNode = settings.mediaNode.styles
@@ -43,11 +46,14 @@ export function applyWorkspaceCanvasTheme(pane: HTMLElement, settings: Workspace
         '--workspace-branch-marker-response-font-size': `${markerText.responseFontSize}px`,
         '--workspace-branch-marker-response-line-height': `${markerText.responseLineHeight}`,
     }
-    for (const [name, value] of Object.entries(properties)) pane.style.setProperty(name, value)
+
+    for (const [name, value] of Object.entries(properties))
+        pane.style.setProperty(name, value)
 }
 
-export function getWorkspaceRightPanelCssProperties(settings: WorkspaceCanvasSettings): Record<`--${string}`, string> {
+export const getWorkspaceRightPanelCssProperties = (settings: WorkspaceCanvasSettings): Record<`--${string}`, string> => {
     const preview = settings.aiChatThread.contextPreview.styles
+
     return {
         '--ai-chat-thread-node-box-shadow': settings.aiChatThread.styles.nodeBoxShadow,
         '--ai-chat-thread-node-border': settings.aiChatThread.styles.nodeBorder,

@@ -44,6 +44,7 @@ import {
     geminiIcon,
     plusIcon,
 } from '@lixpi/ui-kit/svg'
+import { withoutLayout } from '@lixpi/test-utils'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -62,11 +63,11 @@ const makeChain = (): any => {
 // =============================================================================
 
 function expectSourceToContain(source: string, snippet: string): void {
-    expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string): void {
-    expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 }
 
 function createEditorStateWithPlugins(document: ProseMirrorNode, plugins: any[] = []) {

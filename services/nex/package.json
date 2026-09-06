@@ -27,6 +27,7 @@
         "type-fest": "*"
     },
     "devDependencies": {
+        "@lixpi/test-utils": "workspace:*",
         "vitest": "latest",
         "@types/node": "*"
     },

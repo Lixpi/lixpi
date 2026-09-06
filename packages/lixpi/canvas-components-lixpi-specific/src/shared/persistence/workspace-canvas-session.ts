@@ -9,18 +9,29 @@ export class WorkspaceCanvasSession {
     private closing = false
     private readonly flushers = new Set<() => void | Promise<void>>()
 
-    constructor(readonly workspaceId: string, ports: CanvasPersistencePorts) {
+    constructor(
+        readonly workspaceId: string,
+        ports: CanvasPersistencePorts,
+    ) {
         this.persistence = new CanvasPersistenceController(workspaceId, ports)
     }
 
-    acquire(): { session: WorkspaceCanvasSession; release: () => void } {
-        if (this.closing) throw new Error(`Canvas session ${this.workspaceId} is closing`)
+    acquire(): {
+        session: WorkspaceCanvasSession
+        release: () => void
+    } {
+        if (this.closing)
+            throw new Error(`Canvas session ${this.workspaceId} is closing`)
+
         this.views += 1
         let released = false
+
         return {
             session: this,
             release: () => {
-                if (released) return
+                if (released)
+                    return
+
                 released = true
                 this.views -= 1
             },
@@ -32,19 +43,27 @@ export class WorkspaceCanvasSession {
     }
 
     async flush(): Promise<void> {
-        const results = await Promise.allSettled([...this.flushers].map(async flush => await flush()))
+        const results = await Promise.allSettled(
+            [...this.flushers].map(async flush => await flush()),
+        )
         const errors = results.filter(result => result.status === 'rejected').map(result => result.reason)
+
         try {
             await this.persistence.flush()
         } catch (error) {
             errors.push(error)
         }
-        if (errors.length > 0) throw new AggregateError(errors, 'Canvas view flush failed')
+
+        if (errors.length > 0)
+            throw new AggregateError(errors, 'Canvas view flush failed')
     }
 
     registerFlush(flush: () => void | Promise<void>): () => void {
-        if (this.closing) throw new Error(`Canvas session ${this.workspaceId} is closing`)
+        if (this.closing)
+            throw new Error(`Canvas session ${this.workspaceId} is closing`)
+
         this.flushers.add(flush)
+
         return () => this.flushers.delete(flush)
     }
 
@@ -54,14 +73,20 @@ export class WorkspaceCanvasSession {
 
     async close(): Promise<void> {
         this.closing = true
-        const results = await Promise.allSettled([...this.flushers].map(async flush => await flush()))
+        const results = await Promise.allSettled(
+            [...this.flushers].map(async flush => await flush()),
+        )
         const errors = results.filter(result => result.status === 'rejected').map(result => result.reason)
+
         try {
             await this.persistence.close()
         } catch (error) {
             errors.push(error)
         }
-        if (errors.length > 0) throw new AggregateError(errors, 'Canvas view close failed')
+
+        if (errors.length > 0)
+            throw new AggregateError(errors, 'Canvas view close failed')
+
         this.flushers.clear()
     }
 }
@@ -73,12 +98,19 @@ export class WorkspaceCanvasSessionHub {
     constructor(private readonly createPorts: (workspaceId: string) => CanvasPersistencePorts) {}
 
     get(workspaceId: string): WorkspaceCanvasSession {
-        if (this.closing) throw new Error('Workspace canvas sessions are closing')
+        if (this.closing)
+            throw new Error('Workspace canvas sessions are closing')
+
         let session = this.sessions.get(workspaceId)
+
         if (!session) {
-            session = new WorkspaceCanvasSession(workspaceId, this.createPorts(workspaceId))
+            session = new WorkspaceCanvasSession(
+                workspaceId,
+                this.createPorts(workspaceId),
+            )
             this.sessions.set(workspaceId, session)
         }
+
         return session
     }
 
@@ -101,8 +133,12 @@ export class WorkspaceCanvasSessionHub {
     }
 
     private async settle(operation: 'flush' | 'drain' | 'close'): Promise<void> {
-        const results = await Promise.allSettled([...this.sessions.values()].map(async session => await session[operation]()))
+        const results = await Promise.allSettled(
+            [...this.sessions.values()].map(async session => await session[operation]()),
+        )
         const errors = results.filter(result => result.status === 'rejected').map(result => result.reason)
-        if (errors.length > 0) throw new AggregateError(errors, `Canvas session ${operation} failed`)
+
+        if (errors.length > 0)
+            throw new AggregateError(errors, `Canvas session ${operation} failed`)
     }
 }

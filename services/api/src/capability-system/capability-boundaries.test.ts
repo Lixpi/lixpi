@@ -10,6 +10,7 @@ import {
     expect,
     it,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 async function listTypeScriptFiles(directory: string): Promise<string[]> {
     const entries = await readdir(directory, { withFileTypes: true })
@@ -32,7 +33,7 @@ async function readSources(directory: string): Promise<Array<{ path: string; sou
 
 function expectSourceNotToContain(source: string, snippet: string, label: string): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${label} should not contain:\n${snippet}`,
     ).toBe(false)
 }

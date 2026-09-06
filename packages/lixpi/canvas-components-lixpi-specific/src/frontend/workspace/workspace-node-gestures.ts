@@ -31,7 +31,10 @@ import {
 } from '../media/workspace-media-layer.ts'
 
 type BranchMarker = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
-type Scope = { workspaceId: string; sceneKey: string }
+type Scope = {
+    workspaceId: string
+    sceneKey: string
+}
 type GestureScope = Scope & { id: number }
 
 export type WorkspaceNodeDragOptions = {
@@ -61,7 +64,12 @@ export type WorkspaceNodeGesturesPorts = {
     bringToFront: (element: HTMLElement) => void
     lockPan: () => () => void
     getViewport: () => CanvasViewport
-    updateChromeTransform: (nodeId: string, position: Point, dimensions: Size, viewport: CanvasViewport) => void
+    updateChromeTransform: (
+        nodeId: string,
+        position: Point,
+        dimensions: Size,
+        viewport: CanvasViewport,
+    ) => void
     updateChromeLayout: () => void
     scheduleEdges: () => void
     cancelEdges: () => void
@@ -71,14 +79,19 @@ export type WorkspaceNodeGesturesPorts = {
     shouldFillSelectionBounds: () => boolean
     syncNodeGeometry: (nodes: CanvasNode[]) => void
     syncMedia: () => void
-    rememberManualMarker: (node: BranchMarker, dimensions: Size) => void
+    rememberManualMarker: (
+        node: BranchMarker,
+        dimensions: Size,
+    ) => void
     commit: (state: CanvasState) => void
-    setTimer: (callback: () => void, delay: number) => () => void
+    setTimer: (
+        callback: () => void,
+        delay: number,
+    ) => () => void
 }
 
-function isBranchMarker(node: CanvasNode): node is BranchMarker {
-    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
-}
+const isBranchMarker = (node: CanvasNode): node is BranchMarker =>
+    node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 
 export class WorkspaceNodeGestures {
     draggingNodeId: string | null = null
@@ -102,46 +115,59 @@ export class WorkspaceNodeGestures {
     consumeNodeClick(): boolean {
         const suppressed = this.nextNodeClickSuppressed
         this.nextNodeClickSuppressed = false
+
         return suppressed
     }
 
     consumePaneClick(): boolean {
         const suppressed = this.nextPaneClickSuppressed
         this.nextPaneClickSuppressed = false
+
         return suppressed
     }
 
     suppressPaneClick(): void {
-        if (!this.closed) this.nextPaneClickSuppressed = true
+        if (!this.closed)
+            this.nextPaneClickSuppressed = true
     }
 
     private suppressNodeClick(): void {
         this.cancelSuppression?.()
         this.nextNodeClickSuppressed = true
         const scope = this.activeScope
-        this.cancelSuppression = this.ports.setTimer(() => {
-            if (this.activeScope !== scope) return
-            this.cancelSuppression = null
-            this.nextNodeClickSuppressed = false
-        }, 0)
+        this.cancelSuppression = this.ports.setTimer(
+            () => {
+                if (this.activeScope !== scope)
+                    return
+
+                this.cancelSuppression = null
+                this.nextNodeClickSuppressed = false
+            },
+            0,
+        )
     }
 
     suspendPanLock(_nodeId: string): void {
-        if (this.closed) return
+        if (this.closed)
+            return
+
         if (!this.ports.pane.classList.contains('nopan')) {
             this.ports.pane.classList.add('nopan')
             this.addedNoPan = true
         }
+
         this.releasePointerLock ??= this.ports.lockPan()
     }
 
     releasePanLock(): void {
         const release = this.releasePointerLock
         this.releasePointerLock = null
+
         if (this.addedNoPan) {
             this.addedNoPan = false
             this.ports.pane.classList.remove('nopan')
         }
+
         release?.()
     }
 
@@ -150,7 +176,9 @@ export class WorkspaceNodeGestures {
     }
 
     destroy(): void {
-        if (this.closed) return
+        if (this.closed)
+            return
+
         this.closed = true
         this.disposeInteraction('destroyed')
     }
@@ -161,7 +189,9 @@ export class WorkspaceNodeGestures {
         const cancelTimer = this.cancelSuppression
         const lifetime = new Lifetime()
         lifetime.own(() => {
-            if (this.activeScope !== scope) return
+            if (this.activeScope !== scope)
+                return
+
             this.activeScope = null
             this.activeCleanup = null
             this.cancelSuppression = null
@@ -177,51 +207,96 @@ export class WorkspaceNodeGestures {
         lifetime.destroy()
     }
 
-    private ownGestureCleanup(scope: GestureScope, cleanup: () => void): () => void {
+    private ownGestureCleanup(
+        scope: GestureScope,
+        cleanup: () => void,
+    ): () => void {
         let released = false
         const release = () => {
-            if (released) return
+            if (released)
+                return
+
             released = true
             cleanup()
-            if (this.activeScope !== scope) return
+
+            if (this.activeScope !== scope)
+                return
+
             this.activeCleanup = null
             this.draggingNodeId = null
             this.resizingNodeId = null
             this.releasePanLock()
         }
         this.activeCleanup = release
+
         return release
     }
 
     private begin(): GestureScope | null {
-        if (this.closed) return null
+        if (this.closed)
+            return null
+
         const revision = this.gestureRevision
         this.disposeInteraction('replaced')
-        if (this.closed || revision !== this.gestureRevision) return null
+
+        if (
+            this.closed
+            || revision !== this.gestureRevision
+        )
+            return null
+
         const scope = this.ports.readScope()
-        if (!scope || !this.ports.readState()) return null
-        const active = { ...scope, id: ++this.gestureRevision }
+
+        if (
+            !scope
+            || !this.ports.readState()
+        )
+            return null
+
+        const active = {
+            ...scope,
+            id: ++this.gestureRevision,
+        }
         this.activeScope = active
+
         return active
     }
 
     private isCurrent(scope: GestureScope): boolean {
-        if (this.closed || this.activeScope !== scope || !this.currentCanvasState) return false
+        if (
+            this.closed
+            || this.activeScope !== scope
+            || !this.currentCanvasState
+        )
+            return false
+
         const current = this.ports.readScope()
+
         return current?.workspaceId === scope.workspaceId && current.sceneKey === scope.sceneKey
     }
 
     private getNodesById(nodes = this.currentCanvasState?.nodes ?? []): Map<string, CanvasNode> {
-        return new Map(nodes.map(node => [node.nodeId, node]))
+        return new Map(
+            nodes.map(node => [node.nodeId, node]),
+        )
     }
 
-    startDrag(event: MouseEvent, nodeId: string, options: WorkspaceNodeDragOptions = {}) {
+    startDrag(
+        event: MouseEvent,
+        nodeId: string,
+        options: WorkspaceNodeDragOptions = {},
+    ) {
         const scope = this.begin()
-        if (!scope) return
+
+        if (!scope)
+            return
+
         event.preventDefault()
         event.stopPropagation()
 
-        if (!this.currentCanvasState) return
+        if (!this.currentCanvasState)
+            return
+
         const allowSelection = options.allowSelection !== false
 
         const dragPlan = computeWorkspaceDragPlan({
@@ -231,20 +306,29 @@ export class WorkspaceNodeGestures {
         })
         const resolvedNodeId = dragPlan.resolvedNodeId
 
-        if ((event.metaKey || event.ctrlKey)) {
-            if (allowSelection) {
+        if (
+            event.metaKey
+            || event.ctrlKey
+        ) {
+            if (allowSelection)
                 this.ports.toggleSelection(resolvedNodeId)
-            } else {
-                if (options.suppressPaneClick) this.suppressPaneClick()
+            else {
+                if (options.suppressPaneClick)
+                    this.suppressPaneClick()
+
                 options.onClick?.()
             }
+
             this.releasePanLock()
+
             return
         }
 
         const nodeEl = this.ports.findElement(resolvedNodeId)
+
         if (!nodeEl) {
             this.releasePanLock()
+
             return
         }
 
@@ -270,112 +354,218 @@ export class WorkspaceNodeGestures {
         for (const draggedNodeId of draggedNodeIds) {
             const draggedNodeEl = this.ports.findElement(draggedNodeId)
             const bounds = this.ports.media()?.getNodeBounds(draggedNodeId)
-            if (!draggedNodeEl || !bounds) continue
 
-            draggedNodeEntries.set(draggedNodeId, {
-                el: draggedNodeEl,
-                startLeft: bounds.x,
-                startTop: bounds.y,
-                startWidth: bounds.width,
-                startHeight: bounds.height,
-            })
+            if (
+                !draggedNodeEl
+                || !bounds
+            )
+                continue
+
+            draggedNodeEntries.set(
+                draggedNodeId,
+                {
+                    el: draggedNodeEl,
+                    startLeft: bounds.x,
+                    startTop: bounds.y,
+                    startWidth: bounds.width,
+                    startHeight: bounds.height,
+                },
+            )
         }
 
         if (draggedNodeEntries.size === 0) {
             this.releasePanLock()
+
             return
         }
 
         const cleanup = this.ownGestureCleanup(scope, () => {
-            for (const entry of draggedNodeEntries.values()) entry.el.classList.remove('is-dragging')
+            for (const entry of draggedNodeEntries.values())
+                entry.el.classList.remove('is-dragging')
         })
         let dragVisualsActivated = false
         const activateDragVisuals = () => {
-            if (!this.isCurrent(scope) || dragVisualsActivated) return
+            if (
+                !this.isCurrent(scope)
+                || dragVisualsActivated
+            )
+                return
+
             dragVisualsActivated = true
             this.draggingNodeId = resolvedNodeId
+
             for (const [draggedNodeId, entry] of draggedNodeEntries) {
                 entry.el.classList.add('is-dragging')
-                if (draggedNodeId !== resolvedNodeId) {
+
+                if (draggedNodeId !== resolvedNodeId)
                     this.ports.bringToFront(entry.el)
-                }
             }
         }
 
         const handleMouseMove = (bounds: ReadonlyMap<string, Rect>) => {
-            if (!this.isCurrent(scope)) return
+            if (!this.isCurrent(scope))
+                return
+
             for (const [draggedNodeId, entry] of draggedNodeEntries) {
-                if (!this.isCurrent(scope)) return
+                if (!this.isCurrent(scope))
+                    return
+
                 const next = bounds.get(draggedNodeId)!
-                const currentPos = { x: next.x, y: next.y }
-                const currentDims = { width: next.width, height: next.height }
-                this.ports.media()?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
-                if (!this.isCurrent(scope)) return
-                this.ports.updateChromeTransform(draggedNodeId, currentPos, currentDims, this.ports.getViewport())
-                if (!this.isCurrent(scope)) return
+                const currentPos = {
+                    x: next.x,
+                    y: next.y,
+                }
+                const currentDims = {
+                    width: next.width,
+                    height: next.height,
+                }
+                this.ports.media()?.setNodeLiveTransform(
+                    draggedNodeId,
+                    currentPos,
+                    currentDims,
+                )
+
+                if (!this.isCurrent(scope))
+                    return
+
+                this.ports.updateChromeTransform(
+                    draggedNodeId,
+                    currentPos,
+                    currentDims,
+                    this.ports.getViewport(),
+                )
+
+                if (!this.isCurrent(scope))
+                    return
             }
 
             const primaryNodeEntry = draggedNodeEntries.get(resolvedNodeId)
-            if (!primaryNodeEntry) return
-            const primaryBounds = bounds.get(resolvedNodeId)!
-            const currentPos = { x: primaryBounds.x, y: primaryBounds.y }
-            const currentDims = { width: primaryBounds.width, height: primaryBounds.height }
 
-            if (dragPlan.allowProximityConnection) {
-                this.ports.connections()?.checkProximity(resolvedNodeId, currentPos, currentDims)
+            if (!primaryNodeEntry)
+                return
+
+            const primaryBounds = bounds.get(resolvedNodeId)!
+            const currentPos = {
+                x: primaryBounds.x,
+                y: primaryBounds.y,
+            }
+            const currentDims = {
+                width: primaryBounds.width,
+                height: primaryBounds.height,
             }
 
-            if (!this.isCurrent(scope)) return
+            if (dragPlan.allowProximityConnection)
+                this.ports.connections()?.checkProximity(
+                    resolvedNodeId,
+                    currentPos,
+                    currentDims,
+                )
+
+            if (!this.isCurrent(scope))
+                return
+
             this.ports.scheduleEdges()
-            if (!this.isCurrent(scope)) return
+
+            if (!this.isCurrent(scope))
+                return
+
             this.ports.repositionMenu()
-            if (!this.isCurrent(scope)) return
+
+            if (!this.isCurrent(scope))
+                return
+
             this.ports.updateSelectionOverlay()
-            if (!this.isCurrent(scope)) return
-            this.ports.media()?.setSelectedImageNodes(this.ports.selectedNodeIds())
+
+            if (!this.isCurrent(scope))
+                return
+
+            this.ports.media()?.setSelectedImageNodes(
+                this.ports.selectedNodeIds(),
+            )
         }
 
-        const handleMouseUp = (upEvent: MouseEvent, _bounds: ReadonlyMap<string, Rect>, dragDidMove: boolean) => {
-            if (!this.isCurrent(scope)) return
+        const handleMouseUp = (
+            upEvent: MouseEvent,
+            _bounds: ReadonlyMap<string, Rect>,
+            dragDidMove: boolean,
+        ) => {
+            if (!this.isCurrent(scope))
+                return
+
             cleanup()
-            if (!this.isCurrent(scope)) return
+
+            if (!this.isCurrent(scope))
+                return
+
             this.ports.cancelEdges()
-            if (!this.isCurrent(scope)) return
+
+            if (!this.isCurrent(scope))
+                return
 
             if (!dragDidMove) {
                 // No drag occurred — this was a click. Collision logic can
                 // legitimately move nearby nodes and must only run after movement.
-                if (options.onClick) {
+                if (options.onClick)
                     this.suppressNodeClick()
-                }
-                if (allowSelection) this.ports.select(nodeId)
-                if (!this.isCurrent(scope)) return
-                if (options.suppressPaneClick) this.suppressPaneClick()
+
+                if (allowSelection)
+                    this.ports.select(nodeId)
+
+                if (!this.isCurrent(scope))
+                    return
+
+                if (options.suppressPaneClick)
+                    this.suppressPaneClick()
+
                 options.onClick?.()
+
                 return
             }
 
-            if (dragPlan.allowProximityConnection) {
+            if (dragPlan.allowProximityConnection)
                 this.ports.connections()?.commitProximityConnection()
-            }
 
-            if (!this.isCurrent(scope) || !this.currentCanvasState) return
+            if (
+                !this.isCurrent(scope)
+                || !this.currentCanvasState
+            )
+                return
+
             const releaseState = this.currentCanvasState
             this.suppressNodeClick()
-            if (options.suppressPaneClick) this.suppressPaneClick()
 
-            const finalDraggedPositions = new Map<string, { x: number; y: number }>()
+            if (options.suppressPaneClick)
+                this.suppressPaneClick()
+
+            const finalDraggedPositions = new Map<string, {
+                x: number
+                y: number
+            }>()
+
             for (const draggedNodeId of draggedNodeEntries.keys()) {
                 const bounds = this.ports.media()?.getNodeBounds(draggedNodeId)
-                if (bounds) finalDraggedPositions.set(draggedNodeId, { x: bounds.x, y: bounds.y })
+
+                if (bounds)
+                    finalDraggedPositions.set(
+                        draggedNodeId,
+                        {
+                            x: bounds.x,
+                            y: bounds.y,
+                        },
+                    )
             }
 
             let updatedNodes = releaseState.nodes
             updatedNodes = updatedNodes.map((node: CanvasNode) => {
                 const finalWorldPosition = finalDraggedPositions.get(node.nodeId)
-                if (!finalWorldPosition) return node
 
-                if (node.parentId && finalDraggedPositions.has(node.parentId)) {
+                if (!finalWorldPosition)
+                    return node
+
+                if (
+                    node.parentId
+                    && finalDraggedPositions.has(node.parentId)
+                ) {
                     // Parent and child moved together as one selected group. The
                     // live DOM/PIXI positions are world coordinates, but persisted
                     // child positions remain parent-relative. Keep the existing
@@ -384,10 +574,14 @@ export class WorkspaceNodeGestures {
                     return node
                 }
 
-                const releasedNode: CanvasNode = { ...node, position: finalWorldPosition }
+                const releasedNode: CanvasNode = {
+                    ...node,
+                    position: finalWorldPosition,
+                }
                 delete releasedNode.parentId
                 delete releasedNode.expandParent
                 delete releasedNode.extent
+
                 return releasedNode
             })
 
@@ -397,37 +591,79 @@ export class WorkspaceNodeGestures {
                 const collisionExclusions = new Set<string>()
 
                 for (const child of updatedNodes) {
-                    if (child.parentId) {
+                    if (child.parentId)
                         collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
-                    }
                 }
 
                 const collisionSettings = this.ports.collisionSettings
-                const collisionPlan = this.ports.geometry.createCollisionPlan(updatedNodes, dragPlan.isParentContainerDrag, collisionSettings)
+                const collisionPlan = this.ports.geometry.createCollisionPlan(
+                    updatedNodes,
+                    dragPlan.isParentContainerDrag,
+                    collisionSettings,
+                )
 
-                const { nodes: movedNodes, hasChanges } = resolveCollisions(collisionPlan.nodeBoxes, {
-                    iterations: collisionPlan.iterations,
-                    margin: 0,
-                    excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
-                    shouldResolvePair: collisionPlan.shouldResolvePair,
-                })
+                const {
+                    nodes: movedNodes,
+                    hasChanges,
+                } = resolveCollisions(
+                    collisionPlan.nodeBoxes,
+                    {
+                        iterations: collisionPlan.iterations,
+                        margin: 0,
+                        excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
+                        shouldResolvePair: collisionPlan.shouldResolvePair,
+                    },
+                )
 
                 if (hasChanges) {
                     updatedNodes = updatedNodes.map((n: CanvasNode) => {
-                        if (!this.isCurrent(scope)) return n
+                        if (!this.isCurrent(scope))
+                            return n
+
                         const newPos = movedNodes.get(n.nodeId)
+
                         if (newPos) {
-                            const resolvedPosition = this.ports.geometry.getResolvedNodePositionFromCollisionBox(n, newPos, collisionPlan.entries)
-                            this.ports.media()?.setNodeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
-                            if (!this.isCurrent(scope)) return n
-                            this.ports.updateChromeTransform(n.nodeId, resolvedPosition, n.dimensions, this.ports.getViewport())
-                            if (!this.isCurrent(scope)) return n
+                            const resolvedPosition = this.ports.geometry.getResolvedNodePositionFromCollisionBox(
+                                n,
+                                newPos,
+                                collisionPlan.entries,
+                            )
+                            this.ports.media()?.setNodeLiveTransform(
+                                n.nodeId,
+                                resolvedPosition,
+                                n.dimensions,
+                            )
+
+                            if (!this.isCurrent(scope))
+                                return n
+
+                            this.ports.updateChromeTransform(
+                                n.nodeId,
+                                resolvedPosition,
+                                n.dimensions,
+                                this.ports.getViewport(),
+                            )
+
+                            if (!this.isCurrent(scope))
+                                return n
+
                             const nextPosition = n.parentId
-                                ? this.ports.geometry.toParentRelativePosition(resolvedPosition, n.parentId, this.getNodesById(updatedNodes))
+                                ? this.ports.geometry.toParentRelativePosition(
+                                    resolvedPosition,
+                                    n.parentId,
+                                    this.getNodesById(updatedNodes),
+                                )
                                 : resolvedPosition
-                            if (isBranchMarker(n)) manuallyMovedBranchMarkerNodeIds.add(n.nodeId)
-                            return { ...n, position: nextPosition }
+
+                            if (isBranchMarker(n))
+                                manuallyMovedBranchMarkerNodeIds.add(n.nodeId)
+
+                            return {
+                                ...n,
+                                position: nextPosition,
+                            }
                         }
+
                         return n
                     })
                 }
@@ -435,29 +671,47 @@ export class WorkspaceNodeGestures {
 
             for (const draggedNodeId of finalDraggedPositions.keys()) {
                 const draggedNode = updatedNodes.find((node: CanvasNode) => node.nodeId === draggedNodeId)
-                if (draggedNode && isBranchMarker(draggedNode)) {
+
+                if (
+                    draggedNode
+                    && isBranchMarker(draggedNode)
+                )
                     manuallyMovedBranchMarkerNodeIds.add(draggedNode.nodeId)
-                }
             }
 
             for (const movedBranchMarkerNodeId of manuallyMovedBranchMarkerNodeIds) {
-                if (!this.isCurrent(scope)) return
+                if (!this.isCurrent(scope))
+                    return
+
                 const movedBranchMarkerNode = updatedNodes.find((node: CanvasNode) => node.nodeId === movedBranchMarkerNodeId)
-                if (!movedBranchMarkerNode || !isBranchMarker(movedBranchMarkerNode)) continue
+
+                if (
+                    !movedBranchMarkerNode
+                    || !isBranchMarker(movedBranchMarkerNode)
+                )
+                    continue
+
                 const movedBranchMarkerEl = this.ports.findElement(movedBranchMarkerNodeId)
-                this.ports.rememberManualMarker(movedBranchMarkerNode, {
-                    width: movedBranchMarkerEl?.offsetWidth ?? movedBranchMarkerNode.dimensions.width,
-                    height: movedBranchMarkerEl?.offsetHeight ?? movedBranchMarkerNode.dimensions.height,
-                })
+                this.ports.rememberManualMarker(
+                    movedBranchMarkerNode,
+                    {
+                        width: movedBranchMarkerEl?.offsetWidth ?? movedBranchMarkerNode.dimensions.width,
+                        height: movedBranchMarkerEl?.offsetHeight ?? movedBranchMarkerNode.dimensions.height,
+                    },
+                )
             }
 
-            if (!this.isCurrent(scope)) return
+            if (!this.isCurrent(scope))
+                return
+
             this.ports.commit({
                 ...releaseState,
                 nodes: updatedNodes,
             })
 
-            if (!this.isCurrent(scope)) return
+            if (!this.isCurrent(scope))
+                return
+
             // Final reposition after collision resolution may have moved the node
             this.ports.repositionMenu()
             this.ports.updateSelectionOverlay()
@@ -466,21 +720,47 @@ export class WorkspaceNodeGestures {
         try {
             this.ports.runtime.startNodeDrag({
                 event,
-                targets: Array.from(draggedNodeEntries, ([nodeId, entry]) => ({ nodeId, bounds: { x: entry.startLeft, y: entry.startTop, width: entry.startWidth, height: entry.startHeight } })),
+                targets: Array.from(
+                    draggedNodeEntries,
+                    ([nodeId, entry]) => ({
+                        nodeId,
+                        bounds: {
+                            x: entry.startLeft,
+                            y: entry.startTop,
+                            width: entry.startWidth,
+                            height: entry.startHeight,
+                        },
+                    }),
+                ),
                 threshold: 6,
                 onStart: () => {
-                    if (!this.isCurrent(scope)) return
-                    if (allowSelection && !wasAlreadySelected) this.ports.select(resolvedNodeId)
+                    if (!this.isCurrent(scope))
+                        return
+
+                    if (
+                        allowSelection
+                        && !wasAlreadySelected
+                    )
+                        this.ports.select(resolvedNodeId)
+
                     activateDragVisuals()
                 },
                 onChange: handleMouseMove,
                 onEnd: handleMouseUp,
                 onCancel: reason => {
                     cleanup()
-                    if (!this.isCurrent(scope)) return
+
+                    if (!this.isCurrent(scope))
+                        return
+
                     this.ports.cancelEdges()
                     this.ports.connections()?.cancelTransientConnection()
-                    if (reason !== 'destroyed' && reason !== 'scene-change' && this.currentCanvasState) {
+
+                    if (
+                        reason !== 'destroyed'
+                        && reason !== 'scene-change'
+                        && this.currentCanvasState
+                    ) {
                         this.ports.syncNodeGeometry(this.currentCanvasState.nodes)
                         this.ports.syncMedia()
                         this.ports.updateChromeLayout()
@@ -491,19 +771,32 @@ export class WorkspaceNodeGestures {
             })
         } catch (error) {
             cleanup()
+
             throw error
         }
     }
 
-    startResize(event: MouseEvent, nodeId: string, handlePosition: ResizeHandle) {
+    startResize(
+        event: MouseEvent,
+        nodeId: string,
+        handlePosition: ResizeHandle,
+    ) {
         const scope = this.begin()
-        if (!scope) return
+
+        if (!scope)
+            return
+
         event.preventDefault()
         event.stopPropagation()
 
         const nodeEl = this.ports.findElement(nodeId)
-        if (!nodeEl || !this.currentCanvasState) {
+
+        if (
+            !nodeEl
+            || !this.currentCanvasState
+        ) {
             this.releasePanLock()
+
             return
         }
 
@@ -514,6 +807,7 @@ export class WorkspaceNodeGestures {
         // PIXI owns image pixels, so resize behavior uses persisted geometry
         // instead of a rendered surface or duplicated media metadata.
         let aspectRatio: number | null = null
+
         if (isImageNode) {
             aspectRatio = node.dimensions.height > 0
                 ? node.dimensions.width / node.dimensions.height
@@ -523,7 +817,8 @@ export class WorkspaceNodeGestures {
         this.resizingNodeId = nodeId
         nodeEl.classList.add('is-resizing')
 
-        const handle = event.currentTarget instanceof HTMLElement && event.currentTarget.classList.contains('document-resize-handle')
+        const handle = event.currentTarget instanceof HTMLElement
+            && event.currentTarget.classList.contains('document-resize-handle')
             ? event.currentTarget
             : null
         handle?.classList.add('is-dragging')
@@ -533,38 +828,89 @@ export class WorkspaceNodeGestures {
             handle?.classList.remove('is-dragging')
         })
         const startBounds = this.ports.media()?.getNodeBounds(nodeId)
+
         if (!startBounds) {
             cleanup()
+
             return
         }
+
         const minWidth = isImageNode ? 50 : 200
         const constraints = {
-            min: { width: minWidth, height: isImageNode && aspectRatio ? minWidth / aspectRatio : 150 },
+            min: {
+                width: minWidth,
+                height: isImageNode
+                    && aspectRatio
+                    ? minWidth / aspectRatio
+                    : 150,
+            },
             preserveAspectRatio: Boolean(aspectRatio),
             aspectRatio: aspectRatio ?? undefined,
         }
 
         const handleMouseMove = (boundsById: ReadonlyMap<string, Rect>) => {
-            if (!this.isCurrent(scope)) return
+            if (!this.isCurrent(scope))
+                return
+
             const bounds = boundsById.get(nodeId)!
-            const liveResizePosition = { x: bounds.x, y: bounds.y }
-            const liveResizeDimensions = { width: bounds.width, height: bounds.height }
+            const liveResizePosition = {
+                x: bounds.x,
+                y: bounds.y,
+            }
+            const liveResizeDimensions = {
+                width: bounds.width,
+                height: bounds.height,
+            }
 
-            this.ports.media()?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
-            if (!this.isCurrent(scope)) return
-            this.ports.updateChromeTransform(nodeId, liveResizePosition, liveResizeDimensions, this.ports.getViewport())
-            if (!this.isCurrent(scope)) return
-            this.ports.media()?.setSelectedImageNodes(this.ports.selectedNodeIds())
-            if (!this.isCurrent(scope)) return
-            this.ports.media()?.setSelectionOverlayBounds(this.ports.getSelectionBounds(), { fill: this.ports.shouldFillSelectionBounds() })
+            this.ports.media()?.setNodeLiveTransform(
+                nodeId,
+                liveResizePosition,
+                liveResizeDimensions,
+            )
 
-            if (!this.isCurrent(scope)) return
+            if (!this.isCurrent(scope))
+                return
+
+            this.ports.updateChromeTransform(
+                nodeId,
+                liveResizePosition,
+                liveResizeDimensions,
+                this.ports.getViewport(),
+            )
+
+            if (!this.isCurrent(scope))
+                return
+
+            this.ports.media()?.setSelectedImageNodes(
+                this.ports.selectedNodeIds(),
+            )
+
+            if (!this.isCurrent(scope))
+                return
+
+            this.ports.media()?.setSelectionOverlayBounds(
+                this.ports.getSelectionBounds(),
+                { fill: this.ports.shouldFillSelectionBounds() },
+            )
+
+            if (!this.isCurrent(scope))
+                return
+
             // Grow the parent's engine bounds while resizing its child.
             if (node?.parentId) {
                 const parentBounds = this.ports.media()?.getNodeBounds(node.parentId)
+
                 if (parentBounds) {
-                    const parentSize = growParentBounds(parentBounds, bounds, 48)
-                    this.ports.media()?.setNodeLiveTransform(node.parentId, parentBounds, parentSize)
+                    const parentSize = growParentBounds(
+                        parentBounds,
+                        bounds,
+                        48,
+                    )
+                    this.ports.media()?.setNodeLiveTransform(
+                        node.parentId,
+                        parentBounds,
+                        parentSize,
+                    )
                 }
             }
 
@@ -573,27 +919,60 @@ export class WorkspaceNodeGestures {
         }
 
         const handleMouseUp = () => {
-            if (!this.isCurrent(scope)) return
+            if (!this.isCurrent(scope))
+                return
+
             cleanup()
 
-            if (!this.isCurrent(scope) || !this.currentCanvasState) return
+            if (
+                !this.isCurrent(scope)
+                || !this.currentCanvasState
+            )
+                return
+
             const releaseState = this.currentCanvasState
             const bounds = this.ports.media()?.getNodeBounds(nodeId)
-            if (!bounds) return
-            const newDimensions = { width: bounds.width, height: bounds.height }
+
+            if (!bounds)
+                return
+
+            const newDimensions = {
+                width: bounds.width,
+                height: bounds.height,
+            }
             // Persist parent-relative coordinates from the engine's world bounds.
-            const newWorldPosition = { x: bounds.x, y: bounds.y }
+            const newWorldPosition = {
+                x: bounds.x,
+                y: bounds.y,
+            }
             const resizingNode = releaseState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
             const newPosition = resizingNode?.parentId
-                ? this.ports.geometry.toParentRelativePosition(newWorldPosition, resizingNode.parentId, this.getNodesById())
+                ? this.ports.geometry.toParentRelativePosition(
+                    newWorldPosition,
+                    resizingNode.parentId,
+                    this.getNodesById(),
+                )
                 : newWorldPosition
 
-            const updatedNodes = releaseState.nodes.map((n: CanvasNode) => n.nodeId === nodeId ? { ...n, dimensions: newDimensions, position: newPosition } : n)
+            const updatedNodes = releaseState.nodes.map(
+                (n: CanvasNode) => n.nodeId === nodeId ? {
+                    ...n,
+                    dimensions: newDimensions,
+                    position: newPosition,
+                } : n,
+            )
 
-            if (!this.isCurrent(scope)) return
-            this.ports.commit({ ...releaseState, nodes: updatedNodes })
+            if (!this.isCurrent(scope))
+                return
 
-            if (!this.isCurrent(scope)) return
+            this.ports.commit({
+                ...releaseState,
+                nodes: updatedNodes,
+            })
+
+            if (!this.isCurrent(scope))
+                return
+
             // Final reposition at new size
             this.ports.repositionMenu()
         }
@@ -601,7 +980,10 @@ export class WorkspaceNodeGestures {
         try {
             this.ports.runtime.startNodeResize({
                 event,
-                target: { nodeId, bounds: startBounds },
+                target: {
+                    nodeId,
+                    bounds: startBounds,
+                },
                 handle: handlePosition,
                 constraints,
                 lock: () => this.ports.lockPan(),
@@ -609,9 +991,17 @@ export class WorkspaceNodeGestures {
                 onEnd: handleMouseUp,
                 onCancel: reason => {
                     cleanup()
-                    if (!this.isCurrent(scope)) return
+
+                    if (!this.isCurrent(scope))
+                        return
+
                     this.ports.cancelEdges()
-                    if (reason !== 'destroyed' && reason !== 'scene-change' && this.currentCanvasState) {
+
+                    if (
+                        reason !== 'destroyed'
+                        && reason !== 'scene-change'
+                        && this.currentCanvasState
+                    ) {
                         this.ports.syncNodeGeometry(this.currentCanvasState.nodes)
                         this.ports.syncMedia()
                         this.ports.updateChromeLayout()
@@ -622,6 +1012,7 @@ export class WorkspaceNodeGestures {
             })
         } catch (error) {
             cleanup()
+
             throw error
         }
     }

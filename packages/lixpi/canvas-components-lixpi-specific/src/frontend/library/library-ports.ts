@@ -8,13 +8,46 @@ import {
 export type LibraryAssetResult = Asset | { error: string }
 
 export type LibraryAssetPorts = {
-    list: (query: { workspaceId: string; primaryCategory?: AssetPrimaryCategory; limit: number; cursor?: string }) => Promise<{ items: AssetMeta[]; cursor?: string }>
-    get: (assetId: string, workspaceId: string) => Promise<LibraryAssetResult>
-    refresh: (assetId: string, workspaceId: string) => Promise<LibraryAssetResult>
-    updateMetadata: (assetId: string, revision: number, patch: { title: string }) => Promise<LibraryAssetResult>
-    changeScope: (assetId: string, revision: number, scope: Asset['scope'], scopeOwnerId: string) => Promise<LibraryAssetResult>
-    resumeDocument: (coordinate: { organizationId: string; assetId: string; role: AssetDocumentRole }) => Promise<unknown>
-    getDocument: (assetId: string, role: AssetDocumentRole) => { doc: object; version: number } | undefined
+    list: (query: {
+        workspaceId: string
+        primaryCategory?: AssetPrimaryCategory
+        limit: number
+        cursor?: string
+    }) => Promise<{
+        items: AssetMeta[]
+        cursor?: string
+    }>
+    get: (
+        assetId: string,
+        workspaceId: string,
+    ) => Promise<LibraryAssetResult>
+    refresh: (
+        assetId: string,
+        workspaceId: string,
+    ) => Promise<LibraryAssetResult>
+    updateMetadata: (
+        assetId: string,
+        revision: number,
+        patch: { title: string },
+    ) => Promise<LibraryAssetResult>
+    changeScope: (
+        assetId: string,
+        revision: number,
+        scope: Asset['scope'],
+        scopeOwnerId: string,
+    ) => Promise<LibraryAssetResult>
+    resumeDocument: (coordinate: {
+        organizationId: string
+        assetId: string
+        role: AssetDocumentRole
+    }) => Promise<unknown>
+    getDocument: (
+        assetId: string,
+        role: AssetDocumentRole,
+    ) => {
+        doc: object
+        version: number
+    } | undefined
 }
 
 export type LibraryHistoryRequest = {

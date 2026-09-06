@@ -43,22 +43,39 @@ export type AiPromptComposerSubmitData = {
     capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
 }
 
-export function buildCanvasConversationContent(data: AiPromptComposerSubmitData, { threadId, messageId, createdAt, referenceNodeIds }: {
-    threadId: string
-    messageId: string
-    createdAt: number
-    referenceNodeIds: string[]
-}): ProseMirrorJsonNode {
+export const buildCanvasConversationContent = (
+    data: AiPromptComposerSubmitData,
+    {
+        threadId,
+        messageId,
+        createdAt,
+        referenceNodeIds,
+    }: {
+        threadId: string
+        messageId: string
+        createdAt: number
+        referenceNodeIds: string[]
+    },
+): ProseMirrorJsonNode => {
     const useMultipleReasoningModels = Boolean(data.useMultipleReasoningModels)
     const useMultipleImageModels = Boolean(data.useMultipleImageModels)
     const useMultipleVideoModels = Boolean(data.useMultipleVideoModels)
-    const collapseForMode = (models: string[], useMultiple: boolean): string[] => useMultiple ? models : models.slice(0, 1)
-    const aiReasoningModels = serializeAiModelSelectionAttr(collapseForMode(data.aiReasoningModels, useMultipleReasoningModels))
+    const collapseForMode = (
+        models: string[],
+        useMultiple: boolean,
+    ): string[] => (useMultiple ? models : models.slice(0, 1))
+    const aiReasoningModels = serializeAiModelSelectionAttr(
+        collapseForMode(data.aiReasoningModels, useMultipleReasoningModels),
+    )
     const aiImageModels = data.imageOptions
-        ? serializeAiModelSelectionAttr(collapseForMode(data.imageOptions.aiImageModels, useMultipleImageModels))
+        ? serializeAiModelSelectionAttr(
+            collapseForMode(data.imageOptions.aiImageModels, useMultipleImageModels),
+        )
         : ''
     const aiVideoModels = data.videoOptions
-        ? serializeAiModelSelectionAttr(collapseForMode(data.videoOptions.aiVideoModels, useMultipleVideoModels))
+        ? serializeAiModelSelectionAttr(
+            collapseForMode(data.videoOptions.aiVideoModels, useMultipleVideoModels),
+        )
         : ''
     const imageGenerationConfigGroups = data.imageOptions
         ? serializeMediaGenerationConfigSelectionAttr(data.imageOptions.configGroups ?? [])
@@ -69,6 +86,7 @@ export function buildCanvasConversationContent(data: AiPromptComposerSubmitData,
     const videoGenerationConfigGroups = data.videoOptions
         ? serializeMediaGenerationConfigSelectionAttr(data.videoOptions.configGroups ?? [])
         : ''
+
     return {
         type: 'doc',
         content: [
@@ -94,7 +112,11 @@ export function buildCanvasConversationContent(data: AiPromptComposerSubmitData,
                 },
                 content: [{
                     type: 'aiUserMessage',
-                    attrs: { id: messageId, createdAt, referenceNodeIds },
+                    attrs: {
+                        id: messageId,
+                        createdAt,
+                        referenceNodeIds,
+                    },
                     content: data.contentJSON.length > 0 ? data.contentJSON : [{ type: 'paragraph' }],
                 }],
             },
@@ -102,72 +124,133 @@ export function buildCanvasConversationContent(data: AiPromptComposerSubmitData,
     }
 }
 
-export function extractPromptTextFromContentJSON(contentJSON: any): string {
+export const extractPromptTextFromContentJSON = (contentJSON: any): string => {
     const chunks: string[] = []
     const visit = (node: any) => {
-        if (!node) return
+        if (!node)
+            return
+
         if (Array.isArray(node)) {
-            for (const child of node) visit(child)
+            for (const child of node)
+                visit(child)
+
             return
         }
+
         if (typeof node === 'string') {
             chunks.push(node)
+
             return
         }
-        if (node.type === PROMPT_REFERENCE_NODE_TYPE || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+
+        if (
+            node.type === PROMPT_REFERENCE_NODE_TYPE
+            || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
+        ) {
             const reference = collectProseMirrorPromptReferences(node as ProseMirrorJsonNode)[0]
-            if (reference?.displayName) chunks.push(reference.displayName)
+
+            if (reference?.displayName)
+                chunks.push(reference.displayName)
+
             return
         }
-        if (node.type === 'text' && typeof node.text === 'string') chunks.push(node.text)
-        if (node.type === 'hard_break') chunks.push('\n')
+
+        if (
+            node.type === 'text'
+            && typeof node.text === 'string'
+        )
+            chunks.push(node.text)
+
+        if (node.type === 'hard_break')
+            chunks.push('\n')
+
         if (Array.isArray(node.content)) {
-            for (const child of node.content) visit(child)
-            if (node.type === 'paragraph') chunks.push('\n')
+            for (const child of node.content)
+                visit(child)
+
+            if (node.type === 'paragraph')
+                chunks.push('\n')
         }
     }
     visit(contentJSON)
-    return chunks.join('').replace(/\n{3,}/g, '\n\n').trim()
+
+    return chunks
+        .join('')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
 }
 
-export function contentJSONHasPromptReference(contentJSON: unknown): boolean {
-    if (!contentJSON || typeof contentJSON !== 'object') return false
-    if (Array.isArray(contentJSON)) return contentJSON.some(contentJSONHasPromptReference)
-    const node = contentJSON as { type?: unknown; content?: unknown }
+export const contentJSONHasPromptReference = (contentJSON: unknown): boolean => {
+    if (
+        !contentJSON
+        || typeof contentJSON !== 'object'
+    )
+        return false
+
+    if (Array.isArray(contentJSON))
+        return contentJSON.some(contentJSONHasPromptReference)
+
+    const node = contentJSON as {
+        type?: unknown
+        content?: unknown
+    }
+
     return node.type === PROMPT_REFERENCE_NODE_TYPE
         || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
         || (Array.isArray(node.content) && node.content.some(contentJSONHasPromptReference))
 }
 
-export function getPromptReferenceCanvasNodeIds(contentJSON: unknown): string[] {
+export const getPromptReferenceCanvasNodeIds = (contentJSON: unknown): string[] => {
     const root = Array.isArray(contentJSON)
-        ? { type: 'doc', content: contentJSON as ProseMirrorJsonNode[] }
+        ? {
+            type: 'doc',
+            content: contentJSON as ProseMirrorJsonNode[],
+        }
         : parseProseMirrorJsonContent(contentJSON)
-    if (!root) return []
+
+    if (!root)
+        return []
+
     return Array.from(
         new Set(
-            collectProseMirrorPromptReferences(root)
-                .flatMap(reference => 'nodeId' in reference && reference.nodeId ? [reference.nodeId] : []),
+            collectProseMirrorPromptReferences(root).flatMap(
+                reference => 'nodeId' in reference
+                    && reference.nodeId
+                    ? [reference.nodeId]
+                    : [],
+            ),
         ),
     )
 }
 
-export function getLatestUserPromptReferenceCanvasNodeIds(content: unknown, threadId: string): string[] {
+export const getLatestUserPromptReferenceCanvasNodeIds = (
+    content: unknown,
+    threadId: string,
+): string[] => {
     const root = parseProseMirrorJsonContent(content)
-    if (!root) return []
+
+    if (!root)
+        return []
+
     const threadNode = findAiChatThreadContentNode(root, threadId)
     const latestUserMessage = [...(threadNode?.content ?? [])]
-        .reverse()
-        .find(child => child.type === 'aiUserMessage')
+        .reverse().find(child => child.type === 'aiUserMessage')
+
     return latestUserMessage ? getPromptReferenceCanvasNodeIds(latestUserMessage) : []
 }
 
-export function getLatestUserPromptText(content: unknown, threadId: string): string {
+export const getLatestUserPromptText = (
+    content: unknown,
+    threadId: string,
+): string => {
     const root = parseProseMirrorJsonContent(content)
-    if (!root) return ''
+
+    if (!root)
+        return ''
+
     const threadNode = findAiChatThreadContentNode(root, threadId)
     const latestUserMessage = [...(threadNode?.content ?? [])]
-        .reverse()
-        .find(child => child.type === 'aiUserMessage')
+        .reverse().find(child => child.type === 'aiUserMessage')
+
     return latestUserMessage ? extractPromptTextFromContentJSON(latestUserMessage) : ''
 }

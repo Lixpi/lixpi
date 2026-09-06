@@ -26,37 +26,58 @@ const mediaProgressItemStatusRank: Record<OperationProgressItem['status'], numbe
     skipped: 2,
 }
 
-function mergeKeyedItems<T extends object>(
+const mergeKeyedItems = <T extends object>(
     current: readonly T[] | undefined,
     incoming: readonly T[] | undefined,
     getKey: (item: T) => string,
-    mergeItem: (currentItem: T, incomingItem: T) => T = (currentItem, incomingItem) => ({
+    mergeItem: (
+        currentItem: T,
+        incomingItem: T,
+    ) => T = (currentItem, incomingItem) => ({
         ...currentItem,
         ...incomingItem,
     }),
-): T[] | undefined {
-    if (!current?.length) return incoming ? [...incoming] : undefined
-    if (!incoming?.length) return [...current]
-    const currentByKey = new Map(current.map(item => [getKey(item), item]))
-    const incomingKeys = new Set(incoming.map(getKey))
+): T[] | undefined => {
+    if (!current?.length)
+        return incoming ? [...incoming] : undefined
+
+    if (!incoming?.length)
+        return [...current]
+
+    const currentByKey = new Map(
+        current.map(item => [getKey(item), item]),
+    )
+    const incomingKeys = new Set(
+        incoming.map(getKey),
+    )
+
     return [
         ...incoming.map(item => {
-            const currentItem = currentByKey.get(getKey(item))
+            const currentItem = currentByKey.get(
+                getKey(item),
+            )
+
             return currentItem ? mergeItem(currentItem, item) : item
         }),
-        ...current.filter(item => !incomingKeys.has(getKey(item))),
+        ...current.filter(
+            item => !incomingKeys.has(
+                getKey(item),
+            ),
+        ),
     ]
 }
 
-function getTraceHandleKey(handle: ExecutionTraceHandle): string {
-    return `${handle.kind}:${handle.id}:${handle.role ?? ''}`
-}
+const getTraceHandleKey = (handle: ExecutionTraceHandle): string => `${handle.kind}:${handle.id}:${handle.role ?? ''}`
 
-function mergeExecutionTraceModelCall(
+const mergeExecutionTraceModelCall = (
     current: ExecutionTraceModelCall,
     incoming: ExecutionTraceModelCall,
-): ExecutionTraceModelCall {
-    const params = mergeKeyedItems<ExecutionTraceParam>(current.params, incoming.params, param => param.name)
+): ExecutionTraceModelCall => {
+    const params = mergeKeyedItems<ExecutionTraceParam>(
+        current.params,
+        incoming.params,
+        param => param.name,
+    )
     const inputHandles = mergeKeyedItems<ExecutionTraceHandle>(
         current.inputHandles,
         incoming.inputHandles,
@@ -67,32 +88,50 @@ function mergeExecutionTraceModelCall(
         incoming.outputHandles,
         getTraceHandleKey,
     )
+
     return {
         ...current,
         ...incoming,
         ...(params ? { params } : {}),
         ...(inputHandles ? { inputHandles } : {}),
         ...(outputHandles ? { outputHandles } : {}),
-        ...(current.tokenUsage || incoming.tokenUsage
-            ? { tokenUsage: { ...current.tokenUsage, ...incoming.tokenUsage } }
+        ...(current.tokenUsage
+            || incoming.tokenUsage
+            ? { tokenUsage: {
+                ...current.tokenUsage,
+                ...incoming.tokenUsage,
+            } }
             : {}),
     }
 }
 
-function mergeExecutionTrace(
+const mergeExecutionTrace = (
     current: ExecutionTrace | undefined,
     incoming: ExecutionTrace | undefined,
-): ExecutionTrace | undefined {
-    if (!current) return incoming
-    if (!incoming) return current
-    const handles = mergeKeyedItems<ExecutionTraceHandle>(current.handles, incoming.handles, getTraceHandleKey)
+): ExecutionTrace | undefined => {
+    if (!current)
+        return incoming
+
+    if (!incoming)
+        return current
+
+    const handles = mergeKeyedItems<ExecutionTraceHandle>(
+        current.handles,
+        incoming.handles,
+        getTraceHandleKey,
+    )
     const modelCalls = mergeKeyedItems<ExecutionTraceModelCall>(
         current.modelCalls,
         incoming.modelCalls,
         modelCall => modelCall.id,
         mergeExecutionTraceModelCall,
     )
-    const facts = mergeKeyedItems<ExecutionTraceFact>(current.facts, incoming.facts, fact => fact.label)
+    const facts = mergeKeyedItems<ExecutionTraceFact>(
+        current.facts,
+        incoming.facts,
+        fact => fact.label,
+    )
+
     return {
         ...current,
         ...incoming,
@@ -102,10 +141,10 @@ function mergeExecutionTrace(
     }
 }
 
-function mergeMediaProgressItem(
+const mergeMediaProgressItem = (
     current: OperationProgressItem,
     incoming: OperationProgressItem,
-): OperationProgressItem {
+): OperationProgressItem => {
     const currentRank = mediaProgressItemStatusRank[current.status]
     const incomingRank = mediaProgressItemStatusRank[incoming.status]
     const keepCurrentStatus = currentRank > incomingRank
@@ -118,6 +157,7 @@ function mergeMediaProgressItem(
         child => child.id,
         mergeMediaProgressItem,
     )
+
     return {
         ...current,
         ...selected,
@@ -127,11 +167,13 @@ function mergeMediaProgressItem(
     }
 }
 
-export function mergeMediaGenerationRunProgress(
+export const mergeMediaGenerationRunProgress = (
     current: MediaGenerationRunProgress | undefined,
     incoming: MediaGenerationRunProgress,
-): MediaGenerationRunProgress {
-    if (!current) return incoming
+): MediaGenerationRunProgress => {
+    if (!current)
+        return incoming
+
     const currentPhaseIndex = mediaProgressPhaseOrder.indexOf(current.phase)
     const incomingPhaseIndex = mediaProgressPhaseOrder.indexOf(incoming.phase)
     const incomingIsCurrent = incomingPhaseIndex > currentPhaseIndex
@@ -143,6 +185,7 @@ export function mergeMediaGenerationRunProgress(
         item => item.id,
         mergeMediaProgressItem,
     )
+
     return {
         ...selected,
         totalSteps: Math.max(current.totalSteps, incoming.totalSteps),
@@ -150,30 +193,35 @@ export function mergeMediaGenerationRunProgress(
     }
 }
 
-export function createDefaultMediaGenerationRunProgress(
+export const createDefaultMediaGenerationRunProgress = (
     status: MediaGenerationRunStatus,
     message: string,
-): MediaGenerationRunProgress {
+): MediaGenerationRunProgress => {
     const preparing = status === 'pending' || status === 'awaiting-provider-verification'
     const terminalStatus: OperationProgressItem['status'] = status === 'failed'
         ? 'failed'
         : status === 'cancelled'
-        ? 'cancelled'
-        : 'completed'
+            ? 'cancelled'
+            : 'completed'
     const generationStatus: OperationProgressItem['status'] = status === 'running'
         ? 'running'
         : status === 'completed'
-        ? 'completed'
-        : status === 'failed' || status === 'cancelled'
-        ? terminalStatus
-        : 'pending'
+            ? 'completed'
+            : status === 'failed'
+                || status === 'cancelled'
+                ? terminalStatus
+                : 'pending'
     const providerStatus: OperationProgressItem['status'] = status === 'pending'
-            || status === 'awaiting-provider-verification'
+        || status === 'awaiting-provider-verification'
         ? 'running'
         : 'completed'
 
     return {
-        phase: preparing ? 'preparing' : status === 'completed' ? 'composing' : 'rendering',
+        phase: preparing
+            ? 'preparing'
+            : status === 'completed'
+                ? 'composing'
+                : 'rendering',
         completedSteps: status === 'completed' ? 1 : 0,
         totalSteps: 1,
         message,
@@ -182,13 +230,19 @@ export function createDefaultMediaGenerationRunProgress(
                 id: 'provider',
                 title: 'Prepare provider run',
                 status: providerStatus,
-                ...(status === 'pending' || status === 'awaiting-provider-verification' ? { summary: message } : {}),
+                ...(status === 'pending'
+                    || status === 'awaiting-provider-verification'
+                    ? { summary: message }
+                    : {}),
             },
             {
                 id: 'generation',
                 title: 'Generate media',
                 status: generationStatus,
-                ...(status === 'running' || status === 'failed' ? { summary: message } : {}),
+                ...(status === 'running'
+                    || status === 'failed'
+                    ? { summary: message }
+                    : {}),
             },
             {
                 id: 'finalize',
@@ -199,19 +253,21 @@ export function createDefaultMediaGenerationRunProgress(
     }
 }
 
-export function settleMediaGenerationRunProgress(
+export const settleMediaGenerationRunProgress = (
     progress: MediaGenerationRunProgress | undefined,
     status: 'completed' | 'failed' | 'cancelled',
     message: string,
-): MediaGenerationRunProgress {
+): MediaGenerationRunProgress => {
     const currentProgress = progress ?? createDefaultMediaGenerationRunProgress(status, message)
     const settleItem = (item: OperationProgressItem): OperationProgressItem => ({
         ...item,
-        status: item.status === 'pending' || item.status === 'running'
+        status: item.status === 'pending'
+            || item.status === 'running'
             ? status
             : item.status,
         ...(item.children ? { children: item.children.map(settleItem) } : {}),
     })
+
     return {
         ...currentProgress,
         phase: status === 'completed' ? 'composing' : currentProgress.phase,

@@ -1,3 +1,4 @@
+import { err as debugError } from '@lixpi/debug-tools'
 import {
     MEDIA_POLICY,
     type AssetMediaKind,
@@ -39,12 +40,21 @@ export const ingestAssetFile = async ({
     expectedKind?: AssetMediaKind
 }): Promise<AssetIngestResult> => {
     const detection = await detectFileType(buffer, originalName)
-    if (detection.rejected) throw new AssetFileRejectedError(detection.reason)
+
+    if (detection.rejected)
+        throw new AssetFileRejectedError(detection.reason)
+
     const policy = MEDIA_POLICY[detection.mimeType]
-    if (!policy) throw new AssetFileRejectedError('Unsupported file type')
-    if (expectedKind && detection.kind !== expectedKind) {
+
+    if (!policy)
+        throw new AssetFileRejectedError('Unsupported file type')
+
+    if (
+        expectedKind
+        && detection.kind !== expectedKind
+    )
         throw new AssetFileRejectedError(`Expected a ${expectedKind} file`)
-    }
+
     const blob = await BlobModel.store({
         organizationId,
         bytes: buffer,
@@ -87,10 +97,21 @@ export const ingestAssetFile = async ({
         try {
             await AssetRenditionService.process({ assetId: asset.assetId })
         } catch (error) {
-            console.error('Asset rendition processing failed:', { assetId: asset.assetId, error })
-            await enqueueRenditionRetry({ organizationId, assetId: asset.assetId, retryAttempt: 1 })
+            debugError(
+                'Asset rendition processing failed:',
+                {
+                    assetId: asset.assetId,
+                    error,
+                },
+            )
+            await enqueueRenditionRetry({
+                organizationId,
+                assetId: asset.assetId,
+                retryAttempt: 1,
+            })
         }
     })()
+
     return {
         assetId: asset.assetId,
         status: 'processing',

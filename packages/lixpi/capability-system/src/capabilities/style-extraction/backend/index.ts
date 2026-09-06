@@ -17,9 +17,7 @@ export type StyleExtractionModuleDependencies = StyleExtractionActionDependencie
     capabilityStorage: StyleExtractionCapabilityStorage & InstructionSkillStorage
 }
 
-export function createStyleExtractionModule(
-    dependencies: StyleExtractionModuleDependencies,
-): CapabilityModuleDefinition {
+export const createStyleExtractionModule = (dependencies: StyleExtractionModuleDependencies): CapabilityModuleDefinition => {
     return {
         moduleId: 'style-extraction',
         name: 'Style Extraction',
@@ -68,7 +66,10 @@ export function createStyleExtractionModule(
                 summary: 'Runs several analysis specialists and may generate sample images when an image model is selected.',
             },
         },
-        entry: { capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.tool, kind: 'tool' },
+        entry: {
+            capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.tool,
+            kind: 'tool',
+        },
         tools: [createStyleExtractionToolPackage(dependencies, dependencies.capabilityStorage)],
         skills: createStyleExtractionSkillPackages(dependencies.capabilityStorage),
     }

@@ -12,11 +12,31 @@ type SubjectIdentityDropdownOption = {
 }
 
 export const SUBJECT_IDENTITY_OPTIONS: SubjectIdentityDropdownOption[] = [
-    { title: 'Unknown', value: 'unknown', ariaLabel: 'Unknown subject identity' },
-    { title: 'No person', value: 'no-person', ariaLabel: 'No person depicted' },
-    { title: 'Fictional', value: 'fictional', ariaLabel: 'Fictional subject' },
-    { title: 'Me', value: 'self', ariaLabel: 'I am the depicted person' },
-    { title: 'Authorized', value: 'authorized-real-person', ariaLabel: 'Authorized real person' },
+    {
+        title: 'Unknown',
+        value: 'unknown',
+        ariaLabel: 'Unknown subject identity',
+    },
+    {
+        title: 'No person',
+        value: 'no-person',
+        ariaLabel: 'No person depicted',
+    },
+    {
+        title: 'Fictional',
+        value: 'fictional',
+        ariaLabel: 'Fictional subject',
+    },
+    {
+        title: 'Me',
+        value: 'self',
+        ariaLabel: 'I am the depicted person',
+    },
+    {
+        title: 'Authorized',
+        value: 'authorized-real-person',
+        ariaLabel: 'Authorized real person',
+    },
 ]
 
 export type AssetSubjectIdentityControlInstance = {
@@ -55,9 +75,7 @@ class AssetSubjectIdentityControl implements AssetSubjectIdentityControlInstance
             renderIconForOptions: false,
             mountToBody: false,
             disableAutoPositioning: true,
-            onSelect: option => {
-                void this.selectClassification(option.value as SubjectIdentityClassification)
-            },
+            onSelect: option => void this.selectClassification(option.value as SubjectIdentityClassification),
         })
         this.dropdown.dom.classList.add('asset-subject-identity-dropdown')
         this.updateAriaLabel()
@@ -65,15 +83,25 @@ class AssetSubjectIdentityControl implements AssetSubjectIdentityControlInstance
     }
 
     setAsset(asset: Asset): void {
-        if (this.destroyed) return
-        if (this.currentAsset.assetId === asset.assetId && this.currentAsset.revision > asset.revision) return
+        if (this.destroyed)
+            return
+
+        if (
+            this.currentAsset.assetId === asset.assetId
+            && this.currentAsset.revision > asset.revision
+        )
+            return
+
         this.currentAsset = asset
         this.syncSelectedClassification(asset.subjectIdentity.classification)
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
+
         try {
             this.dropdown.destroy()
         } finally {
@@ -86,44 +114,75 @@ class AssetSubjectIdentityControl implements AssetSubjectIdentityControlInstance
     }
 
     private syncSelectedClassification(classification: SubjectIdentityClassification): void {
-        this.dropdown.update(this.optionForClassification(classification))
+        this.dropdown.update(
+            this.optionForClassification(classification),
+        )
         this.updateAriaLabel()
     }
 
     private updateAriaLabel(): void {
         const button = this.dropdown.dom.querySelector('button')
-        if (!(button instanceof HTMLButtonElement)) return
+
+        if (!(button instanceof HTMLButtonElement))
+            return
+
         button.ariaLabel = `Subject identity: ${this.optionForClassification(this.currentAsset.subjectIdentity.classification).ariaLabel}`
     }
 
     private async selectClassification(nextClassification: SubjectIdentityClassification): Promise<void> {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         const previousClassification = this.currentAsset.subjectIdentity.classification
-        if (this.mutationInFlight || nextClassification === previousClassification) {
+
+        if (
+            this.mutationInFlight
+            || nextClassification === previousClassification
+        ) {
             this.syncSelectedClassification(previousClassification)
+
             return
         }
 
         const requestedAssetId = this.currentAsset.assetId
         this.mutationInFlight = true
+
         try {
             const result = await this.options.attestSubjectIdentity(
                 requestedAssetId,
                 this.currentAsset.revision,
                 nextClassification,
             )
-            if (this.destroyed || this.currentAsset.assetId !== requestedAssetId) return
+
+            if (
+                this.destroyed
+                || this.currentAsset.assetId !== requestedAssetId
+            )
+                return
+
             if ('error' in result) {
                 this.syncSelectedClassification(this.currentAsset.subjectIdentity.classification)
                 this.options.onError?.(result.error)
+
                 return
             }
-            if (result.assetId !== requestedAssetId || result.revision < this.currentAsset.revision) return
+
+            if (
+                result.assetId !== requestedAssetId
+                || result.revision < this.currentAsset.revision
+            )
+                return
+
             this.currentAsset = result
             this.syncSelectedClassification(result.subjectIdentity.classification)
             this.options.onUpdated?.(result)
         } catch (error) {
-            if (this.destroyed || this.currentAsset.assetId !== requestedAssetId) return
+            if (
+                this.destroyed
+                || this.currentAsset.assetId !== requestedAssetId
+            )
+                return
+
             this.syncSelectedClassification(this.currentAsset.subjectIdentity.classification)
             this.options.onError?.(error instanceof Error ? error.message : String(error))
         } finally {
@@ -132,8 +191,5 @@ class AssetSubjectIdentityControl implements AssetSubjectIdentityControlInstance
     }
 }
 
-export function mountAssetSubjectIdentityControl(
-    options: AssetSubjectIdentityControlOptions,
-): AssetSubjectIdentityControlInstance {
-    return new AssetSubjectIdentityControl(options)
-}
+export const mountAssetSubjectIdentityControl = (options: AssetSubjectIdentityControlOptions): AssetSubjectIdentityControlInstance =>
+    new AssetSubjectIdentityControl(options)

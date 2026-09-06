@@ -40,8 +40,15 @@ export type CapabilityManifestValidationOptions = {
 }
 
 export type CapabilityManifestValidationResult =
-    | { valid: true; manifest: CapabilityManifest; issues: [] }
-    | { valid: false; issues: CapabilityValidationIssue[] }
+    | {
+        valid: true
+        manifest: CapabilityManifest
+        issues: []
+    }
+    | {
+        valid: false
+        issues: CapabilityValidationIssue[]
+    }
 
 export type CapabilityGraphValidationOptions = {
     rootCapabilityIds?: string[]
@@ -53,8 +60,17 @@ export type CapabilityGraphValidationOptions = {
 const ACTION_NAME_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
 const TOOL_TYPE_PATTERN = /^[a-z][a-z0-9-]*$/
-const CAPABILITY_KINDS = new Set(['tool', 'skill'])
-const RESOURCE_ROLES = new Set(['instructions', 'reference', 'schema', 'example', 'asset'])
+const CAPABILITY_KINDS = new Set([
+    'tool',
+    'skill',
+])
+const RESOURCE_ROLES = new Set([
+    'instructions',
+    'reference',
+    'schema',
+    'example',
+    'asset',
+])
 const COMPARISON_OPERATORS = new Set([
     'equals',
     'not-equals',
@@ -65,32 +81,81 @@ const COMPARISON_OPERATORS = new Set([
     'contains',
 ])
 
-export function validateCapabilityManifest(
+export const validateCapabilityManifest = (
     input: unknown,
     options: CapabilityManifestValidationOptions = {},
-): CapabilityManifestValidationResult {
+): CapabilityManifestValidationResult => {
     const issues: CapabilityValidationIssue[] = []
     const manifest = asRecord(input)
+
     if (!manifest) {
-        addIssue(issues, 'INVALID_SCHEMA', '$', 'Manifest must be an object')
-        return { valid: false, issues }
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$',
+            'Manifest must be an object',
+        )
+
+        return {
+            valid: false,
+            issues,
+        }
     }
 
-    validateLiteral(manifest.schemaVersion, 1, '$.schemaVersion', issues)
-    validateIdentifier(manifest.capabilityId, '$.capabilityId', issues)
-    validateEnum(manifest.kind, CAPABILITY_KINDS, '$.kind', issues)
-    validateNonEmptyString(manifest.name, '$.name', issues)
-    validateNonEmptyString(manifest.description, '$.description', issues)
+    validateLiteral(
+        manifest.schemaVersion,
+        1,
+        '$.schemaVersion',
+        issues,
+    )
+    validateIdentifier(
+        manifest.capabilityId,
+        '$.capabilityId',
+        issues,
+    )
+    validateEnum(
+        manifest.kind,
+        CAPABILITY_KINDS,
+        '$.kind',
+        issues,
+    )
+    validateNonEmptyString(
+        manifest.name,
+        '$.name',
+        issues,
+    )
+    validateNonEmptyString(
+        manifest.description,
+        '$.description',
+        issues,
+    )
 
     const references = validateReferences(manifest.references, issues)
     const resources = validateResources(manifest.resources, issues)
-    validateExports(manifest.exports, resources, issues, options)
+    validateExports(
+        manifest.exports,
+        resources,
+        issues,
+        options,
+    )
 
-    if (manifest.kind === 'tool') {
-        validateToolDefinition(manifest.tool, resources, issues, options)
-    } else if (manifest.kind === 'skill' && manifest.tool !== undefined) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.tool', 'Skill manifests cannot define a Tool workflow')
-    }
+    if (manifest.kind === 'tool')
+        validateToolDefinition(
+            manifest.tool,
+            resources,
+            issues,
+            options,
+        )
+    else if (
+        manifest.kind === 'skill'
+        && manifest.tool !== undefined
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.tool',
+            'Skill manifests cannot define a Tool workflow',
+        )
 
     if (references.length > CAPABILITY_LIMITS.maxResolvedCapabilities) {
         addIssue(
@@ -101,14 +166,23 @@ export function validateCapabilityManifest(
         )
     }
 
-    if (issues.length > 0) return { valid: false, issues }
-    return { valid: true, manifest: input as CapabilityManifest, issues: [] }
+    if (issues.length > 0)
+        return {
+            valid: false,
+            issues,
+        }
+
+    return {
+        valid: true,
+        manifest: input as CapabilityManifest,
+        issues: [],
+    }
 }
 
-export function validateCapabilityDependencyGraph(
+export const validateCapabilityDependencyGraph = (
     manifests: readonly CapabilityManifest[],
     options: CapabilityGraphValidationOptions = {},
-): CapabilityValidationIssue[] {
+): CapabilityValidationIssue[] => {
     const issues: CapabilityValidationIssue[] = []
     const manifestById = new Map<string, CapabilityManifest>()
 
@@ -120,8 +194,10 @@ export function validateCapabilityDependencyGraph(
                 `$.manifests.${manifest.capabilityId}`,
                 `Capability ${manifest.capabilityId} is defined more than once`,
             )
+
             continue
         }
+
         manifestById.set(manifest.capabilityId, manifest)
     }
 
@@ -133,8 +209,12 @@ export function validateCapabilityDependencyGraph(
     const visiting: string[] = []
     let resourceCount = 0
 
-    const visit = (capabilityId: string, depth: number): void => {
+    const visit = (
+        capabilityId: string,
+        depth: number,
+    ): void => {
         const manifest = manifestById.get(capabilityId)
+
         if (!manifest) {
             addIssue(
                 issues,
@@ -142,6 +222,7 @@ export function validateCapabilityDependencyGraph(
                 `$.manifests.${capabilityId}`,
                 `Referenced Capability ${capabilityId} is missing`,
             )
+
             return
         }
 
@@ -152,16 +233,26 @@ export function validateCapabilityDependencyGraph(
                 `$.manifests.${capabilityId}`,
                 `Capability dependency depth exceeds ${maxDepth}`,
             )
+
             return
         }
 
         const cycleStart = visiting.indexOf(capabilityId)
+
         if (cycleStart >= 0) {
             const cycle = [...visiting.slice(cycleStart), capabilityId].join(' -> ')
-            addIssue(issues, 'REFERENCE_CYCLE', `$.manifests.${capabilityId}`, `Capability reference cycle: ${cycle}`)
+            addIssue(
+                issues,
+                'REFERENCE_CYCLE',
+                `$.manifests.${capabilityId}`,
+                `Capability reference cycle: ${cycle}`,
+            )
+
             return
         }
-        if (visited.has(capabilityId)) return
+
+        if (visited.has(capabilityId))
+            return
 
         visiting.push(capabilityId)
         visited.add(capabilityId)
@@ -175,6 +266,7 @@ export function validateCapabilityDependencyGraph(
                 `Resolved Capability count exceeds ${maxCapabilities}`,
             )
         }
+
         if (resourceCount > maxResources) {
             addIssue(
                 issues,
@@ -186,6 +278,7 @@ export function validateCapabilityDependencyGraph(
 
         for (const reference of manifest.references) {
             const target = manifestById.get(reference.capabilityId)
+
             if (!target) {
                 addIssue(
                     issues,
@@ -193,8 +286,10 @@ export function validateCapabilityDependencyGraph(
                     `$.manifests.${capabilityId}.references`,
                     `Referenced Capability ${reference.capabilityId} is missing`,
                 )
+
                 continue
             }
+
             if (target.kind !== reference.kind) {
                 addIssue(
                     issues,
@@ -203,10 +298,12 @@ export function validateCapabilityDependencyGraph(
                     `Reference ${reference.capabilityId} declares ${reference.kind} but resolves to ${target.kind}`,
                 )
             }
+
             const exportedNames = new Set([
                 ...Object.keys(target.exports?.instructions ?? {}),
                 ...Object.keys(target.exports?.stepTemplates ?? {}),
             ])
+
             for (const importedName of reference.import ?? []) {
                 if (!exportedNames.has(importedName)) {
                     addIssue(
@@ -217,41 +314,86 @@ export function validateCapabilityDependencyGraph(
                     )
                 }
             }
+
             visit(reference.capabilityId, depth + 1)
         }
 
         visiting.pop()
     }
 
-    for (const rootCapabilityId of rootCapabilityIds) visit(rootCapabilityId, 1)
+    for (const rootCapabilityId of rootCapabilityIds)
+        visit(rootCapabilityId, 1)
+
     return deduplicateIssues(issues)
 }
 
-function validateReferences(input: unknown, issues: CapabilityValidationIssue[]): Array<Record<string, unknown>> {
+function validateReferences(
+    input: unknown,
+    issues: CapabilityValidationIssue[],
+): Array<Record<string, unknown>> {
     if (!Array.isArray(input)) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.references', 'References must be an array')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.references',
+            'References must be an array',
+        )
+
         return []
     }
 
     return input.flatMap((entry, index) => {
         const reference = asRecord(entry)
         const path = `$.references[${index}]`
+
         if (!reference) {
-            addIssue(issues, 'INVALID_SCHEMA', path, 'Reference must be an object')
+            addIssue(
+                issues,
+                'INVALID_SCHEMA',
+                path,
+                'Reference must be an object',
+            )
+
             return []
         }
-        validateIdentifier(reference.capabilityId, `${path}.capabilityId`, issues)
-        validateEnum(reference.kind, CAPABILITY_KINDS, `${path}.kind`, issues)
-        validateStringArray(reference.import, `${path}.import`, issues, true)
+
+        validateIdentifier(
+            reference.capabilityId,
+            `${path}.capabilityId`,
+            issues,
+        )
+        validateEnum(
+            reference.kind,
+            CAPABILITY_KINDS,
+            `${path}.kind`,
+            issues,
+        )
+        validateStringArray(
+            reference.import,
+            `${path}.import`,
+            issues,
+            true,
+        )
+
         return [reference]
     })
 }
 
-function validateResources(input: unknown, issues: CapabilityValidationIssue[]): CapabilityResourceRef[] {
+function validateResources(
+    input: unknown,
+    issues: CapabilityValidationIssue[],
+): CapabilityResourceRef[] {
     if (!Array.isArray(input)) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.resources', 'Resources must be an array')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.resources',
+            'Resources must be an array',
+        )
+
         return []
     }
+
     if (input.length > CAPABILITY_LIMITS.maxResources) {
         addIssue(
             issues,
@@ -263,26 +405,66 @@ function validateResources(input: unknown, issues: CapabilityValidationIssue[]):
 
     const resources: CapabilityResourceRef[] = []
     const resourceIds = new Set<string>()
+
     for (const [index, entry] of input.entries()) {
         const resource = asRecord(entry)
         const path = `$.resources[${index}]`
+
         if (!resource) {
-            addIssue(issues, 'INVALID_SCHEMA', path, 'Resource must be an object')
+            addIssue(
+                issues,
+                'INVALID_SCHEMA',
+                path,
+                'Resource must be an object',
+            )
+
             continue
         }
-        validateIdentifier(resource.resourceId, `${path}.resourceId`, issues)
-        validateNonEmptyString(resource.blobHash, `${path}.blobHash`, issues)
-        validateResourceMediaType(resource.mediaType, `${path}.mediaType`, issues)
-        validateEnum(resource.role, RESOURCE_ROLES, `${path}.role`, issues)
-        if (resource.name !== undefined) validateNonEmptyString(resource.name, `${path}.name`, issues)
+
+        validateIdentifier(
+            resource.resourceId,
+            `${path}.resourceId`,
+            issues,
+        )
+        validateNonEmptyString(
+            resource.blobHash,
+            `${path}.blobHash`,
+            issues,
+        )
+        validateResourceMediaType(
+            resource.mediaType,
+            `${path}.mediaType`,
+            issues,
+        )
+        validateEnum(
+            resource.role,
+            RESOURCE_ROLES,
+            `${path}.role`,
+            issues,
+        )
+
+        if (resource.name !== undefined)
+            validateNonEmptyString(
+                resource.name,
+                `${path}.name`,
+                issues,
+            )
+
         if (typeof resource.resourceId === 'string') {
-            if (resourceIds.has(resource.resourceId)) {
-                addIssue(issues, 'DUPLICATE_ID', `${path}.resourceId`, `Duplicate resourceId ${resource.resourceId}`)
-            }
+            if (resourceIds.has(resource.resourceId))
+                addIssue(
+                    issues,
+                    'DUPLICATE_ID',
+                    `${path}.resourceId`,
+                    `Duplicate resourceId ${resource.resourceId}`,
+                )
+
             resourceIds.add(resource.resourceId)
         }
+
         resources.push(resource as CapabilityResourceRef)
     }
+
     return resources
 }
 
@@ -292,44 +474,108 @@ function validateExports(
     issues: CapabilityValidationIssue[],
     options: CapabilityManifestValidationOptions,
 ): void {
-    if (input === undefined) return
+    if (input === undefined)
+        return
+
     const exports = asRecord(input)
+
     if (!exports) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.exports', 'Exports must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.exports',
+            'Exports must be an object',
+        )
+
         return
     }
-    const resourceIds = new Set(resources.map((resource) => resource.resourceId))
+
+    const resourceIds = new Set(
+        resources.map(resource => resource.resourceId),
+    )
     const instructions = asRecord(exports.instructions)
-    if (exports.instructions !== undefined && !instructions) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.exports.instructions', 'Instruction exports must be an object')
-    }
+
+    if (
+        exports.instructions !== undefined
+        && !instructions
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.exports.instructions',
+            'Instruction exports must be an object',
+        )
+
     for (const [name, entry] of Object.entries(instructions ?? {})) {
         const instruction = asRecord(entry)
         const path = `$.exports.instructions.${name}`
+
         if (!instruction) {
-            addIssue(issues, 'INVALID_SCHEMA', path, 'Instruction export must be an object')
+            addIssue(
+                issues,
+                'INVALID_SCHEMA',
+                path,
+                'Instruction export must be an object',
+            )
+
             continue
         }
-        const exportedResourceIds = validateStringArray(instruction.resourceIds, `${path}.resourceIds`, issues)
+
+        const exportedResourceIds = validateStringArray(
+            instruction.resourceIds,
+            `${path}.resourceIds`,
+            issues,
+        )
+
         for (const resourceId of exportedResourceIds) {
-            if (!resourceIds.has(resourceId)) {
-                addIssue(issues, 'MISSING_REFERENCE', `${path}.resourceIds`, `Resource ${resourceId} is not in the manifest`)
-            }
+            if (!resourceIds.has(resourceId))
+                addIssue(
+                    issues,
+                    'MISSING_REFERENCE',
+                    `${path}.resourceIds`,
+                    `Resource ${resourceId} is not in the manifest`,
+                )
         }
     }
 
     const stepTemplates = asRecord(exports.stepTemplates)
-    if (exports.stepTemplates !== undefined && !stepTemplates) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.exports.stepTemplates', 'Step template exports must be an object')
-    }
+
+    if (
+        exports.stepTemplates !== undefined
+        && !stepTemplates
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.exports.stepTemplates',
+            'Step template exports must be an object',
+        )
+
     for (const [name, entry] of Object.entries(stepTemplates ?? {})) {
         const template = asRecord(entry)
         const path = `$.exports.stepTemplates.${name}`
+
         if (!template) {
-            addIssue(issues, 'INVALID_SCHEMA', path, 'Step template export must be an object')
+            addIssue(
+                issues,
+                'INVALID_SCHEMA',
+                path,
+                'Step template export must be an object',
+            )
+
             continue
         }
-        validateWorkflow({ steps: template.steps, outputs: template.outputs }, `${path}`, resources, issues, options)
+
+        validateWorkflow(
+            {
+                steps: template.steps,
+                outputs: template.outputs,
+            },
+            `${path}`,
+            resources,
+            issues,
+            options,
+        )
     }
 }
 
@@ -340,38 +586,121 @@ function validateToolDefinition(
     options: CapabilityManifestValidationOptions,
 ): void {
     const tool = asRecord(input)
+
     if (!tool) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.tool', 'Tool manifests must define a Tool definition')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.tool',
+            'Tool manifests must define a Tool definition',
+        )
+
         return
     }
-    if (typeof tool.toolType !== 'string' || !TOOL_TYPE_PATTERN.test(tool.toolType)) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.tool.toolType', 'Tool type must be a lowercase kebab-case identifier')
-    }
-    validateEnum(tool.executionPolicy, new Set(['required', 'model-required', 'model-choice']), '$.tool.executionPolicy', issues)
+
+    if (
+        typeof tool.toolType !== 'string'
+        || !TOOL_TYPE_PATTERN.test(tool.toolType)
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.tool.toolType',
+            'Tool type must be a lowercase kebab-case identifier',
+        )
+
+    validateEnum(
+        tool.executionPolicy,
+        new Set([
+            'required',
+            'model-required',
+            'model-choice',
+        ]),
+        '$.tool.executionPolicy',
+        issues,
+    )
     validateEnum(
         tool.executionMultiplicity,
-        new Set(['once', 'per-reasoning-model']),
+        new Set([
+            'once',
+            'per-reasoning-model',
+        ]),
         '$.tool.executionMultiplicity',
         issues,
     )
     validateModelAxisPolicy(tool.modelAxisPolicy, issues)
-    validateSchemaResource(tool.inputSchema, '$.tool.inputSchema', resources, issues)
-    validateSchemaResource(tool.outputSchema, '$.tool.outputSchema', resources, issues)
-    validateWorkflow(tool.workflow, '$.tool.workflow', resources, issues, options)
+    validateSchemaResource(
+        tool.inputSchema,
+        '$.tool.inputSchema',
+        resources,
+        issues,
+    )
+    validateSchemaResource(
+        tool.outputSchema,
+        '$.tool.outputSchema',
+        resources,
+        issues,
+    )
+    validateWorkflow(
+        tool.workflow,
+        '$.tool.workflow',
+        resources,
+        issues,
+        options,
+    )
 }
 
-function validateModelAxisPolicy(input: unknown, issues: CapabilityValidationIssue[]): void {
+function validateModelAxisPolicy(
+    input: unknown,
+    issues: CapabilityValidationIssue[],
+): void {
     const policy = asRecord(input)
+
     if (!policy) {
-        addIssue(issues, 'INVALID_SCHEMA', '$.tool.modelAxisPolicy', 'Tool model-axis policy must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            '$.tool.modelAxisPolicy',
+            'Tool model-axis policy must be an object',
+        )
+
         return
     }
-    validateEnum(policy.reasoning, new Set(['all-selected', 'first-selected', 'ignore']), '$.tool.modelAxisPolicy.reasoning', issues)
-    validateEnum(policy.image, new Set(['all-selected', 'ignore']), '$.tool.modelAxisPolicy.image', issues)
-    validateEnum(policy.video, new Set(['all-selected', 'ignore']), '$.tool.modelAxisPolicy.video', issues)
+
+    validateEnum(
+        policy.reasoning,
+        new Set([
+            'all-selected',
+            'first-selected',
+            'ignore',
+        ]),
+        '$.tool.modelAxisPolicy.reasoning',
+        issues,
+    )
+    validateEnum(
+        policy.image,
+        new Set([
+            'all-selected',
+            'ignore',
+        ]),
+        '$.tool.modelAxisPolicy.image',
+        issues,
+    )
+    validateEnum(
+        policy.video,
+        new Set([
+            'all-selected',
+            'ignore',
+        ]),
+        '$.tool.modelAxisPolicy.video',
+        issues,
+    )
     validateEnum(
         policy.outputMode,
-        new Set(['capability-only', 'continue-media-generation']),
+        new Set([
+            'capability-only',
+            'continue-media-generation',
+        ]),
         '$.tool.modelAxisPolicy.outputMode',
         issues,
     )
@@ -384,29 +713,64 @@ function validateSchemaResource(
     issues: CapabilityValidationIssue[],
 ): void {
     const schemaRef = asRecord(input)
+
     if (!schemaRef) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Schema reference must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Schema reference must be an object',
+        )
+
         return
     }
-    validateIdentifier(schemaRef.resourceId, `${path}.resourceId`, issues)
-    if (schemaRef.mediaType !== 'application/schema+json') {
-        addIssue(issues, 'INVALID_SCHEMA', `${path}.mediaType`, 'Tool schemas must use application/schema+json')
-    }
-    if (schemaRef.role !== 'schema') {
-        addIssue(issues, 'INVALID_SCHEMA', `${path}.role`, 'Tool schemas must use the schema resource role')
-    }
-    const matchingResource = resources.find((resource) => resource.resourceId === schemaRef.resourceId)
+
+    validateIdentifier(
+        schemaRef.resourceId,
+        `${path}.resourceId`,
+        issues,
+    )
+
+    if (schemaRef.mediaType !== 'application/schema+json')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            `${path}.mediaType`,
+            'Tool schemas must use application/schema+json',
+        )
+
+    if (schemaRef.role !== 'schema')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            `${path}.role`,
+            'Tool schemas must use the schema resource role',
+        )
+
+    const matchingResource = resources.find(resource => resource.resourceId === schemaRef.resourceId)
+
     if (!matchingResource) {
-        addIssue(issues, 'MISSING_REFERENCE', path, `Schema resource ${String(schemaRef.resourceId)} is not in the manifest`)
+        addIssue(
+            issues,
+            'MISSING_REFERENCE',
+            path,
+            `Schema resource ${String(schemaRef.resourceId)} is not in the manifest`,
+        )
+
         return
     }
+
     if (
         matchingResource.blobHash !== schemaRef.blobHash
         || matchingResource.mediaType !== schemaRef.mediaType
         || matchingResource.role !== schemaRef.role
-    ) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Schema reference must exactly match its manifest resource')
-    }
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Schema reference must exactly match its manifest resource',
+        )
 }
 
 function validateWorkflow(
@@ -417,17 +781,37 @@ function validateWorkflow(
     options: CapabilityManifestValidationOptions,
 ): void {
     const workflow = asRecord(input)
+
     if (!workflow) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Workflow must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Workflow must be an object',
+        )
+
         return
     }
+
     if (!Array.isArray(workflow.steps)) {
-        addIssue(issues, 'INVALID_SCHEMA', `${path}.steps`, 'Workflow steps must be an array')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            `${path}.steps`,
+            'Workflow steps must be an array',
+        )
+
         return
     }
-    if (workflow.steps.length === 0) {
-        addIssue(issues, 'INVALID_SCHEMA', `${path}.steps`, 'Workflow must contain at least one step')
-    }
+
+    if (workflow.steps.length === 0)
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            `${path}.steps`,
+            'Workflow must contain at least one step',
+        )
+
     if (workflow.steps.length > CAPABILITY_LIMITS.maxWorkflowSteps) {
         addIssue(
             issues,
@@ -439,35 +823,103 @@ function validateWorkflow(
 
     const steps: CapabilityWorkflowStep[] = []
     const stepIds = new Set<string>()
+
     for (const [index, entry] of workflow.steps.entries()) {
         const step = asRecord(entry)
         const stepPath = `${path}.steps[${index}]`
+
         if (!step) {
-            addIssue(issues, 'INVALID_SCHEMA', stepPath, 'Workflow step must be an object')
+            addIssue(
+                issues,
+                'INVALID_SCHEMA',
+                stepPath,
+                'Workflow step must be an object',
+            )
+
             continue
         }
-        validateIdentifier(step.stepId, `${stepPath}.stepId`, issues)
-        validateNonEmptyString(step.title, `${stepPath}.title`, issues)
-        validateAction(step.action, `${stepPath}.action`, issues, options.allowedActions)
-        validateStringArray(step.dependsOn, `${stepPath}.dependsOn`, issues)
-        validateBindingRecord(step.input, `${stepPath}.input`, resources, issues)
-        if (step.condition !== undefined) {
-            validateCondition(step.condition, `${stepPath}.condition`, resources, issues, 1)
-        }
-        validateRetry(step.retry, `${stepPath}.retry`, issues)
-        validateProgress(step.progress, `${stepPath}.progress`, issues)
+
+        validateIdentifier(
+            step.stepId,
+            `${stepPath}.stepId`,
+            issues,
+        )
+        validateNonEmptyString(
+            step.title,
+            `${stepPath}.title`,
+            issues,
+        )
+        validateAction(
+            step.action,
+            `${stepPath}.action`,
+            issues,
+            options.allowedActions,
+        )
+        validateStringArray(
+            step.dependsOn,
+            `${stepPath}.dependsOn`,
+            issues,
+        )
+        validateBindingRecord(
+            step.input,
+            `${stepPath}.input`,
+            resources,
+            issues,
+        )
+
+        if (step.condition !== undefined)
+            validateCondition(
+                step.condition,
+                `${stepPath}.condition`,
+                resources,
+                issues,
+                1,
+            )
+
+        validateRetry(
+            step.retry,
+            `${stepPath}.retry`,
+            issues,
+        )
+        validateProgress(
+            step.progress,
+            `${stepPath}.progress`,
+            issues,
+        )
+
         if (typeof step.stepId === 'string') {
-            if (stepIds.has(step.stepId)) {
-                addIssue(issues, 'DUPLICATE_ID', `${stepPath}.stepId`, `Duplicate stepId ${step.stepId}`)
-            }
+            if (stepIds.has(step.stepId))
+                addIssue(
+                    issues,
+                    'DUPLICATE_ID',
+                    `${stepPath}.stepId`,
+                    `Duplicate stepId ${step.stepId}`,
+                )
+
             stepIds.add(step.stepId)
         }
+
         steps.push(step as CapabilityWorkflowStep)
     }
 
-    validateStepGraph(steps, path, issues)
-    validateStepBindings(steps, path, resources, issues)
-    validateBindingRecord(workflow.outputs, `${path}.outputs`, resources, issues, stepIds)
+    validateStepGraph(
+        steps,
+        path,
+        issues,
+    )
+    validateStepBindings(
+        steps,
+        path,
+        resources,
+        issues,
+    )
+    validateBindingRecord(
+        workflow.outputs,
+        `${path}.outputs`,
+        resources,
+        issues,
+        stepIds,
+    )
 }
 
 function validateStepGraph(
@@ -475,12 +927,19 @@ function validateStepGraph(
     path: string,
     issues: CapabilityValidationIssue[],
 ): void {
-    const stepIds = new Set(steps.map((step) => step.stepId))
+    const stepIds = new Set(
+        steps.map(step => step.stepId),
+    )
     const visiting = new Set<string>()
     const visited = new Set<string>()
-    const stepById = new Map(steps.map((step) => [step.stepId, step]))
+    const stepById = new Map(
+        steps.map(step => [step.stepId, step]),
+    )
 
-    const visit = (stepId: string, chain: string[]): void => {
+    const visit = (
+        stepId: string,
+        chain: string[],
+    ): void => {
         if (visiting.has(stepId)) {
             addIssue(
                 issues,
@@ -488,12 +947,19 @@ function validateStepGraph(
                 `${path}.steps`,
                 `Workflow dependency cycle: ${[...chain, stepId].join(' -> ')}`,
             )
+
             return
         }
-        if (visited.has(stepId)) return
+
+        if (visited.has(stepId))
+            return
+
         visiting.add(stepId)
         const step = stepById.get(stepId)
-        for (const dependencyId of step?.dependsOn ?? []) visit(dependencyId, [...chain, stepId])
+
+        for (const dependencyId of step?.dependsOn ?? [])
+            visit(dependencyId, [...chain, stepId])
+
         visiting.delete(stepId)
         visited.add(stepId)
     }
@@ -509,6 +975,7 @@ function validateStepGraph(
                 )
             }
         }
+
         visit(step.stepId, [])
     }
 }
@@ -519,22 +986,43 @@ function validateStepBindings(
     resources: CapabilityResourceRef[],
     issues: CapabilityValidationIssue[],
 ): void {
-    const stepById = new Map(steps.map((step) => [step.stepId, step]))
-    const dependenciesFor = (stepId: string, found = new Set<string>()): Set<string> => {
+    const stepById = new Map(
+        steps.map(step => [step.stepId, step]),
+    )
+    const dependenciesFor = (
+        stepId: string,
+        found = new Set<string>(),
+    ): Set<string> => {
         for (const dependencyId of stepById.get(stepId)?.dependsOn ?? []) {
-            if (found.has(dependencyId)) continue
+            if (found.has(dependencyId))
+                continue
+
             found.add(dependencyId)
             dependenciesFor(dependencyId, found)
         }
+
         return found
     }
 
     for (const [index, step] of steps.entries()) {
         const allowedStepIds = dependenciesFor(step.stepId)
-        validateBindingRecord(step.input, `${path}.steps[${index}].input`, resources, issues, allowedStepIds)
-        if (step.condition !== undefined) {
-            validateCondition(step.condition, `${path}.steps[${index}].condition`, resources, issues, 1, allowedStepIds)
-        }
+        validateBindingRecord(
+            step.input,
+            `${path}.steps[${index}].input`,
+            resources,
+            issues,
+            allowedStepIds,
+        )
+
+        if (step.condition !== undefined)
+            validateCondition(
+                step.condition,
+                `${path}.steps[${index}].condition`,
+                resources,
+                issues,
+                1,
+                allowedStepIds,
+            )
     }
 }
 
@@ -546,12 +1034,26 @@ function validateBindingRecord(
     allowedStepIds?: ReadonlySet<string>,
 ): void {
     const bindings = asRecord(input)
+
     if (!bindings) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Bindings must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Bindings must be an object',
+        )
+
         return
     }
+
     for (const [key, binding] of Object.entries(bindings)) {
-        validateBinding(binding, `${path}.${key}`, resources, issues, allowedStepIds)
+        validateBinding(
+            binding,
+            `${path}.${key}`,
+            resources,
+            issues,
+            allowedStepIds,
+        )
     }
 }
 
@@ -563,38 +1065,106 @@ function validateBinding(
     allowedStepIds?: ReadonlySet<string>,
 ): void {
     const binding = asRecord(input)
-    if (!binding || typeof binding.source !== 'string') {
-        addIssue(issues, 'INVALID_BINDING', path, 'Value binding must be a discriminated object')
+
+    if (
+        !binding
+        || typeof binding.source !== 'string'
+    ) {
+        addIssue(
+            issues,
+            'INVALID_BINDING',
+            path,
+            'Value binding must be a discriminated object',
+        )
+
         return
     }
+
     if (binding.source === 'input') {
-        validateStringArray(binding.path, `${path}.path`, issues)
+        validateStringArray(
+            binding.path,
+            `${path}.path`,
+            issues,
+        )
+
         return
     }
+
     if (binding.source === 'step') {
-        validateIdentifier(binding.stepId, `${path}.stepId`, issues)
-        validateStringArray(binding.path, `${path}.path`, issues)
-        if (allowedStepIds && typeof binding.stepId === 'string' && !allowedStepIds.has(binding.stepId)) {
-            addIssue(issues, 'INVALID_BINDING', `${path}.stepId`, `Step ${binding.stepId} is not an available dependency`)
-        }
+        validateIdentifier(
+            binding.stepId,
+            `${path}.stepId`,
+            issues,
+        )
+        validateStringArray(
+            binding.path,
+            `${path}.path`,
+            issues,
+        )
+
+        if (
+            allowedStepIds
+            && typeof binding.stepId === 'string'
+            && !allowedStepIds.has(binding.stepId)
+        )
+            addIssue(
+                issues,
+                'INVALID_BINDING',
+                `${path}.stepId`,
+                `Step ${binding.stepId} is not an available dependency`,
+            )
+
         return
     }
+
     if (binding.source === 'resource') {
-        validateIdentifier(binding.resourceId, `${path}.resourceId`, issues)
-        if (binding.capabilityId !== undefined) validateIdentifier(binding.capabilityId, `${path}.capabilityId`, issues)
+        validateIdentifier(
+            binding.resourceId,
+            `${path}.resourceId`,
+            issues,
+        )
+
+        if (binding.capabilityId !== undefined)
+            validateIdentifier(
+                binding.capabilityId,
+                `${path}.capabilityId`,
+                issues,
+            )
+
         const isLocal = binding.capabilityId === undefined
-        if (isLocal && !resources.some((resource) => resource.resourceId === binding.resourceId)) {
-            addIssue(issues, 'MISSING_REFERENCE', `${path}.resourceId`, `Resource ${String(binding.resourceId)} is not in the manifest`)
-        }
+
+        if (
+            isLocal
+            && !resources.some(resource => resource.resourceId === binding.resourceId)
+        )
+            addIssue(
+                issues,
+                'MISSING_REFERENCE',
+                `${path}.resourceId`,
+                `Resource ${String(binding.resourceId)} is not in the manifest`,
+            )
+
         return
     }
+
     if (binding.source === 'literal') {
-        if (!isJsonValue(binding.value)) {
-            addIssue(issues, 'INVALID_BINDING', `${path}.value`, 'Literal binding must contain a finite JSON value')
-        }
+        if (!isJsonValue(binding.value))
+            addIssue(
+                issues,
+                'INVALID_BINDING',
+                `${path}.value`,
+                'Literal binding must contain a finite JSON value',
+            )
+
         return
     }
-    addIssue(issues, 'INVALID_BINDING', `${path}.source`, `Unsupported binding source ${binding.source}`)
+
+    addIssue(
+        issues,
+        'INVALID_BINDING',
+        `${path}.source`,
+        `Unsupported binding source ${binding.source}`,
+    )
 }
 
 function validateCondition(
@@ -612,48 +1182,142 @@ function validateCondition(
             path,
             `Condition depth exceeds ${CAPABILITY_LIMITS.maxConditionDepth}`,
         )
+
         return
     }
+
     const condition = asRecord(input)
-    if (!condition || typeof condition.type !== 'string') {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Condition must be a discriminated object')
+
+    if (
+        !condition
+        || typeof condition.type !== 'string'
+    ) {
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Condition must be a discriminated object',
+        )
+
         return
     }
+
     if (condition.type === 'compare') {
-        validateBinding(condition.left, `${path}.left`, resources, issues, allowedStepIds)
-        validateEnum(condition.operator, COMPARISON_OPERATORS, `${path}.operator`, issues)
-        validateBinding(condition.right, `${path}.right`, resources, issues, allowedStepIds)
+        validateBinding(
+            condition.left,
+            `${path}.left`,
+            resources,
+            issues,
+            allowedStepIds,
+        )
+        validateEnum(
+            condition.operator,
+            COMPARISON_OPERATORS,
+            `${path}.operator`,
+            issues,
+        )
+        validateBinding(
+            condition.right,
+            `${path}.right`,
+            resources,
+            issues,
+            allowedStepIds,
+        )
+
         return
     }
+
     if (condition.type === 'exists') {
-        validateBinding(condition.value, `${path}.value`, resources, issues, allowedStepIds)
+        validateBinding(
+            condition.value,
+            `${path}.value`,
+            resources,
+            issues,
+            allowedStepIds,
+        )
+
         return
     }
-    if (condition.type === 'all' || condition.type === 'any') {
-        if (!Array.isArray(condition.conditions) || condition.conditions.length === 0) {
-            addIssue(issues, 'INVALID_SCHEMA', `${path}.conditions`, 'Condition group must be a non-empty array')
+
+    if (
+        condition.type === 'all'
+        || condition.type === 'any'
+    ) {
+        if (
+            !Array.isArray(condition.conditions)
+            || condition.conditions.length === 0
+        ) {
+            addIssue(
+                issues,
+                'INVALID_SCHEMA',
+                `${path}.conditions`,
+                'Condition group must be a non-empty array',
+            )
+
             return
         }
+
         for (const [index, child] of condition.conditions.entries()) {
-            validateCondition(child, `${path}.conditions[${index}]`, resources, issues, depth + 1, allowedStepIds)
+            validateCondition(
+                child,
+                `${path}.conditions[${index}]`,
+                resources,
+                issues,
+                depth + 1,
+                allowedStepIds,
+            )
         }
+
         return
     }
+
     if (condition.type === 'not') {
-        validateCondition(condition.condition, `${path}.condition`, resources, issues, depth + 1, allowedStepIds)
+        validateCondition(
+            condition.condition,
+            `${path}.condition`,
+            resources,
+            issues,
+            depth + 1,
+            allowedStepIds,
+        )
+
         return
     }
-    addIssue(issues, 'INVALID_SCHEMA', `${path}.type`, `Unsupported condition type ${condition.type}`)
+
+    addIssue(
+        issues,
+        'INVALID_SCHEMA',
+        `${path}.type`,
+        `Unsupported condition type ${condition.type}`,
+    )
 }
 
-function validateRetry(input: unknown, path: string, issues: CapabilityValidationIssue[]): void {
-    if (input === undefined) return
+function validateRetry(
+    input: unknown,
+    path: string,
+    issues: CapabilityValidationIssue[],
+): void {
+    if (input === undefined)
+        return
+
     const retry = asRecord(input)
+
     if (!retry) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Retry policy must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Retry policy must be an object',
+        )
+
         return
     }
-    if (!Number.isInteger(retry.maxAttempts) || Number(retry.maxAttempts) < 1 || Number(retry.maxAttempts) > CAPABILITY_LIMITS.maxRetryAttempts) {
+
+    if (
+        !Number.isInteger(retry.maxAttempts)
+        || Number(retry.maxAttempts) < 1
+        || Number(retry.maxAttempts) > CAPABILITY_LIMITS.maxRetryAttempts
+    ) {
         addIssue(
             issues,
             'LIMIT_EXCEEDED',
@@ -661,7 +1325,12 @@ function validateRetry(input: unknown, path: string, issues: CapabilityValidatio
             `Retry attempts must be between 1 and ${CAPABILITY_LIMITS.maxRetryAttempts}`,
         )
     }
-    if (!Number.isInteger(retry.backoffMs) || Number(retry.backoffMs) < 0 || Number(retry.backoffMs) > CAPABILITY_LIMITS.maxRetryBackoffMs) {
+
+    if (
+        !Number.isInteger(retry.backoffMs)
+        || Number(retry.backoffMs) < 0
+        || Number(retry.backoffMs) > CAPABILITY_LIMITS.maxRetryBackoffMs
+    ) {
         addIssue(
             issues,
             'LIMIT_EXCEEDED',
@@ -671,16 +1340,41 @@ function validateRetry(input: unknown, path: string, issues: CapabilityValidatio
     }
 }
 
-function validateProgress(input: unknown, path: string, issues: CapabilityValidationIssue[]): void {
+function validateProgress(
+    input: unknown,
+    path: string,
+    issues: CapabilityValidationIssue[],
+): void {
     const progress = asRecord(input)
+
     if (!progress) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Progress metadata must be an object')
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Progress metadata must be an object',
+        )
+
         return
     }
-    if (progress.group !== undefined) validateNonEmptyString(progress.group, `${path}.group`, issues)
-    if (progress.exposeReasoning !== undefined && typeof progress.exposeReasoning !== 'boolean') {
-        addIssue(issues, 'INVALID_SCHEMA', `${path}.exposeReasoning`, 'exposeReasoning must be boolean')
-    }
+
+    if (progress.group !== undefined)
+        validateNonEmptyString(
+            progress.group,
+            `${path}.group`,
+            issues,
+        )
+
+    if (
+        progress.exposeReasoning !== undefined
+        && typeof progress.exposeReasoning !== 'boolean'
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            `${path}.exposeReasoning`,
+            'exposeReasoning must be boolean',
+        )
 }
 
 function validateAction(
@@ -689,33 +1383,83 @@ function validateAction(
     issues: CapabilityValidationIssue[],
     allowedActions?: ReadonlySet<string>,
 ): void {
-    if (typeof input !== 'string' || !ACTION_NAME_PATTERN.test(input)) {
-        addIssue(issues, 'INVALID_ACTION_NAME', path, 'Action must use a namespaced lowercase key such as image.generate')
+    if (
+        typeof input !== 'string'
+        || !ACTION_NAME_PATTERN.test(input)
+    ) {
+        addIssue(
+            issues,
+            'INVALID_ACTION_NAME',
+            path,
+            'Action must use a namespaced lowercase key such as image.generate',
+        )
+
         return
     }
-    if (allowedActions && !allowedActions.has(input)) {
-        addIssue(issues, 'ACTION_NOT_ALLOWED', path, `Action ${input} is not registered for this Tool`)
-    }
+
+    if (
+        allowedActions
+        && !allowedActions.has(input)
+    )
+        addIssue(
+            issues,
+            'ACTION_NOT_ALLOWED',
+            path,
+            `Action ${input} is not registered for this Tool`,
+        )
 }
 
-function validateResourceMediaType(input: unknown, path: string, issues: CapabilityValidationIssue[]): void {
+function validateResourceMediaType(
+    input: unknown,
+    path: string,
+    issues: CapabilityValidationIssue[],
+): void {
     const valid = input === 'application/json'
         || input === 'application/schema+json'
         || input === 'text/markdown'
         || (typeof input === 'string' && input.startsWith('image/') && input.length > 'image/'.length)
-    if (!valid) addIssue(issues, 'INVALID_SCHEMA', path, 'Unsupported Capability resource media type')
+
+    if (!valid)
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Unsupported Capability resource media type',
+        )
 }
 
-function validateIdentifier(input: unknown, path: string, issues: CapabilityValidationIssue[]): void {
-    if (typeof input !== 'string' || !IDENTIFIER_PATTERN.test(input)) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Identifier must be a non-empty stable token')
-    }
+function validateIdentifier(
+    input: unknown,
+    path: string,
+    issues: CapabilityValidationIssue[],
+): void {
+    if (
+        typeof input !== 'string'
+        || !IDENTIFIER_PATTERN.test(input)
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Identifier must be a non-empty stable token',
+        )
 }
 
-function validateNonEmptyString(input: unknown, path: string, issues: CapabilityValidationIssue[]): void {
-    if (typeof input !== 'string' || input.trim().length === 0) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Value must be a non-empty string')
-    }
+function validateNonEmptyString(
+    input: unknown,
+    path: string,
+    issues: CapabilityValidationIssue[],
+): void {
+    if (
+        typeof input !== 'string'
+        || input.trim().length === 0
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Value must be a non-empty string',
+        )
 }
 
 function validateStringArray(
@@ -724,11 +1468,26 @@ function validateStringArray(
     issues: CapabilityValidationIssue[],
     optional = false,
 ): string[] {
-    if (optional && input === undefined) return []
-    if (!Array.isArray(input) || input.some((value) => typeof value !== 'string' || value.trim().length === 0)) {
-        addIssue(issues, 'INVALID_SCHEMA', path, 'Value must be an array of non-empty strings')
+    if (
+        optional
+        && input === undefined
+    )
+        return []
+
+    if (
+        !Array.isArray(input)
+        || input.some(value => typeof value !== 'string' || value.trim().length === 0)
+    ) {
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            'Value must be an array of non-empty strings',
+        )
+
         return []
     }
+
     return input as string[]
 }
 
@@ -738,9 +1497,16 @@ function validateEnum(
     path: string,
     issues: CapabilityValidationIssue[],
 ): void {
-    if (typeof input !== 'string' || !allowed.has(input)) {
-        addIssue(issues, 'INVALID_SCHEMA', path, `Value must be one of: ${[...allowed].join(', ')}`)
-    }
+    if (
+        typeof input !== 'string'
+        || !allowed.has(input)
+    )
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            `Value must be one of: ${[...allowed].join(', ')}`,
+        )
 }
 
 function validateLiteral(
@@ -749,19 +1515,42 @@ function validateLiteral(
     path: string,
     issues: CapabilityValidationIssue[],
 ): void {
-    if (input !== expected) addIssue(issues, 'INVALID_SCHEMA', path, `Value must be ${expected}`)
+    if (input !== expected)
+        addIssue(
+            issues,
+            'INVALID_SCHEMA',
+            path,
+            `Value must be ${expected}`,
+        )
 }
 
 function isJsonValue(input: unknown): input is CapabilityJsonValue {
-    if (input === null || typeof input === 'string' || typeof input === 'boolean') return true
-    if (typeof input === 'number') return Number.isFinite(input)
-    if (Array.isArray(input)) return input.every(isJsonValue)
+    if (
+        input === null
+        || typeof input === 'string'
+        || typeof input === 'boolean'
+    )
+        return true
+
+    if (typeof input === 'number')
+        return Number.isFinite(input)
+
+    if (Array.isArray(input))
+        return input.every(isJsonValue)
+
     const record = asRecord(input)
+
     return record !== null && Object.values(record).every(isJsonValue)
 }
 
 function asRecord(input: unknown): Record<string, unknown> | null {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+    if (
+        !input
+        || typeof input !== 'object'
+        || Array.isArray(input)
+    )
+        return null
+
     return input as Record<string, unknown>
 }
 
@@ -771,15 +1560,24 @@ function addIssue(
     path: string,
     message: string,
 ): void {
-    issues.push({ code, path, message })
+    issues.push({
+        code,
+        path,
+        message,
+    })
 }
 
 function deduplicateIssues(issues: CapabilityValidationIssue[]): CapabilityValidationIssue[] {
     const seen = new Set<string>()
-    return issues.filter((issue) => {
+
+    return issues.filter(issue => {
         const key = `${issue.code}:${issue.path}:${issue.message}`
-        if (seen.has(key)) return false
+
+        if (seen.has(key))
+            return false
+
         seen.add(key)
+
         return true
     })
 }

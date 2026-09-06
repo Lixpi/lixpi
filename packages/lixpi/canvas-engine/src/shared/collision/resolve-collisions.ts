@@ -8,18 +8,25 @@ import {
     type CollisionResult,
 } from './types.ts'
 
-function getFiniteNumber(value: number | undefined, fallback: number): number {
-    return Number.isFinite(value) ? Number(value) : fallback
+const getFiniteNumber = (
+    value: number | undefined,
+    fallback: number,
+): number => (Number.isFinite(value) ? Number(value) : fallback)
+
+const getNonNegativeFiniteNumber = (
+    value: number | undefined,
+    fallback: number,
+): number => {
+    return Math.max(
+        0,
+        getFiniteNumber(value, fallback),
+    )
 }
 
-function getNonNegativeFiniteNumber(value: number | undefined, fallback: number): number {
-    return Math.max(0, getFiniteNumber(value, fallback))
-}
-
-export function resolveCollisions(
+export const resolveCollisions = (
     nodes: CollisionBox[],
     options: CollisionOptions = {},
-): CollisionResult {
+): CollisionResult => {
     const {
         iterations = 50,
         overlapThreshold = 0.5,
@@ -27,12 +34,18 @@ export function resolveCollisions(
         excludePairs,
         shouldResolvePair,
     } = options
-    const safeIterations = Math.max(0, Math.floor(getFiniteNumber(iterations, 50)))
+    const safeIterations = Math.max(
+        0,
+        Math.floor(
+            getFiniteNumber(iterations, 50),
+        ),
+    )
     const safeMargin = getNonNegativeFiniteNumber(margin, 20)
     const safeOverlapThreshold = getNonNegativeFiniteNumber(overlapThreshold, 0.5)
 
-    const boxes = nodes.map((node) => {
+    const boxes = nodes.map(node => {
         const nodeMargin = getNonNegativeFiniteNumber(node.margin, safeMargin)
+
         return {
             id: node.id,
             fixed: node.fixed ?? false,
@@ -55,12 +68,24 @@ export function resolveCollisions(
             for (let j = i + 1; j < boxes.length; j++) {
                 const boxA = boxes[i]
                 const boxB = boxes[j]
-                if (!boxA || !boxB) continue
-                if (boxA.fixed && boxB.fixed) continue
 
-                if (excludePairs && (excludePairs.has(`${boxA.id}-${boxB.id}`) || excludePairs.has(`${boxB.id}-${boxA.id}`))) {
+                if (
+                    !boxA
+                    || !boxB
+                )
                     continue
-                }
+
+                if (
+                    boxA.fixed
+                    && boxB.fixed
+                )
+                    continue
+
+                if (
+                    excludePairs
+                    && (excludePairs.has(`${boxA.id}-${boxB.id}`) || excludePairs.has(`${boxB.id}-${boxA.id}`))
+                )
+                    continue
 
                 const centerAX = boxA.x + boxA.width * 0.5
                 const centerAY = boxA.y + boxA.height * 0.5
@@ -72,7 +97,10 @@ export function resolveCollisions(
                 const py = (boxA.height + boxB.height) * 0.5 - Math.abs(dy)
                 const pairOverlapThreshold = Math.min(boxA.overlapThreshold, boxB.overlapThreshold)
 
-                if (px > pairOverlapThreshold && py > pairOverlapThreshold) {
+                if (
+                    px > pairOverlapThreshold
+                    && py > pairOverlapThreshold
+                ) {
                     const originalA = {
                         id: boxA.id,
                         x: boxA.x + boxA.margin,
@@ -87,7 +115,12 @@ export function resolveCollisions(
                         width: boxB.width - boxB.margin * 2,
                         height: boxB.height - boxB.margin * 2,
                     }
-                    if (shouldResolvePair && !shouldResolvePair(originalA, originalB)) continue
+
+                    if (
+                        shouldResolvePair
+                        && !shouldResolvePair(originalA, originalB)
+                    )
+                        continue
 
                     boxA.moved ||= !boxA.fixed
                     boxB.moved ||= !boxB.fixed
@@ -95,34 +128,59 @@ export function resolveCollisions(
 
                     if (px < py) {
                         const sx = dx > 0 ? 1 : -1
-                        const moveAmount = px * sx / (boxA.fixed || boxB.fixed ? 1 : 2)
-                        if (!boxA.fixed) boxA.x += moveAmount
-                        if (!boxB.fixed) boxB.x -= moveAmount
+                        const moveAmount = px * sx / (boxA.fixed
+                            || boxB.fixed
+                            ? 1
+                            : 2)
+
+                        if (!boxA.fixed)
+                            boxA.x += moveAmount
+
+                        if (!boxB.fixed)
+                            boxB.x -= moveAmount
                     } else {
                         const sy = dy > 0 ? 1 : -1
-                        const moveAmount = py * sy / (boxA.fixed || boxB.fixed ? 1 : 2)
-                        if (!boxA.fixed) boxA.y += moveAmount
-                        if (!boxB.fixed) boxB.y -= moveAmount
+                        const moveAmount = py * sy / (boxA.fixed
+                            || boxB.fixed
+                            ? 1
+                            : 2)
+
+                        if (!boxA.fixed)
+                            boxA.y += moveAmount
+
+                        if (!boxB.fixed)
+                            boxB.y -= moveAmount
                     }
                 }
             }
         }
 
         numIterations++
-        if (!moved) break
+
+        if (!moved)
+            break
     }
 
     const result = new Map<string, CanvasEnginePoint>()
     let hasChanges = false
 
     for (const box of boxes) {
-        if (!box.moved) continue
+        if (!box.moved)
+            continue
+
         hasChanges = true
-        result.set(box.id, {
-            x: box.x + box.margin,
-            y: box.y + box.margin,
-        })
+        result.set(
+            box.id,
+            {
+                x: box.x + box.margin,
+                y: box.y + box.margin,
+            },
+        )
     }
 
-    return { nodes: result, numIterations, hasChanges }
+    return {
+        nodes: result,
+        numIterations,
+        hasChanges,
+    }
 }

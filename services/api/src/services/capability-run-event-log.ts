@@ -29,7 +29,10 @@ export class CapabilityRunEventLog {
 
     static fromSingleton(): CapabilityRunEventLog {
         const natsService = NATS_Service.getInstance()
-        if (!natsService) throw new Error('NATS service is not initialized')
+
+        if (!natsService)
+            throw new Error('NATS service is not initialized')
+
         return new CapabilityRunEventLog(natsService)
     }
 
@@ -44,13 +47,26 @@ export class CapabilityRunEventLog {
     }): Promise<CapabilityRunEventEnvelope> {
         const streamName = await this.ensureWorkspaceStream(workspaceId)
         const subject = getCapabilityRunEventSubject(workspaceId, event.runId)
-        const envelope = { userId, workspaceId, event, streamSequence: 0 }
-        const ack = await this.natsService.publishJetStream(subject, envelope, {
-            msgID: `${event.runId}:${event.sequence}`,
-            expect: { streamName },
-        })
+        const envelope = {
+            userId,
+            workspaceId,
+            event,
+            streamSequence: 0,
+        }
+        const ack = await this.natsService.publishJetStream(
+            subject,
+            envelope,
+            {
+                msgID: `${event.runId}:${event.sequence}`,
+                expect: { streamName },
+            },
+        )
         const streamSequence = getPublishAckSequence(ack)
-        return { ...envelope, streamSequence }
+
+        return {
+            ...envelope,
+            streamSequence,
+        }
     }
 
     async replay({
@@ -66,23 +82,52 @@ export class CapabilityRunEventLog {
     }): Promise<CapabilityRunReplayResult> {
         const streamName = getCapabilityRunEventStreamName(workspaceId)
         const subject = getCapabilityRunEventSubject(workspaceId, runId)
-        const lastMessage = await this.natsService.getJetStreamMessage<CapabilityRunEventEnvelope>(streamName, {
-            last_by_subj: subject,
-        })
-        if (!lastMessage || lastMessage.seq < startStreamSequence) {
-            return { streamName, subject, events: [], hasMore: false }
-        }
+        const lastMessage = await this.natsService.getJetStreamMessage<CapabilityRunEventEnvelope>(
+            streamName,
+            {
+                last_by_subj: subject,
+            },
+        )
+
+        if (
+            !lastMessage
+            || lastMessage.seq < startStreamSequence
+        )
+            return {
+                streamName,
+                subject,
+                events: [],
+                hasMore: false,
+            }
+
         const events: CapabilityRunEventEnvelope[] = []
         let nextSequence = startStreamSequence
-        while (nextSequence <= lastMessage.seq && events.length < maxMessages) {
-            const message = await this.natsService.getJetStreamMessage<CapabilityRunEventEnvelope>(streamName, {
-                seq: nextSequence,
-                next_by_subj: subject,
+
+        while (
+            nextSequence <= lastMessage.seq
+            && events.length < maxMessages
+        ) {
+            const message = await this.natsService.getJetStreamMessage<CapabilityRunEventEnvelope>(
+                streamName,
+                {
+                    seq: nextSequence,
+                    next_by_subj: subject,
+                },
+            )
+
+            if (
+                !message
+                || message.seq > lastMessage.seq
+            )
+                break
+
+            events.push({
+                ...message.data,
+                streamSequence: message.seq,
             })
-            if (!message || message.seq > lastMessage.seq) break
-            events.push({ ...message.data, streamSequence: message.seq })
             nextSequence = message.seq + 1
         }
+
         return {
             streamName,
             subject,
@@ -104,6 +149,7 @@ export class CapabilityRunEventLog {
             max_bytes: DEFAULT_MAX_BYTES,
             max_msgs_per_subject: DEFAULT_MAX_MESSAGES_PER_SUBJECT,
         })
+
         return streamName
     }
 }
@@ -114,7 +160,9 @@ export class CapabilityRunEventRelay {
     constructor(private readonly natsService: NATS_Service) {}
 
     start(): void {
-        if (this.subscriptionCount > 0) return
+        if (this.subscriptionCount > 0)
+            return
+
         const connection = this.natsService.getConnection()
         const canonicalSubject = `${NATS_SUBJECTS.CAPABILITY_SUBJECTS.RUN.EVENTS}.*.*`
         const subscription = connection.subscribe(canonicalSubject, { queue: 'capability-run-event-relay' })
@@ -123,18 +171,24 @@ export class CapabilityRunEventRelay {
             try {
                 for await (const message of subscription) {
                     let envelope: CapabilityRunEventEnvelope
+
                     try {
-                        envelope = JSON.parse(message.string()) as CapabilityRunEventEnvelope
+                        envelope = JSON.parse(
+                            message.string(),
+                        ) as CapabilityRunEventEnvelope
                     } catch {
                         continue
                     }
-                    if (!envelope.userId || !envelope.event?.runId) continue
+
+                    if (
+                        !envelope.userId
+                        || !envelope.event?.runId
+                    )
+                        continue
+
                     connection.publish(
                         [
-                            getCapabilityUserEventSubject(
-                                envelope.userId,
-                                NATS_SUBJECTS.CAPABILITY_SUBJECTS.RUN.STATUS,
-                            ),
+                            getCapabilityUserEventSubject(envelope.userId, NATS_SUBJECTS.CAPABILITY_SUBJECTS.RUN.STATUS),
                             sanitizeToken(envelope.workspaceId),
                             sanitizeToken(envelope.event.runId),
                         ].join('.'),
@@ -148,7 +202,10 @@ export class CapabilityRunEventRelay {
     }
 }
 
-export function getCapabilityRunEventSubject(workspaceId: string, runId: string): string {
+export function getCapabilityRunEventSubject(
+    workspaceId: string,
+    runId: string,
+): string {
     return `${NATS_SUBJECTS.CAPABILITY_SUBJECTS.RUN.EVENTS}.${sanitizeToken(workspaceId)}.${sanitizeToken(runId)}`
 }
 
@@ -161,8 +218,16 @@ function sanitizeToken(value: string): string {
 }
 
 function getPublishAckSequence(ack: unknown): number {
-    const candidate = ack as { seq?: number; sequence?: number }
-    if (typeof candidate.seq === 'number') return candidate.seq
-    if (typeof candidate.sequence === 'number') return candidate.sequence
+    const candidate = ack as {
+        seq?: number
+        sequence?: number
+    }
+
+    if (typeof candidate.seq === 'number')
+        return candidate.seq
+
+    if (typeof candidate.sequence === 'number')
+        return candidate.sequence
+
     throw new Error('JetStream publish ack did not include a stream sequence')
 }

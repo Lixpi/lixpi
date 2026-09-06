@@ -1,11 +1,4 @@
 import { Decimal } from 'decimal.js'
-import {
-    log,
-    info,
-    infoStr,
-    warn,
-    err,
-} from '@lixpi/debug-tools'
 
 import {
     type TokensUsage,
@@ -15,18 +8,15 @@ import {
 export const reportAiTokensUsage = ({
     eventMeta,
     aiModelMetaInfo,
-
     aiVendorRequestId,
     aiVendorModelName,
     usage: {
         promptTokens,
         promptAudioTokens,
         promptCachedTokens,
-
         completionTokens,
         completionAudioTokens,
         completionReasoningTokens,
-
         totalTokens,
     },
     aiRequestReceivedAt,
@@ -43,18 +33,15 @@ export const reportAiTokensUsage = ({
 
     const message: TokensUsageEvent = {
         eventMeta,
-
         aiModel: `${aiModelMetaInfo.provider}:${aiModelMetaInfo.model}`,
         aiVendorRequestId,
         aiRequestReceivedAt,
         aiRequestFinishedAt,
-
         textPricePer: pricePer.toString(),
         textPromptPrice: textPromptPrice.toString(),
         textCompletionPrice: textCompletionPrice.toString(),
         textPromptPriceResale: textPromptPriceResale.toString(),
         textCompletionPriceResale: textCompletionPriceResale.toString(),
-
         prompt: {
             usageTokens: promptTokens,
             cachedTokens: promptCachedTokens,
@@ -72,8 +59,12 @@ export const reportAiTokensUsage = ({
         get total() {
             return {
                 usageTokens: totalTokens,
-                purchasedFor: new Decimal(this.prompt.purchasedFor).add(new Decimal(this.completion.purchasedFor)).toString(),
-                soldToClientFor: new Decimal(this.prompt.soldToClientFor).add(new Decimal(this.completion.soldToClientFor)).toString(),
+                purchasedFor: new Decimal(this.prompt.purchasedFor).add(
+                    new Decimal(this.completion.purchasedFor),
+                ).toString(),
+                soldToClientFor: new Decimal(this.prompt.soldToClientFor).add(
+                    new Decimal(this.completion.soldToClientFor),
+                ).toString(),
             }
         },
     }

@@ -89,6 +89,9 @@ const iteratorMethodNames = new Set([
 ])
 const maximumInlineArrowFunctionLength = 150
 
+// One indentation step, matching oxfmt's tabWidth.
+const indentationWidth = 4
+
 // A call stays on one line only while its line fits this width.
 const maximumInlineCallLength = 150
 const maximumInlineIteratorChainLength = 150
@@ -231,9 +234,10 @@ const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingF
         }
     }
 
-    for (const inputPath of inputPaths) await visit(
-        resolve(inputPath),
-    )
+    for (const inputPath of inputPaths)
+        await visit(
+            resolve(inputPath),
+        )
 
     return {
         files: files.sort(),
@@ -650,14 +654,15 @@ const collectTypeScriptLayouts = (
                 )
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(
-                        child,
-                        node,
-                        parent,
-                        key,
-                        childInsideCondition,
-                    )
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(
+                            child,
+                            node,
+                            parent,
+                            key,
+                            childInsideCondition,
+                        )
             } else if (isAstNode(value))
                 visit(
                     value,
@@ -776,10 +781,8 @@ const preserveExpandedTypeScriptLayouts = (
 
     let output = formatted
 
-    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1202,12 +1205,13 @@ const canonicalizeDelimitedListsOnce = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(
-                        child,
-                        ownStatementStart,
-                        node,
-                    )
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(
+                            child,
+                            ownStatementStart,
+                            node,
+                        )
             } else if (isAstNode(value))
                 visit(
                     value,
@@ -1237,10 +1241,8 @@ const canonicalizeDelimitedListsOnce = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1324,8 +1326,9 @@ const collectHtmlTemplateQuasis = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -1367,25 +1370,47 @@ const applyHtmlTemplateFormatting = (
     if (formattedLayouts.length !== htmlLayouts.length)
         throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
 
-    // Every quasi of one template shares a single indentation delta, measured at the
-    // template's opening backtick. Measuring per quasi instead reads the indentation of
-    // whatever interpolation that quasi resumes after, which differs between the two
-    // oxfmt passes and shifts the closing tags further right on every run.
+    // Anchor each template body on its own first line, and put that line exactly where
+    // canonicalizeHtmlTemplateBoundaries will put it: one step past the line the tagged
+    // template sits on. When the two disagree, the boundary step moves the first line on
+    // its own and leaves the attributes, children and closing tag behind at the offsets
+    // this reindent gave them.
+    //
+    // Every quasi of one template moves together, so the relative shape of the body is
+    // preserved. A quasi after the first resumes mid-line, so its first line belongs to
+    // the interpolation before it and is never shifted.
+    const bodyIndentation = new Map<number, number>()
+
+    for (const quasi of htmlLayouts) {
+        if (bodyIndentation.has(quasi.templateStart))
+            continue
+
+        for (const line of quasi.span.text.split('\n').slice(1)) {
+            if (line.trim().length === 0)
+                continue
+
+            bodyIndentation.set(quasi.templateStart, line.length - line.trimStart().length)
+
+            break
+        }
+    }
+
     const replacements = formattedLayouts.map(
         (target, index) => {
             const htmlQuasi = htmlLayouts[index]!
-            const indentationDifference = getLineIndentation(formatted, target.templateStart).length
-                - getLineIndentation(htmlFormatted, htmlQuasi.templateStart).length
+            const base = bodyIndentation.get(htmlQuasi.templateStart)
+            const wanted = getLineIndentation(formatted, target.templateStart).length + indentationWidth
 
             return {
                 ...target.span,
-                text: reindentHtmlTemplate(htmlQuasi.span.text, indentationDifference),
+                text: reindentHtmlTemplate(htmlQuasi.span.text, base == null ? 0 : wanted - base),
             }
         },
     )
     let output = formatted
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1440,7 +1465,8 @@ const collectHtmlTemplateContents = (
             if (rawRanges.every(range => range != null)) {
                 const interpolationRanges: Array<[number, number]> = []
 
-                for (let index = 0; index < rawRanges.length - 1; index++) interpolationRanges.push([rawRanges[index]![1], rawRanges[index + 1]![0]])
+                for (let index = 0; index < rawRanges.length - 1; index++)
+                    interpolationRanges.push([rawRanges[index]![1], rawRanges[index + 1]![0]])
 
                 contents.push({
                     start: templateRange[0] + 1,
@@ -1456,8 +1482,9 @@ const collectHtmlTemplateContents = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -1474,9 +1501,12 @@ const maskHtmlInterpolations = (
 ): string => {
     const characters: string[] = []
 
-    for (let offset = content.start; offset < content.end; offset++) characters.push(source[offset]!)
+    for (let offset = content.start; offset < content.end; offset++)
+        characters.push(source[offset]!)
 
-    for (const range of content.interpolationRanges) for (let offset = range[0]; offset < range[1]; offset++) characters[offset - content.start] = 'x'
+    for (const range of content.interpolationRanges)
+        for (let offset = range[0]; offset < range[1]; offset++)
+            characters[offset - content.start] = 'x'
 
     return characters.join('')
 }
@@ -1555,13 +1585,15 @@ const collectExpandedHtmlStartTags = (
             }
         }
 
-        for (const child of node.childNodes ?? []) visit(child, depth + 1)
+        for (const child of node.childNodes ?? [])
+            visit(child, depth + 1)
 
         if (node.content)
             visit(node.content, depth + 1)
     }
 
-    for (const child of root.childNodes ?? []) visit(child, 0)
+    for (const child of root.childNodes ?? [])
+        visit(child, 0)
 
     return replacements
 }
@@ -1572,7 +1604,8 @@ const applyHtmlAttributeReplacements = (
 ): string => {
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1592,6 +1625,60 @@ const canonicalizeEmbeddedHtmlAttributes = (
             content.indentation,
             content.start,
         ))
+    }
+
+    return applyHtmlAttributeReplacements(source, replacements)
+}
+
+const canonicalizeHtmlTemplateInterpolations = (
+    file: string,
+    source: string,
+): string => {
+    const replacements: LayoutSpan[] = []
+
+    // An interpolation that spans lines carries ordinary TypeScript, and nothing so far
+    // ties that code to the `${` holding it. Left alone it keeps whatever indentation it
+    // had in the authored file, which routinely leaves the expression and its closing
+    // brace further left than the interpolation they belong to.
+    for (const content of collectHtmlTemplateContents(file, source)) {
+        for (const [start, end] of content.interpolationRanges) {
+            const lines = source.slice(start, end).split('\n')
+
+            if (lines.length < 2)
+                continue
+
+            const openIndentation = getLineIndentation(source, start).length
+            const firstInner = lines.slice(1).find(line => line.trim().length > 0)
+
+            if (firstInner == null)
+                continue
+
+            const difference = openIndentation + indentationWidth
+                - (firstInner.length - firstInner.trimStart().length)
+
+            if (difference === 0)
+                continue
+
+            replacements.push({
+                start,
+                end,
+                text: lines.map(
+                    (line, index) => {
+                        if (
+                            index === 0
+                            || line.trim().length === 0
+                        )
+                            return line
+
+                        return difference > 0
+                            ? `${' '.repeat(difference)}${line}`
+                            : line.slice(
+                                Math.min(-difference, line.length - line.trimStart().length),
+                            )
+                    },
+                ).join('\n'),
+            })
+        }
     }
 
     return applyHtmlAttributeReplacements(source, replacements)
@@ -1708,8 +1795,9 @@ const canonicalizeAssignmentBoundaries = (
                 continue
 
             if (Array.isArray(childValue)) {
-                for (const child of childValue) if (isAstNode(child))
-                    visit(child)
+                for (const child of childValue)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(childValue))
                 visit(childValue)
         }
@@ -1718,10 +1806,8 @@ const canonicalizeAssignmentBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1806,8 +1892,9 @@ const canonicalizeArrowParameters = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -1816,7 +1903,8 @@ const canonicalizeArrowParameters = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1873,8 +1961,9 @@ const canonicalizeExpressionArrowBodies = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -1883,7 +1972,8 @@ const canonicalizeExpressionArrowBodies = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2066,12 +2156,13 @@ const canonicalizeIteratorChainsOnce = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(
-                        child,
-                        node,
-                        parent,
-                    )
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(
+                            child,
+                            node,
+                            parent,
+                        )
             } else if (isAstNode(value))
                 visit(
                     value,
@@ -2084,7 +2175,8 @@ const canonicalizeIteratorChainsOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2193,8 +2285,9 @@ const canonicalizeHtmlTemplateBoundaries = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -2203,7 +2296,8 @@ const canonicalizeHtmlTemplateBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2340,8 +2434,9 @@ const canonicalizeNestedConditionalExpressions = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -2350,7 +2445,8 @@ const canonicalizeNestedConditionalExpressions = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2633,8 +2729,9 @@ const canonicalizeAssignedLogicalExpressions = (
                 continue
 
             if (Array.isArray(childValue)) {
-                for (const child of childValue) if (isAstNode(child))
-                    visit(child)
+                for (const child of childValue)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(childValue))
                 visit(childValue)
         }
@@ -2643,7 +2740,8 @@ const canonicalizeAssignedLogicalExpressions = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2752,11 +2850,12 @@ const canonicalizeStatementSpacing = (
         ) {
             const cases = node.cases.filter(isAstNode)
 
-            for (let index = 1; index < cases.length; index++) addSiblingGapReplacement(
-                cases[index - 1]!,
-                cases[index]!,
-                false,
-            )
+            for (let index = 1; index < cases.length; index++)
+                addSiblingGapReplacement(
+                    cases[index - 1]!,
+                    cases[index]!,
+                    false,
+                )
         }
 
         const statements = getStatementList(node)
@@ -2785,8 +2884,9 @@ const canonicalizeStatementSpacing = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -2795,7 +2895,8 @@ const canonicalizeStatementSpacing = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2847,6 +2948,48 @@ const canonicalizeConditionStatements = (
 
         replacements.push({
             start: nodeRange[0],
+            end: bodyRange[0],
+            text: replacement,
+        })
+    }
+
+    // A loop whose body is a single statement gets the same shape as a brace-less `if`:
+    // the body moves to its own line, one step in. Only whitespace sits between the head
+    // and the body, so the head ends at the `)` immediately before it.
+    const addLoopBodyBreak = (
+        node: AstNode,
+        body: AstNode | null | undefined,
+    ): void => {
+        const nodeRange = getNodeRange(node)
+        const bodyRange = getNodeRange(body)
+
+        if (
+            !nodeRange
+            || !body
+            || !bodyRange
+            || body.type === 'BlockStatement'
+            || hasCommentWithinRange(comments, [nodeRange[0], bodyRange[0]])
+        )
+            return
+
+        let headEnd = bodyRange[0]
+
+        while (
+            headEnd > nodeRange[0]
+            && isWhitespaceCharacter(source[headEnd - 1])
+        )
+            headEnd--
+
+        if (source[headEnd - 1] !== ')')
+            return
+
+        const replacement = `\n${getLineIndentation(source, nodeRange[0])}    `
+
+        if (source.slice(headEnd, bodyRange[0]) === replacement)
+            return
+
+        replacements.push({
+            start: headEnd,
             end: bodyRange[0],
             text: replacement,
         })
@@ -3005,8 +3148,14 @@ const canonicalizeConditionStatements = (
                         text: replacement,
                     })
                 }
-            }
-        } else if (node.type === 'ConditionalExpression') {
+            } else
+                addLoopBodyBreak(node, body)
+        } else if (
+            node.type === 'ForOfStatement'
+            || node.type === 'ForInStatement'
+        )
+            addLoopBodyBreak(node, node.body as AstNode | undefined)
+        else if (node.type === 'ConditionalExpression') {
             const test = node.test as AstNode | undefined
             const consequent = node.consequent as AstNode | undefined
             const alternate = node.alternate as AstNode | undefined
@@ -3060,8 +3209,9 @@ const canonicalizeConditionStatements = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -3081,10 +3231,8 @@ const canonicalizeConditionStatements = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -3280,8 +3428,9 @@ const canonicalizeContainerIndentationOnce = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -3290,10 +3439,8 @@ const canonicalizeContainerIndentationOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -3343,9 +3490,10 @@ const canonicalizeTypeScriptLayout = (
             canonicalConditionalExpressions,
             htmlFormatted,
         )
-        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, formattedHtmlTemplates)
-        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, canonicalHtmlAttributes)
-        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
+        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
+        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, canonicalHtmlTemplates)
+        const canonicalHtmlInterpolations = canonicalizeHtmlTemplateInterpolations(file, canonicalHtmlAttributes)
+        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlInterpolations)
         const canonicalImports = canonicalizeImportLayout(
             canonicalStatementSpacing,
             true,
@@ -3460,7 +3608,8 @@ const {
 } = await collectFormattingFiles(inputPaths)
 
 if (prohibitedFiles.length > 0) {
-    for (const file of prohibitedFiles) err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
+    for (const file of prohibitedFiles)
+        err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
 
     process.exit(1)
 }

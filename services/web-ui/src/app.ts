@@ -31,34 +31,43 @@ class Application implements AppInstance {
     private layout: LayoutInstance | null = null
     private destruction: Promise<void> | null = null
 
-    constructor(target: HTMLElement, private readonly closeCanvasSessions: () => Promise<void>) {
+    constructor(
+        target: HTMLElement,
+        private readonly closeCanvasSessions: () => Promise<void>,
+    ) {
         this.helpTooltipProvider = createHelpTooltipProvider({
             showDelayMs: settings.helpTooltip.providerShowDelayMs,
             root: document,
             shouldShow: trigger => trigger.getAttribute('aria-expanded') !== 'true',
         })
+
         try {
             this.layout = createLayout()
             target.append(this.layout.el)
         } catch (error) {
             const errors: unknown[] = [error]
+
             try {
                 this.layout?.destroy()
             } catch (cleanupError) {
                 errors.push(cleanupError)
             }
+
             try {
                 this.helpTooltipProvider.destroy()
             } catch (cleanupError) {
                 errors.push(cleanupError)
             }
+
             const detail = error instanceof Error ? error.message : String(error)
+
             throw new AggregateError(errors, `Application mount failed: ${detail}`)
         }
     }
 
     destroy = (): Promise<void> => {
         this.destruction ??= this.dispose()
+
         return this.destruction
     }
 
@@ -66,25 +75,31 @@ class Application implements AppInstance {
         // Publish the shared destruction promise before invoking reentrant cleanup.
         await Promise.resolve()
         const errors: unknown[] = []
+
         try {
             this.layout?.destroy()
         } catch (error) {
             errors.push(error)
         }
+
         try {
             this.helpTooltipProvider.destroy()
         } catch (error) {
             errors.push(error)
         }
+
         try {
             await this.closeCanvasSessions()
         } catch (error) {
             errors.push(error)
         }
-        if (errors.length > 0) throw new AggregateError(errors, 'Application shutdown failed')
+
+        if (errors.length > 0)
+            throw new AggregateError(errors, 'Application shutdown failed')
     }
 }
 
-export function mountApp(target: HTMLElement, closeCanvasSessions: () => Promise<void>): AppInstance {
-    return new Application(target, closeCanvasSessions)
-}
+export const mountApp = (
+    target: HTMLElement,
+    closeCanvasSessions: () => Promise<void>,
+): AppInstance => new Application(target, closeCanvasSessions)

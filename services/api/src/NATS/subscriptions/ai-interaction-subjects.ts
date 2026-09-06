@@ -5,7 +5,6 @@ import { v4 as uuid } from 'uuid'
 
 import NATS_Service from '@lixpi/nats-service'
 import {
-    log,
     info,
     infoStr,
     warn,
@@ -119,33 +118,51 @@ type PipelineResumePayload = {
 let _llmModule: LlmModule | undefined
 
 // Set by server.ts after createLlmModule is built — subscriptions are registered before the module exists.
-export const setLlmModule = (mod: LlmModule): void => {
-    _llmModule = mod
-}
+export const setLlmModule = (mod: LlmModule): void => void (_llmModule = mod)
 
 const getLlmModule = (): LlmModule => {
-    if (!_llmModule) throw new Error('LLM module not initialized')
+    if (!_llmModule)
+        throw new Error('LLM module not initialized')
+
     return _llmModule
 }
 
 const normalizeModelOption = (
     requested: string | number | undefined,
-    options: Array<{ value?: string; label?: string }> | undefined,
+    options: Array<{
+        value?: string
+        label?: string
+    }> | undefined,
 ): string | undefined => {
     const requestedValue = requested == null ? '' : String(requested)
-    if (!Array.isArray(options) || options.length === 0) return requestedValue || undefined
 
-    const values = options
-        .map(option => option.value)
-        .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    if (values.length === 0) return requestedValue || undefined
-    if (requestedValue && values.includes(requestedValue)) return requestedValue
+    if (
+        !Array.isArray(options)
+        || options.length === 0
+    )
+        return requestedValue || undefined
+
+    const values = options.map(option => option.value).filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+    if (values.length === 0)
+        return requestedValue || undefined
+
+    if (
+        requestedValue
+        && values.includes(requestedValue)
+    )
+        return requestedValue
+
     return values[0]
 }
 
 const formatNaturalLanguageList = (values: string[]): string => {
-    if (values.length < 2) return values[0] ?? ''
-    if (values.length === 2) return `${values[0]} and ${values[1]}`
+    if (values.length < 2)
+        return values[0] ?? ''
+
+    if (values.length === 2)
+        return `${values[0]} and ${values[1]}`
+
     return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`
 }
 
@@ -176,58 +193,76 @@ const findSealedMediaReplayTrace = (
     },
 ): SealedMediaReplayTrace | undefined => {
     const root = parseProseMirrorJsonContent(doc)
-    if (!root) return undefined
+
+    if (!root)
+        return undefined
+
     const traces: SealedMediaReplayTrace[] = []
     const visit = (node: ProseMirrorJsonNode): void => {
         const imageTrace = node.attrs?.imageGenerationTrace
         const videoTrace = node.attrs?.videoGenerationTrace
         const candidate = imageTrace ?? videoTrace
-        if (candidate && typeof candidate === 'object') {
+
+        if (
+            candidate
+            && typeof candidate === 'object'
+        )
             traces.push(candidate as SealedMediaReplayTrace)
-        }
-        for (const child of node.content ?? []) visit(child)
+
+        for (const child of node.content ?? [])
+            visit(child)
     }
     visit(root)
-    const exactTrace = traces.find((trace) => {
+    const exactTrace = traces.find(trace => {
         const run = trace.generationRun
         const mediaType = trace.traceVersion === 'image-generation-trace-v1' ? 'image' : 'video'
+
         return mediaType === expected.mediaType
             && run?.reasoningModelId === expected.reasoningModelId
             && run.mediaModelId === expected.mediaModelId
             && (!expected.reasoningRunId || run.reasoningRunId === expected.reasoningRunId)
             && (!expected.mediaRunId || run.mediaRunId === expected.mediaRunId)
     })
-    if (exactTrace) return exactTrace
+
+    if (exactTrace)
+        return exactTrace
 
     // Older sealed per-Asset projections can contain one correctly scoped trace
     // without embedded media-run metadata. The provenance document itself is
     // already scoped to this source Asset, so that single trace is authoritative.
-    if (traces.length !== 1) return undefined
+    if (traces.length !== 1)
+        return undefined
+
     const onlyTrace = traces[0]!
     const mediaType = onlyTrace.traceVersion === 'image-generation-trace-v1' ? 'image' : 'video'
+
     return mediaType === expected.mediaType ? onlyTrace : undefined
 }
 
 const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
     let text = ''
+
     for (const child of node.content ?? []) {
-        if (child.type === 'text') {
+        if (child.type === 'text')
             text += child.text ?? ''
-        } else if (child.type === 'hard_break') {
+        else if (child.type === 'hard_break')
             text += '\n'
-        } else if (
+        else if (
             child.type === PROMPT_REFERENCE_NODE_TYPE
             || child.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
-        ) {
+        )
             text += collectProseMirrorPromptReferences(child)[0]?.displayName ?? ''
-        } else if (child.type === 'code_block') {
+        else if (child.type === 'code_block')
             text += `\n\`\`\`\n${collectAuthoritativeMessageText(child)}\n\`\`\`\n`
-        } else if (child.type === aiGeneratedImageNodeType || child.type === aiGeneratedVideoNodeType) {
+        else if (
+            child.type === aiGeneratedImageNodeType
+            || child.type === aiGeneratedVideoNodeType
+        )
             continue
-        } else {
+        else
             text += collectAuthoritativeMessageText(child)
-        }
     }
+
     return text
 }
 
@@ -239,22 +274,26 @@ const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
 // authored words around them stay separated.
 const collectRoutableUserPromptText = (node: ProseMirrorJsonNode): string => {
     let text = ''
+
     for (const child of node.content ?? []) {
-        if (child.type === 'text') {
+        if (child.type === 'text')
             text += child.text ?? ''
-        } else if (child.type === 'hard_break') {
+        else if (child.type === 'hard_break')
             text += '\n'
-        } else if (
+        else if (
             child.type === PROMPT_REFERENCE_NODE_TYPE
             || child.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
-        ) {
+        )
             text += ' '
-        } else if (child.type === aiGeneratedImageNodeType || child.type === aiGeneratedVideoNodeType) {
+        else if (
+            child.type === aiGeneratedImageNodeType
+            || child.type === aiGeneratedVideoNodeType
+        )
             continue
-        } else {
+        else
             text += collectRoutableUserPromptText(child)
-        }
     }
+
     return text
 }
 
@@ -264,47 +303,74 @@ const getClarificationOriginUserMessage = (
 ): ProseMirrorJsonNode | undefined => {
     const root = parseProseMirrorJsonContent(doc)
     const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
-    if (!thread) return undefined
-    const messages = (thread.content ?? []).filter(node => (
-        node.type === aiUserMessageNodeType || node.type === aiResponseMessageNodeType
-    ))
+
+    if (!thread)
+        return undefined
+
+    const messages = (thread.content ?? []).filter(
+        node => (
+            node.type === aiUserMessageNodeType || node.type === aiResponseMessageNodeType
+        ),
+    )
     const latest = messages.at(-1)
     const response = messages.at(-2)
     const origin = messages.at(-3)
+
     if (
         latest?.type !== aiUserMessageNodeType
         || response?.type !== aiResponseMessageNodeType
         || origin?.type !== aiUserMessageNodeType
-    ) {
+    )
         return undefined
-    }
-    const responseContainsGeneratedMedia = (node: ProseMirrorJsonNode): boolean => (
-        node.type === aiGeneratedImageNodeType
+
+    const responseContainsGeneratedMedia = (node: ProseMirrorJsonNode): boolean => node.type === aiGeneratedImageNodeType
         || node.type === aiGeneratedVideoNodeType
         || (node.content ?? []).some(responseContainsGeneratedMedia)
-    )
+
     return responseContainsGeneratedMedia(response) ? undefined : origin
 }
 
 const buildAuthoritativeConversationMessages = (
     doc: object,
     conversationAssetId: string,
-): Array<{ role: 'user' | 'assistant'; content: string }> => {
+): Array<{
+    role: 'user' | 'assistant'
+    content: string
+}> => {
     const root = parseProseMirrorJsonContent(doc)
     const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
-    if (!thread) throw new Error('CONVERSATION_THREAD_NOT_FOUND')
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+
+    if (!thread)
+        throw new Error('CONVERSATION_THREAD_NOT_FOUND')
+
+    const messages: Array<{
+        role: 'user' | 'assistant'
+        content: string
+    }> = []
+
     for (const child of thread.content ?? []) {
-        if (child.type !== aiUserMessageNodeType && child.type !== aiResponseMessageNodeType) continue
-        const role = child.type === aiResponseMessageNodeType ? 'assistant' as const : 'user' as const
+        if (
+            child.type !== aiUserMessageNodeType
+            && child.type !== aiResponseMessageNodeType
+        )
+            continue
+
+        const role = child.type === aiResponseMessageNodeType ? ('assistant' as const) : ('user' as const)
         const content = collectAuthoritativeMessageText(child)
         const previous = messages.at(-1)
-        if (previous?.role === role) previous.content += `\n${content}`
-        else messages.push({ role, content })
+
+        if (previous?.role === role)
+            previous.content += `\n${content}`
+        else
+            messages.push({
+                role,
+                content,
+            })
     }
-    if (!messages.some((message) => message.role === 'user')) {
+
+    if (!messages.some(message => message.role === 'user'))
         throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
-    }
+
     return messages
 }
 
@@ -315,7 +381,10 @@ const getLatestAuthoritativeUserMessageNode = (
     const root = parseProseMirrorJsonContent(doc)
     const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
     const latest = [...(thread?.content ?? [])].reverse().find(node => node.type === aiUserMessageNodeType)
-    if (!latest) throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+
+    if (!latest)
+        throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+
     return latest
 }
 
@@ -331,40 +400,55 @@ const createDurableMediaRuns = ({
     videoModelIds: string[]
 }): MediaGenerationRun[] => {
     const mediaModels = [
-        ...imageModelIds.map((modelId, mediaIndex) => ({ modelId, mediaIndex, mediaType: 'image' as const })),
-        ...videoModelIds.map((modelId, mediaIndex) => ({ modelId, mediaIndex, mediaType: 'video' as const })),
+        ...imageModelIds.map(
+            (modelId, mediaIndex) => ({
+                modelId,
+                mediaIndex,
+                mediaType: 'image' as const,
+            }),
+        ),
+        ...videoModelIds.map(
+            (modelId, mediaIndex) => ({
+                modelId,
+                mediaIndex,
+                mediaType: 'video' as const,
+            }),
+        ),
     ]
-    return reasoningModelIds.flatMap((reasoningModelId, reasoningIndex) =>
-        mediaModels.map((media, mediaAxisIndex) => {
-            const generationRun = reasoningIndex * mediaModels.length + mediaAxisIndex
-            const reasoningRunId = `${generationRequestId}:reasoning:${reasoningIndex}`
-            const mediaRunId = `${reasoningRunId}:${media.mediaType}:${media.mediaIndex}`
-            const assignment = {
-                generationRequestId,
-                reasoningRunId,
-                mediaRunId,
-                reasoningIndex,
-                mediaModelId: media.modelId as `${string}:${string}`,
-                mediaType: media.mediaType,
-                mediaIndex: media.mediaIndex,
-            }
-            const [provider] = media.modelId.split(':')
-            return {
-                generationRun,
-                reasoningModelId: reasoningModelId as `${string}:${string}`,
-                reasoningIndex,
-                reasoningRunId,
-                provider: provider as ProviderName,
-                modelId: media.modelId as `${string}:${string}`,
-                mediaRunId,
-                mediaType: media.mediaType,
-                mediaIndex: media.mediaIndex,
-                outputAssetId: uuid(),
-                outputNodeId: getPendingGeneratedMediaNodeId(assignment),
-                status: 'pending',
-                operationNodeId: getMediaGenerationOperationNodeId(assignment),
-            }
-        })
+
+    return reasoningModelIds.flatMap(
+        (reasoningModelId, reasoningIndex) =>
+            mediaModels.map((media, mediaAxisIndex) => {
+                const generationRun = reasoningIndex * mediaModels.length + mediaAxisIndex
+                const reasoningRunId = `${generationRequestId}:reasoning:${reasoningIndex}`
+                const mediaRunId = `${reasoningRunId}:${media.mediaType}:${media.mediaIndex}`
+                const assignment = {
+                    generationRequestId,
+                    reasoningRunId,
+                    mediaRunId,
+                    reasoningIndex,
+                    mediaModelId: media.modelId as `${string}:${string}`,
+                    mediaType: media.mediaType,
+                    mediaIndex: media.mediaIndex,
+                }
+                const [provider] = media.modelId.split(':')
+
+                return {
+                    generationRun,
+                    reasoningModelId: reasoningModelId as `${string}:${string}`,
+                    reasoningIndex,
+                    reasoningRunId,
+                    provider: provider as ProviderName,
+                    modelId: media.modelId as `${string}:${string}`,
+                    mediaRunId,
+                    mediaType: media.mediaType,
+                    mediaIndex: media.mediaIndex,
+                    outputAssetId: uuid(),
+                    outputNodeId: getPendingGeneratedMediaNodeId(assignment),
+                    status: 'pending',
+                    operationNodeId: getMediaGenerationOperationNodeId(assignment),
+                }
+            }),
     )
 }
 
@@ -372,23 +456,40 @@ const expandVideoModelIdsForOutputCount = async (
     videoModelIds: string[],
     mediaGenerationRequest: AiInteractionChatSendMessagePayload['mediaGenerationRequest'],
 ): Promise<string[]> => {
-    return (await Promise.all(videoModelIds.map(async (modelId) => {
-        const [provider, ...modelParts] = modelId.split(':')
-        const model = modelParts.join(':')
-        if (!provider || !model) return [modelId]
-        const modelMeta = await AiModel.getAiModel({ provider, model, omitPricing: true })
-        const outputCountControl = modelMeta?.videoGenerationControls?.find(control => control.key === 'outputCount')
-        if (!outputCountControl) return [modelId]
-        const requestedValue = mediaGenerationRequest?.videoOptions?.configGroups
-            ?.find(group => group.modelIds.includes(modelId as `${string}:${string}`))
-            ?.values.outputCount
-        const allowedValues = outputCountControl.options.map(option => option.value)
-        const normalizedValue = requestedValue && allowedValues.includes(requestedValue)
-            ? requestedValue
-            : outputCountControl.defaultValue ?? allowedValues[0] ?? '1'
-        const outputCount = Math.max(1, Number.parseInt(normalizedValue, 10) || 1)
-        return Array.from({ length: outputCount }, () => modelId)
-    }))).flat()
+    return (await Promise.all(
+        videoModelIds.map(async modelId => {
+            const [provider, ...modelParts] = modelId.split(':')
+            const model = modelParts.join(':')
+
+            if (
+                !provider
+                || !model
+            )
+                return [modelId]
+
+            const modelMeta = await AiModel.getAiModel({
+                provider,
+                model,
+                omitPricing: true,
+            })
+            const outputCountControl = modelMeta?.videoGenerationControls?.find(control => control.key === 'outputCount')
+
+            if (!outputCountControl)
+                return [modelId]
+
+            const requestedValue = mediaGenerationRequest?.videoOptions?.configGroups
+                ?.find(group => group.modelIds.includes(modelId as `${string}:${string}`))
+                ?.values.outputCount
+            const allowedValues = outputCountControl.options.map(option => option.value)
+            const normalizedValue = requestedValue
+                && allowedValues.includes(requestedValue)
+                ? requestedValue
+                : outputCountControl.defaultValue ?? allowedValues[0] ?? '1'
+            const outputCount = Math.max(1, Number.parseInt(normalizedValue, 10) || 1)
+
+            return Array.from({ length: outputCount }, () => modelId)
+        }),
+    )).flat()
 }
 
 const readAuthoritativeCapabilityInputs = (
@@ -397,7 +498,10 @@ const readAuthoritativeCapabilityInputs = (
 ): Record<string, Record<string, CapabilityJsonValue>> => {
     const root = parseProseMirrorJsonContent(doc)
     const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
-    if (!thread) throw new Error('CONVERSATION_THREAD_NOT_FOUND')
+
+    if (!thread)
+        throw new Error('CONVERSATION_THREAD_NOT_FOUND')
+
     return parseCapabilityInputsAttr(thread.attrs?.capabilityInputs)
 }
 
@@ -409,43 +513,64 @@ const validateCapabilityInputs = async ({
     organizationId,
 }: {
     inputs: Record<string, Record<string, CapabilityJsonValue>>
-    references: Array<{ capabilityId: string; kind: 'tool' | 'skill' }>
+    references: Array<{
+        capabilityId: string
+        kind: 'tool' | 'skill'
+    }>
     requester: AssetRequesterContext
     workspaceId: string
     organizationId: string
 }): Promise<void> => {
-    if (Object.keys(inputs).length === 0) return
+    if (Object.keys(inputs).length === 0)
+        return
+
     const allowedToolIds = new Set(
-        references.filter(reference => reference.kind === 'tool')
-            .map(reference => reference.capabilityId),
+        references.filter(reference => reference.kind === 'tool').map(reference => reference.capabilityId),
     )
+
     for (const capabilityId of Object.keys(inputs)) {
-        if (!allowedToolIds.has(capabilityId)) throw new Error(`CAPABILITY_INPUT_NOT_AUTHORIZED:${capabilityId}`)
+        if (!allowedToolIds.has(capabilityId))
+            throw new Error(`CAPABILITY_INPUT_NOT_AUTHORIZED:${capabilityId}`)
     }
-    const plan = await resolveCapabilities(references, {
-        store: new CapabilityModelResolverStore(),
-        requester: {
-            userId: requester.userId,
-            workspaceId,
-            organizationId,
+
+    const plan = await resolveCapabilities(
+        references,
+        {
+            store: new CapabilityModelResolverStore(),
+            requester: {
+                userId: requester.userId,
+                workspaceId,
+                organizationId,
+            },
+            allowedActions: capabilityActionRegistry.allowedActionKeys(),
         },
-        allowedActions: capabilityActionRegistry.allowedActionKeys(),
-    })
+    )
+
     for (const [capabilityId, input] of Object.entries(inputs)) {
         const manifest = plan.getManifest(capabilityId)?.manifest
         const schemaRef = manifest?.tool?.inputSchema
         const resource = schemaRef ? plan.getResource(capabilityId, schemaRef.resourceId) : undefined
-        if (!manifest?.tool || !resource) throw new Error(`CAPABILITY_INPUT_SCHEMA_NOT_FOUND:${capabilityId}`)
+
+        if (
+            !manifest?.tool
+            || !resource
+        )
+            throw new Error(`CAPABILITY_INPUT_SCHEMA_NOT_FOUND:${capabilityId}`)
+
         let schema: unknown
+
         try {
-            schema = JSON.parse(new TextDecoder().decode(resource.bytes))
+            schema = JSON.parse(
+                new TextDecoder().decode(resource.bytes),
+            )
         } catch {
             throw new Error(`CAPABILITY_INPUT_SCHEMA_INVALID:${capabilityId}`)
         }
+
         const validation = validateJsonSchemaValue(schema, input)
-        if (!validation.valid) {
+
+        if (!validation.valid)
             throw new Error(`CAPABILITY_INPUT_INVALID:${capabilityId}:${validation.errors.join('; ')}`)
-        }
     }
 }
 
@@ -466,108 +591,194 @@ const resolveAuthorizedCandidateSnapshot = async ({
     workspaceNodes: CanvasNode[]
     workspaceEdges: WorkspaceEdge[]
 }): Promise<MediaBranchCandidateSnapshot | undefined> => {
-    if (!snapshot) return undefined
-    if (!Array.isArray(snapshot.candidates)) throw new Error('INVALID_MEDIA_BRANCH_CANDIDATES')
-    if (snapshot.conversationAssetId !== conversationAssetId) throw new Error('MEDIA_BRANCH_CONVERSATION_MISMATCH')
-    const workspaceNodeById = new Map(workspaceNodes.map((node) => [node.nodeId, node]))
-    if (workspaceNodeById.size !== workspaceNodes.length) throw new Error('WORKSPACE_NODE_ID_CONFLICT')
-    if (snapshot.regionNodeId !== `standalone:${conversationAssetId}` && !workspaceNodeById.has(snapshot.regionNodeId)) {
+    if (!snapshot)
+        return undefined
+
+    if (!Array.isArray(snapshot.candidates))
+        throw new Error('INVALID_MEDIA_BRANCH_CANDIDATES')
+
+    if (snapshot.conversationAssetId !== conversationAssetId)
+        throw new Error('MEDIA_BRANCH_CONVERSATION_MISMATCH')
+
+    const workspaceNodeById = new Map(
+        workspaceNodes.map(node => [node.nodeId, node]),
+    )
+
+    if (workspaceNodeById.size !== workspaceNodes.length)
+        throw new Error('WORKSPACE_NODE_ID_CONFLICT')
+
+    if (
+        snapshot.regionNodeId !== `standalone:${conversationAssetId}`
+        && !workspaceNodeById.has(snapshot.regionNodeId)
+    )
         throw new Error('MEDIA_BRANCH_REGION_NOT_IN_WORKSPACE')
-    }
-    const submittedCandidateIds = new Set(snapshot.candidates.map((candidate) => candidate.candidateId))
-    if (submittedCandidateIds.size !== snapshot.candidates.length) throw new Error('DUPLICATE_MEDIA_BRANCH_CANDIDATE')
-    if (snapshot.activeTargetCandidateId && !submittedCandidateIds.has(snapshot.activeTargetCandidateId)) {
+
+    const submittedCandidateIds = new Set(
+        snapshot.candidates.map(candidate => candidate.candidateId),
+    )
+
+    if (submittedCandidateIds.size !== snapshot.candidates.length)
+        throw new Error('DUPLICATE_MEDIA_BRANCH_CANDIDATE')
+
+    if (
+        snapshot.activeTargetCandidateId
+        && !submittedCandidateIds.has(snapshot.activeTargetCandidateId)
+    )
         throw new Error('MEDIA_BRANCH_ACTIVE_TARGET_INVALID')
-    }
-    if (snapshot.explicitReferenceCandidateIds?.some((candidateId) => !submittedCandidateIds.has(candidateId))) {
+
+    if (snapshot.explicitReferenceCandidateIds?.some(candidateId => !submittedCandidateIds.has(candidateId)))
         throw new Error('MEDIA_BRANCH_EXPLICIT_REFERENCE_INVALID')
-    }
+
     const explicitReferenceCandidateIds = new Set(snapshot.explicitReferenceCandidateIds ?? [])
-    const submittedCandidates = snapshot.candidates.filter((candidate) => explicitReferenceCandidateIds.has(candidate.candidateId))
+    const submittedCandidates = snapshot.candidates.filter(candidate => explicitReferenceCandidateIds.has(candidate.candidateId))
     const activeTargetCandidateId = snapshot.activeTargetCandidateId
-            && explicitReferenceCandidateIds.has(snapshot.activeTargetCandidateId)
+        && explicitReferenceCandidateIds.has(snapshot.activeTargetCandidateId)
         ? snapshot.activeTargetCandidateId
         : undefined
-    const candidates = await Promise.all(submittedCandidates.map(async (candidate) => {
-        if (!candidate.nodeId || candidate.candidateId !== `node:${candidate.nodeId}`) {
-            throw new Error(`INVALID_MEDIA_BRANCH_CANDIDATE_ID:${candidate.candidateId}`)
-        }
-        const workspaceNode = workspaceNodeById.get(candidate.nodeId)
-        if (
-            !workspaceNode || (workspaceNode.type !== 'image' && workspaceNode.type !== 'video')
-            || workspaceNode.assetId !== candidate.assetId
-        ) {
-            throw new Error(`MEDIA_BRANCH_NODE_NOT_IN_WORKSPACE:${candidate.nodeId}`)
-        }
-        const asset = await AssetModel.get({ assetId: candidate.assetId, requester })
-        if (
-            'error' in asset || !isAssetAvailableInWorkspaceScope(asset, { workspaceId, organizationId }) || !asset.media
-            || (asset.media.kind !== 'image' && asset.media.kind !== 'video')
-        ) {
-            throw new Error(`MEDIA_BRANCH_ASSET_NOT_FOUND:${candidate.assetId}`)
-        }
-        const mediaKind = asset.media.kind
-        if (mediaKind !== workspaceNode.type) throw new Error(`MEDIA_BRANCH_MEDIA_KIND_MISMATCH:${candidate.assetId}`)
-        const renditionNames = mediaKind === 'image'
-            ? ['preview', 'original'] as const
-            : ['representativeFrame', 'poster', 'thumbnail'] as const
-        const rendition = renditionNames
-            .map((name) => asset.media!.renditions[name])
-            .find((item) => item?.status === 'ready' && item.blobHash)
-        if (rendition?.status !== 'ready' || !rendition.blobHash) {
-            throw new Error(`MEDIA_BRANCH_ASSET_NOT_READY:${candidate.assetId}`)
-        }
-        const blob = await BlobModel.get({ organizationId, blobHash: rendition.blobHash })
-        if (!blob) throw new Error(`MEDIA_BRANCH_BLOB_NOT_FOUND:${candidate.assetId}`)
-        const generatedBy = workspaceNode.generatedBy
-        const hasActiveLineage = hasActiveGeneratedOutputLineage(workspaceNode, workspaceNodes, workspaceEdges)
-        const childExists = hasActiveLineage && workspaceNodes.some((node) =>
-            (node.type === 'image' || node.type === 'video')
-            && node.generatedBy?.parentMediaNodeId === workspaceNode.nodeId
-            && hasActiveGeneratedOutputLineage(node, workspaceNodes, workspaceEdges)
-        )
-        const roleHints = new Set<MediaBranchCandidateRoleHint>(['base-context'])
-        if (hasActiveLineage) {
-            roleHints.add('generated-variant')
-            roleHints.add(childExists ? 'branch-ancestor' : 'branch-leaf')
-        }
-        if (activeTargetCandidateId === candidate.candidateId) roleHints.add('active-target')
-        const ancestorNodeIds = [workspaceNode.nodeId]
-        let parentNodeId = generatedBy?.parentMediaNodeId
-        while (parentNodeId && !ancestorNodeIds.includes(parentNodeId)) {
-            const parent = workspaceNodeById.get(parentNodeId)
-            if (!parent || (parent.type !== 'image' && parent.type !== 'video')) break
-            ancestorNodeIds.push(parentNodeId)
-            parentNodeId = parent.generatedBy?.parentMediaNodeId
-        }
-        return {
-            candidateId: candidate.candidateId,
-            nodeId: workspaceNode.nodeId,
-            assetId: workspaceNode.assetId,
-            imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
-            mediaKind,
-            roleHints: [...roleHints],
-            ...(hasActiveLineage && generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
-            ...(hasActiveLineage && generatedBy?.parentMediaNodeId ? { parentMediaNodeId: generatedBy.parentMediaNodeId } : {}),
-            ...(hasActiveLineage && generatedBy?.parentImageNodeId ? { parentImageNodeId: generatedBy.parentImageNodeId } : {}),
-            ancestorNodeIds,
-            // Selecting one generated output does not implicitly select every
-            // historical source that produced it. Context identity is exactly
-            // the canvas node the user attached for this turn.
-            sourceContextNodeIds: [workspaceNode.nodeId],
-            ...(generatedBy?.promptText ? { promptText: generatedBy.promptText } : {}),
-            ...(asset.descriptor?.summary
-                ? {
-                    visualEntitySummary: asset.descriptor.summary,
-                    visualStyleSummary: asset.descriptor.summary,
-                }
-                : {}),
-            entityTags: asset.descriptor?.entityTags ?? [],
-            styleTags: asset.descriptor?.styleTags ?? [],
-            ...(generatedBy?.createdAt ? { createdAt: generatedBy.createdAt } : {}),
-        }
-    }))
+    const candidates = await Promise.all(
+        submittedCandidates.map(async candidate => {
+            if (
+                !candidate.nodeId
+                || candidate.candidateId !== `node:${candidate.nodeId}`
+            )
+                throw new Error(`INVALID_MEDIA_BRANCH_CANDIDATE_ID:${candidate.candidateId}`)
+
+            const workspaceNode = workspaceNodeById.get(candidate.nodeId)
+
+            if (
+                !workspaceNode
+                || (workspaceNode.type !== 'image' && workspaceNode.type !== 'video')
+                || workspaceNode.assetId !== candidate.assetId
+            )
+                throw new Error(`MEDIA_BRANCH_NODE_NOT_IN_WORKSPACE:${candidate.nodeId}`)
+
+            const asset = await AssetModel.get({
+                assetId: candidate.assetId,
+                requester,
+            })
+
+            if (
+                'error' in asset
+                || !isAssetAvailableInWorkspaceScope(
+                    asset,
+                    {
+                        workspaceId,
+                        organizationId,
+                    },
+                )
+                || !asset.media
+                || (asset.media.kind !== 'image' && asset.media.kind !== 'video')
+            )
+                throw new Error(`MEDIA_BRANCH_ASSET_NOT_FOUND:${candidate.assetId}`)
+
+            const mediaKind = asset.media.kind
+
+            if (mediaKind !== workspaceNode.type)
+                throw new Error(`MEDIA_BRANCH_MEDIA_KIND_MISMATCH:${candidate.assetId}`)
+
+            const renditionNames = mediaKind === 'image'
+                ? ['preview', 'original'] as const
+                : ['representativeFrame', 'poster', 'thumbnail'] as const
+            const rendition = renditionNames.map(name => asset.media!.renditions[name]).find(item => item?.status === 'ready' && item.blobHash)
+
+            if (
+                rendition?.status !== 'ready'
+                || !rendition.blobHash
+            )
+                throw new Error(`MEDIA_BRANCH_ASSET_NOT_READY:${candidate.assetId}`)
+
+            const blob = await BlobModel.get({
+                organizationId,
+                blobHash: rendition.blobHash,
+            })
+
+            if (!blob)
+                throw new Error(`MEDIA_BRANCH_BLOB_NOT_FOUND:${candidate.assetId}`)
+
+            const generatedBy = workspaceNode.generatedBy
+            const hasActiveLineage = hasActiveGeneratedOutputLineage(
+                workspaceNode,
+                workspaceNodes,
+                workspaceEdges,
+            )
+            const childExists = hasActiveLineage && workspaceNodes.some(
+                node =>
+                    (node.type === 'image' || node.type === 'video')
+                    && node.generatedBy?.parentMediaNodeId === workspaceNode.nodeId
+                    && hasActiveGeneratedOutputLineage(
+                        node,
+                        workspaceNodes,
+                        workspaceEdges,
+                    ),
+            )
+            const roleHints = new Set<MediaBranchCandidateRoleHint>(['base-context'])
+
+            if (hasActiveLineage) {
+                roleHints.add('generated-variant')
+                roleHints.add(childExists ? 'branch-ancestor' : 'branch-leaf')
+            }
+
+            if (activeTargetCandidateId === candidate.candidateId)
+                roleHints.add('active-target')
+
+            const ancestorNodeIds = [workspaceNode.nodeId]
+            let parentNodeId = generatedBy?.parentMediaNodeId
+
+            while (
+                parentNodeId
+                && !ancestorNodeIds.includes(parentNodeId)
+            ) {
+                const parent = workspaceNodeById.get(parentNodeId)
+
+                if (
+                    !parent
+                    || (parent.type !== 'image' && parent.type !== 'video')
+                )
+                    break
+
+                ancestorNodeIds.push(parentNodeId)
+                parentNodeId = parent.generatedBy?.parentMediaNodeId
+            }
+
+            return {
+                candidateId: candidate.candidateId,
+                nodeId: workspaceNode.nodeId,
+                assetId: workspaceNode.assetId,
+                imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
+                mediaKind,
+                roleHints: [...roleHints],
+                ...(hasActiveLineage
+                    && generatedBy?.branchId
+                    ? { branchId: generatedBy.branchId }
+                    : {}),
+                ...(hasActiveLineage
+                    && generatedBy?.parentMediaNodeId
+                    ? { parentMediaNodeId: generatedBy.parentMediaNodeId }
+                    : {}),
+                ...(hasActiveLineage
+                    && generatedBy?.parentImageNodeId
+                    ? { parentImageNodeId: generatedBy.parentImageNodeId }
+                    : {}),
+                ancestorNodeIds,
+                // Selecting one generated output does not implicitly select every
+                // historical source that produced it. Context identity is exactly
+                // the canvas node the user attached for this turn.
+                sourceContextNodeIds: [workspaceNode.nodeId],
+                ...(generatedBy?.promptText ? { promptText: generatedBy.promptText } : {}),
+                ...(asset.descriptor?.summary
+                    ? {
+                        visualEntitySummary: asset.descriptor.summary,
+                        visualStyleSummary: asset.descriptor.summary,
+                    }
+                    : {}),
+                entityTags: asset.descriptor?.entityTags ?? [],
+                styleTags: asset.descriptor?.styleTags ?? [],
+                ...(generatedBy?.createdAt ? { createdAt: generatedBy.createdAt } : {}),
+            }
+        }),
+    )
     const promptText = typeof snapshot.promptText === 'string' ? snapshot.promptText : ''
+
     return deduplicateMediaBranchSnapshotCandidatesByAsset({
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
@@ -575,13 +786,17 @@ const resolveAuthorizedCandidateSnapshot = async ({
         ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
         ...(candidates.length > 0
             ? {
-                explicitReferenceCandidateIds: candidates.map((candidate) => candidate.candidateId),
+                explicitReferenceCandidateIds: candidates.map(candidate => candidate.candidateId),
             }
             : {}),
         promptText,
         promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
         candidates,
-        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
+        transcriptContext: buildCandidateTranscriptContext(
+            candidates,
+            promptText,
+            activeTargetCandidateId,
+        ),
     })
 }
 
@@ -589,10 +804,7 @@ type AuthorizedWorkspaceContextCanvasNode = Extract<CanvasNode, {
     type: 'document' | 'image' | 'video' | 'capabilityArtifact'
 }>
 
-const isAuthorizedWorkspaceContextCanvasNode = (
-    node: CanvasNode | undefined,
-): node is AuthorizedWorkspaceContextCanvasNode =>
-    node?.type === 'document'
+const isAuthorizedWorkspaceContextCanvasNode = (node: CanvasNode | undefined): node is AuthorizedWorkspaceContextCanvasNode => node?.type === 'document'
     || node?.type === 'image'
     || node?.type === 'video'
     || node?.type === 'capabilityArtifact'
@@ -610,53 +822,76 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
     workspaceNodes: CanvasNode[]
     workspaceEdges: WorkspaceEdge[]
 }): WorkspaceContextSnapshot | undefined => {
-    if (!snapshot) return undefined
-    if (snapshot.workspaceId !== workspaceId) throw new Error('WORKSPACE_CONTEXT_WORKSPACE_MISMATCH')
-    if (snapshot.conversationAssetId !== conversationAssetId) throw new Error('WORKSPACE_CONTEXT_CONVERSATION_MISMATCH')
-    if (!Array.isArray(snapshot.nodes)) throw new Error('INVALID_WORKSPACE_CONTEXT_NODES')
-    const workspaceNodeById = new Map(workspaceNodes.map((node) => [node.nodeId, node]))
-    if (workspaceNodeById.size !== workspaceNodes.length) throw new Error('WORKSPACE_NODE_ID_CONFLICT')
+    if (!snapshot)
+        return undefined
+
+    if (snapshot.workspaceId !== workspaceId)
+        throw new Error('WORKSPACE_CONTEXT_WORKSPACE_MISMATCH')
+
+    if (snapshot.conversationAssetId !== conversationAssetId)
+        throw new Error('WORKSPACE_CONTEXT_CONVERSATION_MISMATCH')
+
+    if (!Array.isArray(snapshot.nodes))
+        throw new Error('INVALID_WORKSPACE_CONTEXT_NODES')
+
+    const workspaceNodeById = new Map(
+        workspaceNodes.map(node => [node.nodeId, node]),
+    )
+
+    if (workspaceNodeById.size !== workspaceNodes.length)
+        throw new Error('WORKSPACE_NODE_ID_CONFLICT')
+
     const seen = new Set<string>()
-    const nodes = snapshot.nodes
-        .filter((node) => node.isExplicitChip === true)
-        .map((node) => {
-            if (seen.has(node.nodeId)) throw new Error(`DUPLICATE_WORKSPACE_CONTEXT_NODE:${node.nodeId}`)
-            seen.add(node.nodeId)
-            const workspaceNode = workspaceNodeById.get(node.nodeId)
-            if (
-                !isAuthorizedWorkspaceContextCanvasNode(workspaceNode)
-                || workspaceNode.type !== node.type
-                || workspaceNode.assetId !== node.assetId
-            ) {
-                throw new Error(`WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${node.nodeId}`)
-            }
-            const generatedBy = workspaceNode.type === 'image'
-                    || workspaceNode.type === 'video'
-                    || workspaceNode.type === 'capabilityArtifact'
-                ? workspaceNode.generatedBy
-                : undefined
-            const hasActiveLineage = hasActiveGeneratedOutputLineage(workspaceNode, workspaceNodes, workspaceEdges)
-            return {
-                nodeId: workspaceNode.nodeId,
-                type: workspaceNode.type,
-                assetId: workspaceNode.assetId,
-                ...(workspaceNode.type === 'capabilityArtifact'
+    const nodes = snapshot.nodes.filter(node => node.isExplicitChip === true).map(node => {
+        if (seen.has(node.nodeId))
+            throw new Error(`DUPLICATE_WORKSPACE_CONTEXT_NODE:${node.nodeId}`)
+
+        seen.add(node.nodeId)
+        const workspaceNode = workspaceNodeById.get(node.nodeId)
+
+        if (
+            !isAuthorizedWorkspaceContextCanvasNode(workspaceNode)
+            || workspaceNode.type !== node.type
+            || workspaceNode.assetId !== node.assetId
+        )
+            throw new Error(`WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${node.nodeId}`)
+
+        const generatedBy = workspaceNode.type === 'image'
+            || workspaceNode.type === 'video'
+            || workspaceNode.type === 'capabilityArtifact'
+            ? workspaceNode.generatedBy
+            : undefined
+        const hasActiveLineage = hasActiveGeneratedOutputLineage(
+            workspaceNode,
+            workspaceNodes,
+            workspaceEdges,
+        )
+
+        return {
+            nodeId: workspaceNode.nodeId,
+            type: workspaceNode.type,
+            assetId: workspaceNode.assetId,
+            ...(workspaceNode.type === 'capabilityArtifact'
                     ? {
                         artifactTypeId: workspaceNode.artifactTypeId,
                     }
                     : {}),
-                ...(node.descriptorStatus ? { descriptorStatus: node.descriptorStatus } : {}),
-                ...(node.title ? { title: node.title } : {}),
-                ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),
-                ...(node.entityTags ? { entityTags: node.entityTags } : {}),
-                ...(node.styleTags ? { styleTags: node.styleTags } : {}),
-                ...(hasActiveLineage && generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
-                ...(generatedBy?.conversationAssetId ? { sourceConversationAssetId: generatedBy.conversationAssetId } : {}),
-                ...(generatedBy?.conversationAssetId === conversationAssetId ? { isCurrentConversationGenerated: true } : {}),
-                isExplicitChip: true,
-                isEdgeForced: false,
-            }
-        })
+            ...(node.descriptorStatus ? { descriptorStatus: node.descriptorStatus } : {}),
+            ...(node.title ? { title: node.title } : {}),
+            ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),
+            ...(node.entityTags ? { entityTags: node.entityTags } : {}),
+            ...(node.styleTags ? { styleTags: node.styleTags } : {}),
+            ...(hasActiveLineage
+                && generatedBy?.branchId
+                ? { branchId: generatedBy.branchId }
+                : {}),
+            ...(generatedBy?.conversationAssetId ? { sourceConversationAssetId: generatedBy.conversationAssetId } : {}),
+            ...(generatedBy?.conversationAssetId === conversationAssetId ? { isCurrentConversationGenerated: true } : {}),
+            isExplicitChip: true,
+            isEdgeForced: false,
+        }
+    })
+
     return {
         resolverVersion: 'workspace-context-v1',
         workspaceId,
@@ -677,9 +912,17 @@ const mergePromptReferenceMediaCandidates = ({
     conversationAssetId: string
     promptText: string
 }): MediaBranchCandidateSnapshot | undefined => {
-    if (!snapshot && candidates.length === 0) return undefined
+    if (
+        !snapshot
+        && candidates.length === 0
+    )
+        return undefined
+
     const candidatesById = new Map<string, MediaBranchCandidateSnapshot['candidates'][number]>()
-    for (const candidate of snapshot?.candidates ?? []) candidatesById.set(candidate.candidateId, candidate)
+
+    for (const candidate of snapshot?.candidates ?? [])
+        candidatesById.set(candidate.candidateId, candidate)
+
     for (const candidate of candidates) {
         const existing = candidatesById.get(candidate.candidateId)
         candidatesById.set(
@@ -688,13 +931,23 @@ const mergePromptReferenceMediaCandidates = ({
                 ? {
                     ...existing,
                     ...candidate,
-                    roleHints: [...new Set([...existing.roleHints, ...candidate.roleHints])],
-                    ancestorNodeIds: [...new Set([...existing.ancestorNodeIds, ...candidate.ancestorNodeIds])],
-                    sourceContextNodeIds: [...new Set([...existing.sourceContextNodeIds, ...candidate.sourceContextNodeIds])],
+                    roleHints: [...new Set([
+                        ...existing.roleHints,
+                        ...candidate.roleHints,
+                    ])],
+                    ancestorNodeIds: [...new Set([
+                        ...existing.ancestorNodeIds,
+                        ...candidate.ancestorNodeIds,
+                    ])],
+                    sourceContextNodeIds: [...new Set([
+                        ...existing.sourceContextNodeIds,
+                        ...candidate.sourceContextNodeIds,
+                    ])],
                 }
                 : candidate,
         )
     }
+
     const mergedCandidates = [...candidatesById.values()]
     const explicitReferenceCandidateIds = [
         ...new Set([
@@ -704,6 +957,7 @@ const mergePromptReferenceMediaCandidates = ({
     ]
     const activeTargetCandidateId = snapshot?.activeTargetCandidateId
     const resolvedTargetCandidateId = snapshot?.resolvedTargetCandidateId
+
     return deduplicateMediaBranchSnapshotCandidatesByAsset({
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
@@ -714,7 +968,11 @@ const mergePromptReferenceMediaCandidates = ({
         promptText,
         promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
         candidates: mergedCandidates,
-        transcriptContext: buildCandidateTranscriptContext(mergedCandidates, promptText, activeTargetCandidateId),
+        transcriptContext: buildCandidateTranscriptContext(
+            mergedCandidates,
+            promptText,
+            activeTargetCandidateId,
+        ),
     })
 }
 
@@ -735,7 +993,10 @@ export const aiInteractionSubjects = [
         },
         handler: async (data: any, _msg: any) => {
             const {
-                user: { userId, stripeCustomerId },
+                user: {
+                    userId,
+                    stripeCustomerId,
+                },
                 aiReasoningModels,
                 aiImageModels,
                 aiVideoModels,
@@ -755,7 +1016,10 @@ export const aiInteractionSubjects = [
                 resumeGenerationRequestId,
                 resolvedBranchTargetAssetId,
             } = data as {
-                user: { userId: string; stripeCustomerId: string }
+                user: {
+                    userId: string
+                    stripeCustomerId: string
+                }
                 workspaceId: string
                 conversationAssetId: string
                 organizationId?: string
@@ -780,88 +1044,130 @@ export const aiInteractionSubjects = [
             const natsService = await NATS_Service.getInstance()
             const requesterResponseSubject = getAiInteractionResponseSubject(
                 userId,
-                typeof data.organizationId === 'string' && data.organizationId ? data.organizationId : workspaceId,
+                typeof data.organizationId === 'string'
+                    && data.organizationId
+                    ? data.organizationId
+                    : workspaceId,
                 conversationAssetId,
             )
             const rejectSend = (failure: { error: string } | string): undefined => {
                 natsService?.publish(requesterResponseSubject, typeof failure === 'string' ? { error: failure } : failure)
+
                 return undefined
             }
             let releaseLease = async (): Promise<void> => {}
+
             try {
-                if (!mediaGenerationRequest && (typeof aiModel !== 'string' || !aiModel.includes(':'))) {
-                    return rejectSend('AI_MODEL_REQUIRED')
-                }
-                const workspace = await Workspace.getWorkspace({ workspaceId, userId })
-                if ('error' in workspace) return rejectSend(workspace)
-                if (workspace.deletingAt) return rejectSend('WORKSPACE_DELETING')
-                if (!workspace.accessList.some((entry) => entry.userId === userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'))) {
-                    return rejectSend('PERMISSION_DENIED')
-                }
-                const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
-                if ('error' in organization) return rejectSend('ORGANIZATION_ACCESS_DENIED')
-                const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
-                const conversationAsset = await AssetModel.get({ assetId: conversationAssetId, requester })
                 if (
-                    'error' in conversationAsset || !conversationAsset.documents.conversation
+                    !mediaGenerationRequest
+                    && (typeof aiModel !== 'string' || !aiModel.includes(':'))
+                )
+                    return rejectSend('AI_MODEL_REQUIRED')
+
+                const workspace = await Workspace.getWorkspace({
+                    workspaceId,
+                    userId,
+                })
+
+                if ('error' in workspace)
+                    return rejectSend(workspace)
+
+                if (workspace.deletingAt)
+                    return rejectSend('WORKSPACE_DELETING')
+
+                if (!workspace.accessList.some(entry => entry.userId === userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor')))
+                    return rejectSend('PERMISSION_DENIED')
+
+                const organization = await Organization.getOrganization({
+                    organizationId: workspace.organizationId,
+                    userId,
+                })
+
+                if ('error' in organization)
+                    return rejectSend('ORGANIZATION_ACCESS_DENIED')
+
+                const requester = createAssetRequesterForWorkspaceUser(
+                    workspace,
+                    userId,
+                    true,
+                )
+                const conversationAsset = await AssetModel.get({
+                    assetId: conversationAssetId,
+                    requester,
+                })
+
+                if (
+                    'error' in conversationAsset
+                    || !conversationAsset.documents.conversation
                     || !isAssetAvailableInWorkspaceScope(conversationAsset, workspace)
-                ) {
+                )
                     return rejectSend('CONVERSATION_ASSET_NOT_FOUND')
-                }
+
                 const organizationId = workspace.organizationId
                 const aiChatThreadId = conversationAssetId
                 const workspaceNodes = workspace.canvasState?.nodes ?? []
                 const workspaceEdges = workspace.canvasState?.edges ?? []
                 const regeneration = mediaGenerationRequest?.regeneration
                 let resolvedRegeneration = regeneration
+
                 if (
                     regeneration
                     && regeneration.mode !== 'existing-prompt'
                     && regeneration.mode !== 'regenerate-prompt'
-                ) {
+                )
                     return rejectSend('INVALID_REGENERATION_MODE')
-                }
-                if (regeneration?.mode === 'regenerate-prompt' && regeneration.forceFreshLineage !== true) {
+
+                if (
+                    regeneration?.mode === 'regenerate-prompt'
+                    && regeneration.forceFreshLineage !== true
+                )
                     return rejectSend('INVALID_REGENERATION_MODE')
-                }
+
                 if (regeneration?.mode === 'existing-prompt') {
                     const canonicalReplayPrompts: typeof regeneration.replayPrompts = []
                     const lineageNode = workspaceNodes.find(node => node.nodeId === regeneration.lineageParentNodeId)
                     const sourceNode = regeneration.sourceNodeId
                         ? workspaceNodes.find(node => node.nodeId === regeneration.sourceNodeId)
                         : undefined
+
                     if (
                         !lineageNode
                         || !['branchOrigin', 'branchFork', 'branchLine'].includes(lineageNode.type)
                         || lineageNode.type !== regeneration.lineageParentType
                         || !('branchId' in lineageNode)
                         || lineageNode.branchId !== regeneration.branchId
-                    ) {
+                    )
                         return rejectSend('REGENERATION_LINEAGE_NOT_FOUND')
-                    }
+
                     if (
-                        regeneration.sourceNodeId && (!sourceNode
+                        regeneration.sourceNodeId
+                        && (!sourceNode
                             || (sourceNode.type !== 'image' && sourceNode.type !== 'video')
                             || sourceNode.generatedBy?.branchId !== regeneration.branchId
                             || regeneration.replayPrompts.length !== 1
                             || sourceNode.assetId !== regeneration.replayPrompts[0]?.sourceAssetId)
-                    ) {
+                    )
                         return rejectSend('REGENERATION_SOURCE_NOT_FOUND')
-                    }
+
                     if (
                         !regeneration.replayPrompts.length
-                        || regeneration.replayPrompts.some(prompt =>
-                            !prompt.sourceAssetId
-                            || !mediaGenerationRequest.reasoningModelIds.includes(prompt.reasoningModelId)
-                            || (prompt.mediaType === 'image'
-                                ? !mediaGenerationRequest.imageModelIds.includes(prompt.mediaModelId)
-                                : !mediaGenerationRequest.videoModelIds.includes(prompt.mediaModelId))
+                        || regeneration.replayPrompts.some(
+                            prompt =>
+                                !prompt.sourceAssetId
+                                || !mediaGenerationRequest.reasoningModelIds.includes(prompt.reasoningModelId)
+                                || (prompt.mediaType === 'image'
+                                    ? !mediaGenerationRequest.imageModelIds.includes(prompt.mediaModelId)
+                                    : !mediaGenerationRequest.videoModelIds.includes(prompt.mediaModelId)),
                         )
-                    ) {
+                    )
                         return rejectSend('INVALID_REGENERATION_PROMPTS')
-                    }
+
                     for (const replayPrompt of regeneration.replayPrompts) {
-                        const sourceAsset = await AssetModel.get({ assetId: replayPrompt.sourceAssetId, requester })
+                        const sourceAsset = await AssetModel.get({
+                            assetId: replayPrompt.sourceAssetId,
+                            requester,
+                        })
+
                         if (
                             'error' in sourceAsset
                             || !isAssetAvailableInWorkspaceScope(sourceAsset, workspace)
@@ -870,52 +1176,65 @@ export const aiInteractionSubjects = [
                             || sourceAsset.states.provenance !== 'sealed'
                             || sourceAsset.lineage?.reasoningModelId !== replayPrompt.reasoningModelId
                             || sourceAsset.lineage?.mediaModelId !== replayPrompt.mediaModelId
-                        ) {
+                        )
                             return rejectSend('REGENERATION_SOURCE_NOT_FOUND')
-                        }
+
                         const provenance = await AssetDocumentService.loadCurrentSnapshot(sourceAsset, 'provenance')
                         const trace = provenance
-                            ? findSealedMediaReplayTrace(provenance.doc, {
-                                reasoningRunId: sourceAsset.lineage?.reasoningRunId,
-                                mediaRunId: sourceAsset.lineage?.mediaRunId,
-                                reasoningModelId: replayPrompt.reasoningModelId,
-                                mediaModelId: replayPrompt.mediaModelId,
-                                mediaType: replayPrompt.mediaType,
-                            })
+                            ? findSealedMediaReplayTrace(
+                                provenance.doc,
+                                {
+                                    reasoningRunId: sourceAsset.lineage?.reasoningRunId,
+                                    mediaRunId: sourceAsset.lineage?.mediaRunId,
+                                    reasoningModelId: replayPrompt.reasoningModelId,
+                                    mediaModelId: replayPrompt.mediaModelId,
+                                    mediaType: replayPrompt.mediaType,
+                                },
+                            )
                             : undefined
-                        if (!trace || !trace.finalPrompt.trim() || trace.finalPrompt.length > 20000) {
+
+                        if (
+                            !trace
+                            || !trace.finalPrompt.trim()
+                            || trace.finalPrompt.length > 20000
+                        )
                             return rejectSend('REGENERATION_PROVENANCE_MISMATCH')
-                        }
+
                         if (replayPrompt.mediaType === 'image') {
                             const requestedSize = mediaGenerationRequest.imageOptions?.configGroups
                                 ?.find(group => group.modelIds.includes(replayPrompt.mediaModelId))
                                 ?.values.imageSize
                                 ?? mediaGenerationRequest.imageOptions?.imageSize
-                            if (requestedSize !== trace.imageSize) return rejectSend('REGENERATION_PARAMETERS_MISMATCH')
+
+                            if (requestedSize !== trace.imageSize)
+                                return rejectSend('REGENERATION_PARAMETERS_MISMATCH')
                         } else {
                             const config = mediaGenerationRequest.videoOptions?.configGroups
                                 ?.find(group => group.modelIds.includes(replayPrompt.mediaModelId))
                             const requestedAspectRatio = config?.values.aspectRatio ?? mediaGenerationRequest.videoOptions?.aspectRatio
                             const requestedResolution = config?.values.resolution ?? mediaGenerationRequest.videoOptions?.resolution
                             const requestedDuration = config?.values.duration ?? mediaGenerationRequest.videoOptions?.duration
+
                             if (
                                 requestedAspectRatio !== trace.aspectRatio
                                 || requestedResolution !== trace.resolution
                                 || String(requestedDuration ?? '') !== String(trace.durationSeconds ?? '')
-                            ) {
+                            )
                                 return rejectSend('REGENERATION_PARAMETERS_MISMATCH')
-                            }
                         }
+
                         canonicalReplayPrompts.push({
                             ...replayPrompt,
                             finalPrompt: trace.finalPrompt,
                         })
                     }
+
                     resolvedRegeneration = {
                         ...regeneration,
                         replayPrompts: canonicalReplayPrompts,
                     }
                 }
+
                 let resolvedMediaBranchCandidateSnapshot = await resolveAuthorizedCandidateSnapshot({
                     snapshot: mediaBranchCandidateSnapshot,
                     requester,
@@ -925,9 +1244,18 @@ export const aiInteractionSubjects = [
                     workspaceNodes,
                     workspaceEdges,
                 })
-                if (resolvedBranchTargetAssetId && resolvedMediaBranchCandidateSnapshot) {
-                    const target = resolvedMediaBranchCandidateSnapshot.candidates.find(candidate => candidate.assetId === resolvedBranchTargetAssetId)
-                    if (!target) return rejectSend('MEDIA_BRANCH_RESOLUTION_TARGET_NOT_FOUND')
+
+                if (
+                    resolvedBranchTargetAssetId
+                    && resolvedMediaBranchCandidateSnapshot
+                ) {
+                    const target = resolvedMediaBranchCandidateSnapshot.candidates.find(
+                        candidate => candidate.assetId === resolvedBranchTargetAssetId,
+                    )
+
+                    if (!target)
+                        return rejectSend('MEDIA_BRANCH_RESOLUTION_TARGET_NOT_FOUND')
+
                     resolvedMediaBranchCandidateSnapshot = {
                         ...resolvedMediaBranchCandidateSnapshot,
                         activeTargetCandidateId: target.candidateId,
@@ -940,6 +1268,7 @@ export const aiInteractionSubjects = [
                         ],
                     }
                 }
+
                 let resolvedWorkspaceContextSnapshot = resolveAuthorizedWorkspaceContextSnapshot({
                     snapshot: workspaceContextSnapshot,
                     workspaceId,
@@ -961,71 +1290,111 @@ export const aiInteractionSubjects = [
                 // clip's length is captured here where its Asset is already loaded.
                 // Downstream it is only ever a URI, which carries no duration.
                 let resolvedVideoSourceDurationSeconds: number | undefined
+
                 if (sourceAssetId) {
-                    const sourceAsset = await AssetModel.get({ assetId: sourceAssetId, requester })
+                    const sourceAsset = await AssetModel.get({
+                        assetId: sourceAssetId,
+                        requester,
+                    })
+
                     if (
                         'error' in sourceAsset
                         || !isAssetAvailableInWorkspaceScope(sourceAsset, workspace)
                         || sourceAsset.media?.kind !== 'video'
-                    ) return rejectSend('VIDEO_SOURCE_ASSET_NOT_FOUND')
+                    )
+                        return rejectSend('VIDEO_SOURCE_ASSET_NOT_FOUND')
+
                     const sourceRendition = sourceAsset.media.renditions.canonical?.status === 'ready'
                         ? sourceAsset.media.renditions.canonical
                         : sourceAsset.media.renditions.original
-                    if (sourceRendition?.status !== 'ready' || !sourceRendition.blobHash) return rejectSend('VIDEO_SOURCE_NOT_READY')
-                    const sourceBlob = await BlobModel.get({ organizationId: sourceAsset.organizationId, blobHash: sourceRendition.blobHash })
-                    if (!sourceBlob) return rejectSend('VIDEO_SOURCE_BLOB_NOT_FOUND')
+
+                    if (
+                        sourceRendition?.status !== 'ready'
+                        || !sourceRendition.blobHash
+                    )
+                        return rejectSend('VIDEO_SOURCE_NOT_READY')
+
+                    const sourceBlob = await BlobModel.get({
+                        organizationId: sourceAsset.organizationId,
+                        blobHash: sourceRendition.blobHash,
+                    })
+
+                    if (!sourceBlob)
+                        return rejectSend('VIDEO_SOURCE_BLOB_NOT_FOUND')
+
                     resolvedVideoSourceForExtension = `nats-obj://${sourceBlob.bucketName}/${sourceBlob.objectKey}`
                     const measuredDuration = sourceRendition.durationSeconds ?? sourceAsset.media.durationSeconds
-                    if (typeof measuredDuration === 'number' && measuredDuration > 0) {
+
+                    if (
+                        typeof measuredDuration === 'number'
+                        && measuredDuration > 0
+                    )
                         resolvedVideoSourceDurationSeconds = measuredDuration
-                    }
                 }
+
                 const leaseHolderId = `ai-run:${uuid()}`
-                const lease = await AssetModel.acquireLease({ assetId: conversationAssetId, workspaceId, holderId: leaseHolderId, requester })
-                if ('error' in lease) return rejectSend(lease)
+                const lease = await AssetModel.acquireLease({
+                    assetId: conversationAssetId,
+                    workspaceId,
+                    holderId: leaseHolderId,
+                    requester,
+                })
+
+                if ('error' in lease)
+                    return rejectSend(lease)
+
                 let leaseReleased = false
                 releaseLease = async (): Promise<void> => {
-                    if (leaseReleased) return
+                    if (leaseReleased)
+                        return
+
                     leaseReleased = true
-                    await AssetModel.releaseLease({ assetId: conversationAssetId, workspaceId, leaseId: lease.leaseId, holderId: leaseHolderId }).catch(() => undefined)
+                    await AssetModel.releaseLease({
+                        assetId: conversationAssetId,
+                        workspaceId,
+                        leaseId: lease.leaseId,
+                        holderId: leaseHolderId,
+                    }).catch(() => undefined)
                 }
                 const conversationSnapshot = await AssetDocumentService.loadCurrentSnapshot(conversationAsset, 'conversation')
+
                 if (!conversationSnapshot) {
                     await releaseLease()
+
                     return rejectSend('CONVERSATION_SNAPSHOT_NOT_FOUND')
                 }
+
                 const authoritativeProseMirrorInitialDoc = conversationSnapshot.doc
                 const authoritativeProseMirrorBaseVersion = conversationSnapshot.version
-                const authoritativeMessages = buildAuthoritativeConversationMessages(
-                    authoritativeProseMirrorInitialDoc,
-                    conversationAssetId,
-                )
-                const latestSubmittedPromptReferences = extractLatestUserPromptReferences(
-                    authoritativeProseMirrorInitialDoc,
-                    conversationAssetId,
-                )
+                const authoritativeMessages = buildAuthoritativeConversationMessages(authoritativeProseMirrorInitialDoc, conversationAssetId)
+                const latestSubmittedPromptReferences = extractLatestUserPromptReferences(authoritativeProseMirrorInitialDoc, conversationAssetId)
                 const latestAuthoritativeUserMessage = [...authoritativeMessages]
-                    .reverse()
-                    .find((message) => message.role === 'user')
-                if (!latestAuthoritativeUserMessage) throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+                    .reverse().find(message => message.role === 'user')
+
+                if (!latestAuthoritativeUserMessage)
+                    throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+
                 const authoritativePromptText = latestAuthoritativeUserMessage.content
-                const submittedCapabilityInputs = readAuthoritativeCapabilityInputs(
-                    authoritativeProseMirrorInitialDoc,
-                    conversationAssetId,
-                )
+                const submittedCapabilityInputs = readAuthoritativeCapabilityInputs(authoritativeProseMirrorInitialDoc, conversationAssetId)
                 const moduleCatalog = getLlmModule().capabilityModuleCatalog
                 // Referencing an existing Action Timeline Artifact is consumption, not
                 // creation: the user wants the timeline's beats and cited Assets to
                 // drive this generation, so the timeline tool must not claim the run
                 // and strip the selected media models.
-                const referencesExistingActionTimeline = latestSubmittedPromptReferences.some(reference => (
-                    reference.referenceType === 'capability-artifact'
-                    && reference.artifactTypeId === ACTION_TIMELINE_ARTIFACT_TYPE_ID
-                ))
+                const referencesExistingActionTimeline = latestSubmittedPromptReferences.some(
+                    reference => (
+                        reference.referenceType === 'capability-artifact'
+                        && reference.artifactTypeId === ACTION_TIMELINE_ARTIFACT_TYPE_ID
+                    ),
+                )
                 const routeCapabilityModule = (prompt: string): CapabilityModuleRoute | undefined => {
-                    if (typeof moduleCatalog?.routePrompt !== 'function') return undefined
+                    if (typeof moduleCatalog?.routePrompt !== 'function')
+                        return undefined
+
                     const route = moduleCatalog.routePrompt(prompt)
-                    return route?.capabilityId === ACTION_TIMELINE_TOOL_ID && referencesExistingActionTimeline
+
+                    return route?.capabilityId === ACTION_TIMELINE_TOOL_ID
+                        && referencesExistingActionTimeline
                         ? undefined
                         : route
                 }
@@ -1033,17 +1402,15 @@ export const aiInteractionSubjects = [
                     getLatestAuthoritativeUserMessageNode(authoritativeProseMirrorInitialDoc, conversationAssetId),
                 )
                 const latestRoutedModule = routeCapabilityModule(routableAuthoritativePromptText)
-                const clarificationOrigin = getClarificationOriginUserMessage(
-                    authoritativeProseMirrorInitialDoc,
-                    conversationAssetId,
-                )
+                const clarificationOrigin = getClarificationOriginUserMessage(authoritativeProseMirrorInitialDoc, conversationAssetId)
                 const clarificationOriginPrompt = clarificationOrigin
                     ? collectAuthoritativeMessageText(clarificationOrigin).trim()
                     : ''
                 const routableClarificationOriginPrompt = clarificationOrigin
                     ? collectRoutableUserPromptText(clarificationOrigin).trim()
                     : ''
-                const clarificationOriginRoute = !latestRoutedModule && routableClarificationOriginPrompt
+                const clarificationOriginRoute = !latestRoutedModule
+                    && routableClarificationOriginPrompt
                     ? routeCapabilityModule(routableClarificationOriginPrompt)
                     : undefined
                 const clarificationOriginResolution = clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
@@ -1054,22 +1421,28 @@ export const aiInteractionSubjects = [
                         submittedInput: submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID],
                     })
                     : undefined
-                const resumesActionTimelineClarification = !latestSubmittedPromptReferences.some(reference => (
-                    reference.referenceType === 'capability'
-                ))
+                const resumesActionTimelineClarification = !latestSubmittedPromptReferences.some(
+                    reference => (
+                        reference.referenceType === 'capability'
+                    ),
+                )
                     && clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
                     && clarificationOriginResolution?.valid === false
-                const submittedPromptReferences = resumesActionTimelineClarification && clarificationOrigin
+                const submittedPromptReferences = resumesActionTimelineClarification
+                    && clarificationOrigin
                     ? [
                         ...latestSubmittedPromptReferences,
-                        ...extractLatestUserPromptReferences({
-                            type: 'doc',
-                            content: [{
-                                type: 'aiChatThread',
-                                attrs: { threadId: conversationAssetId },
-                                content: [clarificationOrigin],
-                            }],
-                        }, conversationAssetId),
+                        ...extractLatestUserPromptReferences(
+                            {
+                                type: 'doc',
+                                content: [{
+                                    type: 'aiChatThread',
+                                    attrs: { threadId: conversationAssetId },
+                                    content: [clarificationOrigin],
+                                }],
+                            },
+                            conversationAssetId,
+                        ),
                     ]
                     : latestSubmittedPromptReferences
                 const authorizedPromptReferences = await authorizePromptReferences({
@@ -1078,31 +1451,44 @@ export const aiInteractionSubjects = [
                     workspace,
                     moduleCatalog,
                 })
-                if (!latestAuthoritativeUserMessage.content.trim() && authorizedPromptReferences.references.length > 0) {
+
+                if (
+                    !latestAuthoritativeUserMessage.content.trim()
+                    && authorizedPromptReferences.references.length > 0
+                )
                     latestAuthoritativeUserMessage.content = 'Use the selected prompt references.'
-                }
+
                 if (authorizedPromptReferences.documentContext.length > 0) {
                     latestAuthoritativeUserMessage.content = [
                         latestAuthoritativeUserMessage.content,
                         ...authorizedPromptReferences.documentContext,
                     ].filter(Boolean).join('\n\n')
                 }
+
                 const routedModule = latestRoutedModule
                     ?? (resumesActionTimelineClarification ? clarificationOriginRoute : undefined)
                 const routedCapabilityReferences = routedModule
-                        && !authorizedPromptReferences.capabilityReferences.some(reference => (
-                            reference.kind === routedModule.kind && reference.capabilityId === routedModule.capabilityId
-                        ))
+                    && !authorizedPromptReferences.capabilityReferences.some(
+                        reference => (
+                                reference.kind === routedModule.kind && reference.capabilityId === routedModule.capabilityId
+                            ),
+                    )
                     ? [
                         ...authorizedPromptReferences.capabilityReferences,
-                        { capabilityId: routedModule.capabilityId, kind: routedModule.kind },
+                        {
+                            capabilityId: routedModule.capabilityId,
+                            kind: routedModule.kind,
+                        },
                     ]
                     : authorizedPromptReferences.capabilityReferences
-                const actionTimelineSelected = routedCapabilityReferences.some(reference => (
-                    reference.kind === 'tool' && reference.capabilityId === ACTION_TIMELINE_TOOL_ID
-                ))
+                const actionTimelineSelected = routedCapabilityReferences.some(
+                    reference => (
+                        reference.kind === 'tool' && reference.capabilityId === ACTION_TIMELINE_TOOL_ID
+                    ),
+                )
                 const capabilityInputs = { ...submittedCapabilityInputs }
                 let actionTimelineClarificationInstruction: string | undefined
+
                 if (actionTimelineSelected) {
                     const submittedTiming = submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID] ?? {}
                     const routedTiming = routedModule?.capabilityId === ACTION_TIMELINE_TOOL_ID
@@ -1117,13 +1503,16 @@ export const aiInteractionSubjects = [
                         routedInput: routedTiming,
                         submittedInput: submittedTiming,
                     })
+
                     if (!resolution.valid) {
                         delete capabilityInputs[ACTION_TIMELINE_TOOL_ID]
-                        const missingDetails = resolution.missingInputFields.map(field => (
-                            field === 'durationMs'
-                                ? 'the total timeline duration'
-                                : 'the timing precision or gap interval'
-                        ))
+                        const missingDetails = resolution.missingInputFields.map(
+                            field => (
+                                field === 'durationMs'
+                                    ? 'the total timeline duration'
+                                    : 'the timing precision or gap interval'
+                            ),
+                        )
                         actionTimelineClarificationInstruction = [
                             'The selected Action Timeline capability cannot run yet.',
                             `Ask the user for ${formatNaturalLanguageList(missingDetails)}.`,
@@ -1139,10 +1528,13 @@ export const aiInteractionSubjects = [
                         }
                     }
                 }
+
                 const executionCapabilityReferences = actionTimelineClarificationInstruction
-                    ? routedCapabilityReferences.filter(reference => (
-                        reference.capabilityId !== ACTION_TIMELINE_TOOL_ID
-                    ))
+                    ? routedCapabilityReferences.filter(
+                        reference => (
+                            reference.capabilityId !== ACTION_TIMELINE_TOOL_ID
+                        ),
+                    )
                     : routedCapabilityReferences
                 await validateCapabilityInputs({
                     inputs: capabilityInputs,
@@ -1151,10 +1543,7 @@ export const aiInteractionSubjects = [
                     workspaceId,
                     organizationId: workspace.organizationId,
                 })
-                const characterCreatorRouting = resolveCharacterCreatorRouting(
-                    authoritativePromptText,
-                    executionCapabilityReferences,
-                )
+                const characterCreatorRouting = resolveCharacterCreatorRouting(authoritativePromptText, executionCapabilityReferences)
                 const canonicalMediaGenerationRequest = mediaGenerationRequest
                     ? {
                         ...mediaGenerationRequest,
@@ -1171,15 +1560,19 @@ export const aiInteractionSubjects = [
                             videoModelIds: [],
                         }
                         : characterCreatorRouting.isCharacterCreator
-                        ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
-                        : canonicalMediaGenerationRequest
+                            ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
+                            : canonicalMediaGenerationRequest
                     : undefined
                 const scalarMediaModelSelection = routedMediaGenerationRequest
-                    ? { imageModelId: undefined, videoModelId: undefined }
+                    ? {
+                        imageModelId: undefined,
+                        videoModelId: undefined,
+                    }
                     : resolveScalarMediaModelSelection({
                         prompt: authoritativePromptText,
                         imageModelId: actionTimelineSelected ? undefined : aiImageModel,
-                        videoModelId: actionTimelineSelected || characterCreatorRouting.isCharacterCreator
+                        videoModelId: actionTimelineSelected
+                            || characterCreatorRouting.isCharacterCreator
                             ? undefined
                             : aiVideoModel,
                         hasVideoSource: Boolean(resolvedVideoSourceForExtension),
@@ -1194,34 +1587,53 @@ export const aiInteractionSubjects = [
                 let providerSafeMediaIntent: ProviderSafeMediaIntent | undefined
                 let durableMediaRequest: MediaGenerationRequest | undefined
                 let initialMediaCanvasGeometry: CanvasGeometryUpdate | undefined
+
                 if (hasMediaModelSelection) {
                     const referencedMedia = submittedPromptReferences.filter(reference => reference.referenceType === 'media')
-                    const contextMediaReferences = resolvedWorkspaceContextSnapshot?.nodes.flatMap(node => (
-                        (node.type === 'image' || node.type === 'video') && node.assetId
-                            ? [{ assetId: node.assetId, nodeId: node.nodeId }]
-                            : []
-                    )) ?? []
+                    const contextMediaReferences = resolvedWorkspaceContextSnapshot?.nodes.flatMap(
+                        node => (
+                            (node.type === 'image' || node.type === 'video')
+                                && node.assetId
+                                ? [{
+                                    assetId: node.assetId,
+                                    nodeId: node.nodeId,
+                                }]
+                                : []
+                        ),
+                    ) ?? []
                     const selectedMediaReferences = [...new Map([
                         ...contextMediaReferences.map(reference => [reference.assetId, reference] as const),
-                        ...referencedMedia.map(reference =>
-                            [reference.assetId, {
-                                assetId: reference.assetId,
-                                nodeId: reference.nodeId,
-                            }] as const
+                        ...referencedMedia.map(
+                            reference =>
+                                [reference.assetId, {
+                                    assetId: reference.assetId,
+                                    nodeId: reference.nodeId,
+                                }] as const,
                         ),
-                        ...authorizedPromptReferences.mediaCandidates.map(candidate =>
-                            [candidate.assetId, {
-                                assetId: candidate.assetId,
-                                nodeId: candidate.nodeId,
-                            }] as const
+                        ...authorizedPromptReferences.mediaCandidates.map(
+                            candidate =>
+                                [candidate.assetId, {
+                                    assetId: candidate.assetId,
+                                    nodeId: candidate.nodeId,
+                                }] as const,
                         ),
                     ]).values()]
-                    const referencedAssets = (await Promise.all(selectedMediaReferences.map(async reference => {
-                        const asset = await AssetModel.get({ assetId: reference.assetId, requester })
-                        if ('error' in asset) throw new Error(`PROMPT_REFERENCE_ASSET_UNAVAILABLE:${reference.assetId}`)
-                        return asset
-                    }))) as Asset[]
-                    const selectedNodeIds = Object.fromEntries(selectedMediaReferences.map(reference => [reference.assetId, reference.nodeId]))
+                    const referencedAssets = (await Promise.all(
+                        selectedMediaReferences.map(async reference => {
+                            const asset = await AssetModel.get({
+                                assetId: reference.assetId,
+                                requester,
+                            })
+
+                            if ('error' in asset)
+                                throw new Error(`PROMPT_REFERENCE_ASSET_UNAVAILABLE:${reference.assetId}`)
+
+                            return asset
+                        }),
+                    )) as Asset[]
+                    const selectedNodeIds = Object.fromEntries(
+                        selectedMediaReferences.map(reference => [reference.assetId, reference.nodeId]),
+                    )
                     const persistedRequest = resumeGenerationRequestId
                         ? await MediaGenerationRequestModel.getAuthorized({
                             generationRequestId: resumeGenerationRequestId,
@@ -1229,15 +1641,26 @@ export const aiInteractionSubjects = [
                             userId,
                         })
                         : undefined
-                    if (persistedRequest && 'error' in persistedRequest) return rejectSend(persistedRequest)
-                    if (persistedRequest && persistedRequest.status !== 'submitted') return rejectSend('MEDIA_REQUEST_NOT_RESUMABLE')
+
+                    if (
+                        persistedRequest
+                        && 'error' in persistedRequest
+                    )
+                        return rejectSend(persistedRequest)
+
+                    if (
+                        persistedRequest
+                        && persistedRequest.status !== 'submitted'
+                    )
+                        return rejectSend('MEDIA_REQUEST_NOT_RESUMABLE')
+
                     const mediaReferenceBindings = persistedRequest
                         ? persistedRequest.bindings
-                        : createMediaReferenceBindings({ assets: referencedAssets, selectedNodeIds })
-                    const latestUserMessageNode = getLatestAuthoritativeUserMessageNode(
-                        authoritativeProseMirrorInitialDoc,
-                        conversationAssetId,
-                    )
+                        : createMediaReferenceBindings({
+                            assets: referencedAssets,
+                            selectedNodeIds,
+                        })
+                    const latestUserMessageNode = getLatestAuthoritativeUserMessageNode(authoritativeProseMirrorInitialDoc, conversationAssetId)
                     const compiled = compileMediaReferenceIntent({
                         prompt: latestUserMessageNode,
                         bindings: mediaReferenceBindings,
@@ -1257,10 +1680,7 @@ export const aiInteractionSubjects = [
                         ?? [routedAiImageModel].filter((value): value is string => Boolean(value))
                     const videoModelIds = routedMediaGenerationRequest?.videoModelIds
                         ?? [routedAiVideoModel].filter((value): value is string => Boolean(value))
-                    const videoRunModelIds = await expandVideoModelIdsForOutputCount(
-                        videoModelIds,
-                        routedMediaGenerationRequest,
-                    )
+                    const videoRunModelIds = await expandVideoModelIdsForOutputCount(videoModelIds, routedMediaGenerationRequest)
                     const mediaModelIds = [...imageModelIds, ...videoModelIds]
                     const reasoningModelIds = routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels
                     const durableMediaRuns = createDurableMediaRuns({
@@ -1273,16 +1693,18 @@ export const aiInteractionSubjects = [
                     const initialLineagePlan = new MediaBranchLineagePlanner().buildPlan({
                         generationRequestId,
                         reasoningModelIds: reasoningModelIds as `${string}:${string}`[],
-                        preassignedMediaRuns: durableMediaRuns.map(run => ({
-                            assetId: run.outputAssetId!,
-                            reasoningModelId: run.reasoningModelId,
-                            reasoningRunId: run.reasoningRunId!,
-                            reasoningIndex: run.reasoningIndex,
-                            mediaModelId: run.modelId,
-                            mediaType: run.mediaType!,
-                            mediaIndex: run.mediaIndex!,
-                            mediaRunId: run.mediaRunId!,
-                        })),
+                        preassignedMediaRuns: durableMediaRuns.map(
+                            run => ({
+                                assetId: run.outputAssetId!,
+                                reasoningModelId: run.reasoningModelId,
+                                reasoningRunId: run.reasoningRunId!,
+                                reasoningIndex: run.reasoningIndex,
+                                mediaModelId: run.modelId,
+                                mediaType: run.mediaType!,
+                                mediaIndex: run.mediaIndex!,
+                                mediaRunId: run.mediaRunId!,
+                            }),
+                        ),
                         ...(resolvedMediaBranchCandidateSnapshot
                             ? {
                                 mediaBranchCandidateSnapshot: {
@@ -1302,15 +1724,21 @@ export const aiInteractionSubjects = [
                             : {}),
                         createdAt: Date.now(),
                     })
-                    const { user: _authenticatedUser, token: _token, resumeGenerationRequestId: _resumeId, ...submittedResumePayload } = data
+                    const {
+                        user: _authenticatedUser,
+                        token: _token,
+                        resumeGenerationRequestId: _resumeId,
+                        ...submittedResumePayload
+                    } = data
                     const resumePayload = {
                         ...submittedResumePayload,
                         mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                         workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                     }
-                    if (persistedRequest) {
+
+                    if (persistedRequest)
                         durableMediaRequest = persistedRequest
-                    } else {
+                    else {
                         durableMediaRequest = await new MediaGenerationRequestService().create({
                             generationRequestId,
                             workspaceId,
@@ -1319,10 +1747,12 @@ export const aiInteractionSubjects = [
                             conversationAssetId,
                             checkpoint: {
                                 promptDocument: latestUserMessageNode,
-                                selectedReferences: selectedMediaReferences.map(reference => ({
-                                    assetId: reference.assetId,
-                                    ...(reference.nodeId ? { nodeId: reference.nodeId } : {}),
-                                })),
+                                selectedReferences: selectedMediaReferences.map(
+                                    reference => ({
+                                        assetId: reference.assetId,
+                                        ...(reference.nodeId ? { nodeId: reference.nodeId } : {}),
+                                    }),
+                                ),
                                 modelSelection: {
                                     reasoningModelIds,
                                     mediaModelIds,
@@ -1343,63 +1773,78 @@ export const aiInteractionSubjects = [
                             runs: durableMediaRuns,
                             initialLineagePlan,
                             ...(canvasVisibleArea ? { canvasVisibleArea } : {}),
-                            onCanvasGeometryProjected: canvasGeometry => {
-                                initialMediaCanvasGeometry = canvasGeometry
-                            },
+                            onCanvasGeometryProjected: canvasGeometry => void (initialMediaCanvasGeometry = canvasGeometry),
                         })
                     }
-                    if (persistedRequest && compiled.unresolvedBindings.length > 0) {
+
+                    if (
+                        persistedRequest
+                        && compiled.unresolvedBindings.length > 0
+                    )
                         throw new Error('MEDIA_REFERENCE_RESOLUTION_DID_NOT_COMPILE')
-                    }
+
                     if (!persistedRequest) {
                         const mediaRequestSubjects = AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST
-                        natsService!.publish(canonicalResponseSubject, {
-                            generationRequestId,
-                            status: durableMediaRequest.status,
-                            requestRevision: durableMediaRequest.revision,
-                            ...(initialMediaCanvasGeometry ? { canvasGeometry: initialMediaCanvasGeometry } : {}),
-                            mediaEventSubject: [
-                                getMediaGenerationUserEventSubject(userId, mediaRequestSubjects.STATUS),
-                                workspaceId.replace(/[^A-Za-z0-9_-]/gu, '_'),
-                                generationRequestId.replace(/[^A-Za-z0-9_-]/gu, '_'),
-                            ].join('.'),
-                        })
+                        natsService!.publish(
+                            canonicalResponseSubject,
+                            {
+                                generationRequestId,
+                                status: durableMediaRequest.status,
+                                requestRevision: durableMediaRequest.revision,
+                                ...(initialMediaCanvasGeometry ? { canvasGeometry: initialMediaCanvasGeometry } : {}),
+                                mediaEventSubject: [
+                                    getMediaGenerationUserEventSubject(userId, mediaRequestSubjects.STATUS),
+                                    workspaceId.replace(/[^A-Za-z0-9_-]/gu, '_'),
+                                    generationRequestId.replace(/[^A-Za-z0-9_-]/gu, '_'),
+                                ].join('.'),
+                            },
+                        )
                     }
+
                     if (compiled.unresolvedBindings.length > 0) {
                         await releaseLease()
+
                         return
                     }
+
                     assertProviderSafeMediaIntent(compiled.intent)
+
                     for (const message of authoritativeMessages) {
                         message.content = sanitizeMediaReferenceText(message.content, mediaReferenceBindings)
                     }
                 }
+
                 const providerMessagesWithoutAudio = hasMediaModelSelection
                     ? authoritativeMessages
-                    : addPromptReferenceMediaToLatestUserMessage(
-                        authoritativeMessages,
-                        authorizedPromptReferences.mediaCandidates,
-                    )
+                    : addPromptReferenceMediaToLatestUserMessage(authoritativeMessages, authorizedPromptReferences.mediaCandidates)
                 const providerMessages = addPromptReferenceAudioToLatestUserMessage(
                     providerMessagesWithoutAudio,
                     authorizedPromptReferences.modelInputs,
                 )
+
                 if (actionTimelineClarificationInstruction) {
                     const latestProviderUserMessage = [...providerMessages]
-                        .reverse()
-                        .find(message => message.role === 'user')
-                    if (!latestProviderUserMessage) throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+                        .reverse().find(message => message.role === 'user')
+
+                    if (!latestProviderUserMessage)
+                        throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+
                     latestProviderUserMessage.content = [
                         latestProviderUserMessage.content,
                         `[Lixpi capability state: ${actionTimelineClarificationInstruction}]`,
                     ].filter(Boolean).join('\n\n')
                 }
+
                 if (characterCreatorRouting.isCharacterCreator) {
-                    info('[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video', {
-                        reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,
-                        imageModelIds: routedMediaGenerationRequest?.imageModelIds ?? aiImageModels,
-                    })
+                    info(
+                        '[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video',
+                        {
+                            reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,
+                            imageModelIds: routedMediaGenerationRequest?.imageModelIds ?? aiImageModels,
+                        },
+                    )
                 }
+
                 const providerPromptText = providerSafeMediaIntent?.safePrompt ?? authoritativePromptText
                 resolvedMediaBranchCandidateSnapshot = mergePromptReferenceMediaCandidates({
                     snapshot: resolvedMediaBranchCandidateSnapshot,
@@ -1407,7 +1852,11 @@ export const aiInteractionSubjects = [
                     conversationAssetId,
                     promptText: providerPromptText,
                 })
-                if (providerSafeMediaIntent && resolvedMediaBranchCandidateSnapshot) {
+
+                if (
+                    providerSafeMediaIntent
+                    && resolvedMediaBranchCandidateSnapshot
+                ) {
                     resolvedMediaBranchCandidateSnapshot = {
                         ...resolvedMediaBranchCandidateSnapshot,
                         promptText: providerPromptText,
@@ -1415,88 +1864,71 @@ export const aiInteractionSubjects = [
                             resolvedMediaBranchCandidateSnapshot.transcriptContext,
                             providerSafeMediaIntent.bindings,
                         ),
-                        candidates: resolvedMediaBranchCandidateSnapshot.candidates.map(candidate => ({
-                            ...candidate,
-                            ...(candidate.promptText
-                                ? {
-                                    promptText: sanitizeMediaReferenceText(candidate.promptText, providerSafeMediaIntent!.bindings),
-                                }
-                                : {}),
-                            ...(candidate.visualEntitySummary
-                                ? {
-                                    visualEntitySummary: sanitizeMediaReferenceText(
-                                        candidate.visualEntitySummary,
-                                        providerSafeMediaIntent!.bindings,
-                                    ),
-                                }
-                                : {}),
-                            ...(candidate.visualStyleSummary
-                                ? {
-                                    visualStyleSummary: sanitizeMediaReferenceText(
-                                        candidate.visualStyleSummary,
-                                        providerSafeMediaIntent!.bindings,
-                                    ),
-                                }
-                                : {}),
-                            ...(candidate.entityTags
-                                ? {
-                                    entityTags: candidate.entityTags.map(tag =>
-                                        sanitizeMediaReferenceText(
-                                            tag,
+                        candidates: resolvedMediaBranchCandidateSnapshot.candidates.map(
+                            candidate => ({
+                                ...candidate,
+                                ...(candidate.promptText
+                                    ? {
+                                        promptText: sanitizeMediaReferenceText(candidate.promptText, providerSafeMediaIntent!.bindings),
+                                    }
+                                    : {}),
+                                ...(candidate.visualEntitySummary
+                                    ? {
+                                        visualEntitySummary: sanitizeMediaReferenceText(
+                                            candidate.visualEntitySummary,
                                             providerSafeMediaIntent!.bindings,
-                                        )
-                                    ),
-                                }
-                                : {}),
-                            ...(candidate.styleTags
-                                ? {
-                                    styleTags: candidate.styleTags.map(tag =>
-                                        sanitizeMediaReferenceText(
-                                            tag,
+                                        ),
+                                    }
+                                    : {}),
+                                ...(candidate.visualStyleSummary
+                                    ? {
+                                        visualStyleSummary: sanitizeMediaReferenceText(
+                                            candidate.visualStyleSummary,
                                             providerSafeMediaIntent!.bindings,
-                                        )
-                                    ),
-                                }
-                                : {}),
-                        })),
+                                        ),
+                                    }
+                                    : {}),
+                                ...(candidate.entityTags
+                                    ? {
+                                        entityTags: candidate.entityTags.map(
+                                            tag => sanitizeMediaReferenceText(tag, providerSafeMediaIntent!.bindings),
+                                        ),
+                                    }
+                                    : {}),
+                                ...(candidate.styleTags
+                                    ? {
+                                        styleTags: candidate.styleTags.map(tag => sanitizeMediaReferenceText(tag, providerSafeMediaIntent!.bindings)),
+                                    }
+                                    : {}),
+                            }),
+                        ),
                     }
                 }
+
                 if (resolvedWorkspaceContextSnapshot) {
                     resolvedWorkspaceContextSnapshot = {
                         ...resolvedWorkspaceContextSnapshot,
                         promptText: providerPromptText,
                         nodes: resolvedWorkspaceContextSnapshot.nodes.map(node => {
                             const binding = providerSafeMediaIntent?.bindings.find(candidate => candidate.assetId === node.assetId)
+
                             return binding
                                 ? {
                                     ...node,
                                     title: binding.alias,
                                     ...(node.descriptorSummary
                                         ? {
-                                            descriptorSummary: sanitizeMediaReferenceText(
-                                                node.descriptorSummary,
-                                                providerSafeMediaIntent!.bindings,
-                                            ),
+                                            descriptorSummary: sanitizeMediaReferenceText(node.descriptorSummary, providerSafeMediaIntent!.bindings),
                                         }
                                         : {}),
                                     ...(node.entityTags
                                         ? {
-                                            entityTags: node.entityTags.map(tag =>
-                                                sanitizeMediaReferenceText(
-                                                    tag,
-                                                    providerSafeMediaIntent!.bindings,
-                                                )
-                                            ),
+                                            entityTags: node.entityTags.map(tag => sanitizeMediaReferenceText(tag, providerSafeMediaIntent!.bindings)),
                                         }
                                         : {}),
                                     ...(node.styleTags
                                         ? {
-                                            styleTags: node.styleTags.map(tag =>
-                                                sanitizeMediaReferenceText(
-                                                    tag,
-                                                    providerSafeMediaIntent!.bindings,
-                                                )
-                                            ),
+                                            styleTags: node.styleTags.map(tag => sanitizeMediaReferenceText(tag, providerSafeMediaIntent!.bindings)),
                                         }
                                         : {}),
                                 }
@@ -1504,12 +1936,22 @@ export const aiInteractionSubjects = [
                         }),
                     }
                 }
+
                 const pauseForBranchAmbiguity = async (error: unknown): Promise<boolean> => {
-                    if (!(error instanceof MediaBranchAmbiguityError) || !durableMediaRequest) return false
-                    const boundAssetIds = new Set(durableMediaRequest.bindings.map(binding => binding.assetId))
-                    const candidateAssetIds = [...new Set(error.candidateAssetIds)]
-                        .filter(assetId => boundAssetIds.has(assetId))
-                    if (candidateAssetIds.length < 2) return false
+                    if (
+                        !(error instanceof MediaBranchAmbiguityError)
+                        || !durableMediaRequest
+                    )
+                        return false
+
+                    const boundAssetIds = new Set(
+                        durableMediaRequest.bindings.map(binding => binding.assetId),
+                    )
+                    const candidateAssetIds = [...new Set(error.candidateAssetIds)].filter(assetId => boundAssetIds.has(assetId))
+
+                    if (candidateAssetIds.length < 2)
+                        return false
+
                     durableMediaRequest = await new MediaGenerationRequestService().pauseForBranchResolution({
                         request: durableMediaRequest,
                         candidateAssetIds,
@@ -1521,17 +1963,28 @@ export const aiInteractionSubjects = [
                         conversation: 'paused',
                         expectedConversation: 'receiving',
                     }).catch(() => undefined)
-                    natsService!.publish(canonicalResponseSubject, {
-                        generationRequestId: durableMediaRequest.generationRequestId,
-                        status: durableMediaRequest.status,
-                        requestRevision: durableMediaRequest.revision,
-                    })
+                    natsService!.publish(
+                        canonicalResponseSubject,
+                        {
+                            generationRequestId: durableMediaRequest.generationRequestId,
+                            status: durableMediaRequest.status,
+                            requestRevision: durableMediaRequest.revision,
+                        },
+                    )
+
                     return true
                 }
                 const runWithLease = async (run: () => Promise<void>): Promise<void> => {
-                    const renewal = setInterval(() => {
-                        void AssetModel.renewLease({ assetId: conversationAssetId, workspaceId, leaseId: lease.leaseId, holderId: leaseHolderId })
-                    }, 10000)
+                    const renewal = setInterval(
+                        () => void AssetModel.renewLease({
+                            assetId: conversationAssetId,
+                            workspaceId,
+                            leaseId: lease.leaseId,
+                            holderId: leaseHolderId,
+                        }),
+                        10000,
+                    )
+
                     try {
                         await run()
                     } finally {
@@ -1545,17 +1998,24 @@ export const aiInteractionSubjects = [
                             assetId: conversationAssetId,
                             organizationId,
                         })
-                        if (!('error' in claimed)) return true
+
+                        if (!('error' in claimed))
+                            return true
+
                         natsService!.publish(canonicalResponseSubject, { error: claimed.error })
                         await releaseLease()
+
                         return false
                     } catch (error) {
                         await releaseLease()
+
                         throw error
                     }
                 }
                 const recordAcceptedReferences = async (): Promise<void> => {
-                    if (authorizedPromptReferences.references.length === 0) return
+                    if (authorizedPromptReferences.references.length === 0)
+                        return
+
                     await PromptReferenceRecentModel.recordAccepted({
                         userId,
                         references: authorizedPromptReferences.references,
@@ -1563,7 +2023,9 @@ export const aiInteractionSubjects = [
                 }
 
                 if (routedMediaGenerationRequest) {
-                    if (!await claimConversation()) return
+                    if (!await claimConversation())
+                        return
+
                     await recordAcceptedReferences()
                     infoStr([
                         chalk.cyan('🧬 [AI_INTERACTION]'),
@@ -1571,66 +2033,71 @@ export const aiInteractionSubjects = [
                         ' :: generationRequestId:',
                         chalk.yellow(routedMediaGenerationRequest.generationRequestId),
                         ' :: reasoningCount:',
-                        chalk.green(String(routedMediaGenerationRequest.reasoningModelIds.length)),
+                        chalk.green(
+                            String(routedMediaGenerationRequest.reasoningModelIds.length),
+                        ),
                     ])
 
                     const runMediaGenerationMatrix = async (): Promise<void> => {
                         try {
-                            await runWithLease(async () =>
-                                await getLlmModule().processMediaGenerationMatrix({
-                                    ...data,
-                                    aiImageModels: actionTimelineSelected ? [] : aiImageModels,
-                                    aiVideoModels: actionTimelineSelected || characterCreatorRouting.isCharacterCreator
-                                        ? []
-                                        : aiVideoModels,
-                                    messages: providerMessages,
-                                    capabilityReferences: characterCreatorRouting.capabilityReferences,
-                                    capabilityInputs,
-                                    promptReferenceAssetIds: authorizedPromptReferences.assetIds,
-                                    mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
-                                    workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
-                                    workspaceId,
-                                    aiChatThreadId,
-                                    organizationId,
-                                    assetLeaseId: lease.leaseId,
-                                    assetLeaseHolderId: leaseHolderId,
-                                    proseMirrorInitialDoc: authoritativeProseMirrorInitialDoc,
-                                    proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
-                                    videoSourceForExtension: characterCreatorRouting.isCharacterCreator
-                                        ? undefined
-                                        : resolvedVideoSourceForExtension,
-                                    videoSourceDurationSeconds: characterCreatorRouting.isCharacterCreator
-                                        ? undefined
-                                        : resolvedVideoSourceDurationSeconds,
-                                    mediaGenerationRequest: {
-                                        ...routedMediaGenerationRequest,
-                                        ...(!characterCreatorRouting.isCharacterCreator && routedMediaGenerationRequest.videoOptions
-                                            ? {
-                                                videoOptions: {
-                                                    ...routedMediaGenerationRequest.videoOptions,
-                                                    ...(resolvedVideoSourceForExtension ? { sourceForExtension: resolvedVideoSourceForExtension } : {}),
-                                                },
-                                            }
-                                            : {}),
-                                    },
-                                    eventMeta: {
-                                        userId,
-                                        stripeCustomerId,
-                                        organizationId,
+                            await runWithLease(
+                                async () =>
+                                    await getLlmModule().processMediaGenerationMatrix({
+                                        ...data,
+                                        aiImageModels: actionTimelineSelected ? [] : aiImageModels,
+                                        aiVideoModels: actionTimelineSelected
+                                            || characterCreatorRouting.isCharacterCreator
+                                            ? []
+                                            : aiVideoModels,
+                                        messages: providerMessages,
+                                        capabilityReferences: characterCreatorRouting.capabilityReferences,
+                                        capabilityInputs,
+                                        promptReferenceAssetIds: authorizedPromptReferences.assetIds,
+                                        mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
+                                        workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                                         workspaceId,
                                         aiChatThreadId,
-                                        generationRequestId: durableMediaRequest?.generationRequestId
-                                            ?? routedMediaGenerationRequest.generationRequestId,
-                                    },
-                                    ...(providerSafeMediaIntent
-                                        ? {
-                                            durableGenerationRequestId: durableMediaRequest?.generationRequestId,
-                                            durableMediaRuns: durableMediaRequest?.runs,
-                                            providerSafeMediaIntent,
-                                            mediaReferenceBindings: providerSafeMediaIntent.bindings,
-                                        }
-                                        : {}),
-                                })
+                                        organizationId,
+                                        assetLeaseId: lease.leaseId,
+                                        assetLeaseHolderId: leaseHolderId,
+                                        proseMirrorInitialDoc: authoritativeProseMirrorInitialDoc,
+                                        proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
+                                        videoSourceForExtension: characterCreatorRouting.isCharacterCreator
+                                            ? undefined
+                                            : resolvedVideoSourceForExtension,
+                                        videoSourceDurationSeconds: characterCreatorRouting.isCharacterCreator
+                                            ? undefined
+                                            : resolvedVideoSourceDurationSeconds,
+                                        mediaGenerationRequest: {
+                                            ...routedMediaGenerationRequest,
+                                            ...(!characterCreatorRouting.isCharacterCreator
+                                                && routedMediaGenerationRequest.videoOptions
+                                                ? {
+                                                    videoOptions: {
+                                                        ...routedMediaGenerationRequest.videoOptions,
+                                                        ...(resolvedVideoSourceForExtension ? { sourceForExtension: resolvedVideoSourceForExtension } : {}),
+                                                    },
+                                                }
+                                                : {}),
+                                        },
+                                        eventMeta: {
+                                            userId,
+                                            stripeCustomerId,
+                                            organizationId,
+                                            workspaceId,
+                                            aiChatThreadId,
+                                            generationRequestId: durableMediaRequest?.generationRequestId
+                                                ?? routedMediaGenerationRequest.generationRequestId,
+                                        },
+                                        ...(providerSafeMediaIntent
+                                            ? {
+                                                durableGenerationRequestId: durableMediaRequest?.generationRequestId,
+                                                durableMediaRuns: durableMediaRequest?.runs,
+                                                providerSafeMediaIntent,
+                                                mediaReferenceBindings: providerSafeMediaIntent.bindings,
+                                            }
+                                            : {}),
+                                    }),
                             )
                             await AssetModel.updateConversationStateSystem({
                                 assetId: conversationAssetId,
@@ -1639,7 +2106,9 @@ export const aiInteractionSubjects = [
                                 expectedConversation: 'receiving',
                             })
                         } catch (e) {
-                            if (await pauseForBranchAmbiguity(e)) return
+                            if (await pauseForBranchAmbiguity(e))
+                                return
+
                             await AssetModel.updateConversationStateSystem({
                                 assetId: conversationAssetId,
                                 organizationId,
@@ -1648,13 +2117,11 @@ export const aiInteractionSubjects = [
                             }).catch(() => undefined)
                             await releaseLease()
                             err(`Media generation matrix failed for ${workspaceId}:${aiChatThreadId}:`, e)
-                            natsService!.publish(
-                                canonicalResponseSubject,
-                                { error: e instanceof Error ? e.message : String(e) },
-                            )
+                            natsService!.publish(canonicalResponseSubject, { error: e instanceof Error ? e.message : String(e) })
                         }
                     }
                     void runMediaGenerationMatrix()
+
                     return
                 }
 
@@ -1666,17 +2133,20 @@ export const aiInteractionSubjects = [
                         model: model!,
                         omitPricing: false,
                     })
-                    if (!aiModelMetaInfo || !aiModelMetaInfo.modelVersion) {
+
+                    if (
+                        !aiModelMetaInfo
+                        || !aiModelMetaInfo.modelVersion
+                    ) {
                         err('AI model meta info not found in the database', { aiModel })
-                        natsService!.publish(
-                            canonicalResponseSubject,
-                            { error: `AI model not found: ${aiModel}` },
-                        )
+                        natsService!.publish(canonicalResponseSubject, { error: `AI model not found: ${aiModel}` })
                         await releaseLease()
+
                         return
                     }
 
                     let imageModelMetaInfo: any = null
+
                     if (routedAiImageModel) {
                         const [imageProvider, imageModel] = (routedAiImageModel as string).split(':')
                         imageModelMetaInfo = await AiModel.getAiModel({
@@ -1684,14 +2154,15 @@ export const aiInteractionSubjects = [
                             model: imageModel!,
                             omitPricing: false,
                         })
-                        if (imageModelMetaInfo) {
+
+                        if (imageModelMetaInfo)
                             info(`Image model resolved: ${imageProvider}:${imageModel}`)
-                        } else {
+                        else
                             warn(`Image model not found: ${routedAiImageModel}, proceeding without image routing`)
-                        }
                     }
 
                     let videoModelMetaInfo: any = null
+
                     if (routedAiVideoModel) {
                         const [videoProvider, videoModel] = (routedAiVideoModel as string).split(':')
                         videoModelMetaInfo = await AiModel.getAiModel({
@@ -1699,17 +2170,20 @@ export const aiInteractionSubjects = [
                             model: videoModel!,
                             omitPricing: false,
                         })
-                        if (videoModelMetaInfo) {
+
+                        if (videoModelMetaInfo)
                             info(`Video model resolved: ${videoProvider}:${videoModel}`)
-                        } else {
+                        else
                             warn(`Video model not found: ${routedAiVideoModel}, proceeding without video routing`)
-                        }
                     }
 
                     const normalizedVideoAspectRatio = normalizeModelOption(videoAspectRatio, videoModelMetaInfo?.videoAspectRatios)
                     const normalizedVideoResolution = normalizeModelOption(videoResolution, videoModelMetaInfo?.videoResolutions)
                     const normalizedVideoDuration = normalizeModelOption(videoDuration, videoModelMetaInfo?.videoDurations)
-                    if (!await claimConversation()) return
+
+                    if (!await claimConversation())
+                        return
+
                     await recordAcceptedReferences()
 
                     const instanceKey = `${workspaceId}:${aiChatThreadId}`
@@ -1729,55 +2203,61 @@ export const aiInteractionSubjects = [
                     // worker can pick up the next request.
                     const runLlmProcess = async (): Promise<void> => {
                         try {
-                            await runWithLease(async () =>
-                                await getLlmModule().process(instanceKey, provider as ProviderName, {
-                                    messages: providerMessages,
-                                    aiModelMetaInfo,
-                                    imageModelMetaInfo,
-                                    videoModelMetaInfo,
-                                    workspaceId,
-                                    aiChatThreadId,
-                                    organizationId,
-                                    assetLeaseId: lease.leaseId,
-                                    assetLeaseHolderId: leaseHolderId,
-                                    enableImageGeneration: actionTimelineSelected ? false : enableImageGeneration,
-                                    imageSize,
-                                    videoAspectRatio: routedAiVideoModel ? normalizedVideoAspectRatio : undefined,
-                                    videoResolution: routedAiVideoModel ? normalizedVideoResolution : undefined,
-                                    videoDurationSeconds: routedAiVideoModel && normalizedVideoDuration
-                                        ? Number(normalizedVideoDuration)
-                                        : undefined,
-                                    videoSourceForExtension: routedAiVideoModel
-                                        ? resolvedVideoSourceForExtension
-                                        : undefined,
-                                    videoSourceDurationSeconds: routedAiVideoModel
-                                        ? resolvedVideoSourceDurationSeconds
-                                        : undefined,
-                                    capabilityReferences: characterCreatorRouting.capabilityReferences,
-                                    capabilityInputs,
-                                    promptReferenceAssetIds: authorizedPromptReferences.assetIds,
-                                    mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
-                                    workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
-                                    canvasVisibleArea,
-                                    proseMirrorInitialDoc: authoritativeProseMirrorInitialDoc,
-                                    proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
-                                    eventMeta: {
-                                        userId,
-                                        stripeCustomerId,
-                                        organizationId,
-                                        workspaceId,
-                                        aiChatThreadId,
-                                        ...(durableMediaRequest ? { generationRequestId: durableMediaRequest.generationRequestId } : {}),
-                                    },
-                                    ...(providerSafeMediaIntent
-                                        ? {
-                                            durableGenerationRequestId: durableMediaRequest?.generationRequestId,
-                                            durableMediaRuns: durableMediaRequest?.runs,
-                                            providerSafeMediaIntent,
-                                            mediaReferenceBindings: providerSafeMediaIntent.bindings,
-                                        }
-                                        : {}),
-                                })
+                            await runWithLease(
+                                async () =>
+                                    await getLlmModule().process(
+                                        instanceKey,
+                                        provider as ProviderName,
+                                        {
+                                            messages: providerMessages,
+                                            aiModelMetaInfo,
+                                            imageModelMetaInfo,
+                                            videoModelMetaInfo,
+                                            workspaceId,
+                                            aiChatThreadId,
+                                            organizationId,
+                                            assetLeaseId: lease.leaseId,
+                                            assetLeaseHolderId: leaseHolderId,
+                                            enableImageGeneration: actionTimelineSelected ? false : enableImageGeneration,
+                                            imageSize,
+                                            videoAspectRatio: routedAiVideoModel ? normalizedVideoAspectRatio : undefined,
+                                            videoResolution: routedAiVideoModel ? normalizedVideoResolution : undefined,
+                                            videoDurationSeconds: routedAiVideoModel
+                                                && normalizedVideoDuration
+                                                ? Number(normalizedVideoDuration)
+                                                : undefined,
+                                            videoSourceForExtension: routedAiVideoModel
+                                                ? resolvedVideoSourceForExtension
+                                                : undefined,
+                                            videoSourceDurationSeconds: routedAiVideoModel
+                                                ? resolvedVideoSourceDurationSeconds
+                                                : undefined,
+                                            capabilityReferences: characterCreatorRouting.capabilityReferences,
+                                            capabilityInputs,
+                                            promptReferenceAssetIds: authorizedPromptReferences.assetIds,
+                                            mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
+                                            workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
+                                            canvasVisibleArea,
+                                            proseMirrorInitialDoc: authoritativeProseMirrorInitialDoc,
+                                            proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
+                                            eventMeta: {
+                                                userId,
+                                                stripeCustomerId,
+                                                organizationId,
+                                                workspaceId,
+                                                aiChatThreadId,
+                                                ...(durableMediaRequest ? { generationRequestId: durableMediaRequest.generationRequestId } : {}),
+                                            },
+                                            ...(providerSafeMediaIntent
+                                                ? {
+                                                    durableGenerationRequestId: durableMediaRequest?.generationRequestId,
+                                                    durableMediaRuns: durableMediaRequest?.runs,
+                                                    providerSafeMediaIntent,
+                                                    mediaReferenceBindings: providerSafeMediaIntent.bindings,
+                                                }
+                                                : {}),
+                                        },
+                                    ),
                             )
                             await AssetModel.updateConversationStateSystem({
                                 assetId: conversationAssetId,
@@ -1786,7 +2266,9 @@ export const aiInteractionSubjects = [
                                 expectedConversation: 'receiving',
                             })
                         } catch (e) {
-                            if (await pauseForBranchAmbiguity(e)) return
+                            if (await pauseForBranchAmbiguity(e))
+                                return
+
                             await AssetModel.updateConversationStateSystem({
                                 assetId: conversationAssetId,
                                 organizationId,
@@ -1795,20 +2277,14 @@ export const aiInteractionSubjects = [
                             }).catch(() => undefined)
                             await releaseLease()
                             err(`LLM module process failed for ${instanceKey}:`, e)
-                            natsService!.publish(
-                                canonicalResponseSubject,
-                                { error: e instanceof Error ? e.message : String(e) },
-                            )
+                            natsService!.publish(canonicalResponseSubject, { error: e instanceof Error ? e.message : String(e) })
                         }
                     }
                     void runLlmProcess()
                 } catch (error) {
                     await releaseLease()
                     err('❌ [AI_INTERACTION] handler error:', error)
-                    natsService!.publish(
-                        canonicalResponseSubject,
-                        { error: error instanceof Error ? error.message : String(error) },
-                    )
+                    natsService!.publish(canonicalResponseSubject, { error: error instanceof Error ? error.message : String(error) })
                 }
             } catch (error) {
                 await releaseLease()
@@ -1830,32 +2306,61 @@ export const aiInteractionSubjects = [
         handler: async (data: PipelineResumePayload, _msg: any) => {
             const { workspaceId } = data
             const userId = data.user.userId
-            if (data.conversationAssetId && data.pipelineId && data.pipelineId !== data.conversationAssetId) {
-                return { error: 'PIPELINE_CONVERSATION_MISMATCH' }
-            }
-            const pipelineId = data.conversationAssetId ?? data.pipelineId
-            if (!pipelineId) {
-                return { error: 'PIPELINE_ID_REQUIRED' }
-            }
 
-            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
-            if (!workspace || 'error' in workspace) {
+            if (
+                data.conversationAssetId
+                && data.pipelineId
+                && data.pipelineId !== data.conversationAssetId
+            )
+                return { error: 'PIPELINE_CONVERSATION_MISMATCH' }
+
+            const pipelineId = data.conversationAssetId ?? data.pipelineId
+
+            if (!pipelineId)
+                return { error: 'PIPELINE_ID_REQUIRED' }
+
+            const workspace = await Workspace.getWorkspace({
+                userId,
+                workspaceId,
+            })
+
+            if (
+                !workspace
+                || 'error' in workspace
+            )
                 return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
-            }
+
             let responseScopeId = workspaceId
+
             if (data.conversationAssetId) {
-                const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
-                if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' }
-                const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
-                const conversation = await AssetModel.get({ assetId: data.conversationAssetId, requester })
+                const organization = await Organization.getOrganization({
+                    organizationId: workspace.organizationId,
+                    userId,
+                })
+
+                if ('error' in organization)
+                    return { error: 'ORGANIZATION_ACCESS_DENIED' }
+
+                const requester = createAssetRequesterForWorkspaceUser(
+                    workspace,
+                    userId,
+                    true,
+                )
+                const conversation = await AssetModel.get({
+                    assetId: data.conversationAssetId,
+                    requester,
+                })
+
                 if (
-                    'error' in conversation || !conversation.documents.conversation
+                    'error' in conversation
+                    || !conversation.documents.conversation
                     || !isAssetAvailableInWorkspaceScope(conversation, workspace)
-                ) {
+                )
                     return { error: 'CONVERSATION_ASSET_NOT_FOUND' }
-                }
+
                 responseScopeId = conversation.organizationId
             }
+
             const liveSubject = ensureAiInteractionEventRelay({
                 userId,
                 scopeId: responseScopeId,
@@ -1863,10 +2368,12 @@ export const aiInteractionSubjects = [
                 workspaceId,
             })
 
-            const localStreamSeq = Number.isSafeInteger(data.localStreamSeq) && data.localStreamSeq! >= 0
+            const localStreamSeq = Number.isSafeInteger(data.localStreamSeq)
+                && data.localStreamSeq! >= 0
                 ? data.localStreamSeq!
                 : 0
-            const maxMessages = Number.isSafeInteger(data.maxMessages) && data.maxMessages! > 0
+            const maxMessages = Number.isSafeInteger(data.maxMessages)
+                && data.maxMessages! > 0
                 ? Math.min(data.maxMessages!, 10000)
                 : 1000
             const result = await PipelineEventLog.fromSingleton().replayPipelineEvents({
@@ -1895,31 +2402,55 @@ export const aiInteractionSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any, _msg: any) => {
-            const { workspaceId, conversationAssetId, generationRequestId } = data as {
+            const {
+                workspaceId,
+                conversationAssetId,
+                generationRequestId,
+            } = data as {
                 user: { userId: string }
                 workspaceId: string
                 conversationAssetId: string
                 generationRequestId?: string
             }
 
-            const workspace = await Workspace.getWorkspace({ workspaceId, userId: data.user.userId })
-            if ('error' in workspace) return workspace
-            if (!workspace.accessList.some((entry) => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'))) {
+            const workspace = await Workspace.getWorkspace({
+                workspaceId,
+                userId: data.user.userId,
+            })
+
+            if ('error' in workspace)
+                return workspace
+
+            if (!workspace.accessList.some(
+                entry => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'),
+            ))
                 return { error: 'PERMISSION_DENIED' }
-            }
+
             const organization = await Organization.getOrganization({
                 organizationId: workspace.organizationId,
                 userId: data.user.userId,
             })
-            if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' }
-            const requester = createAssetRequesterForWorkspaceUser(workspace, data.user.userId, true)
-            const conversation = await AssetModel.get({ assetId: conversationAssetId, requester })
+
+            if ('error' in organization)
+                return { error: 'ORGANIZATION_ACCESS_DENIED' }
+
+            const requester = createAssetRequesterForWorkspaceUser(
+                workspace,
+                data.user.userId,
+                true,
+            )
+            const conversation = await AssetModel.get({
+                assetId: conversationAssetId,
+                requester,
+            })
+
             if (
-                'error' in conversation || !conversation.documents.conversation
+                'error' in conversation
+                || !conversation.documents.conversation
                 || !isAssetAvailableInWorkspaceScope(conversation, workspace)
-            ) {
+            )
                 return { error: 'CONVERSATION_ASSET_NOT_FOUND' }
-            }
+
             const instanceKey = `${workspaceId}:${conversationAssetId}`
 
             infoStr([
@@ -1944,15 +2475,17 @@ export const aiInteractionSubjects = [
                         userId: data.user.userId,
                     }),
                 ])
-                if (matrixStopResult.status === 'rejected') {
+
+                if (matrixStopResult.status === 'rejected')
                     err(`Failed to stop media generation request ${generationRequestId}:`, matrixStopResult.reason)
-                }
-                if (workflowStopResult.status === 'rejected') {
+
+                if (workflowStopResult.status === 'rejected')
                     err(`Failed to stop conversation workflow ${instanceKey}:`, workflowStopResult.reason)
-                }
-                if (durableCancellationResult.status === 'rejected') {
-                    warn(`Failed to persist cancellation for media generation request ${generationRequestId}: ${String(durableCancellationResult.reason)}`)
-                }
+
+                if (durableCancellationResult.status === 'rejected')
+                    warn(
+                        `Failed to persist cancellation for media generation request ${generationRequestId}: ${String(durableCancellationResult.reason)}`,
+                    )
 
                 try {
                     const canvasGeometry = await removeMediaGenerationRequestFromCanvas({
@@ -1961,6 +2494,7 @@ export const aiInteractionSubjects = [
                         conversationAssetId,
                         requester,
                     })
+
                     try {
                         await AssetModel.updateConversationStateSystem({
                             assetId: conversationAssetId,
@@ -1970,6 +2504,7 @@ export const aiInteractionSubjects = [
                     } catch (error) {
                         err(`Failed to pause stopped conversation ${conversationAssetId}:`, error)
                     }
+
                     return {
                         status: 'stopped',
                         generationRequestId,
@@ -1977,6 +2512,7 @@ export const aiInteractionSubjects = [
                     }
                 } catch (error) {
                     err(`Failed to remove stopped generation request ${generationRequestId}:`, error)
+
                     return { error: error instanceof Error ? error.message : String(error) }
                 }
             }
@@ -1992,9 +2528,11 @@ export const aiInteractionSubjects = [
                     organizationId: conversation.organizationId,
                     conversation: 'paused',
                 })
+
                 return { status: 'stopped' }
             } catch (error) {
                 err(`Failed to stop ${instanceKey}:`, error)
+
                 return { error: error instanceof Error ? error.message : String(error) }
             }
         },
@@ -2006,32 +2544,45 @@ export const resumeAiInteractionMediaGenerationRequest = async ({
     user,
 }: {
     request: MediaGenerationRequest
-    user: { userId: string; stripeCustomerId?: string }
-}): Promise<void> => {
-    if (request.status !== 'submitted' || request.unresolvedBindings.length > 0) {
-        throw new Error('MEDIA_REQUEST_NOT_RESUMABLE')
+    user: {
+        userId: string
+        stripeCustomerId?: string
     }
+}): Promise<void> => {
+    if (
+        request.status !== 'submitted'
+        || request.unresolvedBindings.length > 0
+    )
+        throw new Error('MEDIA_REQUEST_NOT_RESUMABLE')
+
     const checkpoint = await new MediaGenerationRequestService().getCheckpoint(request)
     const configuration = checkpoint.configuration as {
         resumePayload?: Record<string, unknown>
         stripeCustomerId?: string
     }
-    if (!configuration.resumePayload) throw new Error('MEDIA_REQUEST_RESUME_PAYLOAD_MISSING')
+
+    if (!configuration.resumePayload)
+        throw new Error('MEDIA_REQUEST_RESUME_PAYLOAD_MISSING')
+
     const subscription = aiInteractionSubjects.find(candidate => candidate.subject === AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE)
-    if (!subscription) throw new Error('MEDIA_REQUEST_RESUME_HANDLER_MISSING')
-    await subscription.handler({
-        ...configuration.resumePayload,
-        user: {
-            userId: user.userId,
-            stripeCustomerId: user.stripeCustomerId ?? configuration.stripeCustomerId ?? '',
+
+    if (!subscription)
+        throw new Error('MEDIA_REQUEST_RESUME_HANDLER_MISSING')
+
+    await subscription.handler(
+        {
+            ...configuration.resumePayload,
+            user: {
+                userId: user.userId,
+                stripeCustomerId: user.stripeCustomerId ?? configuration.stripeCustomerId ?? '',
+            },
+            resumeGenerationRequestId: request.generationRequestId,
+            ...(request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))
+                ? {
+                    resolvedBranchTargetAssetId: request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))!.assetId,
+                }
+                : {}),
         },
-        resumeGenerationRequestId: request.generationRequestId,
-        ...(request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))
-            ? {
-                resolvedBranchTargetAssetId: request.resolvedReferences.find(
-                    resolution => resolution.bindingId.startsWith('branch-target-'),
-                )!.assetId,
-            }
-            : {}),
-    }, undefined)
+        undefined,
+    )
 }

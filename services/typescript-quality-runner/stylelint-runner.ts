@@ -68,7 +68,8 @@ if (
 
 const stylesheetPaths: string[] = []
 
-for (const inputPath of process.argv.slice(3)) await collectStylesheetPaths(inputPath, stylesheetPaths)
+for (const inputPath of process.argv.slice(3))
+    await collectStylesheetPaths(inputPath, stylesheetPaths)
 
 if (stylesheetPaths.length === 0)
     process.exit(0)

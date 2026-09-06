@@ -13,9 +13,21 @@ export type WorkspaceCanvasSnapshot = {
 }
 
 export type CanvasWriteResult =
-    | { status: 'saved'; workspaceId: string; version: CanvasVersion }
-    | { status: 'stale'; workspaceId: string; current: CanvasVersion }
-    | { status: 'error'; workspaceId: string; error: Error }
+    | {
+        status: 'saved'
+        workspaceId: string
+        version: CanvasVersion
+    }
+    | {
+        status: 'stale'
+        workspaceId: string
+        current: CanvasVersion
+    }
+    | {
+        status: 'error'
+        workspaceId: string
+        error: Error
+    }
 
 export type CanvasPersistencePublication = {
     workspaceId: string
@@ -49,26 +61,38 @@ class CanvasWriteLock {
     private readonly waiters: Array<() => void> = []
 
     async run<Result>(operation: () => Promise<Result>): Promise<Result> {
-        if (this.locked) await new Promise<void>(resolve => this.waiters.push(resolve))
-        else this.locked = true
+        if (this.locked)
+            await new Promise<void>(resolve => this.waiters.push(resolve))
+        else
+            this.locked = true
+
         try {
             return await operation()
         } finally {
             const next = this.waiters.shift()
-            if (next) next()
-            else this.locked = false
+
+            if (next)
+                next()
+            else
+                this.locked = false
         }
     }
 }
 
-function versionToken(version: CanvasVersion): number | undefined {
-    if (Number.isFinite(version.canvasStateUpdatedAt)) return version.canvasStateUpdatedAt
-    if (Number.isFinite(version.updatedAt)) return version.updatedAt
+const versionToken = (version: CanvasVersion): number | undefined => {
+    if (Number.isFinite(version.canvasStateUpdatedAt))
+        return version.canvasStateUpdatedAt
+
+    if (Number.isFinite(version.updatedAt))
+        return version.updatedAt
+
     return undefined
 }
 
-function asError(error: unknown): Error {
-    return error instanceof Error ? error : new Error(String(error))
+const asError = (error: unknown): Error => {
+    return error instanceof Error ? error : new Error(
+        String(error),
+    )
 }
 
 export class CanvasPersistenceController {
@@ -84,12 +108,18 @@ export class CanvasPersistenceController {
     private failure: Error | null = null
     private closing = false
 
-    constructor(readonly workspaceId: string, private readonly ports: CanvasPersistencePorts) {
+    constructor(
+        readonly workspaceId: string,
+        private readonly ports: CanvasPersistencePorts,
+    ) {
         const initial = ports.read(workspaceId)
         this.snapshot = initial ? structuredClone(initial) : null
     }
 
-    update(canvasState: CanvasState, persistViewport = false): void {
+    update(
+        canvasState: CanvasState,
+        persistViewport = false,
+    ): void {
         this.assertOpen()
         this.pending = {
             canvasState: structuredClone(canvasState),
@@ -98,7 +128,11 @@ export class CanvasPersistenceController {
         }
         this.staleRetryCount = 0
         this.failure = null
-        this.publish({ canvasState: this.pending.canvasState, requiresSave: true, origin: 'local-intent' })
+        this.publish({
+            canvasState: this.pending.canvasState,
+            requiresSave: true,
+            origin: 'local-intent',
+        })
         this.startPump()
     }
 
@@ -107,18 +141,30 @@ export class CanvasPersistenceController {
         const task = this.lock.run(async () => {
             const includedSequence = this.sequence
             const result = await mutation()
-            if (this.pending && this.pending.sequence <= includedSequence) this.pending = null
+
+            if (
+                this.pending
+                && this.pending.sequence <= includedSequence
+            )
+                this.pending = null
+
             this.failure = null
             this.staleRetryCount = 0
             this.refreshVersion()
-            this.publish({ requiresSave: Boolean(this.pending), origin: 'save-status' })
+            this.publish({
+                requiresSave: Boolean(this.pending),
+                origin: 'save-status',
+            })
+
             return result
         })
         this.mutations.add(task)
+
         try {
             return await task
         } catch (error) {
             this.recordFailure(error)
+
             throw error
         } finally {
             this.mutations.delete(task)
@@ -129,8 +175,19 @@ export class CanvasPersistenceController {
         this.refreshVersion()
         const currentToken = versionToken(this.snapshot?.version ?? {})
         const incomingToken = versionToken(snapshot.version)
-        if (currentToken !== undefined && incomingToken !== undefined && currentToken > incomingToken) return false
-        const viewportRequest = this.pending?.persistViewport ? this.pending : this.active?.persistViewport ? this.active : null
+
+        if (
+            currentToken !== undefined
+            && incomingToken !== undefined
+            && currentToken > incomingToken
+        )
+            return false
+
+        const viewportRequest = this.pending?.persistViewport
+            ? this.pending
+            : this.active?.persistViewport
+                ? this.active
+                : null
         const viewport = viewportRequest?.canvasState.viewport
         this.epoch += 1
         this.staleRetryCount = 0
@@ -138,7 +195,10 @@ export class CanvasPersistenceController {
         this.snapshot = structuredClone(snapshot)
         this.pending = viewport
             ? {
-                canvasState: { ...structuredClone(snapshot.canvasState), viewport: structuredClone(viewport) },
+                canvasState: {
+                    ...structuredClone(snapshot.canvasState),
+                    viewport: structuredClone(viewport),
+                },
                 persistViewport: true,
                 sequence: ++this.sequence,
             }
@@ -150,6 +210,7 @@ export class CanvasPersistenceController {
             origin: 'authoritative',
         })
         this.startPump()
+
         return true
     }
 
@@ -160,13 +221,18 @@ export class CanvasPersistenceController {
     }
 
     async drain(): Promise<void> {
-        while (this.pumping || this.mutations.size > 0) {
+        while (
+            this.pumping
+            || this.mutations.size > 0
+        ) {
             await Promise.allSettled([
                 ...(this.pumping ? [this.pumping] : []),
                 ...this.mutations,
             ])
         }
-        if (this.failure) throw this.failure
+
+        if (this.failure)
+            throw this.failure
     }
 
     async close(): Promise<void> {
@@ -180,36 +246,57 @@ export class CanvasPersistenceController {
 
     readCurrent(): WorkspaceCanvasSnapshot | null {
         this.refreshVersion()
+
         return this.read()
     }
 
     getPendingViewport(): CanvasState['viewport'] | null {
-        const request = this.pending?.persistViewport ? this.pending : this.active?.persistViewport ? this.active : null
+        const request = this.pending?.persistViewport
+            ? this.pending
+            : this.active?.persistViewport
+                ? this.active
+                : null
+
         return request ? structuredClone(request.canvasState.viewport) : null
     }
 
     private assertOpen(): void {
-        if (this.closing) throw new Error(`Canvas persistence for ${this.workspaceId} is closing`)
+        if (this.closing)
+            throw new Error(`Canvas persistence for ${this.workspaceId} is closing`)
     }
 
     private publish(publication: Omit<CanvasPersistencePublication, 'workspaceId'>): void {
-        this.ports.publish({ ...publication, workspaceId: this.workspaceId })
+        this.ports.publish({
+            ...publication,
+            workspaceId: this.workspaceId,
+        })
     }
 
     private refreshVersion(): CanvasVersion {
         const supplied = this.ports.read(this.workspaceId)
+
         if (supplied) {
             const suppliedToken = versionToken(supplied.version)
             const localToken = versionToken(this.snapshot?.version ?? {})
-            if (!this.snapshot || localToken === undefined || (suppliedToken !== undefined && suppliedToken >= localToken)) {
+
+            if (
+                !this.snapshot
+                || localToken === undefined
+                || (suppliedToken !== undefined && suppliedToken >= localToken)
+            )
                 this.snapshot = structuredClone(supplied)
-            }
         }
+
         return this.snapshot?.version ?? {}
     }
 
     private startPump(): void {
-        if (!this.pumping && this.pending && !this.failure) this.pumping = this.pump()
+        if (
+            !this.pumping
+            && this.pending
+            && !this.failure
+        )
+            this.pumping = this.pump()
     }
 
     private async pump(): Promise<void> {
@@ -229,23 +316,37 @@ export class CanvasPersistenceController {
 
     private async savePending(): Promise<void> {
         let refetchedViewport = false
+
         while (this.pending) {
             const request = this.pending
             this.pending = null
             this.active = request
             const epoch = this.epoch
+
             try {
                 const result = await this.ports.save({
                     workspaceId: this.workspaceId,
                     canvasState: request.canvasState,
-                    expectedCanvasStateUpdatedAt: versionToken(this.refreshVersion()),
+                    expectedCanvasStateUpdatedAt: versionToken(
+                        this.refreshVersion(),
+                    ),
                     persistViewport: request.persistViewport,
                 })
-                if (epoch !== this.epoch) continue
-                if (result.workspaceId !== this.workspaceId) throw new Error('Canvas save response belongs to another workspace')
-                if (result.status === 'error') throw result.error
+
+                if (epoch !== this.epoch)
+                    continue
+
+                if (result.workspaceId !== this.workspaceId)
+                    throw new Error('Canvas save response belongs to another workspace')
+
+                if (result.status === 'error')
+                    throw result.error
+
                 if (result.status === 'stale') {
-                    if (Number.isFinite(result.current.canvasStateUpdatedAt) && this.staleRetryCount < 3) {
+                    if (
+                        Number.isFinite(result.current.canvasStateUpdatedAt)
+                        && this.staleRetryCount < 3
+                    ) {
                         this.staleRetryCount += 1
                         this.setVersion(result.current, request.canvasState)
                         const pending = this.readPending()
@@ -255,54 +356,104 @@ export class CanvasPersistenceController {
                                 persistViewport: pending.persistViewport || request.persistViewport,
                             }
                             : request
+
                         continue
                     }
+
                     const fresh = await this.ports.fetch(this.workspaceId)
-                    if (epoch !== this.epoch) continue
+
+                    if (epoch !== this.epoch)
+                        continue
+
                     const latest = this.pending ?? request
                     const persistViewport = latest.persistViewport || request.persistViewport
                     this.snapshot = structuredClone(fresh)
                     this.staleRetryCount = 0
                     this.pending = null
-                    if (persistViewport && !refetchedViewport) {
+
+                    if (
+                        persistViewport
+                        && !refetchedViewport
+                    ) {
                         refetchedViewport = true
                         this.pending = {
-                            canvasState: { ...structuredClone(fresh.canvasState), viewport: structuredClone(latest.canvasState.viewport) },
+                            canvasState: {
+                                ...structuredClone(fresh.canvasState),
+                                viewport: structuredClone(latest.canvasState.viewport),
+                            },
                             persistViewport: true,
                             sequence: ++this.sequence,
                         }
                     }
-                    this.publish({ canvasState: this.pending?.canvasState ?? fresh.canvasState, version: fresh.version, requiresSave: Boolean(this.pending), origin: 'authoritative' })
-                    if (persistViewport && !this.pending) throw new Error('Canvas viewport save remained stale after refreshing the workspace')
+
+                    this.publish({
+                        canvasState: this.pending?.canvasState ?? fresh.canvasState,
+                        version: fresh.version,
+                        requiresSave: Boolean(this.pending),
+                        origin: 'authoritative',
+                    })
+
+                    if (
+                        persistViewport
+                        && !this.pending
+                    )
+                        throw new Error('Canvas viewport save remained stale after refreshing the workspace')
+
                     continue
                 }
+
                 this.setVersion(result.version, request.canvasState)
                 this.staleRetryCount = 0
                 this.failure = null
-                this.publish({ requiresSave: Boolean(this.pending), origin: 'save-status' })
+                this.publish({
+                    requiresSave: Boolean(this.pending),
+                    origin: 'save-status',
+                })
             } catch (error) {
-                if (epoch !== this.epoch) continue
+                if (epoch !== this.epoch)
+                    continue
+
                 if (this.pending) {
                     this.recordFailure(error)
+
                     continue
                 }
+
                 this.pending = request
                 this.recordFailure(error)
+
                 return
             } finally {
-                if (this.active === request) this.active = null
+                if (this.active === request)
+                    this.active = null
             }
         }
     }
 
-    private setVersion(version: CanvasVersion, canvasState: CanvasState): void {
-        this.snapshot = { canvasState: structuredClone(canvasState), version: { ...this.snapshot?.version, ...version } }
-        this.publish({ version, requiresSave: Boolean(this.pending), origin: 'save-status' })
+    private setVersion(
+        version: CanvasVersion,
+        canvasState: CanvasState,
+    ): void {
+        this.snapshot = {
+            canvasState: structuredClone(canvasState),
+            version: {
+                ...this.snapshot?.version,
+                ...version,
+            },
+        }
+        this.publish({
+            version,
+            requiresSave: Boolean(this.pending),
+            origin: 'save-status',
+        })
     }
 
     private recordFailure(error: unknown): void {
         this.failure = asError(error)
-        this.publish({ requiresSave: true, origin: 'save-status' })
+        this.publish({
+            requiresSave: true,
+            origin: 'save-status',
+        })
         this.ports.reportError(this.failure)
     }
 }

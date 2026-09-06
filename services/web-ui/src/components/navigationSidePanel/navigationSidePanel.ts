@@ -84,12 +84,16 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         ` as HTMLInputElement
         this.importFileInput.addEventListener('change', this.handleImportFileSelected)
 
-        this.headerEl.appendChild(this.createNewWorkspaceButton())
-        this.footerEl.append(
-            html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement,
-            this.avatarEl,
+        this.headerEl.appendChild(
+            this.createNewWorkspaceButton(),
         )
-        this.panelEl.append(this.headerEl, this.listEl, this.footerEl, this.importFileInput)
+        this.footerEl.append(html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement, this.avatarEl)
+        this.panelEl.append(
+            this.headerEl,
+            this.listEl,
+            this.footerEl,
+            this.importFileInput,
+        )
         this.paneEl.appendChild(this.panelEl)
 
         this.sidePanel = createSidePanel({
@@ -119,7 +123,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             getMaxWidth: this.getMaxWidth,
             measureWidth: () => this.panelEl.getBoundingClientRect().width || NAVIGATION_SIDE_PANEL_SETTINGS.defaultDimensions.width,
             loadState: () => ({ width: navigationSidePanelStore.getData().width }),
-            persistState: (state) => navigationSidePanelStore.setValues({ width: state.width ?? null }),
+            persistState: state => navigationSidePanelStore.setValues({ width: state.width ?? null }),
             onResize: this.reflectWidth,
             onResizeEnd: this.reflectWidth,
             onOpenChange: this.handleOpenChange,
@@ -127,20 +131,32 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
         this.reflectStyleSettings()
 
-        if (this.sidePanel.toggleElement) this.paneEl.appendChild(this.sidePanel.toggleElement)
-        if (this.sidePanel.overlayElement) this.paneEl.appendChild(this.sidePanel.overlayElement)
+        if (this.sidePanel.toggleElement)
+            this.paneEl.appendChild(this.sidePanel.toggleElement)
+
+        if (this.sidePanel.overlayElement)
+            this.paneEl.appendChild(this.sidePanel.overlayElement)
+
         this.paneEl.appendChild(this.sidePanel.backdropElement)
         this.panelEl.appendChild(this.sidePanel.element)
 
-        this.reflectWidth(this.sidePanel.getWidth())
+        this.reflectWidth(
+            this.sidePanel.getWidth(),
+        )
         this.reflectInitialOpenState()
 
         this.renderWorkspaceList()
-        this.unsubscribers.push(workspacesStore.subscribe(this.renderWorkspaceList))
-        this.unsubscribers.push(routerStore.subscribe(this.renderWorkspaceList))
+        this.unsubscribers.push(
+            workspacesStore.subscribe(this.renderWorkspaceList),
+        )
+        this.unsubscribers.push(
+            routerStore.subscribe(this.renderWorkspaceList),
+        )
 
         this.renderAvatar()
-        this.unsubscribers.push(authStore.subscribe(this.renderAvatar))
+        this.unsubscribers.push(
+            authStore.subscribe(this.renderAvatar),
+        )
     }
 
     private createNewWorkspaceButton(): HTMLButtonElement {
@@ -155,16 +171,25 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         ` as HTMLButtonElement
     }
 
-    private openUserInfoPanel = (): void => {
-        userInfoPanelStore.set(true)
-    }
+    private openUserInfoPanel = (): void => void userInfoPanelStore.set(true)
 
     private renderAvatar = (): void => {
-        const user = authStore.getData('user') as { picture?: string; given_name?: string; name?: string } | null
+        const user = authStore.getData('user') as {
+            picture?: string
+            given_name?: string
+            name?: string
+        } | null
         this.avatarEl.replaceChildren()
+
         if (user?.picture) {
             this.avatarEl.appendChild(
-                html`<img src=${user.picture} alt=${user.given_name || 'User'} referrerpolicy="no-referrer" />` as HTMLImageElement,
+                html`
+                    <img
+                        src=${user.picture}
+                        alt=${user.given_name || 'User'}
+                        referrerpolicy="no-referrer"
+                    />
+                ` as HTMLImageElement,
             )
         } else {
             const initial = (user?.given_name || user?.name || 'User').charAt(0).toUpperCase()
@@ -174,10 +199,8 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
     private getMaxWidth = (): number => {
         const paneWidth = this.paneEl.getBoundingClientRect().width || window.innerWidth
-        return Math.max(
-            NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth,
-            paneWidth - NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.maxPaneMargin,
-        )
+
+        return Math.max(NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth, paneWidth - NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.maxPaneMargin)
     }
 
     private reflectWidth = (width: number): void => {
@@ -197,6 +220,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private reflectInitialOpenState(): void {
         if (navigationSidePanelStore.getData().isOpen) {
             this.sidePanel.mountOpen(this.panelEl)
+
             return
         }
 
@@ -211,11 +235,10 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     }
 
     private runSlide = async (open: boolean): Promise<void> => {
-        if (open) {
+        if (open)
             await this.sidePanel.playOpen(this.panelEl)
-        } else {
+        else
             await this.sidePanel.playClose()
-        }
     }
 
     private toggleVisibility = (): void => {
@@ -230,16 +253,24 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         const workspaces = workspacesStore.getData()
         const currentWorkspaceId = routerStore.getData('currentRoute')?.routeParams?.workspaceId
 
-        for (const dropdown of this.workspaceDropdowns.values()) dropdown.destroy()
+        for (const dropdown of this.workspaceDropdowns.values())
+            dropdown.destroy()
+
         this.workspaceDropdowns.clear()
 
         this.listEl.replaceChildren()
+
         for (const workspace of workspaces) {
-            this.listEl.appendChild(this.renderWorkspaceRow(workspace, currentWorkspaceId))
+            this.listEl.appendChild(
+                this.renderWorkspaceRow(workspace, currentWorkspaceId),
+            )
         }
     }
 
-    private renderWorkspaceRow(workspace: WorkspaceMeta, currentWorkspaceId: string | undefined): HTMLElement {
+    private renderWorkspaceRow(
+        workspace: WorkspaceMeta,
+        currentWorkspaceId: string | undefined,
+    ): HTMLElement {
         const isActive = currentWorkspaceId === workspace.workspaceId
 
         const menuAnchor = html`<div className="navigation-side-panel-row-menu"></div>` as HTMLDivElement
@@ -258,17 +289,21 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             renderIconForSelectedValue: false,
             renderIconForOptions: false,
             mountToBody: true,
-            onSelect: (option) => {
-                if (option.title === 'Import') this.onWorkspaceImportHandler(workspace.workspaceId)
-                else if (option.title === 'Export') void this.onWorkspaceExportHandler(workspace.workspaceId)
-                else if (option.title === 'Delete') void this.onWorkspaceDeleteHandler(workspace.workspaceId)
+            onSelect: option => {
+                if (option.title === 'Import')
+                    this.onWorkspaceImportHandler(workspace.workspaceId)
+                else if (option.title === 'Export')
+                    void this.onWorkspaceExportHandler(workspace.workspaceId)
+                else if (option.title === 'Delete')
+                    void this.onWorkspaceDeleteHandler(workspace.workspaceId)
             },
         })
         this.workspaceDropdowns.set(workspace.workspaceId, dropdown)
         menuAnchor.appendChild(dropdown.dom)
-        menuAnchor.addEventListener('click', (event) => event.stopPropagation())
+        menuAnchor.addEventListener('click', event => event.stopPropagation())
 
         const tagsEl = html`<div className="navigation-side-panel-row-tags"></div>` as HTMLDivElement
+
         if (workspace.tags?.length) {
             for (const tag of workspace.tags) {
                 tagsEl.appendChild(html`<span className="navigation-side-panel-row-tag">${tag}</span>` as HTMLElement)
@@ -288,18 +323,26 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         ` as HTMLButtonElement
 
         const rowTop = row.querySelector<HTMLDivElement>('.navigation-side-panel-row-top')
-        if (!rowTop) return row
+
+        if (!rowTop)
+            return row
+
         rowTop.appendChild(menuAnchor)
-        if (workspace.tags?.length) row.appendChild(tagsEl)
+
+        if (workspace.tags?.length)
+            row.appendChild(tagsEl)
 
         return row
     }
 
     private handleWorkspaceClick(workspaceId: string): void {
-        routerService.navigateTo('/workspace/:workspaceId', {
-            params: { workspaceId },
-            shouldFetchData: true,
-        })
+        routerService.navigateTo(
+            '/workspace/:workspaceId',
+            {
+                params: { workspaceId },
+                shouldFetchData: true,
+            },
+        )
         workspaceStore.beginWorkspaceLoad(workspaceId)
     }
 
@@ -315,7 +358,9 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
     private onWorkspaceExportHandler = async (workspaceId: string): Promise<void> => {
         const token = await AuthService.getTokenSilently()
-        if (!token) return
+
+        if (!token)
+            return
 
         const apiUrl = import.meta.env.VITE_API_URL
         window.open(`${apiUrl}/api/workspaces/${workspaceId}/export?token=${token}`, '_blank')
@@ -330,32 +375,44 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private handleImportFileSelected = async (event: Event): Promise<void> => {
         const input = event.target as HTMLInputElement
         const file = input.files?.[0]
-        if (!file || !this.importTargetWorkspaceId) return
+
+        if (
+            !file
+            || !this.importTargetWorkspaceId
+        )
+            return
 
         const workspaceId = this.importTargetWorkspaceId
         this.importTargetWorkspaceId = null
 
         const token = await AuthService.getTokenSilently()
-        if (!token) return
+
+        if (!token)
+            return
 
         const apiUrl = import.meta.env.VITE_API_URL
         const formData = new FormData()
         formData.append('file', file)
 
         try {
-            const response = await fetch(`${apiUrl}/api/workspaces/${workspaceId}/import`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-                body: formData,
-            })
+            const response = await fetch(
+                `${apiUrl}/api/workspaces/${workspaceId}/import`,
+                {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                },
+            )
 
             if (!response.ok) {
                 const error = await response.json()
                 console.error('Workspace import failed:', error)
+
                 return
             }
 
             const currentWorkspaceId = routerStore.getData('currentRoute')?.routeParams?.workspaceId
+
             if (currentWorkspaceId === workspaceId) {
                 const workspaceService = new WorkspaceService()
                 await workspaceService.getWorkspace({ workspaceId })
@@ -368,14 +425,17 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
     destroy = (): void => {
         this.importFileInput.removeEventListener('change', this.handleImportFileSelected)
-        for (const unsubscribe of this.unsubscribers) unsubscribe()
-        for (const dropdown of this.workspaceDropdowns.values()) dropdown.destroy()
+
+        for (const unsubscribe of this.unsubscribers)
+            unsubscribe()
+
+        for (const dropdown of this.workspaceDropdowns.values())
+            dropdown.destroy()
+
         this.workspaceDropdowns.clear()
         this.sidePanel.destroy()
         this.panelEl.remove()
     }
 }
 
-export function createNavigationSidePanel(config: NavigationSidePanelConfig): NavigationSidePanelInstance {
-    return new NavigationSidePanel(config)
-}
+export const createNavigationSidePanel = (config: NavigationSidePanelConfig): NavigationSidePanelInstance => new NavigationSidePanel(config)

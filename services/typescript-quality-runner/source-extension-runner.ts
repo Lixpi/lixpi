@@ -115,9 +115,10 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
         }
     }
 
-    for (const inputPath of inputPaths) await visit(
-        resolve(inputPath),
-    )
+    for (const inputPath of inputPaths)
+        await visit(
+            resolve(inputPath),
+        )
 
     return {
         importers: importers.sort(),
@@ -202,8 +203,9 @@ const getModuleSpecifierNodes = (
                 continue
 
             if (Array.isArray(value)) {
-                for (const child of value) if (isAstNode(child))
-                    visit(child)
+                for (const child of value)
+                    if (isAstNode(child))
+                        visit(child)
             } else if (isAstNode(value))
                 visit(value)
         }
@@ -220,7 +222,8 @@ const applySourceReplacements = (
 ): string => {
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start))
+        output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
 
     return output
 }
@@ -286,7 +289,8 @@ const {
 } = await collectSourceFiles(inputPaths)
 
 if (prohibitedFiles.length > 0) {
-    for (const file of prohibitedFiles) err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
+    for (const file of prohibitedFiles)
+        err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
 
     process.exit(1)
 }
@@ -295,7 +299,8 @@ if (mode === 'check') {
     if (javaScriptFiles.length === 0)
         process.exit(0)
 
-    for (const file of javaScriptFiles) err(`${file}: JavaScript source files are prohibited; use a .ts extension`)
+    for (const file of javaScriptFiles)
+        err(`${file}: JavaScript source files are prohibited; use a .ts extension`)
 
     process.exit(1)
 }
@@ -315,7 +320,8 @@ for (const target of renamedFiles.values()) {
     }
 }
 
-for (const [source, target] of renamedFiles) await rename(source, target)
+for (const [source, target] of renamedFiles)
+    await rename(source, target)
 
 let updatedImporterCount = 0
 

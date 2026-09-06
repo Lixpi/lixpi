@@ -21,6 +21,7 @@ import {
     aiResponseMessageNodeSpec,
     aiResponseMessageNodeView,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
+import { withoutLayout } from '@lixpi/test-utils'
 
 function loadScss(): string {
     return readFileSync(
@@ -45,14 +46,14 @@ function loadAnimationsScss(): string {
 
 function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string, label = 'source excerpt'): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${label} should not contain:\n${snippet}`,
     ).toBe(false)
 }

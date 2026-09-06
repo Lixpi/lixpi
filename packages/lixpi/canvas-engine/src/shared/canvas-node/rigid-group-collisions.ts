@@ -16,11 +16,11 @@ import {
     type RigidCanvasNodeGroup,
 } from './types.ts'
 
-export function resolveRigidCanvasNodeGroupCollisions<Node extends CanvasPositionedNode>(
+export const resolveRigidCanvasNodeGroupCollisions = <Node extends CanvasPositionedNode>(
     nodes: Node[],
     groups: RigidCanvasNodeGroup[],
     options: CollisionOptions = {},
-): RigidCanvasNodeCollisionResult<Node> {
+): RigidCanvasNodeCollisionResult<Node> => {
     if (groups.length <= 1) {
         return {
             nodes,
@@ -31,16 +31,19 @@ export function resolveRigidCanvasNodeGroupCollisions<Node extends CanvasPositio
         }
     }
 
-    const boxes: CollisionBox[] = groups.map(group => ({
-        id: group.id,
-        x: group.rect.x,
-        y: group.rect.y,
-        width: group.rect.width,
-        height: group.rect.height,
-        ...(group.margin == null ? {} : { margin: group.margin }),
-        ...(group.overlapThreshold == null ? {} : { overlapThreshold: group.overlapThreshold }),
-    }))
+    const boxes: CollisionBox[] = groups.map(
+        group => ({
+            id: group.id,
+            x: group.rect.x,
+            y: group.rect.y,
+            width: group.rect.width,
+            height: group.rect.height,
+            ...(group.margin == null ? {} : { margin: group.margin }),
+            ...(group.overlapThreshold == null ? {} : { overlapThreshold: group.overlapThreshold }),
+        }),
+    )
     const collisionResult = resolveCollisions(boxes, options)
+
     if (!collisionResult.hasChanges) {
         return {
             nodes,
@@ -53,17 +56,32 @@ export function resolveRigidCanvasNodeGroupCollisions<Node extends CanvasPositio
 
     const deltaByNodeId = new Map<string, CanvasEnginePoint>()
     let movedGroupCount = 0
+
     for (const group of groups) {
         const moved = collisionResult.nodes.get(group.id)
-        if (!moved) continue
+
+        if (!moved)
+            continue
 
         const dx = moved.x - group.rect.x
         const dy = moved.y - group.rect.y
-        if (dx === 0 && dy === 0) continue
+
+        if (
+            dx === 0
+            && dy === 0
+        )
+            continue
 
         movedGroupCount++
+
         for (const nodeId of group.nodeIds) {
-            deltaByNodeId.set(nodeId, { x: dx, y: dy })
+            deltaByNodeId.set(
+                nodeId,
+                {
+                    x: dx,
+                    y: dy,
+                },
+            )
         }
     }
 
@@ -78,9 +96,12 @@ export function resolveRigidCanvasNodeGroupCollisions<Node extends CanvasPositio
     }
 
     return {
-        nodes: nodes.map((node) => {
+        nodes: nodes.map(node => {
             const delta = deltaByNodeId.get(node.nodeId)
-            if (!delta) return node
+
+            if (!delta)
+                return node
+
             return {
                 ...node,
                 position: {

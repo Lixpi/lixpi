@@ -27,9 +27,7 @@ export type ActionTimelineModuleDependencies = ActionTimelineBackendDependencies
     capabilityStorage: ActionTimelineCapabilityStorage & InstructionSkillStorage
 }
 
-export function createActionTimelineModule(
-    dependencies: ActionTimelineModuleDependencies,
-): CapabilityModuleDefinition {
+export const createActionTimelineModule = (dependencies: ActionTimelineModuleDependencies): CapabilityModuleDefinition => {
     return {
         moduleId: ACTION_TIMELINE_MODULE_ID,
         name: 'Action Timeline',
@@ -78,13 +76,19 @@ export function createActionTimelineModule(
                 summary: 'Produces structured timeline data with one selected reasoning model and no media generation.',
             },
         },
-        entry: { capabilityId: ACTION_TIMELINE_TOOL_ID, kind: 'tool' },
+        entry: {
+            capabilityId: ACTION_TIMELINE_TOOL_ID,
+            kind: 'tool',
+        },
         tools: [createActionTimelineToolPackage(dependencies)],
         skills: createActionTimelineSkillPackages(dependencies.capabilityStorage),
         routing: {
             resolve: prompt => {
-                if (!isActionTimelineCreationIntent(prompt)) return undefined
+                if (!isActionTimelineCreationIntent(prompt))
+                    return undefined
+
                 const timing = parseActionTimelineTiming(prompt)
+
                 return {
                     capabilityId: ACTION_TIMELINE_TOOL_ID,
                     kind: 'tool',
@@ -99,9 +103,7 @@ export function createActionTimelineModule(
     }
 }
 
-function createActionTimelineToolPackage(
-    dependencies: ActionTimelineModuleDependencies,
-): CapabilityToolPackageInstaller {
+function createActionTimelineToolPackage(dependencies: ActionTimelineModuleDependencies): CapabilityToolPackageInstaller {
     return {
         kind: 'tool',
         capabilityId: ACTION_TIMELINE_TOOL_ID,

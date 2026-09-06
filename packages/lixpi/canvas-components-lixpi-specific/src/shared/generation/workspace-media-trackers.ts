@@ -11,7 +11,10 @@ import {
 } from './workspace-generation-placements.ts'
 
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
-type TrackerScope = { workspaceId: string; sceneKey: string }
+type TrackerScope = {
+    workspaceId: string
+    sceneKey: string
+}
 
 export type PendingGeneratedMediaTracker = {
     nodeId: string
@@ -21,14 +24,30 @@ export type PendingGeneratedMediaTracker = {
     hasReceivedFrame: boolean
 }
 
-export function pruneGeneratedMediaTrackerAliases(trackerMap: Map<string, PendingGeneratedMediaTracker>, runKey: string, nodeId: string): void {
+export const pruneGeneratedMediaTrackerAliases = (
+    trackerMap: Map<string, PendingGeneratedMediaTracker>,
+    runKey: string,
+    nodeId: string,
+): void => {
     for (const [existingRunKey, existingTracker] of trackerMap) {
-        if (existingRunKey !== runKey && existingTracker.nodeId === nodeId) trackerMap.delete(existingRunKey)
+        if (
+            existingRunKey !== runKey
+            && existingTracker.nodeId === nodeId
+        )
+            trackerMap.delete(existingRunKey)
     }
 }
 
-export function setGeneratedMediaTracker(trackerMap: Map<string, PendingGeneratedMediaTracker>, runKey: string, tracker: PendingGeneratedMediaTracker): void {
-    pruneGeneratedMediaTrackerAliases(trackerMap, runKey, tracker.nodeId)
+export const setGeneratedMediaTracker = (
+    trackerMap: Map<string, PendingGeneratedMediaTracker>,
+    runKey: string,
+    tracker: PendingGeneratedMediaTracker,
+): void => {
+    pruneGeneratedMediaTrackerAliases(
+        trackerMap,
+        runKey,
+        tracker.nodeId,
+    )
     trackerMap.set(runKey, tracker)
 }
 
@@ -40,7 +59,10 @@ export type WorkspaceMediaTrackersPorts = {
     hasReadyOriginal: (assetId: string) => boolean
     forgetDecodedFrame: (nodeId: string) => void
     clearCompletion: (nodeId: string) => void
-    debug: (event: string, details: Record<string, unknown>) => void
+    debug: (
+        event: string,
+        details: Record<string, unknown>,
+    ) => void
 }
 
 export class WorkspaceMediaTrackers {
@@ -66,6 +88,7 @@ export class WorkspaceMediaTrackers {
 
     private isCurrent(scope: TrackerScope): boolean {
         const current = this.closed ? null : this.ports.readScope()
+
         return current?.workspaceId === scope.workspaceId && current.sceneKey === scope.sceneKey
     }
 
@@ -75,37 +98,82 @@ export class WorkspaceMediaTrackers {
         threadId: string,
         generationRun?: MediaGenerationRunMeta,
     ): node is ImageCanvasNode | VideoCanvasNode {
-        if ((node.type !== 'image' && node.type !== 'video') || node.type !== mediaType) return false
+        if (
+            (node.type !== 'image' && node.type !== 'video')
+            || node.type !== mediaType
+        )
+            return false
+
         const generatedBy = node.generatedBy
-        if (!generationRun || !generatedBy || generatedBy.conversationAssetId !== threadId) return false
+
+        if (
+            !generationRun
+            || !generatedBy
+            || generatedBy.conversationAssetId !== threadId
+        )
+            return false
+
         const lineageAssignment = this.ports.placements.getApiMediaRunLineageAssignment(generationRun)
         const mediaRunId = generationRun.mediaRunId ?? lineageAssignment?.mediaRunId
-        if (mediaRunId && generatedBy.mediaRunId === mediaRunId) return true
 
-        if (generatedBy.generationRequestId !== generationRun.generationRequestId) return false
-        if (generationRun.mediaType && generationRun.mediaType !== mediaType) return false
-        if (lineageAssignment?.mediaType && lineageAssignment.mediaType !== mediaType) return false
-        if (generationRun.reasoningRunId && generatedBy.reasoningRunId && generatedBy.reasoningRunId !== generationRun.reasoningRunId) return false
+        if (
+            mediaRunId
+            && generatedBy.mediaRunId === mediaRunId
+        )
+            return true
+
+        if (generatedBy.generationRequestId !== generationRun.generationRequestId)
+            return false
+
+        if (
+            generationRun.mediaType
+            && generationRun.mediaType !== mediaType
+        )
+            return false
+
+        if (
+            lineageAssignment?.mediaType
+            && lineageAssignment.mediaType !== mediaType
+        )
+            return false
+
+        if (
+            generationRun.reasoningRunId
+            && generatedBy.reasoningRunId
+            && generatedBy.reasoningRunId !== generationRun.reasoningRunId
+        )
+            return false
 
         const mediaModelId = generationRun.mediaModelId ?? lineageAssignment?.mediaModelId
-        if (mediaModelId) return generatedBy.mediaModelId === mediaModelId
+
+        if (mediaModelId)
+            return generatedBy.mediaModelId === mediaModelId
 
         const branchLineNodeId = generationRun.lineageAssignment?.branchLineNodeId ?? lineageAssignment?.branchLineNodeId
-        if (branchLineNodeId) return generatedBy.branchLineNodeId === branchLineNodeId
+
+        if (branchLineNodeId)
+            return generatedBy.branchLineNodeId === branchLineNodeId
 
         return Boolean(generatedBy.reasoningRunId && generatedBy.reasoningRunId === generationRun.reasoningRunId)
     }
 
     getGeneratedMediaNodeRunKey(node: GeneratedMediaNode): string {
         const generatedBy = node.generatedBy
-        if (!generatedBy) return ''
-        if (generatedBy.mediaRunId) return `mediaRun:${generatedBy.conversationAssetId}:${generatedBy.mediaRunId}`
+
+        if (!generatedBy)
+            return ''
+
+        if (generatedBy.mediaRunId)
+            return `mediaRun:${generatedBy.conversationAssetId}:${generatedBy.mediaRunId}`
+
         let modelId = generatedBy.mediaModelId
+
         if (!modelId) {
             modelId = node.type === 'image'
                 ? node.generatedBy?.aiModel
                 : node.generatedBy?.videoModel
         }
+
         return [
             generatedBy.conversationAssetId,
             generatedBy.generationRequestId ?? '',
@@ -117,10 +185,20 @@ export class WorkspaceMediaTrackers {
         ].join(':')
     }
 
-    generatedMediaNodesRepresentSameRun(a: GeneratedMediaNode, b: GeneratedMediaNode): boolean {
-        if (a.type !== b.type || !a.generatedBy || !b.generatedBy) return false
+    generatedMediaNodesRepresentSameRun(
+        a: GeneratedMediaNode,
+        b: GeneratedMediaNode,
+    ): boolean {
+        if (
+            a.type !== b.type
+            || !a.generatedBy
+            || !b.generatedBy
+        )
+            return false
+
         const aRunKey = this.getGeneratedMediaNodeRunKey(a)
         const bRunKey = this.getGeneratedMediaNodeRunKey(b)
+
         return Boolean(aRunKey && aRunKey === bRunKey)
     }
 
@@ -128,20 +206,42 @@ export class WorkspaceMediaTrackers {
         state: CanvasState,
         node: GeneratedMediaNode,
         tracker: PendingGeneratedMediaTracker,
-    ): { nodeId: string; assetId: string; reason: 'node-id' | 'asset-id' | 'generated-by-run' } | undefined {
+    ): {
+        nodeId: string
+        assetId: string
+        reason: 'node-id' | 'asset-id' | 'generated-by-run'
+    } | undefined {
         for (const candidate of state.nodes) {
-            if (candidate.type !== node.type) continue
+            if (candidate.type !== node.type)
+                continue
+
             const mediaNode = candidate as GeneratedMediaNode
-            if (mediaNode.nodeId === node.nodeId) {
-                return { nodeId: mediaNode.nodeId, assetId: mediaNode.assetId, reason: 'node-id' }
-            }
-            if (tracker.assetId && mediaNode.assetId === tracker.assetId) {
-                return { nodeId: mediaNode.nodeId, assetId: mediaNode.assetId, reason: 'asset-id' }
-            }
-            if (this.generatedMediaNodesRepresentSameRun(node, mediaNode)) {
-                return { nodeId: mediaNode.nodeId, assetId: mediaNode.assetId, reason: 'generated-by-run' }
-            }
+
+            if (mediaNode.nodeId === node.nodeId)
+                return {
+                    nodeId: mediaNode.nodeId,
+                    assetId: mediaNode.assetId,
+                    reason: 'node-id',
+                }
+
+            if (
+                tracker.assetId
+                && mediaNode.assetId === tracker.assetId
+            )
+                return {
+                    nodeId: mediaNode.nodeId,
+                    assetId: mediaNode.assetId,
+                    reason: 'asset-id',
+                }
+
+            if (this.generatedMediaNodesRepresentSameRun(node, mediaNode))
+                return {
+                    nodeId: mediaNode.nodeId,
+                    assetId: mediaNode.assetId,
+                    reason: 'generated-by-run',
+                }
         }
+
         return undefined
     }
 
@@ -152,47 +252,73 @@ export class WorkspaceMediaTrackers {
         mediaType: 'image' | 'video',
     ): CanvasState {
         if (!this.currentCanvasState) {
-            this.ports.debug('skip-preserve-active-tracker-no-current-state', {
-                runKey,
-                mediaType,
-                nodeId: tracker.nodeId,
-                sourceNodeId: tracker.sourceNodeId ?? '',
-                assetId: tracker.assetId,
-                hasReceivedFrame: tracker.hasReceivedFrame,
-            })
-            return state
-        }
-        const currentNode = this.currentCanvasState.nodes.find((node: CanvasNode): node is GeneratedMediaNode => node.nodeId === tracker.nodeId && node.type === mediaType)
-        if (!currentNode) {
-            this.ports.debug('skip-preserve-active-tracker-missing-node', {
-                runKey,
-                mediaType,
-                nodeId: tracker.nodeId,
-                sourceNodeId: tracker.sourceNodeId ?? '',
-                assetId: tracker.assetId,
-                hasReceivedFrame: tracker.hasReceivedFrame,
-                incomingNodeCount: state.nodes.length,
-            })
-            return state
-        }
-        const incomingRunMatch = this.findGeneratedMediaRunInState(state, currentNode, tracker)
-        if (incomingRunMatch) {
-            this.ports.debug('skip-preserve-active-tracker-incoming-has-run', {
-                runKey,
-                mediaType,
-                nodeId: tracker.nodeId,
-                sourceNodeId: tracker.sourceNodeId ?? '',
-                assetId: tracker.assetId,
-                hasReceivedFrame: tracker.hasReceivedFrame,
-                incomingNodeId: incomingRunMatch.nodeId,
-                incomingAssetId: incomingRunMatch.assetId,
-                reason: incomingRunMatch.reason,
-            })
+            this.ports.debug(
+                'skip-preserve-active-tracker-no-current-state',
+                {
+                    runKey,
+                    mediaType,
+                    nodeId: tracker.nodeId,
+                    sourceNodeId: tracker.sourceNodeId ?? '',
+                    assetId: tracker.assetId,
+                    hasReceivedFrame: tracker.hasReceivedFrame,
+                },
+            )
+
             return state
         }
 
-        const stateNodeIds = new Set(state.nodes.map((node: CanvasNode) => node.nodeId))
-        const stateEdgeIds = new Set(state.edges.map((edge: WorkspaceEdge) => edge.edgeId))
+        const currentNode = this.currentCanvasState.nodes.find(
+            (node: CanvasNode): node is GeneratedMediaNode => node.nodeId === tracker.nodeId && node.type === mediaType,
+        )
+
+        if (!currentNode) {
+            this.ports.debug(
+                'skip-preserve-active-tracker-missing-node',
+                {
+                    runKey,
+                    mediaType,
+                    nodeId: tracker.nodeId,
+                    sourceNodeId: tracker.sourceNodeId ?? '',
+                    assetId: tracker.assetId,
+                    hasReceivedFrame: tracker.hasReceivedFrame,
+                    incomingNodeCount: state.nodes.length,
+                },
+            )
+
+            return state
+        }
+
+        const incomingRunMatch = this.findGeneratedMediaRunInState(
+            state,
+            currentNode,
+            tracker,
+        )
+
+        if (incomingRunMatch) {
+            this.ports.debug(
+                'skip-preserve-active-tracker-incoming-has-run',
+                {
+                    runKey,
+                    mediaType,
+                    nodeId: tracker.nodeId,
+                    sourceNodeId: tracker.sourceNodeId ?? '',
+                    assetId: tracker.assetId,
+                    hasReceivedFrame: tracker.hasReceivedFrame,
+                    incomingNodeId: incomingRunMatch.nodeId,
+                    incomingAssetId: incomingRunMatch.assetId,
+                    reason: incomingRunMatch.reason,
+                },
+            )
+
+            return state
+        }
+
+        const stateNodeIds = new Set(
+            state.nodes.map((node: CanvasNode) => node.nodeId),
+        )
+        const stateEdgeIds = new Set(
+            state.edges.map((edge: WorkspaceEdge) => edge.edgeId),
+        )
         const sourceNode = tracker.sourceNodeId
             ? this.currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === tracker.sourceNodeId)
             : undefined
@@ -200,25 +326,37 @@ export class WorkspaceMediaTrackers {
             ? state.nodes
             : [
                 ...state.nodes,
-                ...(sourceNode && !stateNodeIds.has(sourceNode.nodeId) ? [sourceNode] : []),
+                ...(sourceNode
+                    && !stateNodeIds.has(sourceNode.nodeId)
+                    ? [sourceNode]
+                    : []),
                 currentNode,
             ]
-        const preservedEdges = this.currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-            (edge.targetNodeId === currentNode.nodeId || edge.sourceNodeId === currentNode.nodeId)
-            && !stateEdgeIds.has(edge.edgeId)
+        const preservedEdges = this.currentCanvasState.edges.filter(
+            (edge: WorkspaceEdge) =>
+                (edge.targetNodeId === currentNode.nodeId || edge.sourceNodeId === currentNode.nodeId)
+                && !stateEdgeIds.has(edge.edgeId),
         )
-        if (preservedEdges.length === 0 && nodes === state.nodes) return state
 
-        this.ports.debug('preserve-active-tracker-render', {
-            runKey,
-            mediaType,
-            nodeId: tracker.nodeId,
-            sourceNodeId: tracker.sourceNodeId ?? '',
-            assetId: tracker.assetId,
-            hasReceivedFrame: tracker.hasReceivedFrame,
-            incomingNodeCount: state.nodes.length,
-            preservedEdgeCount: preservedEdges.length,
-        })
+        if (
+            preservedEdges.length === 0
+            && nodes === state.nodes
+        )
+            return state
+
+        this.ports.debug(
+            'preserve-active-tracker-render',
+            {
+                runKey,
+                mediaType,
+                nodeId: tracker.nodeId,
+                sourceNodeId: tracker.sourceNodeId ?? '',
+                assetId: tracker.assetId,
+                hasReceivedFrame: tracker.hasReceivedFrame,
+                incomingNodeCount: state.nodes.length,
+                preservedEdgeCount: preservedEdges.length,
+            },
+        )
 
         return {
             ...state,
@@ -228,15 +366,32 @@ export class WorkspaceMediaTrackers {
     }
 
     preserveActiveGeneratedMediaTrackersInState(state: CanvasState | null): CanvasState | null {
-        if (!state || !this.currentCanvasState) return state
+        if (
+            !state
+            || !this.currentCanvasState
+        )
+            return state
 
         let nextState = state
+
         for (const [runKey, tracker] of this.images.entries()) {
-            nextState = this.preserveActiveGeneratedMediaTrackerInState(nextState, runKey, tracker, 'image')
+            nextState = this.preserveActiveGeneratedMediaTrackerInState(
+                nextState,
+                runKey,
+                tracker,
+                'image',
+            )
         }
+
         for (const [runKey, tracker] of this.videos.entries()) {
-            nextState = this.preserveActiveGeneratedMediaTrackerInState(nextState, runKey, tracker, 'video')
+            nextState = this.preserveActiveGeneratedMediaTrackerInState(
+                nextState,
+                runKey,
+                tracker,
+                'video',
+            )
         }
+
         return nextState
     }
 
@@ -245,7 +400,14 @@ export class WorkspaceMediaTrackers {
         threadId: string,
         generationRun?: MediaGenerationRunMeta,
     ): ImageCanvasNode | VideoCanvasNode | undefined {
-        return this.currentCanvasState?.nodes.find((node: CanvasNode) => this.generatedMediaNodeMatchesGenerationRun(node, mediaType, threadId, generationRun))
+        return this.currentCanvasState?.nodes.find(
+            (node: CanvasNode) => this.generatedMediaNodeMatchesGenerationRun(
+                node,
+                mediaType,
+                threadId,
+                generationRun,
+            ),
+        )
     }
 
     getGeneratedMediaSourceNodeId(nodeId: string): string | undefined {
@@ -276,8 +438,19 @@ export class WorkspaceMediaTrackers {
             hasReceivedFrame: this.hasGeneratedImageFrame(imageNode),
             ...(sourceNodeId ? { sourceNodeId } : {}),
         }
-        if (!scope || !this.isCurrent(scope)) return tracker
-        setGeneratedMediaTracker(this.images, this.ports.placements.getGeneratedMediaRunKey(threadId, generationRun), tracker)
+
+        if (
+            !scope
+            || !this.isCurrent(scope)
+        )
+            return tracker
+
+        setGeneratedMediaTracker(
+            this.images,
+            this.ports.placements.getGeneratedMediaRunKey(threadId, generationRun),
+            tracker,
+        )
+
         return tracker
     }
 
@@ -296,29 +469,57 @@ export class WorkspaceMediaTrackers {
             hasReceivedFrame: this.hasGeneratedVideoFrame(videoNode),
             ...(sourceNodeId ? { sourceNodeId } : {}),
         }
-        if (!scope || !this.isCurrent(scope)) return tracker
-        setGeneratedMediaTracker(this.videos, this.ports.placements.getGeneratedMediaRunKey(threadId, generationRun), tracker)
+
+        if (
+            !scope
+            || !this.isCurrent(scope)
+        )
+            return tracker
+
+        setGeneratedMediaTracker(
+            this.videos,
+            this.ports.placements.getGeneratedMediaRunKey(threadId, generationRun),
+            tracker,
+        )
+
         return tracker
     }
 
     pruneApiCanvasRemovedGeneratedMediaTrackers(nodeIds: Iterable<string>): void {
         const currentScope = this.ports.readScope()
         const scope = currentScope ? { ...currentScope } : null
-        if (!scope || !this.isCurrent(scope)) return
+
+        if (
+            !scope
+            || !this.isCurrent(scope)
+        )
+            return
+
         const nodeIdSet = new Set(nodeIds)
-        if (nodeIdSet.size === 0) return
+
+        if (nodeIdSet.size === 0)
+            return
 
         for (const [runKey, tracker] of [...this.images.entries()]) {
-            if (nodeIdSet.has(tracker.nodeId)) this.images.delete(runKey)
+            if (nodeIdSet.has(tracker.nodeId))
+                this.images.delete(runKey)
         }
+
         for (const [runKey, tracker] of [...this.videos.entries()]) {
-            if (nodeIdSet.has(tracker.nodeId)) this.videos.delete(runKey)
+            if (nodeIdSet.has(tracker.nodeId))
+                this.videos.delete(runKey)
         }
+
         for (const nodeId of nodeIdSet) {
             this.ports.forgetDecodedFrame(nodeId)
-            if (!this.isCurrent(scope)) return
+
+            if (!this.isCurrent(scope))
+                return
+
             this.ports.clearCompletion(nodeId)
-            if (!this.isCurrent(scope)) return
+
+            if (!this.isCurrent(scope))
+                return
         }
     }
 }

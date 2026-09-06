@@ -67,16 +67,23 @@ export type CheckMetering = {
 // resolveCheckMetering derives every part of one graph run's admission check
 // together, so the unit count can never disagree with the modality it is counted
 // in. Returned as one value for exactly that reason.
-export function resolveCheckMetering(state: ProviderState): CheckMetering {
+export const resolveCheckMetering = (state: ProviderState): CheckMetering => {
     const modality = resolveCheckModality(state)
+
     // An image-modality check only ever names an image-generation model, and one
     // such run produces one image. Multi-model fanout and the Character Creator
     // draft plus fidelity passes each dispatch their own transient run, so each is
     // admitted separately rather than multiplied in here.
-    if (modality === 'image') {
-        return { modality, estimatedUnits: 1, basis: { measuringUnit: 'images' } }
-    }
-    if (modality === 'video') return estimateVideoMetering(state)
+    if (modality === 'image')
+        return {
+            modality,
+            estimatedUnits: 1,
+            basis: { measuringUnit: 'images' },
+        }
+
+    if (modality === 'video')
+        return estimateVideoMetering(state)
+
     return estimateReasoningMetering(state)
 }
 
@@ -88,8 +95,13 @@ export function resolveCheckMetering(state: ProviderState): CheckMetering {
 // modality, which has no tariff and is denied outright.
 function resolveCheckModality(state: ProviderState): Modality {
     const model = state.aiModelMetaInfo
-    if (hasGenerationModality(model, 'video_generation')) return 'video'
-    if (hasGenerationModality(model, 'image_generation')) return 'image'
+
+    if (hasGenerationModality(model, 'video_generation'))
+        return 'video'
+
+    if (hasGenerationModality(model, 'image_generation'))
+        return 'image'
+
     return 'tokens'
 }
 
@@ -109,6 +121,7 @@ function estimateReasoningMetering(state: ProviderState): CheckMetering {
     const promptTokensCharged = Math.ceil(promptTokensMeasured * POST_GATE_PROMPT_GROWTH_FACTOR)
     const completionCeiling = maxCompletionTokens
         ?? remainingContextWindow(contextWindow, promptTokensCharged)
+
     return {
         modality: 'tokens',
         estimatedUnits: promptTokensCharged + completionCeiling,
@@ -121,8 +134,8 @@ function estimateReasoningMetering(state: ProviderState): CheckMetering {
             completionCeilingFrom: maxCompletionTokens !== undefined
                 ? 'maxCompletionSize'
                 : contextWindow !== undefined
-                ? 'contextWindowRemainder'
-                : 'unknown',
+                    ? 'contextWindowRemainder'
+                    : 'unknown',
         },
     }
 }
@@ -137,11 +150,15 @@ function estimateVideoMetering(state: ProviderState): CheckMetering {
     // to describe the same model the backend is about to price.
     const model = state.aiModelMetaInfo
     const seconds = videoSecondsForModel(state, model)
+
     if (videoMeasuringUnit(model) === 'seconds') {
         return {
             modality: 'video',
             estimatedUnits: seconds,
-            basis: { measuringUnit: 'seconds', videoSeconds: seconds },
+            basis: {
+                measuringUnit: 'seconds',
+                videoSeconds: seconds,
+            },
         }
     }
 
@@ -158,6 +175,7 @@ function estimateVideoMetering(state: ProviderState): CheckMetering {
         outputSeconds: seconds,
         inputSeconds,
     })
+
     return {
         modality: 'video',
         estimatedUnits: estimate.tokens,
@@ -179,20 +197,32 @@ function estimateVideoMetering(state: ProviderState): CheckMetering {
 // so the longest option is a guaranteed ceiling. When the requested duration is
 // one the model actually offers, normalization keeps it and the bound is exact.
 // A model publishing no duration options receives the request verbatim.
-function videoSecondsForModel(state: ProviderState, model: AiModelMetaInfo): number {
+function videoSecondsForModel(
+    state: ProviderState,
+    model: AiModelMetaInfo,
+): number {
     const catalogSeconds = catalogDurationSeconds(model)
     const requestedSeconds = positiveNumber(state.videoDurationSeconds)
-    if (catalogSeconds.length === 0) return requestedSeconds ?? 0
-    if (requestedSeconds !== undefined && catalogSeconds.includes(requestedSeconds)) return requestedSeconds
+
+    if (catalogSeconds.length === 0)
+        return requestedSeconds ?? 0
+
+    if (
+        requestedSeconds !== undefined
+        && catalogSeconds.includes(requestedSeconds)
+    )
+        return requestedSeconds
+
     return Math.max(...catalogSeconds)
 }
 
 function catalogDurationSeconds(model: AiModelMetaInfo): number[] {
     const options: unknown = model.videoDurations
-    if (!Array.isArray(options)) return []
-    return options
-        .map((option: unknown) => positiveNumber(asRecord(option)?.value))
-        .filter((seconds): seconds is number => seconds !== undefined)
+
+    if (!Array.isArray(options))
+        return []
+
+    return options.map((option: unknown) => positiveNumber(asRecord(option)?.value)).filter((seconds): seconds is number => seconds !== undefined)
 }
 
 // The unit the catalog tariff meters this model's video in: 'seconds' for VEO,
@@ -200,7 +230,9 @@ function catalogDurationSeconds(model: AiModelMetaInfo): number[] {
 // it prices the confirm.
 function videoMeasuringUnit(model: AiModelMetaInfo): string {
     const video = asRecord(asRecord(model.pricing)?.video)
-    return typeof video?.measuringUnit === 'string' && video.measuringUnit.length > 0
+
+    return typeof video?.measuringUnit === 'string'
+        && video.measuringUnit.length > 0
         ? video.measuringUnit
         : 'seconds'
 }
@@ -212,22 +244,35 @@ function hasGenerationModality(
     modality: 'image_generation' | 'video_generation',
 ): boolean {
     const entries: unknown = model?.modalities
-    if (!Array.isArray(entries)) return false
-    return entries.some((entry: unknown) => (
-        (typeof entry === 'string' ? entry : asRecord(entry)?.modality) === modality
-    ))
+
+    if (!Array.isArray(entries))
+        return false
+
+    return entries.some(
+        (entry: unknown) => (
+            (typeof entry === 'string' ? entry : asRecord(entry)?.modality) === modality
+        ),
+    )
 }
 
-function remainingContextWindow(contextWindow: number | undefined, promptTokens: number): number {
+function remainingContextWindow(
+    contextWindow: number | undefined,
+    promptTokens: number,
+): number {
     const window = positiveInteger(contextWindow)
-    if (window === undefined) return 0
+
+    if (window === undefined)
+        return 0
+
     return Math.max(0, window - promptTokens)
 }
 
 // AiModelMetaInfo carries an index signature, so catalog fields arrive as
 // `unknown`. Zero and non-numeric values mean "not configured", not "no budget".
 function positiveInteger(value: unknown): number | undefined {
-    return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    return typeof value === 'number'
+        && Number.isSafeInteger(value)
+        && value > 0
         ? value
         : undefined
 }
@@ -235,13 +280,24 @@ function positiveInteger(value: unknown): number | undefined {
 // Durations are published as numeric strings ('8'), and a provider may
 // legitimately offer a fractional clip length, so these are parsed loosely.
 function positiveNumber(value: unknown): number | undefined {
-    if (typeof value !== 'number' && typeof value !== 'string') return undefined
+    if (
+        typeof value !== 'number'
+        && typeof value !== 'string'
+    )
+        return undefined
+
     const parsed = Number(value)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+
+    return Number.isFinite(parsed)
+        && parsed > 0
+        ? parsed
+        : undefined
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-    return value && typeof value === 'object' && !Array.isArray(value)
+    return value
+        && typeof value === 'object'
+        && !Array.isArray(value)
         ? value as Record<string, unknown>
         : undefined
 }

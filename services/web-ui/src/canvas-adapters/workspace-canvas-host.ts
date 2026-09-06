@@ -44,18 +44,21 @@ import { assetsStore } from '$src/stores/assetsStore.ts'
 import { assetDocumentsStore } from '$src/stores/assetDocumentsStore.ts'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 
-export function createWorkspaceCanvasHost(): WorkspaceCanvasHost {
+export const createWorkspaceCanvasHost = (): WorkspaceCanvasHost => {
     const assets = new AssetService()
     const apiBaseUrl = import.meta.env.VITE_API_URL || ''
 
     return {
         createId: () => crypto.randomUUID(),
-        openExternalUrl: url => {
-            window.open(url, '_blank', 'noopener,noreferrer')
-        },
+        openExternalUrl: url => void window.open(
+            url,
+            '_blank',
+            'noopener,noreferrer',
+        ),
         onOpenCapabilityLibrary: callback => {
-            const listener = (event: Event): void => callback((event as CustomEvent<{ workspaceId?: string }>).detail?.workspaceId)
+            const listener = (event: Event): void => void callback((event as CustomEvent<{ workspaceId?: string }>).detail?.workspaceId)
             window.addEventListener('lixpi:open-capability-library', listener)
+
             return () => window.removeEventListener('lixpi:open-capability-library', listener)
         },
         settings,
@@ -70,9 +73,35 @@ export function createWorkspaceCanvasHost(): WorkspaceCanvasHost {
             refresh: (assetId, workspaceId) => assets.refresh(assetId, workspaceId),
             loadWorkspaceAssets: workspaceId => assets.loadWorkspaceAssets(workspaceId),
             ensureAssetsLoaded: assetIds => assets.ensureAssetsLoaded(assetIds),
-            updateMetadata: (assetId, revision, patch) => assets.updateMetadata(assetId, revision, patch),
-            changeScope: (assetId, revision, scope, ownerId) => assets.changeScope(assetId, revision, scope, ownerId),
-            attestSubjectIdentity: (assetId, revision, classification) => assets.attestSubjectIdentity(assetId, revision, classification),
+            updateMetadata: (
+                assetId,
+                revision,
+                patch,
+            ) => assets.updateMetadata(
+                assetId,
+                revision,
+                patch,
+            ),
+            changeScope: (
+                assetId,
+                revision,
+                scope,
+                ownerId,
+            ) => assets.changeScope(
+                assetId,
+                revision,
+                scope,
+                ownerId,
+            ),
+            attestSubjectIdentity: (
+                assetId,
+                revision,
+                classification,
+            ) => assets.attestSubjectIdentity(
+                assetId,
+                revision,
+                classification,
+            ),
             reviewGeneratedOutput: request => assets.reviewGeneratedOutput(request),
             list: query => assets.list(query),
             resumeDocument: request => assets.resumeDocument(request),
@@ -94,7 +123,15 @@ export function createWorkspaceCanvasHost(): WorkspaceCanvasHost {
             organizationId: () => workspaceStore.getData('organizationId'),
             userId: () => userStore.getData('userId'),
             loadingStatus: () => workspaceStore.getMeta('loadingStatus'),
-            subscribe: changed => workspaceStore.subscribe(({ meta, data }) => changed({ loadingStatus: meta.loadingStatus, error: data.error })),
+            subscribe: changed => workspaceStore.subscribe(
+                ({
+                    meta,
+                    data,
+                }) => changed({
+                    loadingStatus: meta.loadingStatus,
+                    error: data.error,
+                }),
+            ),
             reload: loadWorkspaceRouteData,
         },
         models: {
@@ -102,7 +139,9 @@ export function createWorkspaceCanvasHost(): WorkspaceCanvasHost {
             subscribe: changed => aiModelsStore.subscribe(changed),
             modelIcon: getAiModelIcon,
             providerIcon: getAiProviderIcon,
-            createBadge: options => createMediaModelBadge(resolveMediaModelBadgeConfig(options)),
+            createBadge: options => createMediaModelBadge(
+                resolveMediaModelBadgeConfig(options),
+            ),
             styleBadge: applyMediaModelBadgeStyleProperties,
         },
         capabilities: {
@@ -119,9 +158,15 @@ export function createWorkspaceCanvasHost(): WorkspaceCanvasHost {
             fetch,
         }),
         contextEnvironment: createContextPreviewEnvironment,
-        extractText: content => extractContentFromProseMirror(typeof content === 'string' || content && typeof content === 'object' ? content : '').text,
+        extractText: content => extractContentFromProseMirror(typeof content === 'string'
+            || content && typeof content === 'object'
+            ? content
+            : '').text,
         traceDetail: createExecutionTraceTimelineDetailAdapter,
-        storage: { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) },
+        storage: {
+            getItem: key => localStorage.getItem(key),
+            setItem: (key, value) => localStorage.setItem(key, value),
+        },
         debugEnabled: () => {
             try {
                 return localStorage.getItem('lixpi.debug.workspaceCanvas') === '1'

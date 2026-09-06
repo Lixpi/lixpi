@@ -17,8 +17,9 @@ import {
 
 export const CAPABILITY_CHAT_PROGRESS_MOUNT_CLASS = 'ai-response-capability-progress'
 
-export function getLastCapabilityChatProgressMount(root: HTMLElement): HTMLElement | null {
+export const getLastCapabilityChatProgressMount = (root: HTMLElement): HTMLElement | null => {
     const mounts = root.querySelectorAll<HTMLElement>(`.${CAPABILITY_CHAT_PROGRESS_MOUNT_CLASS}`)
+
     return mounts.item(mounts.length - 1)
 }
 
@@ -27,22 +28,31 @@ export class CapabilityChatRunProgressController {
 
     constructor(private readonly previewRenderer?: PromptReferencePreviewRenderer) {}
 
-    applyEvent(view: EditorView, event: CapabilityRunEvent): void {
+    applyEvent(
+        view: EditorView,
+        event: CapabilityRunEvent,
+    ): void {
         let progress = this.progressByRunId.get(event.runId)
+
         if (!progress) {
             progress = createCapabilityRunProgress(undefined, this.previewRenderer)
             progress.element.dataset.capabilityRunId = event.runId
             this.progressByRunId.set(event.runId, progress)
         }
+
         progress.applyEvent(event)
         this.sync(view)
     }
 
     sync(view: EditorView): void {
         const mount = getLastCapabilityChatProgressMount(view.dom)
-        if (!mount) return
+
+        if (!mount)
+            return
+
         for (const progress of this.progressByRunId.values()) {
-            if (!progress.element.isConnected) mount.appendChild(progress.element)
+            if (!progress.element.isConnected)
+                mount.appendChild(progress.element)
         }
     }
 
@@ -51,7 +61,9 @@ export class CapabilityChatRunProgressController {
     }
 
     destroy(): void {
-        for (const progress of this.progressByRunId.values()) progress.destroy()
+        for (const progress of this.progressByRunId.values())
+            progress.destroy()
+
         this.progressByRunId.clear()
     }
 }

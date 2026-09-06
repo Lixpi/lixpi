@@ -22,8 +22,9 @@ const collectIdentifierNames = (
             continue
 
         if (Array.isArray(value)) {
-            for (const child of value) if (isAstNode(child))
-                collectIdentifierNames(child, names)
+            for (const child of value)
+                if (isAstNode(child))
+                    collectIdentifierNames(child, names)
         } else if (isAstNode(value))
             collectIdentifierNames(value, names)
     }
@@ -115,9 +116,7 @@ const noUnusedImports = defineRule({
                 )
                     return
 
-                pendingConsoleImportNames.add(
-                    debugLoggingMethods.get(node.callee.property.name).importedName,
-                )
+                pendingConsoleImportNames.add(debugLoggingMethods.get(node.callee.property.name).importedName)
             },
             'Program:exit'() {
                 const commentReferencedNames = getCommentReferencedIdentifierNames(sourceCode)
@@ -1049,9 +1048,10 @@ const getSeparatedVariableDeclarationText = (
                 && comment.loc.start.line === declaration.loc.end.line,
         )
 
-        for (const comment of leadingComments) declarationLines.push(
-            sourceCode.getText(comment),
-        )
+        for (const comment of leadingComments)
+            declarationLines.push(
+                sourceCode.getText(comment),
+            )
 
         const trailingText = trailingComments.length > 0
             ? ` ${trailingComments.map(comment => sourceCode.getText(comment)).join(' ')}`
@@ -1666,12 +1666,13 @@ const preferSeparatedStatements = defineRule({
             }
         }
         const checkSwitchCases = (node): void => {
-            for (let index = 1; index < node.cases.length; index++) reportSiblingGap(
-                node.cases[index - 1],
-                node.cases[index],
-                false,
-                'joinCases',
-            )
+            for (let index = 1; index < node.cases.length; index++)
+                reportSiblingGap(
+                    node.cases[index - 1],
+                    node.cases[index],
+                    false,
+                    'joinCases',
+                )
         }
 
         return {

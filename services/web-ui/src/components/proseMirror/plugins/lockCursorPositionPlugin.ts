@@ -19,6 +19,7 @@ const createPlugin = (): Plugin<boolean> =>
             handleDOMEvents: {
                 mousedown: (_view: EditorView, event: MouseEvent): boolean => {
                     event.preventDefault()
+
                     return true
                 },
             },

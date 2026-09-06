@@ -15,7 +15,7 @@ export const capabilityActionRegistry = new CapabilityActionRegistry()
 
 let defaultDispatcher: CapabilityDispatcher | undefined
 
-export function getCapabilityDispatcher(): CapabilityDispatcher {
+export const getCapabilityDispatcher = (): CapabilityDispatcher => {
     defaultDispatcher ??= new CapabilityDispatcher({
         store: new CapabilityModelResolverStore(),
         registry: capabilityActionRegistry,
@@ -34,7 +34,13 @@ export function getCapabilityDispatcher(): CapabilityDispatcher {
             }),
         createEventHandler: request => {
             const conversationAssetId = request.conversationAssetId
-            if (request.origin === 'panel' || !conversationAssetId) return undefined
+
+            if (
+                request.origin === 'panel'
+                || !conversationAssetId
+            )
+                return undefined
+
             return async event =>
                 await mirrorCapabilityRunEventToChat({
                     event,
@@ -44,5 +50,6 @@ export function getCapabilityDispatcher(): CapabilityDispatcher {
                 })
         },
     })
+
     return defaultDispatcher
 }

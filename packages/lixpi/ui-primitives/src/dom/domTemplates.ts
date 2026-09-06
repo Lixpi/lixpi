@@ -14,11 +14,16 @@ type ElementProps = {
 }
 
 class DOMTemplateBuilder {
-    private createElement = (tag: string, props?: ElementProps, ...children: any[]): HTMLElement => {
+    private createElement = (
+        tag: string,
+        props?: ElementProps,
+        ...children: any[]
+    ): HTMLElement => {
         const element = document.createElement(tag)
 
         if (!props) {
             this.appendChildren(element, children)
+
             return element
         }
 
@@ -28,46 +33,70 @@ class DOMTemplateBuilder {
         return element
     }
 
-    private applyProperties(element: HTMLElement, props: ElementProps): void {
+    private applyProperties(
+        element: HTMLElement,
+        props: ElementProps,
+    ): void {
         for (const [key, value] of Object.entries(props)) {
             switch (true) {
                 case key.startsWith('on') && typeof value === 'function':
-                    this.attachEventListener(element, key, value as EventHandler)
+                    this.attachEventListener(
+                        element,
+                        key,
+                        value as EventHandler,
+                    )
+
                     break
                 case key === 'innerHTML':
                     element.innerHTML = value as string
+
                     break
                 case key === 'className' || key === 'class':
                     element.className = value as string
+
                     break
                 case key === 'style' && typeof value === 'object':
                     Object.assign(element.style, value as StyleObject)
+
                     break
                 case key === 'data' && typeof value === 'object':
                     this.applyDataAttributes(element, value as DataObject)
+
                     break
                 default:
-                    element.setAttribute(key, String(value))
+                    element.setAttribute(
+                        key,
+                        String(value),
+                    )
             }
         }
     }
 
-    private attachEventListener(element: HTMLElement, eventKey: string, handler: EventHandler): void {
+    private attachEventListener(
+        element: HTMLElement,
+        eventKey: string,
+        handler: EventHandler,
+    ): void {
         const eventType = eventKey.slice(2).toLowerCase()
         element.addEventListener(eventType, handler)
     }
 
-    private applyDataAttributes(element: HTMLElement, dataObj: DataObject): void {
+    private applyDataAttributes(
+        element: HTMLElement,
+        dataObj: DataObject,
+    ): void {
         for (const [dataKey, dataValue] of Object.entries(dataObj)) {
             element.dataset[dataKey] = String(dataValue)
         }
     }
 
-    private appendChildren(element: HTMLElement, children: any[]): void {
+    private appendChildren(
+        element: HTMLElement,
+        children: any[],
+    ): void {
         for (const child of children.flat()) {
-            if (child != null) {
+            if (child != null)
                 element.append(child)
-            }
         }
     }
 
@@ -90,6 +119,7 @@ export const createEl = templateBuilder.getCreateElementFunction()
 //
 // Example:
 //   applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` })
-export function applyStyle(element: HTMLElement | SVGElement, styles: StyleObject): void {
-    Object.assign(element.style, styles)
-}
+export const applyStyle = (
+    element: HTMLElement | SVGElement,
+    styles: StyleObject,
+): void => void Object.assign(element.style, styles)

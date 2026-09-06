@@ -12,30 +12,56 @@ import {
     type ConnectorArrow,
 } from './connector-renderer.ts'
 
-function computeWorldAnchorPoint(
+const computeWorldAnchorPoint = (
     position: AnchorPosition,
     t: number,
     node: NodeConfig,
-): { x: number; y: number } {
+): {
+    x: number
+    y: number
+} => {
     const override = node.anchorOverrides?.[position]
-    if (override) return override
 
-    const { x, y, width, height } = node
+    if (override)
+        return override
+
+    const {
+        x,
+        y,
+        width,
+        height,
+    } = node
+
     switch (position) {
         case 'left':
-            return { x, y: y + height * t }
+            return {
+                x,
+                y: y + height * t,
+            }
         case 'right':
-            return { x: x + width, y: y + height * t }
+            return {
+                x: x + width,
+                y: y + height * t,
+            }
         case 'top':
-            return { x: x + width * t, y }
+            return {
+                x: x + width * t,
+                y,
+            }
         case 'bottom':
-            return { x: x + width * t, y: y + height }
+            return {
+                x: x + width * t,
+                y: y + height,
+            }
         default:
-            return { x: x + width / 2, y: y + height / 2 }
+            return {
+                x: x + width / 2,
+                y: y + height / 2,
+            }
     }
 }
 
-function anchorArrowAngle(position: AnchorPosition): number {
+const anchorArrowAngle = (position: AnchorPosition): number => {
     // Angle = direction the arrowhead tip points (into the node).
     // left anchor  → edge arrives from the left going rightward  → tip points RIGHT (0)
     // right anchor → edge arrives from the right going leftward  → tip points LEFT  (π)
@@ -61,16 +87,19 @@ export type ConnectorDatumStyle = {
     selectedColor: string
     strokeWidth: number
     markerSize: number
-    markerOffset: { source: number; target: number }
+    markerOffset: {
+        source: number
+        target: number
+    }
     worldMarkerSize: number
     markerBodyLengthFraction: number
 }
 
-export function computeConnectorDatum(
+export const computeConnectorDatum = (
     edgeConfig: EdgeConfig,
     worldNodeMap: Map<string, NodeConfig>,
     style: ConnectorDatumStyle,
-): ConnectorRenderDatum | null {
+): ConnectorRenderDatum | null => {
     const {
         selected: isSelected,
         color: defaultColor,
@@ -97,16 +126,37 @@ export function computeConnectorDatum(
 
     const sourceNode = worldNodeMap.get(source.nodeId)
     const targetNode = worldNodeMap.get(target.nodeId)
-    if (!sourceNode || !targetNode) return null
+
+    if (
+        !sourceNode
+        || !targetNode
+    )
+        return null
 
     const srcT = source.t ?? 0.5
     const tgtT = target.t ?? 0.5
 
-    const rawSrcAnchor = computeWorldAnchorPoint(source.position, srcT, sourceNode)
-    const rawTgtAnchor = computeWorldAnchorPoint(target.position, tgtT, targetNode)
+    const rawSrcAnchor = computeWorldAnchorPoint(
+        source.position,
+        srcT,
+        sourceNode,
+    )
+    const rawTgtAnchor = computeWorldAnchorPoint(
+        target.position,
+        tgtT,
+        targetNode,
+    )
 
-    let srcCoords = applyOffset(rawSrcAnchor.x, rawSrcAnchor.y, source.offset)
-    let tgtCoords = applyOffset(rawTgtAnchor.x, rawTgtAnchor.y, target.offset)
+    let srcCoords = applyOffset(
+        rawSrcAnchor.x,
+        rawSrcAnchor.y,
+        source.offset,
+    )
+    let tgtCoords = applyOffset(
+        rawTgtAnchor.x,
+        rawTgtAnchor.y,
+        target.offset,
+    )
 
     // markerOffset is the pure node↔connector gap and carries NO knowledge of the
     // arrowhead. The arrowhead occupies real length along the line, so when (and
@@ -116,36 +166,74 @@ export function computeConnectorDatum(
     // (for example, an undecorated endpoint) gets just the base gap, no phantom compensation.
     const arrowLengthWorld = scaledMarkerSizeWorld * markerBodyLengthFraction
     const endArrowComp = marker !== 'none' ? arrowLengthWorld : 0
-    const startArrowComp = (markerStart && markerStart !== 'none') ? arrowLengthWorld : 0
+    const startArrowComp = (
+        markerStart
+        && markerStart !== 'none'
+    )
+        ? arrowLengthWorld
+        : 0
     const srcOff = (markerOffset.source ?? 5) + startArrowComp
     const tgtOff = (markerOffset.target ?? 5) + endArrowComp
 
     switch (source.position) {
         case 'right':
-            srcCoords = { x: srcCoords.x + srcOff, y: srcCoords.y }
+            srcCoords = {
+                x: srcCoords.x + srcOff,
+                y: srcCoords.y,
+            }
+
             break
         case 'left':
-            srcCoords = { x: srcCoords.x - srcOff, y: srcCoords.y }
+            srcCoords = {
+                x: srcCoords.x - srcOff,
+                y: srcCoords.y,
+            }
+
             break
         case 'top':
-            srcCoords = { x: srcCoords.x, y: srcCoords.y - srcOff }
+            srcCoords = {
+                x: srcCoords.x,
+                y: srcCoords.y - srcOff,
+            }
+
             break
         case 'bottom':
-            srcCoords = { x: srcCoords.x, y: srcCoords.y + srcOff }
+            srcCoords = {
+                x: srcCoords.x,
+                y: srcCoords.y + srcOff,
+            }
+
             break
     }
+
     switch (target.position) {
         case 'right':
-            tgtCoords = { x: tgtCoords.x + tgtOff, y: tgtCoords.y }
+            tgtCoords = {
+                x: tgtCoords.x + tgtOff,
+                y: tgtCoords.y,
+            }
+
             break
         case 'left':
-            tgtCoords = { x: tgtCoords.x - tgtOff, y: tgtCoords.y }
+            tgtCoords = {
+                x: tgtCoords.x - tgtOff,
+                y: tgtCoords.y,
+            }
+
             break
         case 'top':
-            tgtCoords = { x: tgtCoords.x, y: tgtCoords.y - tgtOff }
+            tgtCoords = {
+                x: tgtCoords.x,
+                y: tgtCoords.y - tgtOff,
+            }
+
             break
         case 'bottom':
-            tgtCoords = { x: tgtCoords.x, y: tgtCoords.y + tgtOff }
+            tgtCoords = {
+                x: tgtCoords.x,
+                y: tgtCoords.y + tgtOff,
+            }
+
             break
     }
 
@@ -178,11 +266,22 @@ export function computeConnectorDatum(
     // raw node-edge anchors. The marker-offset gap is already built into those
     // coordinates, matching the SVG marker's refX/refY positioning.
     const arrowEnd: ConnectorArrow | null = marker !== 'none'
-        ? { x: tgtCoords.x, y: tgtCoords.y, angle: anchorArrowAngle(target.position), baseScreenSize: arrowSize }
+        ? {
+            x: tgtCoords.x,
+            y: tgtCoords.y,
+            angle: anchorArrowAngle(target.position),
+            baseScreenSize: arrowSize,
+        }
         : null
 
-    const arrowStart: ConnectorArrow | null = markerStart && markerStart !== 'none'
-        ? { x: srcCoords.x, y: srcCoords.y, angle: anchorArrowAngle(source.position), baseScreenSize: arrowSize }
+    const arrowStart: ConnectorArrow | null = markerStart
+        && markerStart !== 'none'
+        ? {
+            x: srcCoords.x,
+            y: srcCoords.y,
+            angle: anchorArrowAngle(source.position),
+            baseScreenSize: arrowSize,
+        }
         : null
 
     return {

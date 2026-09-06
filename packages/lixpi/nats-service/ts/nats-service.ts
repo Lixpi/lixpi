@@ -47,9 +47,27 @@ import {
     err,
 } from '@lixpi/debug-tools'
 
-export type NatsMiddleware<T = any> = (data: T, msg: Msg) => Promise<{ data: T; msg: Msg }> | { data: T; msg: Msg }
+export type NatsMiddleware<T = any> = (
+    data: T,
+    msg: Msg,
+) => Promise<{
+    data: T
+    msg: Msg
+}> | {
+    data: T
+    msg: Msg
+}
 
-export type ReplyMiddleware<T = any, R = any> = (data: T, msg: Msg) => Promise<{ data: T; msg: Msg }> | { data: T; msg: Msg }
+export type ReplyMiddleware<T = any, R = any> = (
+    data: T,
+    msg: Msg,
+) => Promise<{
+    data: T
+    msg: Msg
+}> | {
+    data: T
+    msg: Msg
+}
 
 export type NatsServiceConfig = {
     servers?: string[]
@@ -88,7 +106,10 @@ export type NatsSubjectSubscription<T = any> = {
         pub?: { allow: string[] }
         sub?: { allow: string[] }
     }
-    handler: (data: T, msg: Msg) => Promise<void> | void
+    handler: (
+        data: T,
+        msg: Msg,
+    ) => Promise<void> | void
 }
 
 export type RequestOptions = {
@@ -99,8 +120,14 @@ export type SubscriptionOptions = {
     queue?: string
 }
 
-export type MessageHandler = (data: any, msg: Msg) => void | Promise<void>
-export type ReplyHandler<T = any, R = any> = (data: T, msg: Msg) => Promise<R> | R
+export type MessageHandler = (
+    data: any,
+    msg: Msg,
+) => void | Promise<void>
+export type ReplyHandler<T = any, R = any> = (
+    data: T,
+    msg: Msg,
+) => Promise<R> | R
 
 export type JetStreamPublishOptions = {
     msgID?: string
@@ -118,53 +145,92 @@ export type JetStreamMessageDisposition = {
     nakDelayMs: number
 }
 
-const encode = (value: any, type: 'json' | 'buffer'): any => {
-    if (type === 'json') {
+const encode = (
+    value: any,
+    type: 'json' | 'buffer',
+): any => {
+    if (type === 'json')
         return JSON.stringify(value)
-    }
 
-    if (type === 'buffer') {
+    if (type === 'buffer')
         return Buffer.from(value)
-    }
 }
 
 type ReplyErrorPayload = { error: string } | string
 
 const getReplyErrorMessage = (error: unknown): string => {
-    if (error instanceof Error && error.message) return error.message
-    if (typeof error === 'string' && error) return error
-    if (error && typeof error === 'object' && 'error' in error) {
+    if (
+        error instanceof Error
+        && error.message
+    )
+        return error.message
+
+    if (
+        typeof error === 'string'
+        && error
+    )
+        return error
+
+    if (
+        error
+        && typeof error === 'object'
+        && 'error' in error
+    ) {
         const message = (error as { error?: unknown }).error
-        if (typeof message === 'string' && message) return message
+
+        if (
+            typeof message === 'string'
+            && message
+        )
+            return message
     }
 
     const message = String(error)
-    return message && message !== '[object Object]' ? message : 'UNKNOWN_NATS_REPLY_ERROR'
+
+    return message
+        && message !== '[object Object]'
+        ? message
+        : 'UNKNOWN_NATS_REPLY_ERROR'
 }
 
-const getReplyErrorPayload = (error: unknown, type: 'json' | 'buffer'): ReplyErrorPayload => {
+const getReplyErrorPayload = (
+    error: unknown,
+    type: 'json' | 'buffer',
+): ReplyErrorPayload => {
     const message = getReplyErrorMessage(error)
+
     return type === 'json' ? { error: message } : message
 }
 
-const decode = (value: any, type: 'json' | 'buffer'): any => {
-    if (type === 'json') {
-        return JSON.parse(value.string())
-    }
+const decode = (
+    value: any,
+    type: 'json' | 'buffer',
+): any => {
+    if (type === 'json')
+        return JSON.parse(
+            value.string(),
+        )
 
-    if (type === 'buffer') {
+    if (type === 'buffer')
         return value.string()
-    }
 }
 
 // Generate a self-issued JWT signed with NKey (Ed25519).
 // This is optional and only used by services that require self-issued JWT authentication.
-export function generateSelfIssuedJWT(nkeySeed: string, userId: string, expiryHours: number = 1): string {
+export const generateSelfIssuedJWT = (
+    nkeySeed: string,
+    userId: string,
+    expiryHours: number = 1,
+): string => {
     // Create NKey pair from seed
-    const kp = fromSeed(Buffer.from(nkeySeed))
+    const kp = fromSeed(
+        Buffer.from(nkeySeed),
+    )
 
     // Get public key for issuer field
-    const publicKey = Buffer.from(kp.getPublicKey()).toString('utf-8')
+    const publicKey = Buffer.from(
+        kp.getPublicKey(),
+    ).toString('utf-8')
 
     // Create JWT claims
     const now = Math.floor(Date.now() / 1000)
@@ -184,6 +250,7 @@ export function generateSelfIssuedJWT(nkeySeed: string, userId: string, expiryHo
     // Encode header and claims as base64url
     const base64urlEncode = (data: object): string => {
         const jsonStr = JSON.stringify(data)
+
         return Buffer.from(jsonStr)
             .toString('base64')
             .replace(/\+/g, '-')
@@ -198,7 +265,9 @@ export function generateSelfIssuedJWT(nkeySeed: string, userId: string, expiryHo
     const message = `${headerB64}.${claimsB64}`
 
     // Sign with NKey
-    const signature = kp.sign(Buffer.from(message))
+    const signature = kp.sign(
+        Buffer.from(message),
+    )
     const signatureB64 = Buffer.from(signature)
         .toString('base64')
         .replace(/\+/g, '-')
@@ -279,16 +348,20 @@ export default class NatsService {
     // timer and the first-connect retry loop take their delay from here so the two
     // paths cannot drift apart.
     private nextBackoffDelay(delay?: number): number {
-        const backoff = delay ?? Math.min(500 * (2 ** this.reconnectAttempts), 16000)
+        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, 16000)
         this.reconnectAttempts++
 
         return backoff
     }
 
     private scheduleReconnect(delay?: number) {
-        if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+        if (this.reconnectTimer)
+            clearTimeout(this.reconnectTimer)
 
-        this.reconnectTimer = setTimeout(() => this.connect(this.connectTimeout), this.nextBackoffDelay(delay))
+        this.reconnectTimer = setTimeout(
+            () => this.connect(this.connectTimeout),
+            this.nextBackoffDelay(delay),
+        )
     }
 
     private async waitBeforeRetry(): Promise<void> {
@@ -297,7 +370,12 @@ export default class NatsService {
     }
 
     private monitorStatus(): void {
-        if (!this.nc || this.isMonitoring) return
+        if (
+            !this.nc
+            || this.isMonitoring
+        )
+            return
+
         this.isMonitoring = true
         // Bind the loop to the connection it was started for. connect() installs a
         // fresh `this.nc` on every reconnect, so reading it inside the loop would
@@ -309,19 +387,23 @@ export default class NatsService {
                     switch (status.type) {
                         case 'disconnect':
                             err('NATS -> disconnected:', status)
+
                             break
                         case 'reconnecting':
                             warn('NATS -> reconnecting:', status)
+
                             break
                         case 'reconnect':
                             info('NATS -> reconnected:', status)
+
                             // Check if subscriptions need to be initialized after reconnect
-                            if (!this.subscriptionsInitialized) {
+                            if (!this.subscriptionsInitialized)
                                 await this.initSubscriptions()
-                            }
+
                             break
                         case 'error':
                             err('NATS -> connection error:', status)
+
                             // The client keeps retrying internally (maxReconnectAttempts: -1),
                             // but with the credentials captured at connect time. If the server
                             // rejected our token (expired or signing key rotated), refresh it so
@@ -330,15 +412,17 @@ export default class NatsService {
                                 await this.handleAuthError((status as any).error ?? status)
                                 await this.refreshToken()
                             }
+
                             break
                         case 'close':
                             warn('NATS -> connection closed:', status)
                             // Reset the initialized flag on close so we can reconnect properly
                             this.subscriptionsInitialized = false
+
                             // Reconnect unless we intentionally closed the connection.
-                            if (!this.intentionalClose) {
+                            if (!this.intentionalClose)
                                 this.scheduleReconnect()
-                            }
+
                             break
                     }
                 }
@@ -351,6 +435,7 @@ export default class NatsService {
                 // into a process abort.
                 err('NATS -> status monitor failed', error)
                 this.subscriptionsInitialized = false
+
                 if (!this.intentionalClose)
                     this.scheduleReconnect()
             } finally {
@@ -364,11 +449,17 @@ export default class NatsService {
     }
 
     private async initSubscriptions(): Promise<void> {
-        if (!this.nc || this.subscriptionsInitialized) return
+        if (
+            !this.nc
+            || this.subscriptionsInitialized
+        )
+            return
 
         const subs = this.config.subscriptions || []
+
         if (subs.length === 0) {
             this.subscriptionsInitialized = true
+
             return
         }
 
@@ -377,6 +468,7 @@ export default class NatsService {
                 const subscriptionType = listener.type ?? 'subscribe'
 
                 let subscription: Subscription
+
                 if (subscriptionType === 'reply') {
                     subscription = this.reply(
                         listener.subject,
@@ -397,7 +489,9 @@ export default class NatsService {
                     infoStr([
                         c.green('NATS -> '),
                         c.grey.italic('register:'),
-                        c.white.italic(subscriptionType.padEnd(10, ' ')),
+                        c.white.italic(
+                            subscriptionType.padEnd(10, ' '),
+                        ),
                         c.grey(': '),
                         c.green(listener.subject),
                         listener.queue ? `${c.white(' with queue:')} ${c.green(listener.queue)}` : '',
@@ -415,43 +509,78 @@ export default class NatsService {
         data: T,
         msg: Msg,
         handlers: Array<NatsMiddleware<T> | ReplyMiddleware<T>>,
-    ): Promise<{ data: T; msg: Msg }> {
-        let currentData = { data, msg }
-        for (const middlewareFunc of handlers) {
-            currentData = await Promise.resolve(middlewareFunc(currentData.data, currentData.msg))
+    ): Promise<{
+        data: T
+        msg: Msg
+    }> {
+        let currentData = {
+            data,
+            msg,
         }
+
+        for (const middlewareFunc of handlers) {
+            currentData = await Promise.resolve(
+                middlewareFunc(currentData.data, currentData.msg),
+            )
+        }
+
         return currentData
     }
 
     async unsubscribeAll(): Promise<void> {
-        if (!this.nc || this.nc.isClosed()) return
+        if (
+            !this.nc
+            || this.nc.isClosed()
+        )
+            return
+
         const subs = (this.nc as any).protocol.subscriptions.subs
+
         for (const [, sub] of subs) {
             sub.unsubscribe()
         }
+
         log('All NATS subscriptions cancelled via built-in tracking.')
     }
 
     public getSubscriptions(subjectOrSubjects: string | string[] = []): Map<string, Subscription> {
-        const matchFilter = (value: string, filter: string) => {
+        const matchFilter = (
+            value: string,
+            filter: string,
+        ) => {
             const idx = filter.indexOf('*')
-            if (idx < 0) return value === filter
-            if (filter.indexOf('*', idx + 1) !== -1) return false // multiple '*' => fallback
+
+            if (idx < 0)
+                return value === filter
+
+            if (filter.indexOf('*', idx + 1) !== -1)
+                return false // multiple '*' => fallback
+
             const prefix = filter.slice(0, idx)
             const suffix = filter.slice(idx + 1)
+
             return value.startsWith(prefix) && value.endsWith(suffix)
         }
 
         const subjects = Array.isArray(subjectOrSubjects) ? subjectOrSubjects : [subjectOrSubjects]
         const result = new Map<string, Subscription>()
-        if (!this.nc || this.nc.isClosed()) return result
+
+        if (
+            !this.nc
+            || this.nc.isClosed()
+        )
+            return result
 
         const subs = (this.nc as any).protocol.subscriptions.subs
+
         for (const [, sub] of subs) {
-            if (!subjects.length || subjects.some(f => matchFilter(sub.subject, f))) {
+            if (
+                !subjects.length
+                || subjects.some(f => matchFilter(sub.subject, f))
+            )
                 result.set(sub.subject, sub)
-            }
         }
+
         return result
     }
 
@@ -499,7 +628,12 @@ export default class NatsService {
     // the process down, so a failed attempt schedules the next one and returns.
     // scheduleReconnect() and monitorStatus()'s close handler both land here.
     async connect(initialConnectTimeout = 2000): Promise<void> {
-        if (this.isConnecting || this.isConnected()) return
+        if (
+            this.isConnecting
+            || this.isConnected()
+        )
+            return
+
         this.isConnecting = true
         this.intentionalClose = false
         this.connectTimeout = initialConnectTimeout
@@ -536,12 +670,8 @@ export default class NatsService {
                 } catch (error) {
                     await this.reportConnectError(error)
 
-                    if (attempt === maxAttempts) {
-                        throw new Error(
-                            `NATS -> first connect failed after ${maxAttempts} attempts`,
-                            { cause: error },
-                        )
-                    }
+                    if (attempt === maxAttempts)
+                        throw new Error(`NATS -> first connect failed after ${maxAttempts} attempts`, { cause: error })
 
                     await this.waitBeforeRetry()
                 }
@@ -557,13 +687,14 @@ export default class NatsService {
         if (this.config.getToken) {
             try {
                 const fresh = await this.config.getToken()
-                if (fresh) this.currentToken = fresh
+
+                if (fresh)
+                    this.currentToken = fresh
             } catch (error) {
                 err('NATS -> failed to refresh auth token', error)
             }
-        } else if (this.config.token) {
+        } else if (this.config.token)
             this.currentToken = this.config.token
-        }
     }
 
     // Notify the caller that the server rejected our credentials so it can clear
@@ -581,11 +712,15 @@ export default class NatsService {
     private isAuthError(error: unknown): boolean {
         const name = (error as any)?.name
         const message = String((error as any)?.message ?? error ?? '')
+
         return name === 'AuthorizationError' || /authoriz|authentic/i.test(message)
     }
 
     private buildConnectionOptions(): ConnectionOptions {
-        const { servers = ['nats://localhost:4222'], name = 'default' } = this.config
+        const {
+            servers = ['nats://localhost:4222'],
+            name = 'default',
+        } = this.config
 
         const options: ConnectionOptions = {
             servers,
@@ -606,24 +741,50 @@ export default class NatsService {
         }
 
         this.applyAuthentication(options)
+
         return options
     }
 
     private applyAuthentication(options: ConnectionOptions): void {
-        const { nkeySeed, userId, token, user, pass } = this.config
+        const {
+            nkeySeed,
+            userId,
+            token,
+            user,
+            pass,
+        } = this.config
 
-        if (nkeySeed && userId) {
+        if (
+            nkeySeed
+            && userId
+        ) {
             // Priority 1: Self-issued JWT using NKey seed (Ed25519 signing)
             // Used by services that need cryptographically signed authentication
-            options.token = generateSelfIssuedJWT(nkeySeed, userId, 1)
-        } else if (this.config.getToken || token || this.currentToken) {
+            options.token = generateSelfIssuedJWT(
+                nkeySeed,
+                userId,
+                1,
+            )
+        } else if (
+            this.config.getToken
+            || token
+            || this.currentToken
+        ) {
             // Priority 2: Pre-generated / provider-supplied JWT token.
             // Use a token authenticator that reads `currentToken` on every (re)connect
             // so the client's internal reconnect loop always presents the freshest
             // token instead of the one captured when the connection was first opened.
-            if (!this.currentToken && token) this.currentToken = token
+            if (
+                !this.currentToken
+                && token
+            )
+                this.currentToken = token
+
             options.authenticator = tokenAuthenticator(() => this.currentToken ?? '')
-        } else if (user && pass) {
+        } else if (
+            user
+            && pass
+        ) {
             // Priority 3: Basic username/password authentication
             // Legacy auth method, less secure than JWT
             options.user = user
@@ -633,18 +794,30 @@ export default class NatsService {
     }
 
     async disconnect(): Promise<void> {
-        if (this.nc && !this.nc.isClosed()) {
+        if (
+            this.nc
+            && !this.nc.isClosed()
+        ) {
             this.intentionalClose = true
-            if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+
+            if (this.reconnectTimer)
+                clearTimeout(this.reconnectTimer)
+
             await this.nc.close()
             info('NATS disconnected gracefully.')
         }
     }
 
     async drain(): Promise<void> {
-        if (this.nc && !this.nc.isClosed()) {
+        if (
+            this.nc
+            && !this.nc.isClosed()
+        ) {
             this.intentionalClose = true
-            if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+
+            if (this.reconnectTimer)
+                clearTimeout(this.reconnectTimer)
+
             await this.nc.drain()
             info('NATS drained all subscriptions and disconnected.')
         }
@@ -659,23 +832,35 @@ export default class NatsService {
     }
 
     // Publish JSON data to a subject.
-    publish<T = any>(subject: string, data: T): void {
+    publish<T = any>(
+        subject: string,
+        data: T,
+    ): void {
         if (!this.nc) {
             err('NATS client is not connected.')
+
             return
         }
-        this.nc.publish(subject, JSON.stringify(data))
+
+        this.nc.publish(
+            subject,
+            JSON.stringify(data),
+        )
     }
 
     // Subscribe to a subject.
     subscribe<T = any>(
         subject: string,
-        handler: (data: T, msg: Msg) => void | Promise<void>,
+        handler: (
+            data: T,
+            msg: Msg,
+        ) => void | Promise<void>,
         options: SubscriptionOptions = {},
         payloadType: 'json' | 'buffer' = 'json',
     ): Subscription | null {
         if (!this.nc) {
             err('NATS client is not connected.')
+
             return null
         }
 
@@ -684,24 +869,35 @@ export default class NatsService {
 
         // Apply middleware
         // TODO it hould use both middleware types
-        const middlewareChain = this.config.replyMiddleware || this.config.middleware || []
+        const middlewareChain = this.config.replyMiddleware
+            || this.config.middleware
+            || []
         ;(async () => {
             for await (const msg of subscription) {
                 try {
                     let data = decode(msg, payloadType) as T
+
                     if (middlewareChain.length) {
-                        const result = await this.applyMiddleware(data, msg, middlewareChain)
+                        const result = await this.applyMiddleware(
+                            data,
+                            msg,
+                            middlewareChain,
+                        )
                         data = result.data
                     }
+
                     await handler(data, msg)
                 } catch (error) {
-                    err(`Error processing message on subject ${subject}`, {
-                        error,
-                        messageData: msg.data ? new TextDecoder().decode(msg.data) : 'no data',
-                        messageHeaders: msg.headers ? Object.fromEntries(msg.headers) : 'no headers',
-                        subject: msg.subject,
-                        payloadType,
-                    })
+                    err(
+                        `Error processing message on subject ${subject}`,
+                        {
+                            error,
+                            messageData: msg.data ? new TextDecoder().decode(msg.data) : 'no data',
+                            messageHeaders: msg.headers ? Object.fromEntries(msg.headers) : 'no headers',
+                            subject: msg.subject,
+                            payloadType,
+                        },
+                    )
                 }
             }
         })()
@@ -710,13 +906,26 @@ export default class NatsService {
     }
 
     // Request data
-    async request<T = any, R = any>(subject: string, data: T, timeout = 3000): Promise<R> {
+    async request<T = any, R = any>(
+        subject: string,
+        data: T,
+        timeout = 3000,
+    ): Promise<R> {
         if (!this.nc) {
             err('NATS client is not connected.')
+
             return null as unknown as R
         }
-        const response = await this.nc.request(subject, JSON.stringify(data), { timeout })
-        return JSON.parse(response.string()) as R
+
+        const response = await this.nc.request(
+            subject,
+            JSON.stringify(data),
+            { timeout },
+        )
+
+        return JSON.parse(
+            response.string(),
+        ) as R
     }
 
     // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -732,6 +941,7 @@ export default class NatsService {
     ): Subscription | null {
         if (!this.nc) {
             err('NATS client is not connected.')
+
             return null
         }
 
@@ -740,7 +950,9 @@ export default class NatsService {
 
         // Apply middleware
         // TODO it hould use both middleware types
-        const middlewareChain = this.config.replyMiddleware || this.config.middleware || []
+        const middlewareChain = this.config.replyMiddleware
+            || this.config.middleware
+            || []
         ;(async () => {
             for await (const msg of subscription) {
                 try {
@@ -748,16 +960,28 @@ export default class NatsService {
                     let data = decode(msg, payloadType)
 
                     if (middlewareChain.length) {
-                        const result = await this.applyMiddleware(data, msg, middlewareChain)
+                        const result = await this.applyMiddleware(
+                            data,
+                            msg,
+                            middlewareChain,
+                        )
                         data = result.data
                     }
+
                     const result = await handler(data, msg)
                     // msg.respond(JSON.stringify(result))
 
-                    msg.respond(encode(result, payloadType))
+                    msg.respond(
+                        encode(result, payloadType),
+                    )
                 } catch (error) {
                     err(`Reply error on subject ${subject}`, error)
-                    msg.respond(encode(getReplyErrorPayload(error, payloadType), payloadType))
+                    msg.respond(
+                        encode(
+                            getReplyErrorPayload(error, payloadType),
+                            payloadType,
+                        ),
+                    )
                 }
             }
         })()
@@ -770,29 +994,31 @@ export default class NatsService {
     // ===========================================
 
     private getJetStream(): JetStreamClient {
-        if (!this.nc) {
+        if (!this.nc)
             throw new Error('NATS client is not connected.')
-        }
-        if (!this.js) {
+
+        if (!this.js)
             this.js = jetstream(this.nc)
-        }
+
         return this.js
     }
 
     private getObjectStoreManager(): Objm {
-        if (!this.objm) {
-            this.objm = new Objm(this.getJetStream())
-        }
+        if (!this.objm)
+            this.objm = new Objm(
+                this.getJetStream(),
+            )
+
         return this.objm
     }
 
     private async getJetStreamManager(): Promise<JetStreamManager> {
-        if (!this.nc) {
+        if (!this.nc)
             throw new Error('NATS client is not connected.')
-        }
-        if (!this.jsm) {
+
+        if (!this.jsm)
             this.jsm = await jetstreamManager(this.nc)
-        }
+
         return this.jsm
     }
 
@@ -802,8 +1028,17 @@ export default class NatsService {
     // transient error is how data loss was previously masked).
     private isStreamNotFoundError(e: any): boolean {
         const msg = (e?.message ?? String(e ?? '')).toLowerCase()
-        const code = e?.code ?? e?.api_error?.err_code ?? e?.jsError?.code
-        if (msg.includes('no responders') || msg.includes('timeout') || msg.includes('503')) return false
+        const code = e?.code
+            ?? e?.api_error?.err_code
+            ?? e?.jsError?.code
+
+        if (
+            msg.includes('no responders')
+            || msg.includes('timeout')
+            || msg.includes('503')
+        )
+            return false
+
         return code === 404 || code === 10059 || msg.includes('stream not found') || msg.includes('no stream') || msg.includes('not found')
     }
 
@@ -814,21 +1049,34 @@ export default class NatsService {
         try {
             return await this.getObjectStoreManager().open(bucketName)
         } catch (e: any) {
-            if (this.isStreamNotFoundError(e)) return null
+            if (this.isStreamNotFoundError(e))
+                return null
+
             throw e
         }
     }
 
-    async createObjectStore(bucketName: string, options?: Partial<ObjectStoreOptions>): Promise<ObjectStore> {
+    async createObjectStore(
+        bucketName: string,
+        options?: Partial<ObjectStoreOptions>,
+    ): Promise<ObjectStore> {
         const objm = this.getObjectStoreManager()
         // Default to the configured replication factor; callers may override.
-        const os = await objm.create(bucketName, { replicas: this.streamReplicas, ...options })
-        info(`Object Store bucket created: ${bucketName} (replicas=${(options?.replicas ?? this.streamReplicas)})`)
+        const os = await objm.create(
+            bucketName,
+            {
+                replicas: this.streamReplicas,
+                ...options,
+            },
+        )
+        info(`Object Store bucket created: ${bucketName} (replicas=${options?.replicas ?? this.streamReplicas})`)
+
         return os
     }
 
     async getObjectStore(bucketName: string): Promise<ObjectStore> {
         const objm = this.getObjectStoreManager()
+
         return objm.open(bucketName)
     }
 
@@ -836,6 +1084,7 @@ export default class NatsService {
         const objm = this.getObjectStoreManager()
         const result = await objm.destroy(bucketName)
         info(`Object Store bucket deleted: ${bucketName}`)
+
         return result
     }
 
@@ -843,81 +1092,142 @@ export default class NatsService {
     async listStreamNames(): Promise<string[]> {
         const jsm = await this.getJetStreamManager()
         const names: string[] = []
+
         for await (const si of jsm.streams.list()) {
             names.push(si.config.name)
         }
+
         return names
     }
 
     // Scale a stream up to at least `replicas`. No-op when already at/above it.
     // Used to migrate legacy R1 stores to replicated storage. NATS adds the new
     // replicas and syncs them from the current leader (additive, non-destructive).
-    async ensureStreamReplicas(streamName: string, replicas: number = this.streamReplicas): Promise<{ name: string; from: number; to: number; changed: boolean }> {
+    async ensureStreamReplicas(
+        streamName: string,
+        replicas: number = this.streamReplicas,
+    ): Promise<{
+        name: string
+        from: number
+        to: number
+        changed: boolean
+    }> {
         const jsm = await this.getJetStreamManager()
         const si = await jsm.streams.info(streamName)
         const from = si.config.num_replicas ?? 1
-        if (from >= replicas) {
-            return { name: streamName, from, to: from, changed: false }
-        }
+
+        if (from >= replicas)
+            return {
+                name: streamName,
+                from,
+                to: from,
+                changed: false,
+            }
+
         await jsm.streams.update(streamName, { num_replicas: replicas })
-        return { name: streamName, from, to: replicas, changed: true }
+
+        return {
+            name: streamName,
+            from,
+            to: replicas,
+            changed: true,
+        }
     }
 
     async ensureJetStreamStream(config: Record<string, any>): Promise<any> {
         const jsm = await this.getJetStreamManager()
+
         try {
             const streamInfo = await jsm.streams.info(config.name)
             const existingSubjects = streamInfo.config.subjects ?? []
-            const nextSubjects = Array.from(new Set([...existingSubjects, ...(config.subjects ?? [])]))
+            const nextSubjects = Array.from(
+                new Set([
+                    ...existingSubjects,
+                    ...(config.subjects ?? []),
+                ]),
+            )
             const requestedConfig = {
                 ...config,
                 subjects: nextSubjects,
             }
             const requestedEntries = Object.entries(requestedConfig)
             const isCurrent = requestedEntries.every(([key, value]) => {
-                if (key === 'subjects') {
+                if (key === 'subjects')
                     return JSON.stringify(streamInfo.config.subjects ?? []) === JSON.stringify(value)
-                }
+
                 return streamInfo.config[key] === value
             })
-            if (isCurrent) return streamInfo
-            await jsm.streams.update(config.name, {
-                ...streamInfo.config,
-                ...requestedConfig,
-            })
+
+            if (isCurrent)
+                return streamInfo
+
+            await jsm.streams.update(
+                config.name,
+                {
+                    ...streamInfo.config,
+                    ...requestedConfig,
+                },
+            )
+
             return await jsm.streams.info(config.name)
         } catch (e: any) {
-            if (!this.isStreamNotFoundError(e)) throw e
+            if (!this.isStreamNotFoundError(e))
+                throw e
+
             return await jsm.streams.add(config)
         }
     }
 
-    async getJetStreamStreamInfo(streamName: string, options: Record<string, any> = {}): Promise<any> {
+    async getJetStreamStreamInfo(
+        streamName: string,
+        options: Record<string, any> = {},
+    ): Promise<any> {
         const jsm = await this.getJetStreamManager()
+
         return await (jsm.streams as any).info(streamName, options)
     }
 
-    async getJetStreamStreamInfoOrNull(streamName: string, options: Record<string, any> = {}): Promise<any | null> {
+    async getJetStreamStreamInfoOrNull(
+        streamName: string,
+        options: Record<string, any> = {},
+    ): Promise<any | null> {
         try {
             return await this.getJetStreamStreamInfo(streamName, options)
         } catch (e: any) {
-            if (this.isStreamNotFoundError(e)) return null
+            if (this.isStreamNotFoundError(e))
+                return null
+
             throw e
         }
     }
 
-    async getJetStreamMessage<T = any>(streamName: string, request: Record<string, any>): Promise<{ data: T; subject: string; seq: number } | null> {
+    async getJetStreamMessage<T = any>(
+        streamName: string,
+        request: Record<string, any>,
+    ): Promise<{
+        data: T
+        subject: string
+        seq: number
+    } | null> {
         const jsm = await this.getJetStreamManager()
+
         try {
             const message = await (jsm.streams as any).getMessage(streamName, request)
-            if (!message) return null
+
+            if (!message)
+                return null
+
             return {
-                data: JSON.parse(new TextDecoder().decode(message.data)) as T,
+                data: JSON.parse(
+                    new TextDecoder().decode(message.data),
+                ) as T,
                 subject: message.subject,
                 seq: message.seq,
             }
         } catch (e: any) {
-            if (this.isStreamNotFoundError(e)) return null
+            if (this.isStreamNotFoundError(e))
+                return null
+
             throw e
         }
     }
@@ -929,20 +1239,38 @@ export default class NatsService {
     ): Promise<any> {
         const payload = data instanceof Uint8Array
             ? data
-            : new TextEncoder().encode(JSON.stringify(data))
-        return await (this.getJetStream() as any).publish(subject, payload, options)
+            : new TextEncoder().encode(
+                JSON.stringify(data),
+            )
+
+        return await (this.getJetStream() as any).publish(
+            subject,
+            payload,
+            options,
+        )
     }
 
-    async ensureJetStreamConsumer(streamName: string, config: Record<string, any>): Promise<any> {
+    async ensureJetStreamConsumer(
+        streamName: string,
+        config: Record<string, any>,
+    ): Promise<any> {
         const jsm = await this.getJetStreamManager()
+
         try {
             const consumerInfo = await (jsm.consumers as any).info(streamName, config.durable_name)
-            return await (jsm.consumers as any).update(streamName, config.durable_name, {
-                ...consumerInfo.config,
-                ...config,
-            })
+
+            return await (jsm.consumers as any).update(
+                streamName,
+                config.durable_name,
+                {
+                    ...consumerInfo.config,
+                    ...config,
+                },
+            )
         } catch (e: any) {
-            if (!this.isStreamNotFoundError(e)) throw e
+            if (!this.isStreamNotFoundError(e))
+                throw e
+
             return await (jsm.consumers as any).add(streamName, config)
         }
     }
@@ -951,17 +1279,27 @@ export default class NatsService {
         streamName: string,
         consumerName: string,
         options: JetStreamConsumeOptions = {},
-    ): Promise<Array<{ data: T; subject: string; seq: number }>> {
+    ): Promise<Array<{
+        data: T
+        subject: string
+        seq: number
+    }>> {
         const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
         const messages = await consumer.consume({
             max_messages: options.maxMessages ?? 100,
             expires: options.expiresMs ?? 1000,
         })
-        const decodedMessages: Array<{ data: T; subject: string; seq: number }> = []
+        const decodedMessages: Array<{
+            data: T
+            subject: string
+            seq: number
+        }> = []
 
         for await (const message of messages) {
             decodedMessages.push({
-                data: JSON.parse(message.string()) as T,
+                data: JSON.parse(
+                    message.string(),
+                ) as T,
                 subject: message.subject,
                 seq: message.seq,
             })
@@ -974,7 +1312,11 @@ export default class NatsService {
     async processJetStreamMessages<T = any>(
         streamName: string,
         consumerName: string,
-        handler: (message: { data: T; subject: string; seq: number }) => Promise<void | JetStreamMessageDisposition>,
+        handler: (message: {
+            data: T
+            subject: string
+            seq: number
+        }) => Promise<void | JetStreamMessageDisposition>,
         options: JetStreamConsumeOptions = {},
     ): Promise<number> {
         const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
@@ -983,17 +1325,23 @@ export default class NatsService {
             expires: options.expiresMs ?? 1000,
         })
         let processed = 0
+
         for await (const message of messages) {
             try {
                 const disposition = await handler({
-                    data: JSON.parse(message.string()) as T,
+                    data: JSON.parse(
+                        message.string(),
+                    ) as T,
                     subject: message.subject,
                     seq: message.seq,
                 })
+
                 if (disposition) {
                     message.nak(disposition.nakDelayMs)
+
                     continue
                 }
+
                 message.ack()
                 processed += 1
             } catch (error) {
@@ -1003,6 +1351,7 @@ export default class NatsService {
                 err(`Error processing JetStream message on subject ${message.subject}`, error)
             }
         }
+
         return processed
     }
 
@@ -1012,12 +1361,15 @@ export default class NatsService {
         options: { throughSequence?: number } = {},
     ): Promise<void> {
         const jsm = await this.getJetStreamManager()
-        await jsm.streams.purge(streamName, {
-            filter: subject,
-            ...(typeof options.throughSequence === 'number'
-                ? { seq: options.throughSequence + 1 }
-                : {}),
-        })
+        await jsm.streams.purge(
+            streamName,
+            {
+                filter: subject,
+                ...(typeof options.throughSequence === 'number'
+                    ? { seq: options.throughSequence + 1 }
+                    : {}),
+            },
+        )
     }
 
     // Helper to convert Uint8Array to ReadableStream (required by @nats-io/obj)
@@ -1030,89 +1382,147 @@ export default class NatsService {
         })
     }
 
-    async putObject(bucketName: string, name: string, data: Uint8Array, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
+    async putObject(
+        bucketName: string,
+        name: string,
+        data: Uint8Array,
+        meta?: Partial<ObjectInfo>,
+    ): Promise<ObjectInfo> {
         const os = await this.getObjectStore(bucketName)
         const stream = this.readableStreamFrom(data)
-        const result = await os.put({ name, ...meta }, stream)
+        const result = await os.put(
+            {
+                name,
+                ...meta,
+            },
+            stream,
+        )
         info(`Object stored: ${bucketName}/${name} (${data.length} bytes)`)
+
         return result
     }
 
-    async putObjectFromReadable(bucketName: string, name: string, readable: ReadableStream<Uint8Array>, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
+    async putObjectFromReadable(
+        bucketName: string,
+        name: string,
+        readable: ReadableStream<Uint8Array>,
+        meta?: Partial<ObjectInfo>,
+    ): Promise<ObjectInfo> {
         const os = await this.getObjectStore(bucketName)
-        const result = await os.put({ name, ...meta }, readable)
+        const result = await os.put(
+            {
+                name,
+                ...meta,
+            },
+            readable,
+        )
         info(`Object stored from stream: ${bucketName}/${name}`)
+
         return result
     }
 
-    async getObject(bucketName: string, name: string): Promise<Uint8Array | null> {
+    async getObject(
+        bucketName: string,
+        name: string,
+    ): Promise<Uint8Array | null> {
         const os = await this.openObjectStoreOrNull(bucketName)
-        if (!os) {
+
+        if (!os)
             return null
-        }
+
         const result = await os.get(name)
-        if (!result) {
+
+        if (!result)
             return null
-        }
+
         // Read the data from the result
         const chunks: Uint8Array[] = []
         const reader = result.data.getReader()
+
         while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            if (value) chunks.push(value)
+            const {
+                done,
+                value,
+            } = await reader.read()
+
+            if (done)
+                break
+
+            if (value)
+                chunks.push(value)
         }
+
         // Combine chunks
         const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0)
         const combined = new Uint8Array(totalLength)
         let offset = 0
+
         for (const chunk of chunks) {
             combined.set(chunk, offset)
             offset += chunk.length
         }
+
         return combined
     }
 
-    async getObjectStream(bucketName: string, name: string): Promise<ReadableStream<Uint8Array> | null> {
+    async getObjectStream(
+        bucketName: string,
+        name: string,
+    ): Promise<ReadableStream<Uint8Array> | null> {
         const os = await this.openObjectStoreOrNull(bucketName)
-        if (!os) {
+
+        if (!os)
             return null
-        }
+
         const result = await os.get(name)
-        if (!result) {
+
+        if (!result)
             return null
-        }
+
         return result.data
     }
 
-    async getObjectInfo(bucketName: string, name: string): Promise<ObjectInfo | null> {
+    async getObjectInfo(
+        bucketName: string,
+        name: string,
+    ): Promise<ObjectInfo | null> {
         const os = await this.openObjectStoreOrNull(bucketName)
-        if (!os) {
+
+        if (!os)
             return null
-        }
+
         return os.info(name)
     }
 
-    async deleteObject(bucketName: string, name: string): Promise<void> {
+    async deleteObject(
+        bucketName: string,
+        name: string,
+    ): Promise<void> {
         const os = await this.openObjectStoreOrNull(bucketName)
+
         if (!os) {
             warn(`Object Store bucket missing on delete, nothing to do: ${bucketName}/${name}`)
+
             return
         }
+
         await os.delete(name)
         info(`Object deleted: ${bucketName}/${name}`)
     }
 
     async listObjects(bucketName: string): Promise<ObjectInfo[]> {
         const os = await this.openObjectStoreOrNull(bucketName)
-        if (!os) {
+
+        if (!os)
             return []
-        }
+
         const objects: ObjectInfo[] = []
         const list = await os.list()
+
         for await (const obj of list) {
             objects.push(obj)
         }
+
         return objects
     }
 }

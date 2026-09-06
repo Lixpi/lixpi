@@ -47,8 +47,17 @@ const collapseExpandIconSpec: AnimatedIconSpec<CollapseExpandIconState> = {
         {
             id: 'chevron-up',
             className: 'animated-svg-icon-chevron',
-            shape: { kind: 'icon', markup: chevronUpIcon, size: CHEVRON_SIZE, cx: CENTER, cy: CENTER },
-            origin: { x: CENTER, y: CENTER },
+            shape: {
+                kind: 'icon',
+                markup: chevronUpIcon,
+                size: CHEVRON_SIZE,
+                cx: CENTER,
+                cy: CENTER,
+            },
+            origin: {
+                x: CENTER,
+                y: CENTER,
+            },
             poses: {
                 collapsed: { y: -OUTWARD_SLOT_OFFSET },
                 expanded: { y: INWARD_SLOT_OFFSET },
@@ -60,21 +69,41 @@ const collapseExpandIconSpec: AnimatedIconSpec<CollapseExpandIconState> = {
         {
             id: 'chevron-down',
             className: 'animated-svg-icon-chevron',
-            shape: { kind: 'icon', markup: chevronDownIcon, size: CHEVRON_SIZE, cx: CENTER, cy: CENTER },
-            origin: { x: CENTER, y: CENTER },
+            shape: {
+                kind: 'icon',
+                markup: chevronDownIcon,
+                size: CHEVRON_SIZE,
+                cx: CENTER,
+                cy: CENTER,
+            },
+            origin: {
+                x: CENTER,
+                y: CENTER,
+            },
             poses: {
                 collapsed: { y: OUTWARD_SLOT_OFFSET },
                 expanded: { y: -INWARD_SLOT_OFFSET },
             },
             // Staggered against its twin so the two arrows are distinguishable
             // as they pass each other instead of overlapping into one glyph.
-            motion: { midScale: 0.92, delayMs: 70 },
+            motion: {
+                midScale: 0.92,
+                delayMs: 70,
+            },
         },
         {
             id: 'dot',
             className: 'animated-svg-icon-dot',
-            shape: { kind: 'circle', cx: CENTER, cy: CENTER, r: DOT_RADIUS },
-            origin: { x: CENTER, y: CENTER },
+            shape: {
+                kind: 'circle',
+                cx: CENTER,
+                cy: CENTER,
+                r: DOT_RADIUS,
+            },
+            origin: {
+                x: CENTER,
+                y: CENTER,
+            },
             poses: {
                 collapsed: {},
                 expanded: {},
@@ -93,8 +122,7 @@ export type CollapseExpandIconConfig = {
     className?: string
 }
 
-export function createCollapseExpandIcon(
-    config: CollapseExpandIconConfig,
-): AnimatedSvgIconInstance<CollapseExpandIconState> {
-    return createAnimatedSvgIcon(collapseExpandIconSpec, config)
-}
+export const createCollapseExpandIcon = (config: CollapseExpandIconConfig): AnimatedSvgIconInstance<CollapseExpandIconState> => createAnimatedSvgIcon(
+    collapseExpandIconSpec,
+    config,
+)

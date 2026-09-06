@@ -47,19 +47,21 @@ import { downloadImage } from '$src/utils/downloadImage.ts'
 
 export type SelectionContext = 'text' | 'image' | 'none'
 
-export function getSelectionContext(view: EditorView): SelectionContext {
+export const getSelectionContext = (view: EditorView): SelectionContext => {
     const { selection } = view.state
 
     if (selection instanceof NodeSelection) {
-        if (selection.node.type.name === 'image' || selection.node.type.name === 'aiGeneratedImage') {
+        if (
+            selection.node.type.name === 'image'
+            || selection.node.type.name === 'aiGeneratedImage'
+        )
             return 'image'
-        }
+
         return 'none'
     }
 
-    if (!selection.empty) {
+    if (!selection.empty)
         return 'text'
-    }
 
     return 'none'
 }
@@ -77,7 +79,10 @@ type BubbleMenuView = {
     forceHide: () => void
 }
 
-type Command = (state: EditorView['state'], dispatch?: EditorView['dispatch']) => boolean
+type Command = (
+    state: EditorView['state'],
+    dispatch?: EditorView['dispatch'],
+) => boolean
 
 // =============================================================================
 // TEXT WRAP ICONS
@@ -102,7 +107,11 @@ type DropdownItem = MenuItemBase & {
     type: 'dropdown'
     key: string
     defaultIcon: string
-    options: Array<{ icon: string; node: string; attrs?: Record<string, unknown> }>
+    options: Array<{
+        icon: string
+        node: string
+        attrs?: Record<string, unknown>
+    }>
 }
 
 type MarkItem = MenuItemBase & {
@@ -174,122 +183,326 @@ const MENU_ITEMS: MenuItem[] = [
         defaultIcon: paragraphIcon,
         context: ['text'],
         options: [
-            { icon: paragraphIcon, node: 'paragraph' },
-            { icon: heading1Icon, node: 'heading', attrs: { level: 1 } },
-            { icon: heading2Icon, node: 'heading', attrs: { level: 2 } },
-            { icon: heading3Icon, node: 'heading', attrs: { level: 3 } },
+            {
+                icon: paragraphIcon,
+                node: 'paragraph',
+            },
+            {
+                icon: heading1Icon,
+                node: 'heading',
+                attrs: { level: 1 },
+            },
+            {
+                icon: heading2Icon,
+                node: 'heading',
+                attrs: { level: 2 },
+            },
+            {
+                icon: heading3Icon,
+                node: 'heading',
+                attrs: { level: 3 },
+            },
         ],
     },
 
-    { type: 'separator', context: ['text'] },
+    {
+        type: 'separator',
+        context: ['text'],
+    },
 
     // Mark buttons (inline formatting)
-    { type: 'mark', key: 'bold', mark: 'strong', icon: boldIcon, title: 'Bold (Ctrl+B)', iconSize: 14, context: ['text'] },
-    { type: 'mark', key: 'italic', mark: 'em', icon: italicIcon, title: 'Italic (Ctrl+I)', iconSize: 13, context: ['text'] },
-    { type: 'mark', key: 'strikethrough', mark: 'strikethrough', icon: strikethroughIcon, title: 'Strikethrough', iconSize: 15, context: ['text'] },
-    { type: 'mark', key: 'link', mark: 'link', icon: linkIcon, title: 'Link', iconSize: 15, action: 'showLinkInput', context: ['text'] },
-    { type: 'mark', key: 'inlineCode', mark: 'code', icon: inlineCodeIcon, title: 'Inline Code', iconSize: 16, context: ['text'] },
+    {
+        type: 'mark',
+        key: 'bold',
+        mark: 'strong',
+        icon: boldIcon,
+        title: 'Bold (Ctrl+B)',
+        iconSize: 14,
+        context: ['text'],
+    },
+    {
+        type: 'mark',
+        key: 'italic',
+        mark: 'em',
+        icon: italicIcon,
+        title: 'Italic (Ctrl+I)',
+        iconSize: 13,
+        context: ['text'],
+    },
+    {
+        type: 'mark',
+        key: 'strikethrough',
+        mark: 'strikethrough',
+        icon: strikethroughIcon,
+        title: 'Strikethrough',
+        iconSize: 15,
+        context: ['text'],
+    },
+    {
+        type: 'mark',
+        key: 'link',
+        mark: 'link',
+        icon: linkIcon,
+        title: 'Link',
+        iconSize: 15,
+        action: 'showLinkInput',
+        context: ['text'],
+    },
+    {
+        type: 'mark',
+        key: 'inlineCode',
+        mark: 'code',
+        icon: inlineCodeIcon,
+        title: 'Inline Code',
+        iconSize: 16,
+        context: ['text'],
+    },
 
-    { type: 'separator', context: ['text'] },
+    {
+        type: 'separator',
+        context: ['text'],
+    },
 
     // Block buttons
-    { type: 'block', key: 'codeBlock', node: 'code_block', icon: codeBlockIcon, title: 'Code Block', iconSize: 17, context: ['text'] },
-    { type: 'blockWrap', key: 'blockquote', node: 'blockquote', icon: blockquoteIcon, title: 'Blockquote', iconSize: 17, context: ['text'] },
+    {
+        type: 'block',
+        key: 'codeBlock',
+        node: 'code_block',
+        icon: codeBlockIcon,
+        title: 'Code Block',
+        iconSize: 17,
+        context: ['text'],
+    },
+    {
+        type: 'blockWrap',
+        key: 'blockquote',
+        node: 'blockquote',
+        icon: blockquoteIcon,
+        title: 'Blockquote',
+        iconSize: 17,
+        context: ['text'],
+    },
 
     // ==========================================================================
     // IMAGE SELECTION ITEMS
     // ==========================================================================
 
     // Alignment buttons
-    { type: 'imageAlignment', key: 'alignLeft', alignment: 'left', icon: alignLeftIcon, title: 'Align left', iconSize: 16, context: ['image'] },
-    { type: 'imageAlignment', key: 'alignCenter', alignment: 'center', icon: alignCenterIcon, title: 'Align center', iconSize: 16, context: ['image'] },
-    { type: 'imageAlignment', key: 'alignRight', alignment: 'right', icon: alignRightIcon, title: 'Align right', iconSize: 16, context: ['image'] },
+    {
+        type: 'imageAlignment',
+        key: 'alignLeft',
+        alignment: 'left',
+        icon: alignLeftIcon,
+        title: 'Align left',
+        iconSize: 16,
+        context: ['image'],
+    },
+    {
+        type: 'imageAlignment',
+        key: 'alignCenter',
+        alignment: 'center',
+        icon: alignCenterIcon,
+        title: 'Align center',
+        iconSize: 16,
+        context: ['image'],
+    },
+    {
+        type: 'imageAlignment',
+        key: 'alignRight',
+        alignment: 'right',
+        icon: alignRightIcon,
+        title: 'Align right',
+        iconSize: 16,
+        context: ['image'],
+    },
 
-    { type: 'separator', context: ['image'] },
+    {
+        type: 'separator',
+        context: ['image'],
+    },
 
     // Text wrap buttons
-    { type: 'imageWrap', key: 'wrapNone', wrap: 'none', icon: wrapNoneIcon, title: 'No text wrap', iconSize: 16, context: ['image'] },
-    { type: 'imageWrap', key: 'wrapLeft', wrap: 'left', icon: wrapLeftIcon, title: 'Wrap text right', iconSize: 16, context: ['image'] },
-    { type: 'imageWrap', key: 'wrapRight', wrap: 'right', icon: wrapRightIcon, title: 'Wrap text left', iconSize: 16, context: ['image'] },
+    {
+        type: 'imageWrap',
+        key: 'wrapNone',
+        wrap: 'none',
+        icon: wrapNoneIcon,
+        title: 'No text wrap',
+        iconSize: 16,
+        context: ['image'],
+    },
+    {
+        type: 'imageWrap',
+        key: 'wrapLeft',
+        wrap: 'left',
+        icon: wrapLeftIcon,
+        title: 'Wrap text right',
+        iconSize: 16,
+        context: ['image'],
+    },
+    {
+        type: 'imageWrap',
+        key: 'wrapRight',
+        wrap: 'right',
+        icon: wrapRightIcon,
+        title: 'Wrap text left',
+        iconSize: 16,
+        context: ['image'],
+    },
 
-    { type: 'separator', context: ['image'] },
+    {
+        type: 'separator',
+        context: ['image'],
+    },
 
     // Image actions
-    { type: 'imageAction', key: 'createVariant', action: 'createVariant', icon: magicIcon, title: 'Create variant', iconSize: 17, context: ['image'] },
-    { type: 'imageAction', key: 'imageDownload', action: 'download', icon: downloadIcon, title: 'Download image', iconSize: 16, context: ['image'] },
-    { type: 'imageAction', key: 'imageBlockquote', action: 'blockquote', icon: blockquoteIcon, title: 'Wrap in blockquote', iconSize: 17, context: ['image'] },
-    { type: 'imageAction', key: 'imageDelete', action: 'delete', icon: trashBinIcon, title: 'Delete image', iconSize: 16, context: ['image'] },
+    {
+        type: 'imageAction',
+        key: 'createVariant',
+        action: 'createVariant',
+        icon: magicIcon,
+        title: 'Create variant',
+        iconSize: 17,
+        context: ['image'],
+    },
+    {
+        type: 'imageAction',
+        key: 'imageDownload',
+        action: 'download',
+        icon: downloadIcon,
+        title: 'Download image',
+        iconSize: 16,
+        context: ['image'],
+    },
+    {
+        type: 'imageAction',
+        key: 'imageBlockquote',
+        action: 'blockquote',
+        icon: blockquoteIcon,
+        title: 'Wrap in blockquote',
+        iconSize: 17,
+        context: ['image'],
+    },
+    {
+        type: 'imageAction',
+        key: 'imageDelete',
+        action: 'delete',
+        icon: trashBinIcon,
+        title: 'Delete image',
+        iconSize: 16,
+        context: ['image'],
+    },
 ]
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
-function getMarkCommand(schema: Schema, markName: string): Command | null {
+const getMarkCommand = (
+    schema: Schema,
+    markName: string,
+): Command | null => {
     const markType = schema.marks[markName]
+
     return markType ? (state, dispatch) => toggleMark(markType)(state, dispatch) : null
 }
 
-function getBlockCommand(schema: Schema, nodeName: string): Command | null {
+const getBlockCommand = (
+    schema: Schema,
+    nodeName: string,
+): Command | null => {
     const nodeType = schema.nodes[nodeName]
+
     return nodeType ? (state, dispatch) => setBlockType(nodeType)(state, dispatch) : null
 }
 
-function getBlockWrapCommand(schema: Schema, nodeName: string): Command | null {
+const getBlockWrapCommand = (
+    schema: Schema,
+    nodeName: string,
+): Command | null => {
     const nodeType = schema.nodes[nodeName]
+
     return nodeType ? (state, dispatch) => wrapIn(nodeType)(state, dispatch) : null
 }
 
-function getSelectedImageNode(view: EditorView): { pos: number; node: ProseMirrorNode } | null {
+const getSelectedImageNode = (view: EditorView): {
+    pos: number
+    node: ProseMirrorNode
+} | null => {
     const { selection } = view.state
-    if (!(selection instanceof NodeSelection)) return null
+
+    if (!(selection instanceof NodeSelection))
+        return null
 
     const nodeType = selection.node.type.name
-    if (nodeType !== 'image' && nodeType !== 'aiGeneratedImage') return null
 
-    return { pos: selection.from, node: selection.node }
+    if (
+        nodeType !== 'image'
+        && nodeType !== 'aiGeneratedImage'
+    )
+        return null
+
+    return {
+        pos: selection.from,
+        node: selection.node,
+    }
 }
 
 // =============================================================================
 // BUTTON CREATORS
 // =============================================================================
 
-function createButton(
-    item: { key: string; icon: string; title: string; iconSize: number; action?: 'showLinkInput' },
+const createButton = (
+    item: {
+        key: string
+        icon: string
+        title: string
+        iconSize: number
+        action?: 'showLinkInput'
+    },
     command: Command | null,
     view: EditorView,
     bubbleMenuView: BubbleMenuView,
     markType?: string,
-): HTMLElement | null {
-    if (!command) return null
+): HTMLElement | null => {
+    if (!command)
+        return null
 
-    const button = createEl('button', {
-        className: 'bubble-menu-button',
-        type: 'button',
-        'aria-label': item.title,
-        innerHTML: item.icon,
-        data: { helpTooltip: 'aria-label' },
-    })
+    const button = createEl(
+        'button',
+        {
+            className: 'bubble-menu-button',
+            type: 'button',
+            'aria-label': item.title,
+            innerHTML: item.icon,
+            data: { helpTooltip: 'aria-label' },
+        },
+    )
 
     const svg = button.querySelector('svg')
-    if (svg) {
-        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
-    }
+
+    if (svg)
+        applyStyle(
+            svg,
+            {
+                width: `${item.iconSize}px`,
+                height: `${item.iconSize}px`,
+            },
+        )
 
     if (markType) {
         button.dataset.markType = markType
         button.dataset.update = 'true'
     }
 
-    button.addEventListener('click', (e) => {
+    button.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
 
-        if (item.action === 'showLinkInput') {
+        if (item.action === 'showLinkInput')
             bubbleMenuView.showLinkInput()
-        } else {
+        else
             command(view.state, view.dispatch)
-        }
 
         view.focus()
     })
@@ -297,34 +510,54 @@ function createButton(
     return button
 }
 
-function createSeparator(): HTMLElement {
-    return createEl('span', { className: 'bubble-menu-separator' })
-}
+const createSeparator = (): HTMLElement => createEl('span', { className: 'bubble-menu-separator' })
 
-function createDropdown(
+const createDropdown = (
     item: DropdownItem,
     view: EditorView,
-): { element: HTMLElement; update: () => void } {
+): {
+    element: HTMLElement
+    update: () => void
+} => {
     const { schema } = view.state
     const menu = createEl('div', { className: 'bubble-menu-dropdown-menu' })
 
-    const labelSpan = createEl('span', { className: 'dropdown-label', innerHTML: item.defaultIcon })
+    const labelSpan = createEl(
+        'span',
+        {
+            className: 'dropdown-label',
+            innerHTML: item.defaultIcon,
+        },
+    )
 
-    const optionButtons: Array<{ btn: HTMLElement; node: string; attrs?: Record<string, unknown> }> = []
+    const optionButtons: Array<{
+        btn: HTMLElement
+        node: string
+        attrs?: Record<string, unknown>
+    }> = []
 
-    item.options.forEach((opt) => {
+    item.options.forEach(opt => {
         const nodeType = schema.nodes[opt.node]
-        if (!nodeType) return
 
-        const btn = createEl('button', {
-            className: 'bubble-menu-dropdown-item',
-            type: 'button',
-            innerHTML: opt.icon,
+        if (!nodeType)
+            return
+
+        const btn = createEl(
+            'button',
+            {
+                className: 'bubble-menu-dropdown-item',
+                type: 'button',
+                innerHTML: opt.icon,
+            },
+        )
+
+        optionButtons.push({
+            btn,
+            node: opt.node,
+            attrs: opt.attrs,
         })
 
-        optionButtons.push({ btn, node: opt.node, attrs: opt.attrs })
-
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', e => {
             e.preventDefault()
             e.stopPropagation()
             setBlockType(nodeType, opt.attrs)(view.state, view.dispatch)
@@ -335,25 +568,32 @@ function createDropdown(
         menu.appendChild(btn)
     })
 
-    const toggle = createEl('button', {
-        className: 'bubble-menu-dropdown-toggle',
-        type: 'button',
-    })
+    const toggle = createEl(
+        'button',
+        {
+            className: 'bubble-menu-dropdown-toggle',
+            type: 'button',
+        },
+    )
     toggle.appendChild(labelSpan)
     toggle.insertAdjacentHTML('beforeend', chevronDownIcon)
 
-    const wrapper = createEl('div', { className: 'bubble-menu-dropdown' }, toggle, menu)
+    const wrapper = createEl(
+        'div',
+        { className: 'bubble-menu-dropdown' },
+        toggle,
+        menu,
+    )
 
-    toggle.addEventListener('click', (e) => {
+    toggle.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
         menu.classList.toggle('is-open')
     })
 
-    document.addEventListener('click', (e) => {
-        if (!wrapper.contains(e.target as Node)) {
+    document.addEventListener('click', e => {
+        if (!wrapper.contains(e.target as Node))
             menu.classList.remove('is-open')
-        }
     })
 
     const update = (): void => {
@@ -362,18 +602,20 @@ function createDropdown(
         const parentNode = $from.parent
 
         let currentIcon = item.defaultIcon
+
         for (const opt of item.options) {
             if (parentNode.type.name === opt.node) {
                 if (opt.attrs) {
-                    const attrsMatch = Object.entries(opt.attrs).every(
-                        ([key, value]) => parentNode.attrs[key] === value,
-                    )
+                    const attrsMatch = Object.entries(opt.attrs).every(([key, value]) => parentNode.attrs[key] === value)
+
                     if (attrsMatch) {
                         currentIcon = opt.icon
+
                         break
                     }
                 } else {
                     currentIcon = opt.icon
+
                     break
                 }
             }
@@ -381,50 +623,80 @@ function createDropdown(
 
         labelSpan.innerHTML = currentIcon
 
-        for (const { btn, node, attrs } of optionButtons) {
+        for (const {
+            btn,
+            node,
+            attrs,
+        } of optionButtons) {
             let isActive = parentNode.type.name === node
-            if (isActive && attrs) {
-                isActive = Object.entries(attrs).every(
-                    ([key, value]) => parentNode.attrs[key] === value,
-                )
-            }
+
+            if (
+                isActive
+                && attrs
+            )
+                isActive = Object.entries(attrs).every(([key, value]) => parentNode.attrs[key] === value)
+
             btn.classList.toggle('is-active', isActive)
         }
     }
 
-    return { element: wrapper, update }
+    return {
+        element: wrapper,
+        update,
+    }
 }
 
-function createImageAlignmentButton(
+const createImageAlignmentButton = (
     item: ImageAlignmentItem,
     bubbleMenuView: BubbleMenuView,
-): HTMLElement {
-    const button = createEl('button', {
-        className: 'bubble-menu-button',
-        type: 'button',
-        'aria-label': item.title,
-        innerHTML: item.icon,
-        data: { helpTooltip: 'aria-label', imageAlignment: item.alignment },
-    })
+): HTMLElement => {
+    const button = createEl(
+        'button',
+        {
+            className: 'bubble-menu-button',
+            type: 'button',
+            'aria-label': item.title,
+            innerHTML: item.icon,
+            data: {
+                helpTooltip: 'aria-label',
+                imageAlignment: item.alignment,
+            },
+        },
+    )
 
     const svg = button.querySelector('svg')
-    if (svg) {
-        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
-    }
 
-    button.addEventListener('click', (e) => {
+    if (svg)
+        applyStyle(
+            svg,
+            {
+                width: `${item.iconSize}px`,
+                height: `${item.iconSize}px`,
+            },
+        )
+
+    button.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
 
         const view = bubbleMenuView.getView()
         const imageInfo = getSelectedImageNode(view)
-        if (!imageInfo) return
 
-        const { pos, node } = imageInfo
-        const tr = view.state.tr.setNodeMarkup(pos, null, {
-            ...node.attrs,
-            alignment: item.alignment,
-        })
+        if (!imageInfo)
+            return
+
+        const {
+            pos,
+            node,
+        } = imageInfo
+        const tr = view.state.tr.setNodeMarkup(
+            pos,
+            null,
+            {
+                ...node.attrs,
+                alignment: item.alignment,
+            },
+        )
         view.dispatch(tr)
         view.focus()
     })
@@ -432,36 +704,57 @@ function createImageAlignmentButton(
     return button
 }
 
-function createImageWrapButton(
+const createImageWrapButton = (
     item: ImageWrapItem,
     bubbleMenuView: BubbleMenuView,
-): HTMLElement {
-    const button = createEl('button', {
-        className: 'bubble-menu-button',
-        type: 'button',
-        'aria-label': item.title,
-        innerHTML: item.icon,
-        data: { helpTooltip: 'aria-label', imageWrap: item.wrap },
-    })
+): HTMLElement => {
+    const button = createEl(
+        'button',
+        {
+            className: 'bubble-menu-button',
+            type: 'button',
+            'aria-label': item.title,
+            innerHTML: item.icon,
+            data: {
+                helpTooltip: 'aria-label',
+                imageWrap: item.wrap,
+            },
+        },
+    )
 
     const svg = button.querySelector('svg')
-    if (svg) {
-        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
-    }
 
-    button.addEventListener('click', (e) => {
+    if (svg)
+        applyStyle(
+            svg,
+            {
+                width: `${item.iconSize}px`,
+                height: `${item.iconSize}px`,
+            },
+        )
+
+    button.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
 
         const view = bubbleMenuView.getView()
         const imageInfo = getSelectedImageNode(view)
-        if (!imageInfo) return
 
-        const { pos, node } = imageInfo
-        const tr = view.state.tr.setNodeMarkup(pos, null, {
-            ...node.attrs,
-            textWrap: item.wrap,
-        })
+        if (!imageInfo)
+            return
+
+        const {
+            pos,
+            node,
+        } = imageInfo
+        const tr = view.state.tr.setNodeMarkup(
+            pos,
+            null,
+            {
+                ...node.attrs,
+                textWrap: item.wrap,
+            },
+        )
         view.dispatch(tr)
         view.focus()
     })
@@ -469,32 +762,49 @@ function createImageWrapButton(
     return button
 }
 
-function createImageActionButton(
+const createImageActionButton = (
     item: ImageActionItem,
     bubbleMenuView: BubbleMenuView,
-): HTMLElement {
-    const button = createEl('button', {
-        className: 'bubble-menu-button',
-        type: 'button',
-        'aria-label': item.title,
-        innerHTML: item.icon,
-        data: { helpTooltip: 'aria-label', imageAction: item.action },
-    })
+): HTMLElement => {
+    const button = createEl(
+        'button',
+        {
+            className: 'bubble-menu-button',
+            type: 'button',
+            'aria-label': item.title,
+            innerHTML: item.icon,
+            data: {
+                helpTooltip: 'aria-label',
+                imageAction: item.action,
+            },
+        },
+    )
 
     const svg = button.querySelector('svg')
-    if (svg) {
-        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
-    }
 
-    button.addEventListener('click', (e) => {
+    if (svg)
+        applyStyle(
+            svg,
+            {
+                width: `${item.iconSize}px`,
+                height: `${item.iconSize}px`,
+            },
+        )
+
+    button.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
 
         const view = bubbleMenuView.getView()
         const imageInfo = getSelectedImageNode(view)
-        if (!imageInfo) return
 
-        const { pos, node } = imageInfo
+        if (!imageInfo)
+            return
+
+        const {
+            pos,
+            node,
+        } = imageInfo
 
         switch (item.action) {
             case 'download': {
@@ -502,23 +812,36 @@ function createImageActionButton(
                 const imgEl = domNode instanceof HTMLElement
                     ? domNode.querySelector('img') as HTMLImageElement | null
                     : null
-                if (imgEl?.src) {
+
+                if (imgEl?.src)
                     downloadImage(imgEl.src, { getAuthToken: () => AuthService.getTokenSilently() })
-                }
+
                 bubbleMenuView.forceHide()
+
                 break
             }
             case 'createVariant': {
                 // Check if image has AI-related attrs (is an AI-generated image)
-                if (node.attrs.revisedPrompt || node.attrs.responseId) {
+                if (
+                    node.attrs.revisedPrompt
+                    || node.attrs.responseId
+                ) {
                     view.dom.dispatchEvent(
-                        new CustomEvent('create-ai-image-variant', {
-                            detail: { node, pos },
-                            bubbles: true,
-                        }),
+                        new CustomEvent(
+                            'create-ai-image-variant',
+                            {
+                                detail: {
+                                    node,
+                                    pos,
+                                },
+                                bubbles: true,
+                            },
+                        ),
                     )
                 }
+
                 bubbleMenuView.forceHide()
+
                 break
             }
             case 'delete': {
@@ -526,17 +849,25 @@ function createImageActionButton(
                 view.dispatch(tr)
                 view.focus()
                 bubbleMenuView.forceHide()
+
                 break
             }
             case 'blockquote': {
                 const { schema } = view.state
                 const blockquoteType = schema.nodes.blockquote
-                if (!blockquoteType) return
+
+                if (!blockquoteType)
+                    return
 
                 const blockquote = blockquoteType.create(null, node)
-                const tr = view.state.tr.replaceWith(pos, pos + node.nodeSize, blockquote)
+                const tr = view.state.tr.replaceWith(
+                    pos,
+                    pos + node.nodeSize,
+                    blockquote,
+                )
                 view.dispatch(tr)
                 view.focus()
+
                 break
             }
         }
@@ -545,58 +876,78 @@ function createImageActionButton(
     return button
 }
 
-function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView): HTMLElement {
-    const input = createEl('input', {
-        type: 'url',
-        placeholder: 'URL...',
-        className: 'link-input-field',
-    }) as HTMLInputElement
+const createLinkInputPanel = (
+    view: EditorView,
+    bubbleMenuView: BubbleMenuView,
+): HTMLElement => {
+    const input = createEl(
+        'input',
+        {
+            type: 'url',
+            placeholder: 'URL...',
+            className: 'link-input-field',
+        },
+    ) as HTMLInputElement
 
-    const applyIcon = createEl('span', {
-        className: 'link-input-apply',
-        innerHTML: checkMarkIcon,
-        role: 'button',
-        tabindex: '0',
-        'aria-label': 'Apply link',
-        data: { helpTooltip: 'aria-label' },
-    })
+    const applyIcon = createEl(
+        'span',
+        {
+            className: 'link-input-apply',
+            innerHTML: checkMarkIcon,
+            role: 'button',
+            tabindex: '0',
+            'aria-label': 'Apply link',
+            data: { helpTooltip: 'aria-label' },
+        },
+    )
 
-    const removeIcon = createEl('span', {
-        className: 'link-input-remove',
-        innerHTML: trashBinIcon,
-        role: 'button',
-        tabindex: '0',
-        'aria-label': 'Remove link',
-        data: { helpTooltip: 'aria-label' },
-    })
+    const removeIcon = createEl(
+        'span',
+        {
+            className: 'link-input-remove',
+            innerHTML: trashBinIcon,
+            role: 'button',
+            tabindex: '0',
+            'aria-label': 'Remove link',
+            data: { helpTooltip: 'aria-label' },
+        },
+    )
 
-    applyIcon.addEventListener('click', (e) => {
+    applyIcon.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.applyLink(input.value)
     })
-    applyIcon.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return
+    applyIcon.addEventListener('keydown', e => {
+        if (
+            e.key !== 'Enter'
+            && e.key !== ' '
+        )
+            return
 
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.applyLink(input.value)
     })
 
-    removeIcon.addEventListener('click', (e) => {
+    removeIcon.addEventListener('click', e => {
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.removeLink()
     })
-    removeIcon.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return
+    removeIcon.addEventListener('keydown', e => {
+        if (
+            e.key !== 'Enter'
+            && e.key !== ' '
+        )
+            return
 
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.removeLink()
     })
 
-    input.addEventListener('keydown', (e) => {
+    input.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
             e.preventDefault()
             bubbleMenuView.applyLink(input.value)
@@ -607,7 +958,13 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
         }
     })
 
-    return createEl('div', { className: 'bubble-menu-link-input' }, input, applyIcon, removeIcon)
+    return createEl(
+        'div',
+        { className: 'bubble-menu-link-input' },
+        input,
+        applyIcon,
+        removeIcon,
+    )
 }
 
 // =============================================================================
@@ -618,89 +975,151 @@ export type MenuItemElement = BubbleMenuItem & {
     context: SelectionContext[]
 }
 
-export function buildBubbleMenuItems(
+export const buildBubbleMenuItems = (
     view: EditorView,
     bubbleMenuView: BubbleMenuView,
-): { items: MenuItemElement[]; linkInputPanel: HTMLElement } {
+): {
+    items: MenuItemElement[]
+    linkInputPanel: HTMLElement
+} => {
     const { schema } = view.state
     const items: MenuItemElement[] = []
 
     for (const item of MENU_ITEMS) {
         switch (item.type) {
             case 'separator':
-                items.push({ element: createSeparator(), context: item.context })
-                break
+                items.push({
+                    element: createSeparator(),
+                    context: item.context,
+                })
 
+                break
             case 'dropdown': {
-                const { element, update } = createDropdown(item, view)
-                items.push({ element, context: item.context, update })
+                const {
+                    element,
+                    update,
+                } = createDropdown(item, view)
+                items.push({
+                    element,
+                    context: item.context,
+                    update,
+                })
+
                 break
             }
-
             case 'mark': {
                 const cmd = getMarkCommand(schema, item.mark)
-                const btn = createButton(item, cmd, view, bubbleMenuView, item.mark)
-                if (btn) items.push({ element: btn, context: item.context })
+                const btn = createButton(
+                    item,
+                    cmd,
+                    view,
+                    bubbleMenuView,
+                    item.mark,
+                )
+
+                if (btn)
+                    items.push({
+                        element: btn,
+                        context: item.context,
+                    })
+
                 break
             }
-
             case 'block': {
                 const cmd = getBlockCommand(schema, item.node)
-                const btn = createButton(item, cmd, view, bubbleMenuView)
-                if (btn) items.push({ element: btn, context: item.context })
+                const btn = createButton(
+                    item,
+                    cmd,
+                    view,
+                    bubbleMenuView,
+                )
+
+                if (btn)
+                    items.push({
+                        element: btn,
+                        context: item.context,
+                    })
+
                 break
             }
-
             case 'blockWrap': {
                 const cmd = getBlockWrapCommand(schema, item.node)
-                const btn = createButton(item, cmd, view, bubbleMenuView)
-                if (btn) items.push({ element: btn, context: item.context })
+                const btn = createButton(
+                    item,
+                    cmd,
+                    view,
+                    bubbleMenuView,
+                )
+
+                if (btn)
+                    items.push({
+                        element: btn,
+                        context: item.context,
+                    })
+
                 break
             }
-
             case 'imageAlignment': {
                 const btn = createImageAlignmentButton(item, bubbleMenuView)
-                items.push({ element: btn, context: item.context })
+                items.push({
+                    element: btn,
+                    context: item.context,
+                })
+
                 break
             }
-
             case 'imageWrap': {
                 const btn = createImageWrapButton(item, bubbleMenuView)
-                items.push({ element: btn, context: item.context })
+                items.push({
+                    element: btn,
+                    context: item.context,
+                })
+
                 break
             }
-
             case 'imageAction': {
                 const btn = createImageActionButton(item, bubbleMenuView)
-                items.push({ element: btn, context: item.context })
+                items.push({
+                    element: btn,
+                    context: item.context,
+                })
+
                 break
             }
         }
     }
 
-    return { items, linkInputPanel: createLinkInputPanel(view, bubbleMenuView) }
+    return {
+        items,
+        linkInputPanel: createLinkInputPanel(view, bubbleMenuView),
+    }
 }
 
-export function updateImageButtonStates(items: MenuItemElement[], view: EditorView): void {
+export const updateImageButtonStates = (
+    items: MenuItemElement[],
+    view: EditorView,
+): void => {
     const imageInfo = getSelectedImageNode(view)
-    if (!imageInfo) return
+
+    if (!imageInfo)
+        return
 
     const { node } = imageInfo
     const alignment = node.attrs.alignment || 'left'
     const textWrap = node.attrs.textWrap || 'none'
 
     for (const item of items) {
-        if (!item.context.includes('image')) continue
+        if (!item.context.includes('image'))
+            continue
 
         const el = item.element
         const alignmentAttr = el.dataset?.imageAlignment
         const wrapAttr = el.dataset?.imageWrap
 
-        if (alignmentAttr) {
+        if (alignmentAttr)
             el.classList.toggle('is-active', alignmentAttr === alignment)
-        }
-        if (wrapAttr) {
+
+        if (wrapAttr)
             el.classList.toggle('is-active', wrapAttr === textWrap)
-        }
     }
 }

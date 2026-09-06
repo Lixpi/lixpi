@@ -17,9 +17,12 @@ export default class UserService {
         userStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
         try {
-            const user: any = await servicesStore.getData('nats')!.request(USER_SUBJECTS.GET_USER, {
-                token: await AuthService.getTokenSilently(),
-            })
+            const user: any = await servicesStore.getData('nats')!.request(
+                USER_SUBJECTS.GET_USER,
+                {
+                    token: await AuthService.getTokenSilently(),
+                },
+            )
 
             userStore.setDataValues(user)
             userStore.setMetaValues({ loadingStatus: LoadingStatus.success })

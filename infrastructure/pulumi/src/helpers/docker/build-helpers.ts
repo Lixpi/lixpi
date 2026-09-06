@@ -54,22 +54,28 @@ export const createECRRepository = (config: ECRRepositoryConfig): aws.ecr.Reposi
         tags = {},
     } = config
 
-    return new aws.ecr.Repository(`${name}-repo`, {
-        name: name.toLowerCase(),
-        imageScanningConfiguration: {
-            scanOnPush: enableImageScanning,
+    return new aws.ecr.Repository(
+        `${name}-repo`,
+        {
+            name: name.toLowerCase(),
+            imageScanningConfiguration: {
+                scanOnPush: enableImageScanning,
+            },
+            imageTagMutability,
+            forceDelete,
+            tags,
         },
-        imageTagMutability,
-        forceDelete,
-        tags,
-    })
+    )
 }
 
 export const buildDockerImage = (
     config: DockerImageBuildConfig & {
         repository?: aws.ecr.Repository
     },
-): DockerImageBuildResult | { image: dockerBuild.Image; imageTag: string } => {
+): DockerImageBuildResult | {
+    image: dockerBuild.Image
+    imageTag: string
+} => {
     const {
         imageName,
         dockerBuildContext,
@@ -110,37 +116,41 @@ export const buildDockerImage = (
         })
         : undefined
 
-    const image = new dockerBuild.Image(`${imageName}-image-${imageTag}`, {
-        context: {
-            location: dockerBuildContext,
+    const image = new dockerBuild.Image(
+        `${imageName}-image-${imageTag}`,
+        {
+            context: {
+                location: dockerBuildContext,
+            },
+            dockerfile: {
+                location: dockerfilePath,
+            },
+            platforms,
+            tags,
+            push,
+            buildOnPreview,
+            noCache,
+            ...(buildArgs && { buildArgs }),
+            ...(target && { target }),
+            ...(network && { network }),
+            ...(addHosts && { addHosts }),
+            ...(secrets && { secrets }),
+            ...(cache?.from && { cacheFrom: cache.from }),
+            ...(cache?.to && { cacheTo: cache.to }),
+            ...(exports && { exports }),
+            ...(push && authToken && {
+                registries: [{
+                    address: repository!.repositoryUrl,
+                    username: authToken.userName,
+                    password: authToken.password,
+                }],
+            }),
         },
-        dockerfile: {
-            location: dockerfilePath,
+        {
+            replaceOnChanges: ['*'],
+            dependsOn: repository ? [repository, ...dependencies] : dependencies,
         },
-        platforms,
-        tags,
-        push,
-        buildOnPreview,
-        noCache,
-        ...(buildArgs && { buildArgs }),
-        ...(target && { target }),
-        ...(network && { network }),
-        ...(addHosts && { addHosts }),
-        ...(secrets && { secrets }),
-        ...(cache?.from && { cacheFrom: cache.from }),
-        ...(cache?.to && { cacheTo: cache.to }),
-        ...(exports && { exports }),
-        ...(push && authToken && {
-            registries: [{
-                address: repository!.repositoryUrl,
-                username: authToken.userName,
-                password: authToken.password,
-            }],
-        }),
-    }, {
-        replaceOnChanges: ['*'],
-        dependsOn: repository ? [repository, ...dependencies] : dependencies,
-    })
+    )
 
     if (repository) {
         return {

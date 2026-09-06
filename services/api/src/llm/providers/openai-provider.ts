@@ -68,52 +68,79 @@ type ImageRefFile =
         name: string
     }
 
-export const buildOpenAIImageReferenceFiles = async (
-    references: readonly ResolvedImageGenerationReference[],
-): Promise<ImageRefFile[]> =>
-    Promise.all(references.map(async reference => ({
-        file: await toFile(reference.bytes, reference.fileName, { type: reference.mediaType }),
-        name: reference.fileName,
-        role: reference.role,
-        byteLength: reference.byteLength,
-        mediaType: reference.mediaType,
-        sha256: reference.sha256,
-    })))
+export const buildOpenAIImageReferenceFiles = async (references: readonly ResolvedImageGenerationReference[]): Promise<ImageRefFile[]> =>
+    Promise.all(
+        references.map(
+            async reference => ({
+                file: await toFile(
+                    reference.bytes,
+                    reference.fileName,
+                    { type: reference.mediaType },
+                ),
+                name: reference.fileName,
+                role: reference.role,
+                byteLength: reference.byteLength,
+                mediaType: reference.mediaType,
+                sha256: reference.sha256,
+            }),
+        ),
+    )
 
 export const appendOpenAIImageGenerationReferences = (
-    inputMessages: Array<{ role: string; content: any }>,
+    inputMessages: Array<{
+        role: string
+        content: any
+    }>,
     references: readonly ResolvedImageGenerationReference[],
 ): void => {
-    let lastUserMessage: { role: string; content: any } | undefined
+    let lastUserMessage: {
+        role: string
+        content: any
+    } | undefined
+
     for (let index = inputMessages.length - 1; index >= 0; index--) {
         if (inputMessages[index]?.role === 'user') {
             lastUserMessage = inputMessages[index]
+
             break
         }
     }
-    if (!lastUserMessage) throw new Error('No user prompt found for image generation')
+
+    if (!lastUserMessage)
+        throw new Error('No user prompt found for image generation')
+
     const existingContent = Array.isArray(lastUserMessage.content)
         ? lastUserMessage.content
-        : [{ type: 'input_text', text: String(lastUserMessage.content ?? '') }]
-    const prompt = existingContent.flatMap(block => (
-        block?.type === 'input_text' || block?.type === 'text'
-            ? [String(block.text ?? '')]
-            : []
-    )).join('\n')
-    const nonTextContent = existingContent.filter(block => (
-        block?.type !== 'input_text' && block?.type !== 'text'
-    ))
+        : [{
+            type: 'input_text',
+            text: String(lastUserMessage.content ?? ''),
+        }]
+    const prompt = existingContent.flatMap(
+        block => (
+            block?.type === 'input_text'
+                || block?.type === 'text'
+                ? [String(block.text ?? '')]
+                : []
+        ),
+    ).join('\n')
+    const nonTextContent = existingContent.filter(
+        block => (
+            block?.type !== 'input_text' && block?.type !== 'text'
+        ),
+    )
     lastUserMessage.content = [
         {
             type: 'input_text',
             text: prependImageReferencePromptLegend(prompt, references),
         },
         ...nonTextContent,
-        ...references.map(reference => ({
-            type: 'input_image',
-            image_url: reference.dataUrl,
-            detail: 'high',
-        })),
+        ...references.map(
+            reference => ({
+                type: 'input_image',
+                image_url: reference.dataUrl,
+                detail: 'high',
+            }),
+        ),
     ]
 }
 
@@ -121,10 +148,16 @@ export class OpenAIProvider extends BaseProvider {
     readonly providerName: ProviderName = 'OpenAI'
     private readonly client: OpenAI
 
-    constructor(instanceKey: string, deps: BaseProviderDeps) {
+    constructor(
+        instanceKey: string,
+        deps: BaseProviderDeps,
+    ) {
         super(instanceKey, deps)
         const apiKey = process.env.OPENAI_API_KEY
-        if (!apiKey) throw new Error('OPENAI_API_KEY environment variable is required')
+
+        if (!apiKey)
+            throw new Error('OPENAI_API_KEY environment variable is required')
+
         this.client = new OpenAI({ apiKey })
     }
 
@@ -152,26 +185,41 @@ export class OpenAIProvider extends BaseProvider {
         const injectTool = hasImageModel && !enableImageGeneration
         const enableVideoGeneration = state.enableVideoGeneration ?? false
         const hasVideoModel = !!state.videoModelVersion
-        const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
+        const injectVideoTool = hasVideoModel
+            && !enableImageGeneration
+            && !enableVideoGeneration
         const maxTokens = state.maxCompletionSize
         const imageGenerationConfig = state.imageGenerationConfig ?? {}
 
-        const inputMessages: Array<{ role: string; content: any }> = []
+        const inputMessages: Array<{
+            role: string
+            content: any
+        }> = []
+
         for (const msg of messages) {
             let content: any = msg.content ?? ''
             content = await resolveImageUrls(content, this.nats)
             content = convertAttachmentsForProvider(content, 'OPENAI')
-            inputMessages.push({ role: msg.role, content })
+            inputMessages.push({
+                role: msg.role,
+                content,
+            })
         }
 
         const resolvedImageGenerationReferences = state.resolvedImageGenerationReferences ?? []
-        if (enableImageGeneration && !modelVersion.startsWith('gpt-image-') && resolvedImageGenerationReferences.length > 0) {
+
+        if (
+            enableImageGeneration
+            && !modelVersion.startsWith('gpt-image-')
+            && resolvedImageGenerationReferences.length > 0
+        )
             appendOpenAIImageGenerationReferences(inputMessages, resolvedImageGenerationReferences)
-        }
 
         let instructions: string | undefined
+
         if (supportsSystemPrompt) {
             instructions = getSystemPrompt(hasImageModel, hasVideoModel)
+
             if (hasImageModel) {
                 instructions = applyImagePromptLimitToSystemPrompt(
                     instructions,
@@ -187,26 +235,46 @@ export class OpenAIProvider extends BaseProvider {
             imageGenerationConfig,
             state.aiModelMetaInfo.imageReferenceCapabilities,
         ) ?? []
-        if (injectTool) {
-            tools.push(getToolForProvider('OpenAI', state.imageModelMetaInfo, state.imageProviderName))
-        }
-        if (injectVideoTool) {
-            tools.push(getVideoToolForProvider('OpenAI'))
-        }
+
+        if (injectTool)
+            tools.push(
+                getToolForProvider(
+                    'OpenAI',
+                    state.imageModelMetaInfo,
+                    state.imageProviderName,
+                ),
+            )
+
+        if (injectVideoTool)
+            tools.push(
+                getVideoToolForProvider('OpenAI'),
+            )
+
         const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
-            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher, {
-                onGenerationTrace: trace => this.publisher.capabilityGenerationTrace(trace),
-            })
+            ? new CapabilityModelToolExecutor(
+                state,
+                this.capabilityDispatcher,
+                {
+                    onGenerationTrace: trace => this.publisher.capabilityGenerationTrace(trace),
+                },
+            )
             : undefined
 
         try {
             // Skip START_STREAM when called as image model (via ImageRouter) or
             // when called as video model (via VideoRouter) — the parent text
             // stream already manages the lifecycle.
-            if (!enableImageGeneration && !enableVideoGeneration) this.publisher.start()
+            if (
+                !enableImageGeneration
+                && !enableVideoGeneration
+            )
+                this.publisher.start()
 
             // gpt-image-* models must use the dedicated Image API path.
-            if (enableImageGeneration && modelVersion.startsWith('gpt-image-')) {
+            if (
+                enableImageGeneration
+                && modelVersion.startsWith('gpt-image-')
+            ) {
                 const imageUpdate = await this.generateViaImageApi({
                     state,
                     inputMessages,
@@ -215,7 +283,13 @@ export class OpenAIProvider extends BaseProvider {
                     workspaceId,
                     aiChatThreadId,
                 })
-                if (!enableImageGeneration && !enableVideoGeneration) this.publisher.end()
+
+                if (
+                    !enableImageGeneration
+                    && !enableVideoGeneration
+                )
+                    this.publisher.end()
+
                 return imageUpdate
             }
 
@@ -240,15 +314,22 @@ export class OpenAIProvider extends BaseProvider {
                 !enableImageGeneration
                 && !enableVideoGeneration
                 && !state.pendingCapabilityOutputFinalizations?.length
-            ) this.publisher.end()
+            )
+                this.publisher.end()
+
             return update
         } catch (e: any) {
             err(`OpenAI streaming failed: ${e?.message ?? e}`)
             const message = e?.message ?? String(e)
-            if (!enableImageGeneration && !enableVideoGeneration) {
+
+            if (
+                !enableImageGeneration
+                && !enableVideoGeneration
+            ) {
                 this.publisher.error(message)
                 this.publisher.end()
             }
+
             return { error: message }
         }
     }
@@ -259,7 +340,9 @@ export class OpenAIProvider extends BaseProvider {
         imageGenerationConfig: ProviderState['imageGenerationConfig'],
         imageReferenceCapabilities: ImageReferenceCapabilities | undefined,
     ): Array<Record<string, any>> | undefined {
-        if (!enableImageGeneration) return undefined
+        if (!enableImageGeneration)
+            return undefined
+
         return [{
             type: 'image_generation',
             quality: imageGenerationConfig?.quality ?? 'auto',
@@ -301,63 +384,84 @@ export class OpenAIProvider extends BaseProvider {
             stream: true,
             store: false,
         }
-        if (caps.supportsTemperature) requestKwargs.temperature = args.temperature
+
+        if (caps.supportsTemperature)
+            requestKwargs.temperature = args.temperature
+
         const reasoningConfig = args.state.reasoningGenerationConfig ?? {}
-        if (reasoningConfig.reasoningEffort || reasoningConfig.reasoningMode) {
+
+        if (
+            reasoningConfig.reasoningEffort
+            || reasoningConfig.reasoningMode
+        ) {
             requestKwargs.reasoning = {
                 ...(reasoningConfig.reasoningEffort ? { effort: reasoningConfig.reasoningEffort } : {}),
                 ...(reasoningConfig.reasoningMode ? { mode: reasoningConfig.reasoningMode } : {}),
             }
         }
-        if (reasoningConfig.reasoningVerbosity) {
+
+        if (reasoningConfig.reasoningVerbosity)
             requestKwargs.text = { verbosity: reasoningConfig.reasoningVerbosity }
-        }
-        if (args.maxTokens && args.maxTokens > 0) {
+
+        if (
+            args.maxTokens
+            && args.maxTokens > 0
+        )
             requestKwargs.max_output_tokens = args.maxTokens
-        }
+
         const requestTools = [
             ...(args.tools ?? []),
             ...(args.capabilityToolExecutor?.definitions().map(asOpenAITool) ?? []),
         ]
-        if (requestTools.length > 0) requestKwargs.tools = requestTools
+
+        if (requestTools.length > 0)
+            requestKwargs.tools = requestTools
+
         const pendingRequiredToolName = args.capabilityToolExecutor?.pendingRequiredToolName()
-        if (pendingRequiredToolName) {
+
+        if (pendingRequiredToolName)
             requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(pendingRequiredToolName)
-        } else if (
+        else if (
             !args.capabilityToolExecutor
             && !args.state.capabilityMediaExecutionPlan
             && !args.enableImageGeneration
             && !args.enableVideoGeneration
             && args.hasImageModel !== args.hasVideoModel
-        ) {
-            requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(
-                args.hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME,
-            )
-        }
-        assessProviderInputBudget({ state: args.state, request: requestKwargs })
+        )
+            requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(args.hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME)
+
+        assessProviderInputBudget({
+            state: args.state,
+            request: requestKwargs,
+        })
 
         if (args.enableImageGeneration) {
-            info(`[OpenAI:${this.instanceKey}] Responses-API image-gen call ${
-                JSON.stringify(
-                    {
-                        model: args.modelVersion,
-                        imageSize: args.state.imageSize,
-                        quality: args.state.imageGenerationConfig?.quality ?? 'auto',
-                        background: args.state.imageGenerationConfig?.background ?? 'auto',
-                        inputFidelity: args.state.aiModelMetaInfo.imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
-                        moderation: 'low',
-                        partialImages: 3,
-                        inputMessageCount: args.inputMessages.length,
-                        inputImageCount: args.inputMessages.reduce((count, m) =>
-                            count + (Array.isArray(m.content)
-                                ? m.content.filter((b: any) => b?.type === 'input_image' || b?.type === 'image_url').length
-                                : 0), 0),
-                        promptLen: (args.inputMessages.at(-1)?.content as any)?.length ?? 0,
-                    },
-                    null,
-                    0,
-                )
-            }`)
+            info(
+                `[OpenAI:${this.instanceKey}] Responses-API image-gen call ${
+                    JSON.stringify(
+                        {
+                            model: args.modelVersion,
+                            imageSize: args.state.imageSize,
+                            quality: args.state.imageGenerationConfig?.quality ?? 'auto',
+                            background: args.state.imageGenerationConfig?.background ?? 'auto',
+                            inputFidelity: args.state.aiModelMetaInfo.imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
+                            moderation: 'low',
+                            partialImages: 3,
+                            inputMessageCount: args.inputMessages.length,
+                            inputImageCount: args.inputMessages.reduce(
+                                (count, m) =>
+                                    count + (Array.isArray(m.content)
+                                        ? m.content.filter((b: any) => b?.type === 'input_image' || b?.type === 'image_url').length
+                                        : 0),
+                                0,
+                            ),
+                            promptLen: (args.inputMessages.at(-1)?.content as any)?.length ?? 0,
+                        },
+                        null,
+                        0,
+                    )
+                }`,
+            )
         }
 
         // Submit only. Once the stream starts emitting, tokens are published as
@@ -365,44 +469,56 @@ export class OpenAIProvider extends BaseProvider {
         const stream = await this.retryTransport(
             'responses',
             async () =>
-                await this.client.responses.create(requestKwargs as any, {
-                    signal: this.signal,
-                    maxRetries: 0,
-                }),
+                await this.client.responses.create(
+                    requestKwargs as any,
+                    {
+                        signal: this.signal,
+                        maxRetries: 0,
+                    },
+                ),
         )
 
         let imagesGenerated = 0
         const generatedImages: string[] = []
+
         for await (const event of stream as any) {
             if (this.shouldStop) {
                 info('Stream stopped by user request')
+
                 break
             }
+
             switch (event.type) {
                 case 'response.output_text.delta': {
                     const delta: string = event.delta ?? ''
-                    if (delta) this.publisher.chunk(delta)
+
+                    if (delta)
+                        this.publisher.chunk(delta)
+
                     break
                 }
                 case 'response.output_item.added': {
                     const item = event.item
-                    if (item?.type === 'image_generation_call') {
+
+                    if (item?.type === 'image_generation_call')
                         await this.imagePub.partial('', 0)
-                    }
+
                     break
                 }
                 case 'response.image_generation_call.partial_image': {
                     const partialImage = event.partial_image_b64
                     const partialIndex = event.partial_image_index ?? 0
-                    if (partialImage) {
+
+                    if (partialImage)
                         await this.imagePub.partial(partialImage, partialIndex)
-                    }
+
                     break
                 }
                 case 'response.completed': {
                     const response = event.response
                     update.responseId = response.id
                     update.aiVendorRequestId = response.id
+
                     if (response.usage) {
                         const usage = response.usage
                         update.usage = {
@@ -420,85 +536,115 @@ export class OpenAIProvider extends BaseProvider {
                         if (
                             item?.type !== 'function_call'
                             || !args.capabilityToolExecutor?.recognizes(item.name)
-                        ) return []
+                        )
+                            return []
+
                         return [{
                             callId: item.call_id ?? item.id ?? '',
                             name: item.name,
                             arguments: parseCapabilityToolArguments(item.arguments),
                         }]
                     })
+
                     if (capabilityCalls.length > 0) {
                         const round = args.capabilityRound ?? 0
-                        if (round >= 4) throw new Error('Capability model-tool round limit exceeded')
+
+                        if (round >= 4)
+                            throw new Error('Capability model-tool round limit exceeded')
+
                         const executions = []
+
                         for (const call of capabilityCalls) {
                             executions.push(await args.capabilityToolExecutor!.execute(call, this.signal))
                         }
+
                         const continuationInput = [
                             ...args.inputMessages,
                             ...(response.output ?? []),
-                            ...executions.map(execution => ({
-                                type: 'function_call_output',
-                                call_id: execution.call.callId,
-                                output: JSON.stringify(execution.result),
-                            })),
+                            ...executions.map(
+                                execution => ({
+                                    type: 'function_call_output',
+                                    call_id: execution.call.callId,
+                                    output: JSON.stringify(execution.result),
+                                }),
+                            ),
                         ]
                         const continuation = await this.generateViaResponsesApi({
                             ...args,
                             inputMessages: continuationInput,
                             capabilityRound: round + 1,
                         })
+
                         return mergeProviderUpdates(update, continuation)
                     }
 
-                    if (args.hasImageModel || args.hasVideoModel) {
+                    if (
+                        args.hasImageModel
+                        || args.hasVideoModel
+                    ) {
                         const characterCreatorActive = args.state.capabilityUsageMode === 'character-creator'
-                        const videoCall = args.hasVideoModel && !characterCreatorActive
+                        const videoCall = args.hasVideoModel
+                            && !characterCreatorActive
                             ? extractVideoToolCall('OpenAI', response)
                             : undefined
-                        const imageCall = args.hasImageModel && !videoCall ? extractToolCall('OpenAI', response) : undefined
+                        const imageCall = args.hasImageModel
+                            && !videoCall
+                            ? extractToolCall('OpenAI', response)
+                            : undefined
+
                         if (videoCall) {
                             update.generatedVideoPrompt = videoCall.prompt
                             update.generatedVideoNegativePrompt = videoCall.negativePrompt
-                            info(`[OpenAI:${this.instanceKey}] generate_video tool call ${
-                                JSON.stringify(
-                                    {
-                                        chatModel: args.modelVersion,
-                                        targetVideoProvider: args.state.videoProviderName,
-                                        targetVideoModel: args.state.videoModelVersion,
-                                        promptLen: videoCall.prompt.length,
-                                        negativePromptLen: videoCall.negativePrompt?.length ?? 0,
-                                    },
-                                    null,
-                                    0,
-                                )
-                            }`)
+                            info(
+                                `[OpenAI:${this.instanceKey}] generate_video tool call ${
+                                    JSON.stringify(
+                                        {
+                                            chatModel: args.modelVersion,
+                                            targetVideoProvider: args.state.videoProviderName,
+                                            targetVideoModel: args.state.videoModelVersion,
+                                            promptLen: videoCall.prompt.length,
+                                            negativePromptLen: videoCall.negativePrompt?.length ?? 0,
+                                        },
+                                        null,
+                                        0,
+                                    )
+                                }`,
+                            )
                         } else if (imageCall) {
                             const refs = extractReferenceImages(args.state.messages)
                             update.generatedImagePrompt = imageCall.prompt
                             update.referenceImages = refs
-                            info(`[OpenAI:${this.instanceKey}] generate_image tool call ${
-                                JSON.stringify(
-                                    {
-                                        chatModel: args.modelVersion,
-                                        targetImageProvider: args.state.imageProviderName,
-                                        targetImageModel: args.state.imageModelVersion,
-                                        promptLen: imageCall.prompt.length,
-                                        referenceImagesExtracted: refs.length,
-                                    },
-                                    null,
-                                    0,
-                                )
-                            }`)
-                        } else if (args.hasImageModel && args.state.capabilityMediaExecutionPlan) {
-                            info(`[OpenAI:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${args.modelVersion})`)
-                        } else if (args.hasImageModel && args.hasVideoModel) {
+                            info(
+                                `[OpenAI:${this.instanceKey}] generate_image tool call ${
+                                    JSON.stringify(
+                                        {
+                                            chatModel: args.modelVersion,
+                                            targetImageProvider: args.state.imageProviderName,
+                                            targetImageModel: args.state.imageModelVersion,
+                                            promptLen: imageCall.prompt.length,
+                                            referenceImagesExtracted: refs.length,
+                                        },
+                                        null,
+                                        0,
+                                    )
+                                }`,
+                            )
+                        } else if (
+                            args.hasImageModel
+                            && args.state.capabilityMediaExecutionPlan
+                        )
+                            info(
+                                `[OpenAI:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${args.modelVersion})`,
+                            )
+                        else if (
+                            args.hasImageModel
+                            && args.hasVideoModel
+                        )
                             warn(`[OpenAI:${this.instanceKey}] did not emit generate_image or generate_video (model=${args.modelVersion})`)
-                        } else if (args.hasImageModel) {
+                        else if (args.hasImageModel)
                             warn(`[OpenAI:${this.instanceKey}] did not emit generate_image (model=${args.modelVersion}); image gen will not run`)
-                        } else {
+                        else
                             warn(`[OpenAI:${this.instanceKey}] did not emit generate_video (model=${args.modelVersion}); video gen will not run`)
-                        }
                     }
 
                     // Native (Responses-API) image generation path.
@@ -507,6 +653,7 @@ export class OpenAIProvider extends BaseProvider {
                             if (output.type === 'image_generation_call') {
                                 const result = output.result
                                 const revisedPrompt = output.revised_prompt ?? ''
+
                                 if (result) {
                                     imagesGenerated += 1
                                     info(
@@ -537,11 +684,13 @@ export class OpenAIProvider extends BaseProvider {
                             totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
                         }
                     }
+
                     break
                 }
                 case 'response.failed': {
                     const response = event.response
                     const errorObj = response.error
+
                     if (errorObj) {
                         const message = errorObj.message ?? 'Unknown error'
                         const code = errorObj.code
@@ -551,8 +700,10 @@ export class OpenAIProvider extends BaseProvider {
                         update.errorType = type
                         update.responseId = response.id
                         err(`Response failed: ${message} (code: ${code}, type: ${type})`)
+
                         throw new Error(`OpenAI Responses API error: ${message}`)
                     }
+
                     break
                 }
             }
@@ -572,7 +723,10 @@ export class OpenAIProvider extends BaseProvider {
 
     private async generateViaImageApi(args: {
         state: ProviderState
-        inputMessages: Array<{ role: string; content: any }>
+        inputMessages: Array<{
+            role: string
+            content: any
+        }>
         modelVersion: string
         imageSize: string
         workspaceId: string
@@ -587,25 +741,41 @@ export class OpenAIProvider extends BaseProvider {
         // already resolved once by BaseProvider's provider-neutral contract.
         for (let i = args.inputMessages.length - 1; i >= 0; i--) {
             const msg = args.inputMessages[i]!
-            if (msg.role !== 'user') continue
+
+            if (msg.role !== 'user')
+                continue
+
             const content = msg.content
-            if (typeof content === 'string') {
+
+            if (typeof content === 'string')
                 prompt = content
-            } else if (Array.isArray(content)) {
+            else if (Array.isArray(content)) {
                 const textParts: string[] = []
+
                 for (const block of content) {
-                    if (typeof block !== 'object' || block === null) continue
+                    if (
+                        typeof block !== 'object'
+                        || block === null
+                    )
+                        continue
+
                     const blockType = (block as any).type
-                    if (blockType === 'text' || blockType === 'input_text') {
+
+                    if (
+                        blockType === 'text'
+                        || blockType === 'input_text'
+                    )
                         textParts.push((block as any).text ?? '')
-                    }
                 }
+
                 prompt = textParts.join(' ')
             }
+
             break
         }
 
-        if (!prompt) throw new Error('No user prompt found for image generation')
+        if (!prompt)
+            throw new Error('No user prompt found for image generation')
 
         const hasReferences = referenceFiles.length > 0
         prompt = prependImageReferencePromptLegend(prompt, resolvedReferences)
@@ -620,34 +790,38 @@ export class OpenAIProvider extends BaseProvider {
             signal: this.signal,
             maxRetries: 0,
         }
-        info(`[OpenAI:${this.instanceKey}] image SDK call ${
-            JSON.stringify(
-                {
-                    api: hasReferences ? 'images.edit' : 'images.generate',
-                    model: args.modelVersion,
-                    size: args.imageSize,
-                    quality,
-                    background,
-                    inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
-                    automaticRetries: imageRequestOptions.maxRetries,
-                    transportRetryBudgetMs: TRANSPORT_RETRY_BUDGET_MS,
-                    partialImages: 3,
-                    referenceFiles: referenceFiles.length,
-                    referenceFileNames: referenceFiles.map(r => r.name),
-                    referenceFileMetadata: referenceFiles.map(reference => ({
-                        name: reference.name,
-                        role: reference.role,
-                        byteLength: reference.byteLength,
-                        mediaType: reference.mediaType,
-                        sha256: reference.sha256,
-                    })),
-                    promptLen: prompt.length,
-                    promptPreview: prompt.slice(0, 200),
-                },
-                null,
-                0,
-            )
-        }`)
+        info(
+            `[OpenAI:${this.instanceKey}] image SDK call ${
+                JSON.stringify(
+                    {
+                        api: hasReferences ? 'images.edit' : 'images.generate',
+                        model: args.modelVersion,
+                        size: args.imageSize,
+                        quality,
+                        background,
+                        inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
+                        automaticRetries: imageRequestOptions.maxRetries,
+                        transportRetryBudgetMs: TRANSPORT_RETRY_BUDGET_MS,
+                        partialImages: 3,
+                        referenceFiles: referenceFiles.length,
+                        referenceFileNames: referenceFiles.map(r => r.name),
+                        referenceFileMetadata: referenceFiles.map(
+                            reference => ({
+                                name: reference.name,
+                                role: reference.role,
+                                byteLength: reference.byteLength,
+                                mediaType: reference.mediaType,
+                                sha256: reference.sha256,
+                            }),
+                        ),
+                        promptLen: prompt.length,
+                        promptPreview: prompt.slice(0, 200),
+                    },
+                    null,
+                    0,
+                )
+            }`,
+        )
 
         // Send placeholder for animated border.
         await this.imagePub.partial('', 0)
@@ -661,49 +835,64 @@ export class OpenAIProvider extends BaseProvider {
             'image',
             async () => {
                 const stream = hasReferences
-                    ? await this.client.images.edit({
-                        model: args.modelVersion,
-                        image: referenceFiles.length > 1
-                            ? referenceFiles.map(r => r.file)
-                            : referenceFiles[0]!.file,
-                        prompt,
-                        ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
-                        quality,
-                        background,
-                        output_format: 'png',
-                        ...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {}),
-                        size: resolvedSize,
-                        stream: true,
-                        partial_images: 3,
-                    } as any, imageRequestOptions)
-                    : await this.client.images.generate({
-                        model: args.modelVersion,
-                        prompt,
-                        ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
-                        quality,
-                        background,
-                        output_format: 'png',
-                        size: resolvedSize,
-                        stream: true,
-                        partial_images: 3,
-                    } as any, imageRequestOptions)
+                    ? await this.client.images.edit(
+                        {
+                            model: args.modelVersion,
+                            image: referenceFiles.length > 1
+                                ? referenceFiles.map(r => r.file)
+                                : referenceFiles[0]!.file,
+                            prompt,
+                            ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
+                            quality,
+                            background,
+                            output_format: 'png',
+                            ...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {}),
+                            size: resolvedSize,
+                            stream: true,
+                            partial_images: 3,
+                        } as any,
+                        imageRequestOptions,
+                    )
+                    : await this.client.images.generate(
+                        {
+                            model: args.modelVersion,
+                            prompt,
+                            ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
+                            quality,
+                            background,
+                            output_format: 'png',
+                            size: resolvedSize,
+                            stream: true,
+                            partial_images: 3,
+                        } as any,
+                        imageRequestOptions,
+                    )
 
                 let completed: any = null
+
                 for await (const event of stream as any) {
                     if (this.shouldStop) {
                         info('Image generation stopped by user request')
+
                         break
                     }
-                    if (event.type && String(event.type).includes('partial_image')) {
+
+                    if (
+                        event.type
+                        && String(event.type).includes('partial_image')
+                    ) {
                         const partialB64 = event.b64_json
                         const partialIdx = event.partial_image_index ?? 0
-                        if (partialB64) {
+
+                        if (partialB64)
                             await this.imagePub.partial(partialB64, partialIdx)
-                        }
-                    } else if (event.type && String(event.type).includes('completed')) {
+                    } else if (
+                        event.type
+                        && String(event.type).includes('completed')
+                    )
                         completed = event
-                    }
                 }
+
                 return completed
             },
         )
@@ -711,6 +900,7 @@ export class OpenAIProvider extends BaseProvider {
         if (finalImage) {
             const imageB64 = finalImage.b64_json
             const revisedPrompt = finalImage.revised_prompt ?? ''
+
             if (imageB64) {
                 await this.imagePub.complete({
                     imageBase64: imageB64,
@@ -725,7 +915,9 @@ export class OpenAIProvider extends BaseProvider {
                     quality,
                 }
             }
+
             const usage = finalImage.usage
+
             if (usage) {
                 update.usage = {
                     promptTokens: usage.input_tokens ?? 0,
@@ -744,17 +936,35 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     private extractResponseText(response: any): string {
-        if (typeof response.output_text === 'string' && response.output_text.trim()) {
+        if (
+            typeof response.output_text === 'string'
+            && response.output_text.trim()
+        )
             return response.output_text.trim()
-        }
+
         const parts: string[] = []
+
         for (const item of response.output ?? []) {
-            if (item?.type !== 'message') continue
+            if (item?.type !== 'message')
+                continue
+
             for (const c of item.content ?? []) {
-                if (c?.type !== 'output_text' && c?.type !== 'text') continue
-                if (typeof c.text === 'string' && c.text.trim()) parts.push(c.text.trim())
+                if (
+                    c?.type !== 'output_text'
+                    && c?.type !== 'text'
+                )
+                    continue
+
+                if (
+                    typeof c.text === 'string'
+                    && c.text.trim()
+                )
+                    parts.push(
+                        c.text.trim(),
+                    )
             }
         }
+
         return parts.join('\n').trim()
     }
 }
@@ -765,10 +975,12 @@ function mergeProviderUpdates(
 ): Partial<ProviderState> {
     const firstUsage = first.usage
     const secondUsage = second.usage
+
     return {
         ...first,
         ...second,
-        ...(firstUsage || secondUsage
+        ...(firstUsage
+            || secondUsage
             ? {
                 usage: {
                     promptTokens: (firstUsage?.promptTokens ?? 0) + (secondUsage?.promptTokens ?? 0),

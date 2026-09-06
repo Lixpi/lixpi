@@ -30,13 +30,15 @@ export type SpreadResult = {
     sourceY: number // Source node center Y for lane calculation
 }
 
-export function computeConnectorSpread<Node extends CanvasGeometryNode>(
+export const computeConnectorSpread = <Node extends CanvasGeometryNode>(
     edges: readonly SpreadEdge[],
     nodes: readonly Node[],
     options: ConnectorSpreadOptions<Node>,
-): Map<string, SpreadResult> {
+): Map<string, SpreadResult> => {
     const result = new Map<string, SpreadResult>()
-    const nodeMap = new Map(nodes.map(n => [n.nodeId, n]))
+    const nodeMap = new Map(
+        nodes.map(n => [n.nodeId, n]),
+    )
 
     // Group edges by source node+side
     const sourceGroups = new Map<string, SpreadEdge[]>()
@@ -47,8 +49,11 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
         const sourceKey = `${edge.sourceNodeId}:${edge.sourceHandle ?? 'right'}`
         const targetKey = `${edge.targetNodeId}:${edge.targetHandle ?? 'left'}`
 
-        if (!sourceGroups.has(sourceKey)) sourceGroups.set(sourceKey, [])
-        if (!targetGroups.has(targetKey)) targetGroups.set(targetKey, [])
+        if (!sourceGroups.has(sourceKey))
+            sourceGroups.set(sourceKey, [])
+
+        if (!targetGroups.has(targetKey))
+            targetGroups.set(targetKey, [])
 
         sourceGroups.get(sourceKey)!.push(edge)
         targetGroups.get(targetKey)!.push(edge)
@@ -58,19 +63,26 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
         const sourceY = sourceNode ? sourceNode.position.y + sourceNode.dimensions.height / 2 : 0
 
         // Default to stored T or 0.5
-        const sourceT = options.isCentered(sourceNode) ? 0.5 : edge.sourceT ?? 0.5
-        let targetT = options.isCentered(targetNode) ? 0.5 : edge.targetT ?? 0.5
+        const sourceT = options.isCentered(sourceNode) ? 0.5 : (edge.sourceT ?? 0.5)
+        let targetT = options.isCentered(targetNode) ? 0.5 : (edge.targetT ?? 0.5)
 
         // Dynamic auto-align: If source Y hits the target node, FORCE straight line alignment
         // This ensures that even during dragging or node moving, the line attempts to stay straight
         // For off-axis nodes, we clamp to the nearest corner (top/bottom) instead of snapping to center
-        if (sourceNode && targetNode && !options.isCentered(targetNode)) {
+        if (
+            sourceNode
+            && targetNode
+            && !options.isCentered(targetNode)
+        ) {
             const targetHeight = targetNode.dimensions.height
 
             // When the target is shorter than the minimum slide height, snap to center
-            if (targetHeight <= 0 || targetHeight < options.minSlideHeight) {
+            if (
+                targetHeight <= 0
+                || targetHeight < options.minSlideHeight
+            )
                 targetT = 0.5
-            } else {
+            else {
                 const targetTop = targetNode.position.y
 
                 // Calculate ideal straight-line projection
@@ -79,25 +91,36 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
                 // Clamp to be within the node side (0-1), leaving a configurable margin
                 // effectively snapping to the top or bottom corner if the source is outside vertical bounds
                 const m = options.edgeMargin
-                targetT = Math.max(m, Math.min(1 - m, idealT))
+                targetT = Math.max(
+                    m,
+                    Math.min(1 - m, idealT),
+                )
             }
         }
 
         // Initialize with values
-        result.set(edge.edgeId, {
-            sourceT,
-            targetT,
-            laneIndex: 0,
-            laneCount: 1,
-            sourceY,
-        })
+        result.set(
+            edge.edgeId,
+            {
+                sourceT,
+                targetT,
+                laneIndex: 0,
+                laneCount: 1,
+                sourceY,
+            },
+        )
     }
 
     // Spread source t values for edges sharing the same source node+side
     // Sort by TARGET node's Y position so lines don't cross
     for (const [, group] of sourceGroups) {
-        if (group.length <= 1) continue
-        if (options.isCentered(nodeMap.get(group[0]?.sourceNodeId))) continue
+        if (group.length <= 1)
+            continue
+
+        if (options.isCentered(
+            nodeMap.get(group[0]?.sourceNodeId),
+        ))
+            continue
 
         // Sort by target node Y position (smaller Y = higher on screen = smaller t)
         group.sort((a, b) => {
@@ -105,6 +128,7 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
             const bTarget = nodeMap.get(b.targetNodeId)
             const aY = aTarget ? aTarget.position.y + aTarget.dimensions.height / 2 : 0
             const bY = bTarget ? bTarget.position.y + bTarget.dimensions.height / 2 : 0
+
             return aY - bY
         })
 
@@ -125,7 +149,8 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
     // Sort by SOURCE node's Y position so lines don't cross
     // Also assign lane indices for vertical segment ordering
     for (const [, group] of targetGroups) {
-        if (group.length <= 1) continue
+        if (group.length <= 1)
+            continue
 
         // Sort by source node Y position (smaller Y = higher on screen = smaller t)
         group.sort((a, b) => {
@@ -133,6 +158,7 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
             const bSource = nodeMap.get(b.sourceNodeId)
             const aY = aSource ? aSource.position.y + aSource.dimensions.height / 2 : 0
             const bY = bSource ? bSource.position.y + bSource.dimensions.height / 2 : 0
+
             return aY - bY
         })
 
@@ -140,6 +166,7 @@ export function computeConnectorSpread<Node extends CanvasGeometryNode>(
         // We DO NOT override targetT here anymore. We prioritize standard straight lines.
         // If lines overlap, laneIndex will separate their vertical segments.
         const count = group.length
+
         for (let i = 0; i < group.length; i++) {
             const edge = group[i]
             const values = result.get(edge.edgeId)!

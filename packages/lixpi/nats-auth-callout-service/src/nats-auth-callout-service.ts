@@ -85,9 +85,15 @@ const appendUniquePermissionSubjects = ({
 }): void => {
     for (const subjectPattern of subjectPatterns) {
         const subject = subjectPattern
-            .replaceAll('{userIdToken}', getNatsUserSubjectToken(userId))
+            .replaceAll(
+                '{userIdToken}',
+                getNatsUserSubjectToken(userId),
+            )
             .replaceAll('{userId}', userId)
-        if (seen.has(subject)) continue
+
+        if (seen.has(subject))
+            continue
+
         seen.add(subject)
         target.push(subject)
     }
@@ -111,6 +117,7 @@ const getPermissionsForUser = (
     // If service-specific permissions are provided, use them
     if (servicePermissions) {
         info('Service permissions (restricted service account):', servicePermissions)
+
         return servicePermissions
     }
 
@@ -153,6 +160,7 @@ const getPermissionsForUser = (
     }
 
     info('Final resolved permissions:', resolvedPermissions)
+
     return resolvedPermissions
 }
 
@@ -165,6 +173,7 @@ const getPermissionsForUser = (
 const decodeBase64Url = (value: string): Buffer => {
     const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+
     return Buffer.from(padded, 'base64')
 }
 
@@ -197,23 +206,23 @@ const authenticateRegisteredServiceFromSelfIssuedJwt = async (
 
     if (serviceJwtVerification.error) {
         err('Self-issued JWT verification failed:', serviceJwtVerification.error)
+
         throw new Error(`Self-issued JWT verification failed: ${serviceJwtVerification.error}`)
     }
 
     const serviceJwtPayload = serviceJwtVerification.decoded
-    if (!serviceJwtPayload) {
+
+    if (!serviceJwtPayload)
         throw new Error('Self-issued JWT verified without a decoded payload')
-    }
 
     const userId = serviceJwtPayload.sub
-    if (!userId) {
+
+    if (!userId)
         throw new Error('User ID ("sub") missing in self-issued JWT')
-    }
 
     // Verify the userId matches the expected service identity
-    if (userId !== serviceConfig.userId) {
+    if (userId !== serviceConfig.userId)
         throw new Error(`User ID mismatch: expected ${serviceConfig.userId}, got ${userId}`)
-    }
 
     info(`Auth callout: Service authenticated via self-issued JWT (${userId})`)
 
@@ -246,24 +255,29 @@ const authenticateRegularUserFromAuth0Jwt = async (
 
         if (auth0JwtVerification.error) {
             err('Auth0 token verification failed:', auth0JwtVerification.error)
+
             throw new Error(`Token verification failed: ${auth0JwtVerification.error}`)
         }
 
         const auth0JwtPayload = auth0JwtVerification.decoded
-        if (!auth0JwtPayload) {
+
+        if (!auth0JwtPayload)
             throw new Error('Auth0 JWT verified without a decoded payload')
-        }
 
         const userId = auth0JwtPayload.sub
-        if (!userId) {
+
+        if (!userId)
             throw new Error('User ID ("sub") missing in Auth0 JWT')
-        }
 
         info(`Auth callout: Auth0 user authenticated (${userId})`)
 
-        return { userId, targetNatsAccount: defaultNatsAccount }
+        return {
+            userId,
+            targetNatsAccount: defaultNatsAccount,
+        }
     } catch (caughtError: any) {
         err('Auth0 token verification failed:', caughtError)
+
         throw new Error(`Token verification failed: ${caughtError.error || caughtError.message}`)
     }
 }
@@ -349,9 +363,7 @@ const authenticateClientUsingAuthTokenPath = async ({
 // Returning undefined means "this request is not using raw NKey auth". Throwing
 // means "the request tried to use raw NKey auth but did not provide enough data
 // to verify it safely".
-const extractRawNKeyChallengeFields = (
-    authorizationRequest: NatsAuthCalloutRequest,
-): RawNKeyChallengeFields | undefined => {
+const extractRawNKeyChallengeFields = (authorizationRequest: NatsAuthCalloutRequest): RawNKeyChallengeFields | undefined => {
     const connectOptions = authorizationRequest.nats?.connect_opts
 
     const clientPublicNKey = connectOptions?.nkey
@@ -363,11 +375,16 @@ const extractRawNKeyChallengeFields = (
     const challengeNonce = authorizationRequest.nats?.request_nonce ?? authorizationRequest.nats?.client_info?.nonce
 
     const hasAnyRawNKeyField = Boolean(clientPublicNKey || clientSignature || challengeNonce)
-    if (!hasAnyRawNKeyField) return undefined
 
-    if (!clientPublicNKey || !clientSignature || !challengeNonce) {
+    if (!hasAnyRawNKeyField)
+        return undefined
+
+    if (
+        !clientPublicNKey
+        || !clientSignature
+        || !challengeNonce
+    )
         throw new Error('Raw NKey client auth fields are incomplete.')
-    }
 
     return {
         clientPublicNKey,
@@ -397,13 +414,10 @@ const authenticateClientUsingRawNKeyChallengePath = ({
     serviceAuthConfigs: ServiceAuthConfig[]
     defaultNatsAccount: string
 }): AuthenticatedNatsClient => {
-    const serviceConfig = serviceAuthConfigs.find(
-        config => config.publicKey === rawNKeyChallengeFields.clientPublicNKey,
-    )
+    const serviceConfig = serviceAuthConfigs.find(config => config.publicKey === rawNKeyChallengeFields.clientPublicNKey)
 
-    if (!serviceConfig) {
+    if (!serviceConfig)
         throw new Error('Raw NKey client is not registered for auth callout.')
-    }
 
     info(`Auth callout: Verifying raw NKey client auth (issuer: ${rawNKeyChallengeFields.clientPublicNKey.substring(0, 10)}...)`)
 
@@ -416,9 +430,8 @@ const authenticateClientUsingRawNKeyChallengePath = ({
         decodeBase64Url(rawNKeyChallengeFields.clientSignature),
     )
 
-    if (!isSignatureValid) {
+    if (!isSignatureValid)
         throw new Error('Raw NKey signature verification failed')
-    }
 
     info(`Auth callout: Service authenticated via raw NKey (${serviceConfig.userId})`)
 
@@ -457,6 +470,7 @@ const authenticateClientFromAuthorizationRequest = async ({
     // 2. raw NKey challenge fields are the NATS-native path used by NEX.
     // 3. anything else is rejected before a NATS user JWT can be issued.
     const tokenFromConnectOptions = authorizationRequest.nats?.connect_opts?.auth_token
+
     if (tokenFromConnectOptions) {
         return authenticateClientUsingAuthTokenPath({
             tokenFromConnectOptions,
@@ -467,6 +481,7 @@ const authenticateClientFromAuthorizationRequest = async ({
     }
 
     const rawNKeyChallengeFields = extractRawNKeyChallengeFields(authorizationRequest)
+
     if (rawNKeyChallengeFields) {
         return authenticateClientUsingRawNKeyChallengePath({
             rawNKeyChallengeFields,
@@ -502,27 +517,21 @@ const decryptAuthorizationRequest = ({
     // service opens it with the matching private curve seed.
     const senderPublicCurveKey = requestMessage.headers?.get('Nats-Server-Xkey')
 
-    if (!senderPublicCurveKey) {
+    if (!senderPublicCurveKey)
         throw new Error('Missing Nats-Server-Xkey in request headers!')
-    }
 
-    const decryptedAuthorizationRequestJwt = authorizationRequestCurveKeyPair.open(
-        encryptedAuthorizationRequest,
-        senderPublicCurveKey,
-    )
+    const decryptedAuthorizationRequestJwt = authorizationRequestCurveKeyPair.open(encryptedAuthorizationRequest, senderPublicCurveKey)
 
-    if (!decryptedAuthorizationRequestJwt) {
+    if (!decryptedAuthorizationRequestJwt)
         throw new Error('Curve decryption failed')
-    }
 
     const decodedAuthorizationRequest = jsonWebToken.decode(
         new TextDecoder().decode(decryptedAuthorizationRequestJwt),
         { json: true },
     ) as NatsAuthCalloutRequest | null
 
-    if (!decodedAuthorizationRequest?.nats) {
+    if (!decodedAuthorizationRequest?.nats)
         throw new Error('Invalid NATS auth-callout request payload.')
-    }
 
     return decodedAuthorizationRequest
 }
@@ -552,13 +561,11 @@ const createAuthorizationResponseJwt = async ({
     const sessionUserPublicNKey = authorizationRequest.nats?.user_nkey
     const serverId = authorizationRequest.nats?.server_id?.id
 
-    if (!sessionUserPublicNKey) {
+    if (!sessionUserPublicNKey)
         throw new Error('Missing NATS user nkey in auth-callout request.')
-    }
 
-    if (!serverId) {
+    if (!serverId)
         throw new Error('Missing NATS server id in auth-callout request.')
-    }
 
     const permissions = getPermissionsForUser(
         authenticatedClient.userId,
@@ -634,16 +641,18 @@ export const startNatsAuthCalloutService = async ({
     natsAuthAccount: string
     serviceAuthConfigs?: ServiceAuthConfig[]
 }) => {
-    if (!nKeyIssuerSeed) {
+    if (!nKeyIssuerSeed)
         throw new Error('Issuer seed for NATS auth callout not provided!')
-    }
 
-    if (!xKeyIssuerSeed) {
+    if (!xKeyIssuerSeed)
         throw new Error('xKeyIssuerSeed for NATS auth callout not provided!')
-    }
 
-    const authorizationIssuerKeyPair = fromSeed(Buffer.from(nKeyIssuerSeed))
-    const authorizationRequestCurveKeyPair = fromSeed(Buffer.from(xKeyIssuerSeed))
+    const authorizationIssuerKeyPair = fromSeed(
+        Buffer.from(nKeyIssuerSeed),
+    )
+    const authorizationRequestCurveKeyPair = fromSeed(
+        Buffer.from(xKeyIssuerSeed),
+    )
 
     // Create JWT verifier for Auth0 tokens
     const auth0JwtVerifier = createJwtVerifier({

@@ -30,20 +30,23 @@ export type AiPromptSubmitModelData = {
     }
 }
 
-function parseBooleanModelMode(value: unknown): boolean {
-    return value === true || value === 'true'
-}
+const parseBooleanModelMode = (value: unknown): boolean => value === true || value === 'true'
 
 // Multi disabled: collapse the section's selection to its first model.
-function serializePromptModelSelection(value: unknown, useMultiple: boolean): string {
+const serializePromptModelSelection = (
+    value: unknown,
+    useMultiple: boolean,
+): string => {
     const models = parseAiModelSelectionAttr(value)
+
     return serializeAiModelSelectionAttr(useMultiple ? models : models.slice(0, 1))
 }
 
-export function buildAiPromptDraftAttrsFromSubmitData(data: AiPromptSubmitModelData): Record<string, any> {
+export const buildAiPromptDraftAttrsFromSubmitData = (data: AiPromptSubmitModelData): Record<string, any> => {
     const useMultipleReasoningModels = parseBooleanModelMode(data.useMultipleReasoningModels)
     const useMultipleImageModels = parseBooleanModelMode(data.useMultipleImageModels)
     const useMultipleVideoModels = parseBooleanModelMode(data.useMultipleVideoModels)
+
     return {
         mediaGenerationMode: data.mediaGenerationMode === 'video' ? 'video' : 'image',
         aiReasoningModels: serializePromptModelSelection(data.aiReasoningModels, useMultipleReasoningModels),
@@ -62,14 +65,24 @@ export function buildAiPromptDraftAttrsFromSubmitData(data: AiPromptSubmitModelD
     }
 }
 
-export function buildAiPromptDraftFromText(promptText: string, attrs: Record<string, any> = {}): object {
+export const buildAiPromptDraftFromText = (
+    promptText: string,
+    attrs: Record<string, any> = {},
+): object => {
     const text = promptText.trim()
     const paragraph = text
-        ? { type: 'paragraph', content: [{ type: 'text', text }] }
+        ? {
+            type: 'paragraph',
+            content: [{
+                type: 'text',
+                text,
+            }],
+        }
         : { type: 'paragraph' }
     const useMultipleReasoningModels = parseBooleanModelMode(attrs.useMultipleReasoningModels)
     const useMultipleImageModels = parseBooleanModelMode(attrs.useMultipleImageModels)
     const useMultipleVideoModels = parseBooleanModelMode(attrs.useMultipleVideoModels)
+
     return {
         type: 'doc',
         content: [

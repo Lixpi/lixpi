@@ -6,7 +6,10 @@ export type SvgGradientAnimation = {
     stop: () => void
 }
 
-type SvgGradientPoint = { x: number; y: number }
+type SvgGradientPoint = {
+    x: number
+    y: number
+}
 
 export class SvgGradientRenderer {
     static appendLinearGradientStops(
@@ -21,7 +24,8 @@ export class SvgGradientRenderer {
                 .attr('offset', `${index / offsetDenominator * 100}%`)
                 .style('stop-color', color)
 
-            if (options.idPrefix) stop.attr('id', `${options.idPrefix}-${index}`)
+            if (options.idPrefix)
+                stop.attr('id', `${options.idPrefix}-${index}`)
         })
     }
 
@@ -30,7 +34,8 @@ export class SvgGradientRenderer {
         colors: ReadonlyArray<string>,
         repeats = 2,
     ): void {
-        if (colors.length === 0) return
+        if (colors.length === 0)
+            return
 
         const loopedColors = [...colors, colors[0]]
         const stopCount = repeats * loopedColors.length
@@ -52,12 +57,19 @@ export class SvgGradientRenderer {
             ease?: (progress: number) => number
         },
     ): SvgGradientAnimation {
-        const { center, radius, duration, angleStep = -0.1, ease = Easing.hoverTransition } = options
+        const {
+            center,
+            radius,
+            duration,
+            angleStep = -0.1,
+            ease = Easing.hoverTransition,
+        } = options
         let running = true
         let angle = 0
 
         const animate = () => {
-            if (!running) return
+            if (!running)
+                return
 
             const x1 = center.x + radius * Math.cos(angle)
             const y1 = center.y + radius * Math.sin(angle)
@@ -74,7 +86,9 @@ export class SvgGradientRenderer {
                 .attr('y2', y2)
                 .on('end', () => {
                     angle += angleStep
-                    if (running) animate()
+
+                    if (running)
+                        animate()
                 })
         }
 

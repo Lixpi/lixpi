@@ -65,10 +65,17 @@ class AiPromptComposer implements AiPromptComposerInstance {
         this.lifetime.own(() => this.element.remove())
         this.editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
         this.element.appendChild(this.editorContainer)
+
         try {
-            if (config.useGradient ?? config.appearance.useShiftingGradientBackground) {
+            if (
+                config.useGradient
+                ?? config.appearance.useShiftingGradientBackground
+            ) {
                 const colors = config.appearance.gradientColors
-                if (colors.length !== 4) throw new Error('Composer gradient requires four colors')
+
+                if (colors.length !== 4)
+                    throw new Error('Composer gradient requires four colors')
+
                 const gradient = createShiftingGradientBackground(this.element, { colors: [colors[0], colors[1], colors[2], colors[3]] })
                 this.gradient = gradient
                 this.lifetime.own(() => {
@@ -76,16 +83,19 @@ class AiPromptComposer implements AiPromptComposerInstance {
                     gradient.destroy()
                 })
             }
+
             const editor = config.mountEditor({
                 host: this.editorContainer,
                 initialContent: config.initialContent ?? {},
                 threadId: config.threadId ?? null,
                 signal: this.lifetime.signal,
                 onContentChange: value => {
-                    if (!this.lifetime.signal.aborted) config.onContentChange?.(value)
+                    if (!this.lifetime.signal.aborted)
+                        config.onContentChange?.(value)
                 },
                 onSubmit: data => {
-                    if (!this.lifetime.signal.aborted) return config.onSubmit(data)
+                    if (!this.lifetime.signal.aborted)
+                        return config.onSubmit(data)
                 },
             })
             this.editor = editor
@@ -95,6 +105,7 @@ class AiPromptComposer implements AiPromptComposerInstance {
             })
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
@@ -103,23 +114,17 @@ class AiPromptComposer implements AiPromptComposerInstance {
         return this.editor?.editorView ?? null
     }
 
-    triggerGradientAnimation = (): void => {
-        this.gradient?.triggerAnimation()
-    }
-    focus = (): void => {
-        this.editor?.editorView?.focus()
-    }
+    triggerGradientAnimation = (): void => void this.gradient?.triggerAnimation()
+    focus = (): void => void this.editor?.editorView?.focus()
 
     restoreContent = (content: object): void => {
-        if (!this.editor?.editorView) throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
+        if (!this.editor?.editorView)
+            throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
+
         this.editor.restoreContent(content)
     }
 
-    destroy = (): void => {
-        this.lifetime.destroy()
-    }
+    destroy = (): void => void this.lifetime.destroy()
 }
 
-export function createAiPromptComposer(config: AiPromptComposerConfig): AiPromptComposerInstance {
-    return new AiPromptComposer(config)
-}
+export const createAiPromptComposer = (config: AiPromptComposerConfig): AiPromptComposerInstance => new AiPromptComposer(config)

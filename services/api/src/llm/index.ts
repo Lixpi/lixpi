@@ -26,10 +26,18 @@ import {
 import { createCharacterCreatorRuntimePorts } from '../capability-system/character-creator-platform-adapter.ts'
 
 export type LlmModule = {
-    process: (instanceKey: string, providerName: ProviderName, requestData: Record<string, any>) => Promise<void>
+    process: (
+        instanceKey: string,
+        providerName: ProviderName,
+        requestData: Record<string, any>,
+    ) => Promise<void>
     processMediaGenerationMatrix: (requestData: MatrixRequestData) => Promise<void>
     stop: (instanceKey: string) => Promise<void>
-    stopMediaGenerationMatrix: (params: { workspaceId: string; aiChatThreadId: string; generationRequestId?: string }) => Promise<void>
+    stopMediaGenerationMatrix: (params: {
+        workspaceId: string
+        aiChatThreadId: string
+        generationRequestId?: string
+    }) => Promise<void>
     shutdown: () => Promise<void>
     seedCapabilities: () => Promise<void>
     capabilityModuleCatalog: CapabilityModuleCatalog
@@ -55,7 +63,11 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     )
 
     const capabilityMediaStrategies = new CapabilityMediaStrategyRegistry()
-    const imageRouter = new ImageRouter(registry, capabilityMediaStrategies, deps.natsService)
+    const imageRouter = new ImageRouter(
+        registry,
+        capabilityMediaStrategies,
+        deps.natsService,
+    )
     registry.setImageRouter((state, options) => imageRouter.execute(state, options))
 
     const videoRouter = new VideoRouter(registry)
@@ -77,10 +89,18 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
 
     return {
         capabilityModuleCatalog: capabilityModules,
-        process: (instanceKey, providerName, requestData) => registry.process(instanceKey, providerName, requestData),
-        processMediaGenerationMatrix: (requestData) => mediaGenerationMatrixOrchestrator.process(requestData),
-        stop: (instanceKey) => registry.stop(instanceKey),
-        stopMediaGenerationMatrix: (params) => mediaGenerationMatrixOrchestrator.stop(params),
+        process: (
+            instanceKey,
+            providerName,
+            requestData,
+        ) => registry.process(
+            instanceKey,
+            providerName,
+            requestData,
+        ),
+        processMediaGenerationMatrix: requestData => mediaGenerationMatrixOrchestrator.process(requestData),
+        stop: instanceKey => registry.stop(instanceKey),
+        stopMediaGenerationMatrix: params => mediaGenerationMatrixOrchestrator.stop(params),
         shutdown: () => registry.shutdown(),
         seedCapabilities: async () => await capabilityModules.seedAll(capabilityActionRegistry),
         getSubscriptions: () => [],

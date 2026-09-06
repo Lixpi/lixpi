@@ -11,7 +11,18 @@ export const MEDIA_REFERENCE_WINNING_MARGIN = 0.12
 export const MEDIA_REFERENCE_MAX_BINDINGS = 32
 export const MEDIA_REFERENCE_MAX_CANDIDATES = 5
 
-const GENERIC_SUFFIXES = new Set(['asset', 'audio', 'document', 'file', 'image', 'img', 'media', 'photo', 'picture', 'video'])
+const GENERIC_SUFFIXES = new Set([
+    'asset',
+    'audio',
+    'document',
+    'file',
+    'image',
+    'img',
+    'media',
+    'photo',
+    'picture',
+    'video',
+])
 const NON_IDENTIFYING_TOKENS = new Set([
     'a',
     'an',
@@ -90,9 +101,25 @@ const NON_IDENTIFYING_TOKENS = new Set([
 ])
 
 const singularizeToken = (token: string): string => {
-    if (token.endsWith('ies') && token.length > 4) return `${token.slice(0, -3)}y`
-    if (token.endsWith('ses') && token.length > 4) return token.slice(0, -2)
-    if (token.endsWith('s') && !token.endsWith('ss') && token.length > 3) return token.slice(0, -1)
+    if (
+        token.endsWith('ies')
+        && token.length > 4
+    )
+        return `${token.slice(0, -3)}y`
+
+    if (
+        token.endsWith('ses')
+        && token.length > 4
+    )
+        return token.slice(0, -2)
+
+    if (
+        token.endsWith('s')
+        && !token.endsWith('ss')
+        && token.length > 3
+    )
+        return token.slice(0, -1)
+
     return token
 }
 
@@ -105,35 +132,52 @@ export const normalizeMediaReferenceVariant = (value: string): string =>
         .replace(/\.[a-z0-9]{1,8}$/iu, '')
         .replace(/[^\p{L}\p{N}]+/gu, ' ')
         .trim()
-        .split(/\s+/u)
-        .map(singularizeToken)
-        .filter(token => token.length > 0 && !GENERIC_SUFFIXES.has(token))
+        .split(/\s+/u).map(singularizeToken).filter(token => token.length > 0 && !GENERIC_SUFFIXES.has(token))
         .join(' ')
 
-const tokenSet = (value: string): Set<string> => new Set(value.split(' ').filter(Boolean))
-const identifyingTokenSet = (value: string): Set<string> =>
-    new Set(
-        [...tokenSet(value)].filter(token => !NON_IDENTIFYING_TOKENS.has(token)),
-    )
-
-export const isIdentifyingMediaReferencePhrase = (value: string): boolean => (
-    identifyingTokenSet(normalizeMediaReferenceVariant(value)).size > 0
+const tokenSet = (value: string): Set<string> => new Set(
+    value.split(' ').filter(Boolean),
+)
+const identifyingTokenSet = (value: string): Set<string> => new Set(
+    [...tokenSet(value)].filter(token => !NON_IDENTIFYING_TOKENS.has(token)),
 )
 
-const tokenSimilarity = (left: string, right: string): number => {
+export const isIdentifyingMediaReferencePhrase = (value: string): boolean => identifyingTokenSet(
+    normalizeMediaReferenceVariant(value),
+).size > 0
+
+const tokenSimilarity = (
+    left: string,
+    right: string,
+): number => {
     const a = tokenSet(left)
     const b = tokenSet(right)
-    if (a.size === 0 || b.size === 0) return 0
+
+    if (
+        a.size === 0
+        || b.size === 0
+    )
+        return 0
+
     const intersection = [...a].filter(token => b.has(token)).length
+
     return (2 * intersection) / (a.size + b.size)
 }
 
-const boundedEditDistance = (left: string, right: string, maximum: number): number => {
-    if (Math.abs(left.length - right.length) > maximum) return maximum + 1
+const boundedEditDistance = (
+    left: string,
+    right: string,
+    maximum: number,
+): number => {
+    if (Math.abs(left.length - right.length) > maximum)
+        return maximum + 1
+
     let previous = Array.from({ length: right.length + 1 }, (_, index) => index)
+
     for (let leftIndex = 1; leftIndex <= left.length; leftIndex++) {
         const current = [leftIndex]
         let rowMinimum = leftIndex
+
         for (let rightIndex = 1; rightIndex <= right.length; rightIndex++) {
             const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1
             const value = Math.min(
@@ -144,44 +188,79 @@ const boundedEditDistance = (left: string, right: string, maximum: number): numb
             current.push(value)
             rowMinimum = Math.min(rowMinimum, value)
         }
-        if (rowMinimum > maximum) return maximum + 1
+
+        if (rowMinimum > maximum)
+            return maximum + 1
+
         previous = current
     }
+
     return previous[right.length]!
 }
 
 const trigrams = (value: string): Set<string> => {
     const padded = `  ${value}  `
     const result = new Set<string>()
-    for (let index = 0; index <= padded.length - 3; index++) result.add(padded.slice(index, index + 3))
+
+    for (let index = 0; index <= padded.length - 3; index++)
+        result.add(
+            padded.slice(index, index + 3),
+        )
+
     return result
 }
 
-const trigramSimilarity = (left: string, right: string): number => {
+const trigramSimilarity = (
+    left: string,
+    right: string,
+): number => {
     const a = trigrams(left)
     const b = trigrams(right)
     const intersection = [...a].filter(value => b.has(value)).length
+
     return a.size + b.size === 0 ? 0 : (2 * intersection) / (a.size + b.size)
 }
 
-export const scoreMediaReferenceVariant = (phrase: string, variant: string): number => {
+export const scoreMediaReferenceVariant = (
+    phrase: string,
+    variant: string,
+): number => {
     const normalizedPhrase = normalizeMediaReferenceVariant(phrase)
     const normalizedVariant = normalizeMediaReferenceVariant(variant)
-    if (!normalizedPhrase || !normalizedVariant) return 0
+
+    if (
+        !normalizedPhrase
+        || !normalizedVariant
+    )
+        return 0
+
     const phraseTokens = identifyingTokenSet(normalizedPhrase)
-    if (phraseTokens.size === 0) return 0
-    if (normalizedPhrase === normalizedVariant) return 1
+
+    if (phraseTokens.size === 0)
+        return 0
+
+    if (normalizedPhrase === normalizedVariant)
+        return 1
+
     const variantTokens = identifyingTokenSet(normalizedVariant)
     const boundedSubsetScore = normalizedPhrase.length >= 3
-            && phraseTokens.size > 0
-            && [...phraseTokens].every(token => variantTokens.has(token))
+        && phraseTokens.size > 0
+        && [...phraseTokens].every(token => variantTokens.has(token))
         ? 0.88
         : 0
-    const maximumDistance = Math.max(1, Math.floor(Math.max(normalizedPhrase.length, normalizedVariant.length) * 0.2))
-    const distance = boundedEditDistance(normalizedPhrase, normalizedVariant, maximumDistance)
+    const maximumDistance = Math.max(
+        1,
+        Math.floor(Math.max(normalizedPhrase.length, normalizedVariant.length) * 0.2),
+    )
+    const distance = boundedEditDistance(
+        normalizedPhrase,
+        normalizedVariant,
+        maximumDistance,
+    )
     const editScore = distance > maximumDistance
         ? 0
         : 1 - distance / Math.max(normalizedPhrase.length, normalizedVariant.length)
+
     return Math.max(
         boundedSubsetScore,
         tokenSimilarity(normalizedPhrase, normalizedVariant),
@@ -213,25 +292,38 @@ export const matchMediaReferencePhrase = ({
 }: {
     phrase: string
     bindings: MediaReferenceBinding[]
-    promptRange: { from: number; to: number }
+    promptRange: {
+        from: number
+        to: number
+    }
 }): MediaReferenceMatch => {
-    if (bindings.length > MEDIA_REFERENCE_MAX_BINDINGS) throw new Error('MEDIA_REFERENCE_BINDING_LIMIT_EXCEEDED')
-    const scores = bindings
-        .map(binding => ({
+    if (bindings.length > MEDIA_REFERENCE_MAX_BINDINGS)
+        throw new Error('MEDIA_REFERENCE_BINDING_LIMIT_EXCEEDED')
+
+    const scores = bindings.map(
+        binding => ({
             binding,
-            score: Math.max(
-                ...getMediaReferenceBindingVariants(binding)
-                    .map(variant => scoreMediaReferenceVariant(phrase, variant)),
-            ),
-        }))
-        .filter(candidate => candidate.score >= MEDIA_REFERENCE_UNIQUE_THRESHOLD)
+            score: Math.max(...getMediaReferenceBindingVariants(binding).map(variant => scoreMediaReferenceVariant(phrase, variant))),
+        }),
+    ).filter(candidate => candidate.score >= MEDIA_REFERENCE_UNIQUE_THRESHOLD)
         .sort((left, right) => right.score - left.score || left.binding.assetId.localeCompare(right.binding.assetId))
     const winner = scores[0]
-    if (!winner) return { kind: 'none' }
+
+    if (!winner)
+        return { kind: 'none' }
+
     const runnerUp = scores[1]
-    if (!runnerUp || winner.score - runnerUp.score >= MEDIA_REFERENCE_WINNING_MARGIN) {
-        return { kind: 'unique', binding: winner.binding, score: winner.score }
-    }
+
+    if (
+        !runnerUp
+        || winner.score - runnerUp.score >= MEDIA_REFERENCE_WINNING_MARGIN
+    )
+        return {
+            kind: 'unique',
+            binding: winner.binding,
+            score: winner.score,
+        }
+
     return {
         kind: 'ambiguous',
         unresolved: {
@@ -239,11 +331,15 @@ export const matchMediaReferencePhrase = ({
             promptRange,
             originalText: phrase,
             matcherVersion: MEDIA_REFERENCE_MATCHER_VERSION,
-            candidates: scores.slice(0, MEDIA_REFERENCE_MAX_CANDIDATES).map(candidate => ({
-                assetId: candidate.binding.assetId,
-                score: Number(candidate.score.toFixed(4)),
-                previewRenditionName: 'thumbnail',
-            })),
+            candidates: scores.slice(0, MEDIA_REFERENCE_MAX_CANDIDATES).map(
+                candidate => ({
+                    assetId: candidate.binding.assetId,
+                    score: Number(
+                        candidate.score.toFixed(4),
+                    ),
+                    previewRenditionName: 'thumbnail',
+                }),
+            ),
         },
     }
 }

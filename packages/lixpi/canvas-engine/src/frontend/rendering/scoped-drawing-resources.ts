@@ -28,10 +28,14 @@ export class ScopedDrawingResources implements DrawingResources {
     private readonly owned = new Map<ResourceHandle, Dispose>()
     private readonly released = new WeakSet<ResourceHandle>()
 
-    constructor(private readonly backend: DrawingResources, private readonly lifetime: Lifetime) {}
+    constructor(
+        private readonly backend: DrawingResources,
+        private readonly lifetime: Lifetime,
+    ) {}
 
     private live(): void {
-        if (this.lifetime.signal.aborted) throw new Error('Drawing scope is disposed')
+        if (this.lifetime.signal.aborted)
+            throw new Error('Drawing scope is disposed')
     }
 
     private own<Handle extends ResourceHandle>(handle: Handle): Handle {
@@ -41,76 +45,134 @@ export class ScopedDrawingResources implements DrawingResources {
             this.backend.release(handle)
         })
         this.owned.set(handle, release)
+
         return handle
     }
 
     private requireOwned(handle: ResourceHandle): void {
         this.live()
-        if (!this.owned.has(handle)) throw new Error('Drawing scope cannot modify a borrowed resource')
+
+        if (!this.owned.has(handle))
+            throw new Error('Drawing scope cannot modify a borrowed resource')
     }
 
-    createGroup(options: { space: DrawingSpace; layer: CanvasLayer | ResourceHandle<'group'> }): ResourceHandle<'group'> {
+    createGroup(options: {
+        space: DrawingSpace
+        layer: CanvasLayer | ResourceHandle<'group'>
+    }): ResourceHandle<'group'> {
         this.live()
-        if (options.layer.kind === 'group') this.requireOwned(options.layer)
-        return this.own(this.backend.createGroup(options))
+
+        if (options.layer.kind === 'group')
+            this.requireOwned(options.layer)
+
+        return this.own(
+            this.backend.createGroup(options),
+        )
     }
 
-    updateGroup(group: ResourceHandle<'group'>, transform: Partial<GroupTransform>): void {
+    updateGroup(
+        group: ResourceHandle<'group'>,
+        transform: Partial<GroupTransform>,
+    ): void {
         this.requireOwned(group)
         this.backend.updateGroup(group, transform)
     }
 
-    setVisible(resource: ResourceHandle<'group' | 'mesh' | 'path'>, visible: boolean): void {
+    setVisible(
+        resource: ResourceHandle<'group' | 'mesh' | 'path'>,
+        visible: boolean,
+    ): void {
         this.requireOwned(resource)
         this.backend.setVisible(resource, visible)
     }
 
     createTexture(input: TextureInput): ResourceHandle<'texture'> {
         this.live()
-        return this.own(this.backend.createTexture(input))
+
+        return this.own(
+            this.backend.createTexture(input),
+        )
     }
 
-    updateTexture(texture: ResourceHandle<'texture'>, input: TextureInput): void {
+    updateTexture(
+        texture: ResourceHandle<'texture'>,
+        input: TextureInput,
+    ): void {
         this.requireOwned(texture)
         this.backend.updateTexture(texture, input)
     }
 
     createMaterial(program: MaterialProgram): ResourceHandle<'material'> {
         this.live()
-        return this.own(this.backend.createMaterial(program))
+
+        return this.own(
+            this.backend.createMaterial(program),
+        )
     }
 
-    updateMaterial(material: ResourceHandle<'material'>, bindings: readonly MaterialBinding[]): void {
+    updateMaterial(
+        material: ResourceHandle<'material'>,
+        bindings: readonly MaterialBinding[],
+    ): void {
         this.requireOwned(material)
         this.backend.updateMaterial(material, bindings)
     }
 
-    createMesh(group: ResourceHandle<'group'>, data: MeshData, paint: PaintHandle): ResourceHandle<'mesh'> {
+    createMesh(
+        group: ResourceHandle<'group'>,
+        data: MeshData,
+        paint: PaintHandle,
+    ): ResourceHandle<'mesh'> {
         this.requireOwned(group)
-        return this.own(this.backend.createMesh(group, data, paint))
+
+        return this.own(
+            this.backend.createMesh(
+                group,
+                data,
+                paint,
+            ),
+        )
     }
 
-    updateMesh(mesh: ResourceHandle<'mesh'>, data: MeshData): void {
+    updateMesh(
+        mesh: ResourceHandle<'mesh'>,
+        data: MeshData,
+    ): void {
         this.requireOwned(mesh)
         this.backend.updateMesh(mesh, data)
     }
 
-    setPaint(mesh: ResourceHandle<'mesh'>, paint: PaintHandle): void {
+    setPaint(
+        mesh: ResourceHandle<'mesh'>,
+        paint: PaintHandle,
+    ): void {
         this.requireOwned(mesh)
         this.backend.setPaint(mesh, paint)
     }
 
-    createPath(group: ResourceHandle<'group'>, shapes: readonly VectorShape[]): ResourceHandle<'path'> {
+    createPath(
+        group: ResourceHandle<'group'>,
+        shapes: readonly VectorShape[],
+    ): ResourceHandle<'path'> {
         this.requireOwned(group)
-        return this.own(this.backend.createPath(group, shapes))
+
+        return this.own(
+            this.backend.createPath(group, shapes),
+        )
     }
 
-    updatePath(path: ResourceHandle<'path'>, shapes: readonly VectorShape[]): void {
+    updatePath(
+        path: ResourceHandle<'path'>,
+        shapes: readonly VectorShape[],
+    ): void {
         this.requireOwned(path)
         this.backend.updatePath(path, shapes)
     }
 
-    setMask(group: ResourceHandle<'group'>, mask: ResourceHandle<'path'> | null): void {
+    setMask(
+        group: ResourceHandle<'group'>,
+        mask: ResourceHandle<'path'> | null,
+    ): void {
         this.requireOwned(group)
         this.backend.setMask(group, mask)
     }
@@ -119,24 +181,48 @@ export class ScopedDrawingResources implements DrawingResources {
         this.live()
         const capture = this.backend.capture(input)
         this.own(capture.handle)
+
         return capture
     }
 
-    updateCapture(capture: ResourceHandle<'capture'>, input: CaptureSpec): void {
+    updateCapture(
+        capture: ResourceHandle<'capture'>,
+        input: CaptureSpec,
+    ): void {
         this.requireOwned(capture)
         this.backend.updateCapture(capture, input)
     }
 
-    displace(group: ResourceHandle<'group'>, source: ResourceHandle<'texture'>, map: ResourceHandle<'texture'>, options: { bounds: CanvasEngineRect; scale: CanvasEnginePoint }): Dispose {
+    displace(
+        group: ResourceHandle<'group'>,
+        source: ResourceHandle<'texture'>,
+        map: ResourceHandle<'texture'>,
+        options: {
+            bounds: CanvasEngineRect
+            scale: CanvasEnginePoint
+        },
+    ): Dispose {
         this.requireOwned(group)
-        return this.lifetime.own(this.backend.displace(group, source, map, options))
+
+        return this.lifetime.own(
+            this.backend.displace(
+                group,
+                source,
+                map,
+                options,
+            ),
+        )
     }
 
     release(resource: ResourceHandle): void {
-        if (this.released.has(resource)) return
+        if (this.released.has(resource))
+            return
+
         // Abort listeners dispose their component before lifetime cleanup runs.
         // Releasing owned resources remains valid after abort; mutations do not.
-        if (!this.owned.has(resource)) throw new Error('Drawing scope cannot release a borrowed resource')
+        if (!this.owned.has(resource))
+            throw new Error('Drawing scope cannot release a borrowed resource')
+
         this.owned.get(resource)!()
     }
 }

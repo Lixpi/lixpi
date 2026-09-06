@@ -103,8 +103,9 @@ const isTransitionCustomProperty = (property: string): boolean => {
     if (nameEnd <= 2)
         return false
 
-    for (let index = 2; index < nameEnd; index++) if (!isLowercaseIdentifierCharacter(property[index]))
-        return false
+    for (let index = 2; index < nameEnd; index++)
+        if (!isLowercaseIdentifierCharacter(property[index]))
+            return false
 
     return true
 }

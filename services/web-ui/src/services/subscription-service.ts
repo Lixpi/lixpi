@@ -23,7 +23,6 @@ class SubscriptionService {
         // subscriptionStore.setDataValues({
         //     paymentMethodSetupIntentSecret: ''
         // })
-
         // SocketService.emit({
         //     event: USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT,
         //     data: {}
@@ -42,7 +41,6 @@ class SubscriptionService {
     getCustomerPaymentMethods() {
         // Set loading state
         // subscriptionStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
-
         // SocketService.emit({
         //     event: USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS,
         //     data: {}
@@ -61,9 +59,7 @@ class SubscriptionService {
     deletePaymentMethod({ paymentMethodId }: { paymentMethodId: string }): void {
         // // Set loading state
         // subscriptionStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
-
         // console.log('deletePaymentMethod', paymentMethodId)
-
         // SocketService.emit({
         //     event: USER_SUBSCRIPTION_SUBJECTS.DELETE_USER_PAYMENT_METHOD,
         //     data: { paymentMethodId }
@@ -74,7 +70,6 @@ class SubscriptionService {
         // if (response) {
         //     // subscriptionStore.setDataValues({ paymentMethods: response })
         //     // subscriptionStore.setMetaValues({ isLoading: false, isLoaded: true, errorLoading: false })
-
         //     // Refresh the payment methods after deleting one
         //     this.getCustomerPaymentMethods()
         // } else {
@@ -85,7 +80,6 @@ class SubscriptionService {
     topUpCustomerBalance({ amount }: { amount: number }): void {
         // // Set loading state
         // subscriptionStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
-
         // SocketService.emit({
         //     event: USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE,
         //     data: { amount }

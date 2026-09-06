@@ -92,7 +92,10 @@ type AiPromptInputControllerOptions = {
         aiModel: string
         owner?: { type: 'standalone' }
     }) => Promise<any>
-    onAiSubmit: (threadId: string, payload: AiSubmitPayload) => void
+    onAiSubmit: (
+        threadId: string,
+        payload: AiSubmitPayload,
+    ) => void
 }
 
 export class AiPromptInputController {
@@ -125,44 +128,61 @@ export class AiPromptInputController {
         return this.target
     }
 
-    registerThreadEditor(threadId: string, entry: ThreadEditorEntry): void {
+    registerThreadEditor(
+        threadId: string,
+        entry: ThreadEditorEntry,
+    ): void {
         this.threadEditors.set(threadId, entry)
 
         // Check for pending messages for this newly registered thread
         const pending = this.pendingMessages.get(threadId)
+
         if (pending) {
             this.pendingMessages.delete(threadId)
             this.injectMessageAndSubmit(threadId, pending)
         }
     }
 
-    unregisterThreadEditor(threadId: string, expectedEditorView?: EditorView): void {
-        if (expectedEditorView && this.threadEditors.get(threadId)?.editorView !== expectedEditorView) return
+    unregisterThreadEditor(
+        threadId: string,
+        expectedEditorView?: EditorView,
+    ): void {
+        if (
+            expectedEditorView
+            && this.threadEditors.get(threadId)?.editorView !== expectedEditorView
+        )
+            return
+
         this.threadEditors.delete(threadId)
     }
 
-    setReceiving(threadId: string, receiving: boolean): void {
-        if (receiving) {
+    setReceiving(
+        threadId: string,
+        receiving: boolean,
+    ): void {
+        if (receiving)
             this.receivingThreadIds.add(threadId)
-        } else {
+        else
             this.receivingThreadIds.delete(threadId)
-        }
     }
 
     isReceiving(threadId?: string): boolean {
-        if (threadId) {
+        if (threadId)
             return this.receivingThreadIds.has(threadId)
-        }
+
         // Check if the current target thread is receiving
         const targetThreadId = this.getTargetThreadId()
+
         return targetThreadId ? this.receivingThreadIds.has(targetThreadId) : false
     }
 
     getTargetThreadId(): string | null {
-        if (!this.target) return null
-        if (this.target.type === 'aiChatThread') {
+        if (!this.target)
+            return null
+
+        if (this.target.type === 'aiChatThread')
             return this.target.referenceId
-        }
+
         // For non-thread targets, there's no existing thread until one is auto-created
         return null
     }
@@ -196,30 +216,35 @@ export class AiPromptInputController {
 
         if (!this.target) {
             console.warn('[AiPromptInputController] No target set, cannot submit')
+
             return
         }
 
         if (!aiReasoningModels[0]) {
             console.error('[AiPromptInputController] Cannot submit without a reasoning model.')
+
             return
         }
 
         if (this.target.type === 'aiChatThread') {
             // Target is an existing AI chat thread — inject message directly
             const threadId = this.target.referenceId
-            this.injectMessageAndSubmit(threadId, {
-                content: contentJSON,
-                mediaGenerationMode,
-                aiReasoningModels,
-                useMultipleReasoningModels,
-                useMultipleImageModels,
-                useMultipleVideoModels,
-                reasoningOptions,
-                imageOptions,
-                videoOptions,
-                referenceNodeIds,
-                capabilityInputs,
-            })
+            this.injectMessageAndSubmit(
+                threadId,
+                {
+                    content: contentJSON,
+                    mediaGenerationMode,
+                    aiReasoningModels,
+                    useMultipleReasoningModels,
+                    useMultipleImageModels,
+                    useMultipleVideoModels,
+                    reasoningOptions,
+                    imageOptions,
+                    videoOptions,
+                    referenceNodeIds,
+                    capabilityInputs,
+                },
+            )
         } else {
             // Target is a document or image — auto-create a new AI chat thread
             await this.createThreadAndSubmit({
@@ -238,11 +263,16 @@ export class AiPromptInputController {
         }
     }
 
-    private injectMessageAndSubmit(threadId: string, pending: PendingMessage): void {
+    private injectMessageAndSubmit(
+        threadId: string,
+        pending: PendingMessage,
+    ): void {
         const entry = this.threadEditors.get(threadId)
+
         if (!entry) {
             // Thread editor not mounted yet — queue the message
             this.pendingMessages.set(threadId, pending)
+
             return
         }
 
@@ -256,35 +286,48 @@ export class AiPromptInputController {
             if (node.type.name === 'aiChatThread') {
                 threadPos = pos
                 threadNode = node
+
                 return false
             }
         })
 
-        if (threadPos === -1 || !threadNode) {
+        if (
+            threadPos === -1
+            || !threadNode
+        ) {
             console.warn('[AiPromptInputController] Could not find aiChatThread node in editor')
+
             return
         }
 
         // Create the aiUserMessage node from the content JSON
         const userMessageType = state.schema.nodes.aiUserMessage
+
         if (!userMessageType) {
             console.warn('[AiPromptInputController] aiUserMessage node type not found in schema')
+
             return
         }
 
         // Convert contentJSON to a Fragment using the target editor's schema
         let messageContent: Fragment
+
         try {
             // contentJSON is expected to be an array of ProseMirror node JSON objects (paragraphs, etc.)
             const nodes = pending.content.map((nodeJSON: any) => state.schema.nodeFromJSON(nodeJSON))
             messageContent = Fragment.from(nodes)
         } catch (e) {
             console.warn('[AiPromptInputController] Failed to convert content JSON to fragment:', e)
+
             return
         }
 
         const messageNode = userMessageType.create(
-            { id: createId(), createdAt: Date.now(), referenceNodeIds: pending.referenceNodeIds ?? [] },
+            {
+                id: createId(),
+                createdAt: Date.now(),
+                referenceNodeIds: pending.referenceNodeIds ?? [],
+            },
             messageContent,
         )
 
@@ -298,15 +341,22 @@ export class AiPromptInputController {
         const pendingUseMultipleImageModels = Boolean(pending.useMultipleImageModels)
         const pendingUseMultipleVideoModels = Boolean(pending.useMultipleVideoModels)
         // Multi disabled → collapse the section's selection to its first model.
-        const collapseForMode = (models: string[], useMultiple: boolean): string[] => useMultiple ? models : models.slice(0, 1)
+        const collapseForMode = (
+            models: string[],
+            useMultiple: boolean,
+        ): string[] => (useMultiple ? models : models.slice(0, 1))
         const pendingReasoningModels = serializeAiModelSelectionAttr(
             collapseForMode(pending.aiReasoningModels, pendingUseMultipleReasoningModels),
         )
         const pendingImageModels = pending.imageOptions
-            ? serializeAiModelSelectionAttr(collapseForMode(pending.imageOptions.aiImageModels, pendingUseMultipleImageModels))
+            ? serializeAiModelSelectionAttr(
+                collapseForMode(pending.imageOptions.aiImageModels, pendingUseMultipleImageModels),
+            )
             : undefined
         const pendingVideoModels = pending.videoOptions
-            ? serializeAiModelSelectionAttr(collapseForMode(pending.videoOptions.aiVideoModels, pendingUseMultipleVideoModels))
+            ? serializeAiModelSelectionAttr(
+                collapseForMode(pending.videoOptions.aiVideoModels, pendingUseMultipleVideoModels),
+            )
             : undefined
         const pendingImageConfigGroups = pending.imageOptions
             ? serializeMediaGenerationConfigSelectionAttr(pending.imageOptions.configGroups ?? [])
@@ -343,38 +393,48 @@ export class AiPromptInputController {
 
         if (needsUpdate) {
             const mappedThreadPos = tr.mapping.map(threadPos)
-            tr = tr.setNodeMarkup(mappedThreadPos, undefined, {
-                ...currentAttrs,
-                mediaGenerationMode: pending.mediaGenerationMode,
-                aiReasoningModels: pendingReasoningModels,
-                ...(pendingReasoningConfigGroups !== undefined
-                    ? { reasoningGenerationConfigGroups: pendingReasoningConfigGroups }
-                    : {}),
-                useMultipleReasoningModels: pendingUseMultipleReasoningModels,
-                useMultipleImageModels: pendingUseMultipleImageModels,
-                useMultipleVideoModels: pendingUseMultipleVideoModels,
-                ...(pending.imageOptions
-                    ? {
-                        ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
-                        imageGenerationSize: pending.imageOptions.imageGenerationSize,
-                        ...(pendingImageConfigGroups !== undefined ? { imageGenerationConfigGroups: pendingImageConfigGroups } : {}),
-                    }
-                    : {}),
-                ...(pending.videoOptions
-                    ? {
-                        ...(pendingVideoModels !== undefined ? { aiVideoModels: pendingVideoModels } : {}),
-                        videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
-                        videoResolution: pending.videoOptions.videoResolution || '',
-                        videoDuration: pending.videoOptions.videoDuration || '',
-                        ...(pendingVideoConfigGroups !== undefined ? { videoGenerationConfigGroups: pendingVideoConfigGroups } : {}),
-                    }
-                    : {}),
-                capabilityInputs: pendingCapabilityInputs,
-            })
+            tr = tr.setNodeMarkup(
+                mappedThreadPos,
+                undefined,
+                {
+                    ...currentAttrs,
+                    mediaGenerationMode: pending.mediaGenerationMode,
+                    aiReasoningModels: pendingReasoningModels,
+                    ...(pendingReasoningConfigGroups !== undefined
+                        ? { reasoningGenerationConfigGroups: pendingReasoningConfigGroups }
+                        : {}),
+                    useMultipleReasoningModels: pendingUseMultipleReasoningModels,
+                    useMultipleImageModels: pendingUseMultipleImageModels,
+                    useMultipleVideoModels: pendingUseMultipleVideoModels,
+                    ...(pending.imageOptions
+                        ? {
+                            ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
+                            imageGenerationSize: pending.imageOptions.imageGenerationSize,
+                            ...(pendingImageConfigGroups !== undefined ? { imageGenerationConfigGroups: pendingImageConfigGroups } : {}),
+                        }
+                        : {}),
+                    ...(pending.videoOptions
+                        ? {
+                            ...(pendingVideoModels !== undefined ? { aiVideoModels: pendingVideoModels } : {}),
+                            videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
+                            videoResolution: pending.videoOptions.videoResolution || '',
+                            videoDuration: pending.videoOptions.videoDuration || '',
+                            ...(pendingVideoConfigGroups !== undefined ? { videoGenerationConfigGroups: pendingVideoConfigGroups } : {}),
+                        }
+                        : {}),
+                    capabilityInputs: pendingCapabilityInputs,
+                },
+            )
         }
 
         // Set the USE_AI_CHAT_META to trigger the AI request handler in the thread plugin
-        tr = tr.setMeta(USE_AI_CHAT_META, { threadId, nodePos: threadPos })
+        tr = tr.setMeta(
+            USE_AI_CHAT_META,
+            {
+                threadId,
+                nodePos: threadPos,
+            },
+        )
         tr = tr.setMeta('skipDispatch', true)
         editorView.dispatch(tr)
 
@@ -408,21 +468,30 @@ export class AiPromptInputController {
             referenceNodeIds,
             capabilityInputs,
         } = params
-        if (!this.target) return
+
+        if (!this.target)
+            return
 
         const threadId = uuidv4()
         const threadUseMultipleReasoningModels = Boolean(useMultipleReasoningModels)
         const threadUseMultipleImageModels = Boolean(useMultipleImageModels)
         const threadUseMultipleVideoModels = Boolean(useMultipleVideoModels)
-        const collapseForMode = (models: string[], useMultiple: boolean): string[] => useMultiple ? models : models.slice(0, 1)
+        const collapseForMode = (
+            models: string[],
+            useMultiple: boolean,
+        ): string[] => (useMultiple ? models : models.slice(0, 1))
         const threadReasoningModels = serializeAiModelSelectionAttr(
             collapseForMode(aiReasoningModels, threadUseMultipleReasoningModels),
         )
         const threadImageModels = imageOptions
-            ? serializeAiModelSelectionAttr(collapseForMode(imageOptions.aiImageModels, threadUseMultipleImageModels))
+            ? serializeAiModelSelectionAttr(
+                collapseForMode(imageOptions.aiImageModels, threadUseMultipleImageModels),
+            )
             : ''
         const threadVideoModels = videoOptions
-            ? serializeAiModelSelectionAttr(collapseForMode(videoOptions.aiVideoModels, threadUseMultipleVideoModels))
+            ? serializeAiModelSelectionAttr(
+                collapseForMode(videoOptions.aiVideoModels, threadUseMultipleVideoModels),
+            )
             : ''
         const threadImageConfigGroups = serializeMediaGenerationConfigSelectionAttr(imageOptions?.configGroups ?? [])
         const threadReasoningConfigGroups = serializeMediaGenerationConfigSelectionAttr(reasoningOptions?.configGroups ?? [])
@@ -457,7 +526,11 @@ export class AiPromptInputController {
                     content: [
                         {
                             type: 'aiUserMessage',
-                            attrs: { id: createId(), createdAt: Date.now(), referenceNodeIds: referenceNodeIds ?? [] },
+                            attrs: {
+                                id: createId(),
+                                createdAt: Date.now(),
+                                referenceNodeIds: referenceNodeIds ?? [],
+                            },
                             content: contentJSON.length > 0 ? contentJSON : [{ type: 'paragraph' }],
                         },
                     ],
@@ -477,6 +550,7 @@ export class AiPromptInputController {
 
             if (!thread) {
                 console.error('[AiPromptInputController] Failed to create AI chat thread')
+
                 return
             }
 
@@ -484,19 +558,22 @@ export class AiPromptInputController {
             // it has no on-canvas node. Queue the AI submit for after the panel
             // thread editor mounts — the message is already in the initial content,
             // so we just need to trigger the AI request.
-            this.pendingMessages.set(threadId, {
-                content: contentJSON,
-                mediaGenerationMode,
-                aiReasoningModels,
-                useMultipleReasoningModels: threadUseMultipleReasoningModels,
-                useMultipleImageModels: threadUseMultipleImageModels,
-                useMultipleVideoModels: threadUseMultipleVideoModels,
-                reasoningOptions,
-                imageOptions,
-                videoOptions,
-                referenceNodeIds,
-                capabilityInputs,
-            })
+            this.pendingMessages.set(
+                threadId,
+                {
+                    content: contentJSON,
+                    mediaGenerationMode,
+                    aiReasoningModels,
+                    useMultipleReasoningModels: threadUseMultipleReasoningModels,
+                    useMultipleImageModels: threadUseMultipleImageModels,
+                    useMultipleVideoModels: threadUseMultipleVideoModels,
+                    reasoningOptions,
+                    imageOptions,
+                    videoOptions,
+                    referenceNodeIds,
+                    capabilityInputs,
+                },
+            )
 
             // Update target to point to the new thread (panel-only, no canvas node).
             this.target = {
@@ -519,8 +596,11 @@ export class AiPromptInputController {
 }
 
 function createId(): string {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    if (
+        typeof crypto !== 'undefined'
+        && 'randomUUID' in crypto
+    )
         return crypto.randomUUID()
-    }
+
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }

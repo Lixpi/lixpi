@@ -16,29 +16,56 @@ export class WorkspaceAssetViews {
 
     constructor(private readonly ports: () => WorkspaceAssetDetailsPorts) {}
 
-    mountMetadata(node: AssetNode, host: HTMLElement, mode: 'node' | 'details'): () => void {
-        if (this.destroyed) return () => {}
+    mountMetadata(
+        node: AssetNode,
+        host: HTMLElement,
+        mode: 'node' | 'details',
+    ): () => void {
+        if (this.destroyed)
+            return () => {}
+
         const ports = this.ports()
-        if (!ports.getAsset(node.assetId)) return () => {}
+
+        if (!ports.getAsset(node.assetId))
+            return () => {}
+
         const key = `${node.nodeId}:metadata:${mode}`
         this.remove(key)
-        const view = new WorkspaceAssetMetadataEditor(node.assetId, host, mode, ports)
+        const view = new WorkspaceAssetMetadataEditor(
+            node.assetId,
+            host,
+            mode,
+            ports,
+        )
         this.views.set(key, view)
+
         return () => {
-            if (this.views.get(key) === view) this.views.delete(key)
+            if (this.views.get(key) === view)
+                this.views.delete(key)
+
             view.destroy()
         }
     }
 
     createDetails(node: AssetNode): HTMLElement | null {
-        if (this.destroyed) return null
+        if (this.destroyed)
+            return null
+
         const ports = this.ports()
         const asset = ports.getAsset(node.assetId)
-        if (!asset) return null
+
+        if (!asset)
+            return null
+
         const key = `${node.nodeId}:details`
         this.remove(key)
-        const view = new WorkspaceAssetDetails(asset, node.type === 'capabilityArtifact', ports)
+        const view = new WorkspaceAssetDetails(
+            asset,
+            node.type === 'capabilityArtifact',
+            ports,
+        )
         this.views.set(key, view)
+
         return view.element
     }
 
@@ -52,6 +79,7 @@ export class WorkspaceAssetViews {
         const views = [...this.views.values()]
         this.views.clear()
         const errors: unknown[] = []
+
         for (const view of views) {
             try {
                 view.destroy()
@@ -59,11 +87,15 @@ export class WorkspaceAssetViews {
                 errors.push(error)
             }
         }
-        if (errors.length) throw new AggregateError(errors, 'Asset view cleanup failed')
+
+        if (errors.length)
+            throw new AggregateError(errors, 'Asset view cleanup failed')
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.clear()
     }

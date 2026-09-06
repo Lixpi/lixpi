@@ -3,12 +3,7 @@ import process from 'process'
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 
-import {
-    log,
-    info,
-    warn,
-    err,
-} from '@lixpi/debug-tools'
+import { err } from '@lixpi/debug-tools'
 import { endOutputSession } from './outputFormatter.ts'
 
 import { StackManager } from './stackManager.ts'
@@ -18,10 +13,28 @@ const {
     STAGE,
 } = process.env
 
-const cli = yargs(hideBin(process.argv))
+const cli = yargs(
+    hideBin(process.argv),
+)
     .usage('Usage: $0 <command> [options]')
-    .option('stack', { alias: 's', describe: 'Stack name', default: STAGE, type: 'string' })
-    .option('region', { alias: 'r', describe: 'AWS region', default: AWS_REGION, type: 'string' })
+    .option(
+        'stack',
+        {
+            alias: 's',
+            describe: 'Stack name',
+            default: STAGE,
+            type: 'string',
+        },
+    )
+    .option(
+        'region',
+        {
+            alias: 'r',
+            describe: 'AWS region',
+            default: AWS_REGION,
+            type: 'string',
+        },
+    )
     .command('init', 'Initialize stack')
     .command('up', 'Update stack')
     .command('preview', 'Preview stack changes')
@@ -48,42 +61,54 @@ const execCommand = async () => {
         switch (command) {
             case 'init':
                 await manager.init()
+
                 break
             case 'up':
                 await manager.up()
+
                 break
             case 'preview':
                 await manager.preview()
+
                 break
             case 'destroy':
                 await manager.destroy()
+
                 break
             case 'force-destroy':
                 await manager.cleanEcrRepositories()
                 await manager.destroy({ destroy: true })
+
                 break
             case 'clean-ecr':
                 await manager.cleanEcrRepositories()
+
                 break
             case 'refresh':
                 await manager.refresh({
                     clearPendingCreates: true,
                 })
+
                 break
             case 'outputs':
                 await manager.outputs()
+
                 break
             case 'list-stacks':
                 await manager.listStacks()
+
                 break
             case 'create-stack':
                 await manager.createStack()
+
                 break
             case 'remove-stack':
                 await manager.removeStack()
+
                 break
             case 'cancel':
                 await manager.cancel()
+
                 break
             default:
                 err('Invalid command', command)

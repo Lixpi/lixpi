@@ -301,8 +301,11 @@ export const actionTimelineFrontendDefinition: CapabilityArtifactFrontendDefinit
     createGeneratedOutputInfoView: createActionTimelineInfoView,
     buildReplaySubmitData: host => {
         const input = asRecord(host.provenance.input) ?? {}
-        const variant = asRecord(host.provenance.variant) ?? asRecord(asRecord(host.provenance.generationRun)?.lineageAssignment) ?? {}
+        const variant = asRecord(host.provenance.variant)
+            ?? asRecord(asRecord(host.provenance.generationRun)?.lineageAssignment)
+            ?? {}
         const reasoningModelId = typeof variant.reasoningModelId === 'string' ? variant.reasoningModelId : ''
+
         return {
             capabilityId: ACTION_TIMELINE_TOOL_ID,
             capabilityInputs: {
@@ -337,18 +340,26 @@ class ActionTimelineSegmentNodeView implements NodeView {
 
     constructor(node: ProseMirrorNode) {
         const html = createDocumentHtml(document)
-        this.dom = html`<section className="action-timeline-segment">
-            <header className="action-timeline-time" contenteditable="false"></header>
+        this.dom = html`
+            <section className="action-timeline-segment">
+            <header
+                className="action-timeline-time"
+                contenteditable="false"
+            ></header>
             <div className="action-timeline-segment-content"></div>
-        </section>` as HTMLElement
+        </section>
+        ` as HTMLElement
         this.time = this.dom.querySelector('.action-timeline-time') as HTMLElement
         this.contentDOM = this.dom.querySelector('.action-timeline-segment-content') as HTMLElement
         this.updateTime(node)
     }
 
     update(node: ProseMirrorNode): boolean {
-        if (node.type.name !== 'actionTimelineSegment') return false
+        if (node.type.name !== 'actionTimelineSegment')
+            return false
+
         this.updateTime(node)
+
         return true
     }
 
@@ -357,18 +368,24 @@ class ActionTimelineSegmentNodeView implements NodeView {
     }
 
     private updateTime(node: ProseMirrorNode): void {
-        this.time.textContent = `${formatTimelineTime(numberValue(node.attrs.startMs))} – ${formatTimelineTime(numberValue(node.attrs.endMs))}`
+        this.time.textContent = `${formatTimelineTime(
+            numberValue(node.attrs.startMs),
+        )} – ${formatTimelineTime(
+            numberValue(node.attrs.endMs),
+        )}`
     }
 }
 
 function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): CapabilityArtifactCanvasView {
     const html = createDocumentHtml(host.container.ownerDocument)
-    const root = html`<div className="action-timeline-body">
+    const root = html`
+        <div className="action-timeline-body">
         <div className="action-timeline-summary"><strong>Action Timeline</strong><span></span></div>
         <div className="action-timeline-thumbnails"></div>
         <div className="action-timeline-legend"><span className="action-timeline-legend-chip">@ Asset</span><span>References stay attached to the beat where they are used.</span></div>
         <div className="action-timeline-editor nopan"></div>
-    </div>` as HTMLDivElement
+    </div>
+    ` as HTMLDivElement
     const summary = root.querySelector('.action-timeline-summary span') as HTMLElement
     const thumbnails = root.querySelector('.action-timeline-thumbnails') as HTMLElement
     const editorContainer = root.querySelector('.action-timeline-editor') as HTMLElement
@@ -376,39 +393,60 @@ function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): Cap
     let referenceViews: Array<{ destroy: () => void }> = []
 
     const destroyReferenceViews = (): void => {
-        for (const view of referenceViews) view.destroy()
+        for (const view of referenceViews)
+            view.destroy()
+
         referenceViews = []
     }
 
     const mountDocument = (document: object): void => {
         const doc = document as JsonNode
         const segmentCount = doc.content?.length ?? 0
-        summary.textContent = `${formatTimelineTime(numberValue(doc.attrs?.durationMs))} · ${segmentCount} segment${segmentCount === 1 ? '' : 's'}`
+        summary.textContent = `${formatTimelineTime(
+            numberValue(doc.attrs?.durationMs),
+        )} · ${segmentCount} segment${segmentCount === 1 ? '' : 's'}`
         destroyReferenceViews()
         thumbnails.replaceChildren()
+
         for (const assetId of collectActionTimelineReferencedAssetIds(document)) {
-            const view = host.createAssetReferenceView({ assetId, variant: 'thumbnail' })
-            if (!view) continue
+            const view = host.createAssetReferenceView({
+                assetId,
+                variant: 'thumbnail',
+            })
+
+            if (!view)
+                continue
+
             view.dom.classList.add('action-timeline-thumbnail')
             referenceViews.push(view)
             thumbnails.appendChild(view.dom)
         }
+
         if (host.mountEditor) {
-            if (editor) editor.updateDocument(document)
-            else {editor = host.mountEditor({
+            if (editor)
+                editor.updateDocument(document)
+            else {
+                editor = host.mountEditor({
                     container: editorContainer,
                     document,
                     schema: createActionTimelineDocumentSchema(),
                     plugins: createActionTimelineEditorPlugins(),
-                })}
-        } else {
-            renderStaticTimeline(editorContainer, document, host, view => referenceViews.push(view))
-        }
+                })
+            }
+        } else
+            renderStaticTimeline(
+                editorContainer,
+                document,
+                host,
+                view => referenceViews.push(view),
+            )
+
         queueMicrotask(() => host.onHeightChange(root.scrollHeight))
     }
 
     host.container.appendChild(root)
     mountDocument(host.document)
+
     return {
         updateDocument: mountDocument,
         destroy: () => {
@@ -428,13 +466,25 @@ function renderStaticTimeline(
     const html = createDocumentHtml(container.ownerDocument)
     container.replaceChildren()
     const doc = document as JsonNode
+
     for (const segment of doc.content ?? []) {
-        const row = html`<section className="action-timeline-segment-row">
-            <div className="action-timeline-time">${formatTimelineTime(numberValue(segment.attrs?.startMs))} – ${formatTimelineTime(numberValue(segment.attrs?.endMs))}</div>
+        const row = html`
+            <section className="action-timeline-segment-row">
+            <div className="action-timeline-time">${formatTimelineTime(
+                numberValue(segment.attrs?.startMs),
+            )} – ${formatTimelineTime(
+                numberValue(segment.attrs?.endMs),
+            )}</div>
             <div className="action-timeline-content"></div>
-        </section>` as HTMLElement
+        </section>
+        ` as HTMLElement
         const content = row.querySelector('.action-timeline-content') as HTMLElement
-        renderInlineContent(content, segment, host, registerReferenceView)
+        renderInlineContent(
+            content,
+            segment,
+            host,
+            registerReferenceView,
+        )
         container.appendChild(row)
     }
 }
@@ -444,10 +494,13 @@ function createActionTimelineInfoView(host: CapabilityArtifactInfoHost): Capabil
     const doc = host.document as JsonNode
     const segments = doc.content?.length ?? 0
     const references = collectActionTimelineReferencedAssetIds(host.document).length
-    const root = html`<div className="action-timeline-info">
+    const root = html`
+        <div className="action-timeline-info">
         <div className="action-timeline-info-item">
             <span className="action-timeline-info-label">Duration</span>
-            <span className="action-timeline-info-value">${formatTimelineTime(numberValue(doc.attrs?.durationMs))}</span>
+            <span className="action-timeline-info-value">${formatTimelineTime(
+                numberValue(doc.attrs?.durationMs),
+            )}</span>
         </div>
         <div className="action-timeline-info-item">
             <span className="action-timeline-info-label">Segments</span>
@@ -457,8 +510,10 @@ function createActionTimelineInfoView(host: CapabilityArtifactInfoHost): Capabil
             <span className="action-timeline-info-label">Cited Assets</span>
             <span className="action-timeline-info-value">${references}</span>
         </div>
-    </div>` as HTMLDivElement
+    </div>
+    ` as HTMLDivElement
     host.container.appendChild(root)
+
     return { destroy: () => root.remove() }
 }
 
@@ -467,6 +522,7 @@ function createActionTimelinePromptReferenceView(host: CapabilityPromptReference
     const segmentCount = numberValue(host.displayMetadata.segmentCount)
     const root = html`<span className="action-timeline-reference">${host.title}${segmentCount > 0 ? ` · ${segmentCount} segments` : ''}</span>` as HTMLSpanElement
     host.container.appendChild(root)
+
     return { destroy: () => root.remove() }
 }
 
@@ -474,12 +530,18 @@ function createActionTimelineLibraryView(host: CapabilityArtifactLibraryHost): C
     const html = createDocumentHtml(host.container.ownerDocument)
     const durationMs = numberValue(host.displayMetadata.durationMs)
     const segmentCount = numberValue(host.displayMetadata.segmentCount)
-    const root = html`<button type="button" className="action-timeline-library-row">
+    const root = html`
+        <button
+            type="button"
+            className="action-timeline-library-row"
+        >
         <strong>${host.title}</strong>
         <span className="action-timeline-library-meta">${formatTimelineTime(durationMs)} · ${segmentCount} segments · ${host.scope}</span>
-    </button>` as HTMLButtonElement
+    </button>
+    ` as HTMLButtonElement
     root.addEventListener('click', host.onAddToCanvas)
     host.container.appendChild(root)
+
     return { destroy: () => root.remove() }
 }
 
@@ -490,27 +552,44 @@ function renderInlineContent(
     registerReferenceView: (view: { destroy: () => void }) => void,
 ): void {
     const visit = (child: JsonNode): void => {
-        if (child.type === 'text' && child.text) container.append(child.text)
+        if (
+            child.type === 'text'
+            && child.text
+        )
+            container.append(child.text)
+
         if (child.type === 'prompt_reference') {
             const assetId = typeof child.attrs?.assetId === 'string' ? child.attrs.assetId : ''
             const displayName = typeof child.attrs?.displayName === 'string' ? child.attrs.displayName : undefined
-            const view = host.createAssetReferenceView({ assetId, displayName, variant: 'inline' })
+            const view = host.createAssetReferenceView({
+                assetId,
+                displayName,
+                variant: 'inline',
+            })
+
             if (view) {
                 registerReferenceView(view)
                 container.appendChild(view.dom)
             }
         }
-        for (const nested of child.content ?? []) visit(nested)
+
+        for (const nested of child.content ?? [])
+            visit(nested)
     }
     visit(node)
 }
 
 function numberValue(value: unknown): number {
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0
+    return typeof value === 'number'
+        && Number.isFinite(value)
+        ? value
+        : 0
 }
 
 function asRecord(value: CapabilityJsonValue | undefined): Record<string, CapabilityJsonValue> | undefined {
-    return value && typeof value === 'object' && !Array.isArray(value)
+    return value
+        && typeof value === 'object'
+        && !Array.isArray(value)
         ? value as Record<string, CapabilityJsonValue>
         : undefined
 }

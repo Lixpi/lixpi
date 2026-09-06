@@ -23,9 +23,24 @@ import {
 export type WorkspaceBranchMarkerProjectionPorts = {
     getState: () => CanvasState | null
     getConversationPreview: (node: BranchMarkerNode) => BranchMarkerConversationPreview | null
-    getPromptParts: (node: BranchMarkerNode, preview: BranchMarkerConversationPreview | null | undefined) => BranchMarkerPromptPart[]
-    getPromptTraceHandles: (node: BranchMarkerNode, preview: BranchMarkerConversationPreview | null | undefined) => ExecutionTraceHandle[]
-    getLiveOverride: (nodeId: string) => { position?: { x: number; y: number }; dimensions?: { width: number; height: number } } | undefined
+    getPromptParts: (
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ) => BranchMarkerPromptPart[]
+    getPromptTraceHandles: (
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ) => ExecutionTraceHandle[]
+    getLiveOverride: (nodeId: string) => {
+        position?: {
+            x: number
+            y: number
+        }
+        dimensions?: {
+            width: number
+            height: number
+        }
+    } | undefined
     deleteProjectionOverride: (nodeId: string) => void
     projectionOverrideNodeIds: Set<string>
     manuallyPositionedNodeIds: Set<string>
@@ -42,13 +57,27 @@ export class WorkspaceBranchMarkerProjection {
     static normalizeState(canvasState: CanvasState): CanvasState {
         let changed = false
         const nodes = canvasState.nodes.map((node): CanvasNode => {
-            if (!WorkspaceBranchMarkerProjection.isMarker(node)) return node
-            if (node.dimensions?.width > 0 && node.dimensions?.height > 0) return node
-            const dimensions = estimateBranchMarkerDimensions(getBranchMarkerPromptText(node))
+            if (!WorkspaceBranchMarkerProjection.isMarker(node))
+                return node
+
+            if (
+                node.dimensions?.width > 0
+                && node.dimensions?.height > 0
+            )
+                return node
+
+            const dimensions = estimateBranchMarkerDimensions(
+                getBranchMarkerPromptText(node),
+            )
             changed = true
+
             return resizeBranchMarkerToDimensions(node, dimensions)
         })
-        return changed ? { ...canvasState, nodes } : canvasState
+
+        return changed ? {
+            ...canvasState,
+            nodes,
+        } : canvasState
     }
 
     getPromptTraceHandles = (
@@ -64,22 +93,36 @@ export class WorkspaceBranchMarkerProjection {
     shouldShowResponseLine = (
         node: BranchMarkerNode,
         preview: BranchMarkerConversationPreview | null | undefined,
-    ): boolean => Boolean(getBranchMarkerReasoningResponseText(node, preview))
+    ): boolean => Boolean(
+        getBranchMarkerReasoningResponseText(node, preview),
+    )
 
     resize = <T extends BranchMarkerNode>(node: T): T => {
         const preview = this.ports.getConversationPreview(node)
         const responseText = getBranchMarkerReasoningResponseText(node, preview)
-        const promptText = getBranchMarkerPromptDisplayText(this.getPromptParts(node, preview))
-        const dimensions = this.getContentDimensions(promptText, {
-            responseLine: this.shouldShowResponseLine(node, preview),
-            responseText,
-        })
+        const promptText = getBranchMarkerPromptDisplayText(
+            this.getPromptParts(node, preview),
+        )
+        const dimensions = this.getContentDimensions(
+            promptText,
+            {
+                responseLine: this.shouldShowResponseLine(node, preview),
+                responseText,
+            },
+        )
+
         return resizeBranchMarkerToDimensions(node, dimensions)
     }
 
     applyLiveGeometry = <T extends BranchMarkerNode>(node: T): T => {
         const override = this.ports.getLiveOverride(node.nodeId)
-        if (!override?.position && !override?.dimensions) return node
+
+        if (
+            !override?.position
+            && !override?.dimensions
+        )
+            return node
+
         return {
             ...node,
             ...(override.position ? { position: override.position } : {}),
@@ -87,21 +130,34 @@ export class WorkspaceBranchMarkerProjection {
         } as T
     }
 
-    preserveAcrossPromotion = (pendingNodeId: string, plannedNode: BranchMarkerNode): BranchMarkerNode => {
-        if (pendingNodeId !== plannedNode.nodeId) this.clearProjectionGeometry(pendingNodeId)
+    preserveAcrossPromotion = (
+        pendingNodeId: string,
+        plannedNode: BranchMarkerNode,
+    ): BranchMarkerNode => {
+        if (pendingNodeId !== plannedNode.nodeId)
+            this.clearProjectionGeometry(pendingNodeId)
+
         const nodeWithProjection = this.resize(plannedNode)
         this.clearProjectionGeometry(nodeWithProjection.nodeId)
+
         return nodeWithProjection
     }
 
     refresh = (threadId: string): void => {
         const state = this.ports.getState()
-        if (!state) return
+
+        if (!state)
+            return
 
         const markersWithClearedProjectionGeometry: BranchMarkerNode[] = []
         const resizedOnCanvasMarkersById = new Map<string, BranchMarkerNode>()
+
         for (const node of state.nodes) {
-            if (!WorkspaceBranchMarkerProjection.isMarker(node) || getBranchMarkerThreadId(node) !== threadId) continue
+            if (
+                !WorkspaceBranchMarkerProjection.isMarker(node)
+                || getBranchMarkerThreadId(node) !== threadId
+            )
+                continue
 
             if (this.ports.projectionOverrideNodeIds.has(node.nodeId)) {
                 this.ports.deleteProjectionOverride(node.nodeId)
@@ -109,24 +165,32 @@ export class WorkspaceBranchMarkerProjection {
                 markersWithClearedProjectionGeometry.push(node)
             }
 
-            const resizedNode = this.resize(this.applyLiveGeometry(node))
+            const resizedNode = this.resize(
+                this.applyLiveGeometry(node),
+            )
+
             if (
                 resizedNode.dimensions.width !== node.dimensions.width
                 || resizedNode.dimensions.height !== node.dimensions.height
                 || resizedNode.position.x !== node.position.x
                 || resizedNode.position.y !== node.position.y
-            ) {
+            )
                 resizedOnCanvasMarkersById.set(node.nodeId, resizedNode)
-            }
+
             this.ports.syncMarker(resizedNode)
         }
+
         if (resizedOnCanvasMarkersById.size > 0) {
             this.ports.commit({
                 ...state,
                 nodes: state.nodes.map(node => resizedOnCanvasMarkersById.get(node.nodeId) ?? node),
             })
         }
-        if (markersWithClearedProjectionGeometry.length > 0 && resizedOnCanvasMarkersById.size === 0) {
+
+        if (
+            markersWithClearedProjectionGeometry.length > 0
+            && resizedOnCanvasMarkersById.size === 0
+        ) {
             this.ports.syncGeometry(markersWithClearedProjectionGeometry)
             this.ports.syncMedia(state)
             this.ports.scheduleEdges()
@@ -134,14 +198,24 @@ export class WorkspaceBranchMarkerProjection {
     }
 
     refreshThreads = (threadIds: Iterable<string>): void => {
-        for (const threadId of threadIds) this.refresh(threadId)
+        for (const threadId of threadIds)
+            this.refresh(threadId)
     }
 
-    private getContentDimensions(promptText: string, options: BranchMarkerDimensionOptions = {}): { width: number; height: number } {
-        return estimateBranchMarkerDimensions(promptText, {
-            responseLine: options.responseLine,
-            responseText: options.responseText,
-        })
+    private getContentDimensions(
+        promptText: string,
+        options: BranchMarkerDimensionOptions = {},
+    ): {
+        width: number
+        height: number
+    } {
+        return estimateBranchMarkerDimensions(
+            promptText,
+            {
+                responseLine: options.responseLine,
+                responseText: options.responseText,
+            },
+        )
     }
 
     private clearProjectionGeometry(nodeId: string): void {

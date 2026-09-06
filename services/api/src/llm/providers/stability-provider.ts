@@ -75,21 +75,35 @@ const resizeReferenceForStability = async (
     label: string,
 ): Promise<ResolvedImageGenerationReference> => {
     let metadata: sharp.Metadata
+
     try {
         metadata = await sharp(ref.bytes).metadata()
     } catch (e) {
         warn(`${logPrefix} Failed to inspect ${label} reference dimensions: ${e}`)
+
         return ref
     }
 
     const width = metadata.width ?? 0
     const height = metadata.height ?? 0
     const pixels = width * height
-    if (width <= 0 || height <= 0 || pixels <= MAX_STABILITY_REFERENCE_PIXELS) return ref
+
+    if (
+        width <= 0
+        || height <= 0
+        || pixels <= MAX_STABILITY_REFERENCE_PIXELS
+    )
+        return ref
 
     const scale = Math.sqrt(MAX_STABILITY_REFERENCE_PIXELS / pixels)
-    const resizedWidth = Math.max(1, Math.floor(width * scale))
-    const resizedHeight = Math.max(1, Math.floor(height * scale))
+    const resizedWidth = Math.max(
+        1,
+        Math.floor(width * scale),
+    )
+    const resizedHeight = Math.max(
+        1,
+        Math.floor(height * scale),
+    )
 
     try {
         const resizedBytes = await sharp(ref.bytes)
@@ -118,6 +132,7 @@ const resizeReferenceForStability = async (
         }
     } catch (e) {
         warn(`${logPrefix} Failed to resize ${label} reference image for Stability: ${e}`)
+
         return ref
     }
 }
@@ -125,27 +140,47 @@ const resizeReferenceForStability = async (
 const extractPrompt = (messages: ChatMessage[]): string => {
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i]!
-        if (msg.role !== 'user') continue
+
+        if (msg.role !== 'user')
+            continue
+
         const content = msg.content
-        if (typeof content === 'string') return content.trim()
+
+        if (typeof content === 'string')
+            return content.trim()
+
         if (Array.isArray(content)) {
             for (const block of content) {
-                if (typeof block !== 'object' || block === null) continue
+                if (
+                    typeof block !== 'object'
+                    || block === null
+                )
+                    continue
+
                 const blockType = (block as any).type
-                if (blockType === 'input_text' || blockType === 'text') {
+
+                if (
+                    blockType === 'input_text'
+                    || blockType === 'text'
+                )
                     return ((block as any).text ?? '').trim()
-                }
-                if ('text' in block) {
-                    return (((block as any).text) ?? '').trim()
-                }
+
+                if ('text' in block)
+                    return ((block as any).text ?? '').trim()
             }
         }
     }
+
     return ''
 }
 
 const resolveAspectRatio = (imageSize: string | undefined): string => {
-    if (!imageSize || imageSize === 'auto') return '1:1'
+    if (
+        !imageSize
+        || imageSize === 'auto'
+    )
+        return '1:1'
+
     return imageSize
 }
 
@@ -154,10 +189,15 @@ export class StabilityProvider extends BaseProvider {
     private readonly useBedrock: boolean
     private bedrockClient?: BedrockRuntimeClient
 
-    constructor(instanceKey: string, deps: BaseProviderDeps) {
+    constructor(
+        instanceKey: string,
+        deps: BaseProviderDeps,
+    ) {
         super(instanceKey, deps)
         this.useBedrock = bedrockInference.isEnabledFor('stability')
-        if (this.useBedrock) bedrockInference.logRouting('stability', `Stability:${instanceKey}`)
+
+        if (this.useBedrock)
+            bedrockInference.logRouting('stability', `Stability:${instanceKey}`)
     }
 
     // The direct path calls fetch, whose socket codes the shared layer covers.
@@ -168,35 +208,53 @@ export class StabilityProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
-        if (!state.enableImageGeneration) {
+        if (!state.enableImageGeneration)
             throw new Error('Stability AI is an image-only provider and requires enableImageGeneration=true')
-        }
 
         // On the Bedrock path the request is signed with AWS credentials, so no api key is involved.
         const apiKey = process.env.STABLE_DIFFUSION_API_KEY
-        if (!apiKey && !this.useBedrock) throw new Error('STABLE_DIFFUSION_API_KEY is not configured')
+
+        if (
+            !apiKey
+            && !this.useBedrock
+        )
+            throw new Error('STABLE_DIFFUSION_API_KEY is not configured')
 
         const modelVersion = state.modelVersion
         const imageSize = state.imageSize ?? '1:1'
 
         const messages = state.messages
         const prompt = extractPrompt(messages)
-        if (!prompt) throw new Error('No prompt found in messages')
 
-        const validationError = validateImagePrompt(prompt, state.aiModelMetaInfo, this.providerName)
-        if (validationError) throw new Error(validationError)
+        if (!prompt)
+            throw new Error('No prompt found in messages')
+
+        const validationError = validateImagePrompt(
+            prompt,
+            state.aiModelMetaInfo,
+            this.providerName,
+        )
+
+        if (validationError)
+            throw new Error(validationError)
 
         const aspectRatio = resolveAspectRatio(imageSize)
         const allRefs = [...(state.resolvedImageGenerationReferences ?? [])]
-        info(`[Stability:${this.instanceKey}] reference images ${
-            JSON.stringify(allRefs.map(reference => ({
-                role: reference.role,
-                fileName: reference.fileName,
-                byteLength: reference.byteLength,
-                mediaType: reference.mediaType,
-                sha256: reference.sha256,
-            })))
-        }`)
+        info(
+            `[Stability:${this.instanceKey}] reference images ${
+                JSON.stringify(
+                    allRefs.map(
+                        reference => ({
+                            role: reference.role,
+                            fileName: reference.fileName,
+                            byteLength: reference.byteLength,
+                            mediaType: reference.mediaType,
+                            sha256: reference.sha256,
+                        }),
+                    ),
+                )
+            }`,
+        )
 
         const logPrefix = `[Stability:${this.instanceKey}]`
         let routingMode: StabilityRoutingMode = 'generate'
@@ -207,7 +265,9 @@ export class StabilityProvider extends BaseProvider {
             routingMode = 'style-transfer'
             primaryRef = allRefs[0]
             styleRef = allRefs[1]
-            if (allRefs.length > 2) warn(`${logPrefix} ${allRefs.length - 2} extra references skipped`)
+
+            if (allRefs.length > 2)
+                warn(`${logPrefix} ${allRefs.length - 2} extra references skipped`)
         } else if (allRefs.length === 1) {
             routingMode = allRefs[0]?.role === 'structure-reference'
                 ? 'structure-control'
@@ -215,12 +275,19 @@ export class StabilityProvider extends BaseProvider {
             primaryRef = allRefs[0]
         }
 
-        if (primaryRef) {
-            primaryRef = await resizeReferenceForStability(primaryRef, logPrefix, 'primary')
-        }
-        if (styleRef) {
-            styleRef = await resizeReferenceForStability(styleRef, logPrefix, 'style')
-        }
+        if (primaryRef)
+            primaryRef = await resizeReferenceForStability(
+                primaryRef,
+                logPrefix,
+                'primary',
+            )
+
+        if (styleRef)
+            styleRef = await resizeReferenceForStability(
+                styleRef,
+                logPrefix,
+                'style',
+            )
 
         await this.imagePub.partial('', 0)
 
@@ -228,7 +295,11 @@ export class StabilityProvider extends BaseProvider {
         // Stability accepts a seed on both transports and reports the one it used,
         // so we always send a generated seed and store what comes back.
         const requestedSeed = await this.resolveGenerationSeed(state, STABILITY_SEED_MAX)
-        const { imageBase64, finishReason, generationSeed } = this.useBedrock
+        const {
+            imageBase64,
+            finishReason,
+            generationSeed,
+        } = this.useBedrock
             ? await this.generateViaBedrock({
                 prompt,
                 modelVersion,
@@ -251,12 +322,11 @@ export class StabilityProvider extends BaseProvider {
                 requestedSeed,
             })
 
-        if (finishReason === 'CONTENT_FILTERED') {
+        if (finishReason === 'CONTENT_FILTERED')
             throw new Error('Image was filtered by Stability AI content moderation. Please try a different prompt.')
-        }
-        if (!imageBase64) {
+
+        if (!imageBase64)
             throw new Error('Stability API returned empty image data')
-        }
 
         await this.imagePub.complete({
             imageBase64,
@@ -311,38 +381,79 @@ export class StabilityProvider extends BaseProvider {
         const formData = new FormData()
         formData.set('prompt', prompt)
         formData.set('output_format', 'png')
-        formData.set('seed', String(requestedSeed))
+        formData.set(
+            'seed',
+            String(requestedSeed),
+        )
 
         let endpoint: string
-        if (routingMode === 'style-transfer' && primaryRef && styleRef) {
+
+        if (
+            routingMode === 'style-transfer'
+            && primaryRef
+            && styleRef
+        ) {
             endpoint = STYLE_TRANSFER_ENDPOINT
             const initExt = primaryRef.mediaType.split('/')[1] ?? 'png'
             const styleExt = styleRef.mediaType.split('/')[1] ?? 'png'
             const initBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mediaType })
             const styleBlob = new Blob([new Uint8Array(styleRef.bytes)], { type: styleRef.mediaType })
-            formData.set('init_image', initBlob, `init.${initExt}`)
-            formData.set('style_image', styleBlob, `style.${styleExt}`)
+            formData.set(
+                'init_image',
+                initBlob,
+                `init.${initExt}`,
+            )
+            formData.set(
+                'style_image',
+                styleBlob,
+                `style.${styleExt}`,
+            )
             formData.set('style_strength', '1')
-        } else if (routingMode === 'structure-control' && primaryRef) {
+        } else if (
+            routingMode === 'structure-control'
+            && primaryRef
+        ) {
             endpoint = STRUCTURE_CONTROL_ENDPOINT
             formData.set('aspect_ratio', aspectRatio)
-            formData.set('control_strength', String(STRUCTURE_CONTROL_STRENGTH))
+            formData.set(
+                'control_strength',
+                String(STRUCTURE_CONTROL_STRENGTH),
+            )
             const refExt = primaryRef.mediaType.split('/')[1] ?? 'png'
             const refBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mediaType })
-            formData.set('image', refBlob, `structure.${refExt}`)
-        } else if (routingMode === 'style-control' && primaryRef) {
+            formData.set(
+                'image',
+                refBlob,
+                `structure.${refExt}`,
+            )
+        } else if (
+            routingMode === 'style-control'
+            && primaryRef
+        ) {
             endpoint = STYLE_CONTROL_ENDPOINT
             formData.set('aspect_ratio', aspectRatio)
-            formData.set('fidelity', String(STYLE_CONTROL_FIDELITY))
+            formData.set(
+                'fidelity',
+                String(STYLE_CONTROL_FIDELITY),
+            )
             const refExt = primaryRef.mediaType.split('/')[1] ?? 'png'
             const refBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mediaType })
-            formData.set('image', refBlob, `reference.${refExt}`)
+            formData.set(
+                'image',
+                refBlob,
+                `reference.${refExt}`,
+            )
         } else {
             const ep = MODEL_ENDPOINT_MAP[modelVersion]
-            if (!ep) throw new Error(`Unknown Stability model: ${modelVersion}`)
+
+            if (!ep)
+                throw new Error(`Unknown Stability model: ${modelVersion}`)
+
             endpoint = ep
             formData.set('aspect_ratio', aspectRatio)
-            if (SD3_MODELS.has(modelVersion)) formData.set('model', modelVersion)
+
+            if (SD3_MODELS.has(modelVersion))
+                formData.set('model', modelVersion)
         }
 
         info(
@@ -354,29 +465,34 @@ export class StabilityProvider extends BaseProvider {
         const response = await this.retryTransport(
             'image',
             async () =>
-                await fetch(`https://api.stability.ai${endpoint}`, {
-                    method: 'POST',
-                    headers: {
-                        authorization: `Bearer ${apiKey}`,
-                        accept: 'application/json',
+                await fetch(
+                    `https://api.stability.ai${endpoint}`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            authorization: `Bearer ${apiKey}`,
+                            accept: 'application/json',
+                        },
+                        body: formData,
+                        signal: this.signal,
                     },
-                    body: formData,
-                    signal: this.signal,
-                }),
+                ),
         )
 
         info(`[Stability:${this.instanceKey}] API response status=${response.status}`)
 
         if (response.status !== 200) {
             let errorBody: any = {}
+
             try {
-                if (response.headers.get('content-type')?.startsWith('application/json')) {
+                if (response.headers.get('content-type')?.startsWith('application/json'))
                     errorBody = await response.json()
-                }
             } catch {}
+
             const errors: string[] = errorBody.errors ?? [String(response.status)]
             const errorName: string = errorBody.name ?? 'api_error'
             err(`[Stability:${this.instanceKey}] API error name=${errorName} errors=${errors}`)
+
             throw new Error(`Stability API error (${errorName}): ${errors.join('; ')}`)
         }
 
@@ -390,7 +506,11 @@ export class StabilityProvider extends BaseProvider {
                 + `seed=${generationSeed} imageLen=${imageBase64.length}`,
         )
 
-        return { imageBase64, finishReason, generationSeed }
+        return {
+            imageBase64,
+            finishReason,
+            generationSeed,
+        }
     }
 
     // AWS Bedrock InvokeModel. Bedrock exposes only Stability's text-to-image and
@@ -427,6 +547,7 @@ export class StabilityProvider extends BaseProvider {
             output_format: 'png',
             seed: requestedSeed,
         }
+
         if (useImageToImage) {
             const strength = BEDROCK_IMAGE_TO_IMAGE_STRENGTH[routingMode as Exclude<StabilityRoutingMode, 'generate'>]
             body.mode = 'image-to-image'
@@ -438,9 +559,9 @@ export class StabilityProvider extends BaseProvider {
         } else {
             body.mode = 'text-to-image'
             body.aspect_ratio = aspectRatio
-            if (routingMode !== 'generate') {
+
+            if (routingMode !== 'generate')
                 warn(`${logPrefix} ${routingMode} requested without a usable reference; falling back to text-to-image`)
-            }
         }
 
         info(
@@ -463,23 +584,31 @@ export class StabilityProvider extends BaseProvider {
                 ),
         )
 
-        if (!response.body) throw new Error('Stability Bedrock invocation returned an empty body')
-        const payload: any = JSON.parse(new TextDecoder().decode(response.body))
+        if (!response.body)
+            throw new Error('Stability Bedrock invocation returned an empty body')
+
+        const payload: any = JSON.parse(
+            new TextDecoder().decode(response.body),
+        )
         const imageBase64: string = payload.images?.[0] ?? ''
         // Bedrock reports one finish reason per image; it is null on success and a moderation
         // message otherwise. Normalize to the direct-API sentinel the caller checks.
         const rawFinishReason = payload.finish_reasons?.[0] ?? null
         const finishReason = rawFinishReason ? 'CONTENT_FILTERED' : ''
         const generationSeed = resolveReportedSeed(payload.seeds?.[0], requestedSeed)
-        if (rawFinishReason) {
+
+        if (rawFinishReason)
             err(`${logPrefix} Bedrock finish reason: ${rawFinishReason}`)
-        }
 
         info(
             `${logPrefix} Bedrock generation complete filtered=${!!rawFinishReason} `
                 + `seed=${generationSeed} imageLen=${imageBase64.length}`,
         )
 
-        return { imageBase64, finishReason, generationSeed }
+        return {
+            imageBase64,
+            finishReason,
+            generationSeed,
+        }
     }
 }

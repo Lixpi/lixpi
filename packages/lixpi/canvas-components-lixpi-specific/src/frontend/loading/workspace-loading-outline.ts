@@ -30,7 +30,11 @@ export type WorkspaceLoadingSettings = {
             animationDurationMs: number
             preFrameCircleScale: number
             zoomScaling: BoundedZoomScalingOptions
-            styles: { snakeColors: string[]; snakeTailAlpha: number; glassMaterial: GlassMaterialStyle }
+            styles: {
+                snakeColors: string[]
+                snakeTailAlpha: number
+                glassMaterial: GlassMaterialStyle
+            }
         }
     }
 }
@@ -44,21 +48,43 @@ export type WorkspaceLoadingOutlineConfig = {
 
 export type WorkspaceLoadingOutlineInstance = Pick<LoadingOverlay, 'setVisible' | 'setErrorMessage' | 'destroy'>
 
-export function getWorkspaceLoadingPresentation(settings: WorkspaceLoadingSettings): Pick<LoadingOverlayOptions, 'outline' | 'errorTitle' | 'retryLabel'> {
+export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettings): Pick<LoadingOverlayOptions, 'outline' | 'errorTitle' | 'retryLabel'> => {
     const animation = settings.mediaNode.inProgressOutlineAnimation
     const generatedMediaSize = settings.mediaBranchLineage.generatedMediaSize
     const configuredScale = Number(animation.preFrameCircleScale)
-    const scale = Number.isFinite(configuredScale) && configuredScale > 0 ? Math.min(1, configuredScale) : 1 / 3
+    const scale = Number.isFinite(configuredScale)
+        && configuredScale > 0
+        ? Math.min(1, configuredScale)
+        : 1 / 3
     const configuredDiameter = Number(settings.workspaceLoadingOutline.diameterScale)
-    const diameterScale = Number.isFinite(configuredDiameter) && configuredDiameter > 0 ? configuredDiameter : 1
+    const diameterScale = Number.isFinite(configuredDiameter)
+        && configuredDiameter > 0
+        ? configuredDiameter
+        : 1
     const size = Math.max(1, Math.max(1, generatedMediaSize * scale) * diameterScale)
-    const getStrokeScale = () => scaleCanvasChromeWorldSizeForZoom(1, 1, getAdaptiveBoundedZoomScalingOptions(animation.zoomScaling ?? { minZoom: 0 }))
+    const getStrokeScale = () => scaleCanvasChromeWorldSizeForZoom(
+        1,
+        1,
+        getAdaptiveBoundedZoomScalingOptions(animation.zoomScaling ?? { minZoom: 0 }),
+    )
     const outset = ((animation.gap ?? 0) + animation.snakeWidth / 2) * getStrokeScale()
     const configuredRadius = settings.mediaNode.styles.borderRadius
-    const radius = Number.isFinite(configuredRadius) && configuredRadius > 0 ? Math.min(configuredRadius, generatedMediaSize / 2) : 0
-    const nodePerimeter = getRoundedOutlinePerimeter(generatedMediaSize + outset * 2, generatedMediaSize + outset * 2, radius + outset)
-    const circlePerimeter = getRoundedOutlinePerimeter(size + outset * 2, size + outset * 2, size / 2 + outset)
+    const radius = Number.isFinite(configuredRadius)
+        && configuredRadius > 0
+        ? Math.min(configuredRadius, generatedMediaSize / 2)
+        : 0
+    const nodePerimeter = getRoundedOutlinePerimeter(
+        generatedMediaSize + outset * 2,
+        generatedMediaSize + outset * 2,
+        radius + outset,
+    )
+    const circlePerimeter = getRoundedOutlinePerimeter(
+        size + outset * 2,
+        size + outset * 2,
+        size / 2 + outset,
+    )
     const validPerimeters = nodePerimeter > 0 && circlePerimeter > 0
+
     return {
         errorTitle: 'Workspace failed to load',
         retryLabel: 'Retry',
@@ -79,12 +105,16 @@ export function getWorkspaceLoadingPresentation(settings: WorkspaceLoadingSettin
                 edgeFeatherFraction: animation.styles.glassMaterial.edgeFeatherFraction,
                 durationMs: animation.animationDurationMs,
             },
-            texture: new TravelingSnakeGlassMaterial(animation.styles.snakeColors, animation.styles.snakeTailAlpha, animation.styles.glassMaterial).bake(),
+            texture: new TravelingSnakeGlassMaterial(
+                animation.styles.snakeColors,
+                animation.styles.snakeTailAlpha,
+                animation.styles.glassMaterial,
+            ).bake(),
         },
     }
 }
 
-export function createWorkspaceLoadingOutline(config: WorkspaceLoadingOutlineConfig): WorkspaceLoadingOutlineInstance {
+export const createWorkspaceLoadingOutline = (config: WorkspaceLoadingOutlineConfig): WorkspaceLoadingOutlineInstance => {
     return new LoadingOverlay({
         root: config.paneEl,
         ...getWorkspaceLoadingPresentation(config.settings),

@@ -6,9 +6,10 @@ import {
 } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { withoutLayout } from '@lixpi/test-utils'
 
 function expectSourceToContain(source: string, snippet: string): void {
-    expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 }
 
 describe('help-tooltip.scss', () => {

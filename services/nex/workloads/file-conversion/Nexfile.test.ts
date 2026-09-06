@@ -4,12 +4,13 @@ import {
     it,
     expect,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 const source = readFileSync(new URL('./Nexfile', import.meta.url), 'utf-8')
 
 const expectSourceToContain = (snippet: string, label: string): void => {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${label} should be present in Nexfile
 ${snippet}`,
     ).toBe(true)

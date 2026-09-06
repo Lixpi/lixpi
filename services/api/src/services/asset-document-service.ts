@@ -1,3 +1,7 @@
+import {
+    err as debugError,
+    info as debugInfo,
+} from '@lixpi/debug-tools'
 import * as process from 'node:process'
 
 import NATS_Service from '@lixpi/nats-service'
@@ -51,8 +55,15 @@ import {
     runOperationWithRetry,
 } from './keyed-operation-coordinator.ts'
 
-const { ORG_NAME, STAGE } = process.env
-const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
+const {
+    ORG_NAME,
+    STAGE,
+} = process.env
+const assetsTableName = (): string => getDynamoDbTableStageName(
+    'ASSETS',
+    ORG_NAME,
+    STAGE,
+)
 const SETTLED_STEP_REPLAY_GRACE_MS = 5 * 60 * 1000
 const RESUME_EVENT_SCAN_LIMIT = 1000
 const RESUME_EVENT_REPLY_BUDGET_BYTES = 256 * 1024
@@ -83,22 +94,30 @@ const getAssetDocumentSettlementKey = ({
     role,
 }: Pick<AssetDocumentSettlementRequest, 'organizationId' | 'assetId' | 'role'>): string => `${organizationId}:${assetId}:${role}`
 
-const getSettlementErrorFields = (error: unknown): { errorName: string; errorMessage: string } => ({
+const getSettlementErrorFields = (error: unknown): {
+    errorName: string
+    errorMessage: string
+} => ({
     errorName: error instanceof Error ? error.name : 'UnknownError',
     errorMessage: error instanceof Error ? error.message : String(error),
 })
 
 const getDocumentType = (role: AssetDocumentRole) => {
-    if (role === 'content') return DOCUMENT_TYPE.ASSET_CONTENT
-    if (role === 'conversation') return DOCUMENT_TYPE.ASSET_CONVERSATION
-    if (role === 'provenance') return DOCUMENT_TYPE.ASSET_PROVENANCE
+    if (role === 'content')
+        return DOCUMENT_TYPE.ASSET_CONTENT
+
+    if (role === 'conversation')
+        return DOCUMENT_TYPE.ASSET_CONVERSATION
+
+    if (role === 'provenance')
+        return DOCUMENT_TYPE.ASSET_PROVENANCE
+
     return 'capabilityArtifact'
 }
 
-const getArtifactDefinition = (asset: Asset) =>
-    asset.artifact
-        ? capabilityArtifactBackendRegistry.require(asset.artifact.artifactTypeId).shared
-        : undefined
+const getArtifactDefinition = (asset: Asset) => asset.artifact
+    ? capabilityArtifactBackendRegistry.require(asset.artifact.artifactTypeId).shared
+    : undefined
 
 const getHeadlessEngineConfig = (
     asset: Asset,
@@ -114,15 +133,33 @@ const getHeadlessEngineConfig = (
     version,
 })
 
-const loadSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<AssetDocSnapshot | null> => {
+const loadSnapshot = async (
+    asset: Asset,
+    role: AssetDocumentRole,
+): Promise<AssetDocSnapshot | null> => {
     const pointer = asset.documents[role]
-    if (!pointer) return null
-    const blob = await BlobModel.get({ organizationId: asset.organizationId, blobHash: pointer.blobHash })
-    if (!blob) throw new Error('DOCUMENT_BLOB_NOT_FOUND')
+
+    if (!pointer)
+        return null
+
+    const blob = await BlobModel.get({
+        organizationId: asset.organizationId,
+        blobHash: pointer.blobHash,
+    })
+
+    if (!blob)
+        throw new Error('DOCUMENT_BLOB_NOT_FOUND')
+
     const natsService = NATS_Service.getInstance()
-    if (!natsService) throw new Error('NATS service unavailable')
+
+    if (!natsService)
+        throw new Error('NATS service unavailable')
+
     const bytes = await natsService.getObject(blob.bucketName, blob.objectKey)
-    if (!bytes) throw new Error('DOCUMENT_OBJECT_NOT_FOUND')
+
+    if (!bytes)
+        throw new Error('DOCUMENT_OBJECT_NOT_FOUND')
+
     return {
         organizationId: asset.organizationId,
         assetId: asset.assetId,
@@ -130,13 +167,21 @@ const loadSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<Asse
         blobHash: pointer.blobHash,
         version: pointer.version,
         schemaVersion: pointer.schemaVersion,
-        doc: JSON.parse(Buffer.from(bytes).toString('utf8')) as object,
+        doc: JSON.parse(
+            Buffer.from(bytes).toString('utf8'),
+        ) as object,
     }
 }
 
-const getSnapshotReference = (asset: Asset, role: AssetDocumentRole): AssetDocSnapshotReference | null => {
+const getSnapshotReference = (
+    asset: Asset,
+    role: AssetDocumentRole,
+): AssetDocSnapshotReference | null => {
     const pointer = asset.documents[role]
-    if (!pointer) return null
+
+    if (!pointer)
+        return null
+
     return {
         organizationId: asset.organizationId,
         assetId: asset.assetId,
@@ -156,29 +201,49 @@ const buildResumeEventPage = ({
     candidates: LoggedAssetStepStreamEvent[]
     localStreamSeq: number
     effectiveVersion: number
-}): { events: LoggedAssetStepStreamEvent[]; replayedThroughStreamSeq: number } => {
+}): {
+    events: LoggedAssetStepStreamEvent[]
+    replayedThroughStreamSeq: number
+} => {
     const events: LoggedAssetStepStreamEvent[] = []
     let replayedThroughStreamSeq = localStreamSeq
     let replyBytes = 2
 
     for (const event of candidates) {
         const include = event.kind !== 'STEP' || event.version > effectiveVersion
+
         if (include) {
-            const eventBytes = Buffer.byteLength(JSON.stringify(event), 'utf8') + 1
-            if (eventBytes > RESUME_EVENT_REPLY_BUDGET_BYTES) {
+            const eventBytes = Buffer.byteLength(
+                JSON.stringify(event),
+                'utf8',
+            ) + 1
+
+            if (eventBytes > RESUME_EVENT_REPLY_BUDGET_BYTES)
                 throw new Error(`ASSET_DOCUMENT_EVENT_TOO_LARGE:${event.streamSequence}`)
-            }
-            if (events.length > 0 && replyBytes + eventBytes > RESUME_EVENT_REPLY_BUDGET_BYTES) break
+
+            if (
+                events.length > 0
+                && replyBytes + eventBytes > RESUME_EVENT_REPLY_BUDGET_BYTES
+            )
+                break
+
             events.push(event)
             replyBytes += eventBytes
         }
+
         replayedThroughStreamSeq = event.streamSequence
     }
 
-    return { events, replayedThroughStreamSeq }
+    return {
+        events,
+        replayedThroughStreamSeq,
+    }
 }
 
-const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<AssetDocSnapshot | null> => {
+const loadCurrentSnapshot = async (
+    asset: Asset,
+    role: AssetDocumentRole,
+): Promise<AssetDocSnapshot | null> => {
     const settledSnapshot = await loadSnapshot(asset, role)
     const events = await AssetProseMirrorStepTransport.fromSingleton().replay(
         {
@@ -189,14 +254,32 @@ const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promi
         1,
         10000,
     )
-    if (!settledSnapshot && events.length === 0) return null
+
+    if (
+        !settledSnapshot
+        && events.length === 0
+    )
+        return null
+
     const engine = new HeadlessProseMirrorEngine({
-        ...getHeadlessEngineConfig(asset, role, settledSnapshot?.doc, settledSnapshot?.version ?? 0),
+        ...getHeadlessEngineConfig(
+            asset,
+            role,
+            settledSnapshot?.doc,
+            settledSnapshot?.version ?? 0,
+        ),
     })
+
     for (const event of events) {
-        if (event.kind !== 'STEP' || event.version <= engine.version) continue
+        if (
+            event.kind !== 'STEP'
+            || event.version <= engine.version
+        )
+            continue
+
         engine.applyStepJson(event.step)
     }
+
     return {
         organizationId: asset.organizationId,
         assetId: asset.assetId,
@@ -210,7 +293,12 @@ const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promi
     }
 }
 
-const verifyLease = (asset: Asset, workspaceId: string, leaseId: string, holderId?: string): boolean =>
+const verifyLease = (
+    asset: Asset,
+    workspaceId: string,
+    leaseId: string,
+    holderId?: string,
+): boolean =>
     Boolean(
         asset.editLease
             && asset.editLease.workspaceId === workspaceId
@@ -219,11 +307,20 @@ const verifyLease = (asset: Asset, workspaceId: string, leaseId: string, holderI
             && (!holderId || asset.editLease.holders.some(holder => holder.holderId === holderId && holder.expiresAt > Date.now())),
     )
 
-const isMatchingAssetRenditionUrl = (value: unknown, assetId: string): boolean => {
-    if (typeof value !== 'string' || !value.startsWith('/api/assets/')) return false
+const isMatchingAssetRenditionUrl = (
+    value: unknown,
+    assetId: string,
+): boolean => {
+    if (
+        typeof value !== 'string'
+        || !value.startsWith('/api/assets/')
+    )
+        return false
+
     try {
         const url = new URL(value, 'http://asset.local')
         const match = /^\/api\/assets\/([^/]+)\/renditions\/[^/]+$/.exec(url.pathname)
+
         return Boolean(
             match
                 && decodeURIComponent(match[1]!) === assetId
@@ -235,38 +332,80 @@ const isMatchingAssetRenditionUrl = (value: unknown, assetId: string): boolean =
 }
 
 export const assertAssetBackedMediaNodes = (node: unknown): void => {
-    if (!node || typeof node !== 'object') return
-    const record = node as { type?: unknown; attrs?: Record<string, unknown>; content?: unknown }
-    if (record.type === 'image' || record.type === 'aiGeneratedImage' || record.type === 'aiGeneratedVideo') {
+    if (
+        !node
+        || typeof node !== 'object'
+    )
+        return
+
+    const record = node as {
+        type?: unknown
+        attrs?: Record<string, unknown>
+        content?: unknown
+    }
+
+    if (
+        record.type === 'image'
+        || record.type === 'aiGeneratedImage'
+        || record.type === 'aiGeneratedVideo'
+    ) {
         const assetId = record.attrs?.assetId
-        if (typeof assetId !== 'string' || !assetId) throw new Error(`ASSET_ID_REQUIRED_FOR_MEDIA_NODE:${record.type}`)
+
+        if (
+            typeof assetId !== 'string'
+            || !assetId
+        )
+            throw new Error(`ASSET_ID_REQUIRED_FOR_MEDIA_NODE:${record.type}`)
+
         const urlFields = record.type === 'image'
             ? ['src']
             : record.type === 'aiGeneratedImage'
-            ? ['imageData']
-            : ['videoUrl', 'posterUrl']
+                ? ['imageData']
+                : ['videoUrl', 'posterUrl']
+
         for (const field of urlFields) {
             const value = record.attrs?.[field]
-            if (value !== undefined && value !== '' && !isMatchingAssetRenditionUrl(value, assetId)) {
+
+            if (
+                value !== undefined
+                && value !== ''
+                && !isMatchingAssetRenditionUrl(value, assetId)
+            )
                 throw new Error(`ASSET_RENDITION_URL_MISMATCH:${record.type}:${field}`)
-            }
         }
     }
+
     for (const traceField of ['imageGenerationTrace', 'videoGenerationTrace']) {
         const trace = record.attrs?.[traceField] as { referenceImages?: unknown } | undefined
-        if (!Array.isArray(trace?.referenceImages)) continue
+
+        if (!Array.isArray(trace?.referenceImages))
+            continue
+
         for (const reference of trace.referenceImages) {
             const imageUrl = (reference as { imageUrl?: unknown })?.imageUrl
-            if (imageUrl === undefined || imageUrl === '') continue
-            if (typeof imageUrl !== 'string' || !imageUrl.startsWith('/api/')) {
+
+            if (
+                imageUrl === undefined
+                || imageUrl === ''
+            )
+                continue
+
+            if (
+                typeof imageUrl !== 'string'
+                || !imageUrl.startsWith('/api/')
+            )
                 throw new Error(`ASSET_TRACE_URL_INVALID:${traceField}`)
-            }
+
             const parsed = new URL(imageUrl, 'http://asset.local')
-            if (parsed.searchParams.has('token')) throw new Error(`ASSET_TRACE_TOKEN_FORBIDDEN:${traceField}`)
+
+            if (parsed.searchParams.has('token'))
+                throw new Error(`ASSET_TRACE_TOKEN_FORBIDDEN:${traceField}`)
         }
     }
+
     if (Array.isArray(record.content)) {
-        for (const child of record.content) assertAssetBackedMediaNodes(child)
+        for (const child of record.content)
+            assertAssetBackedMediaNodes(child)
     }
 }
 
@@ -280,24 +419,34 @@ const validateEmbeddedAssetReferences = async ({
     role: 'content' | 'conversation' | 'capabilityArtifact'
 }): Promise<void> => {
     for (const embeddedAssetId of collectEmbeddedAssetIds(doc, role)) {
-        if (embeddedAssetId === hostAsset.assetId) throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
+        if (embeddedAssetId === hostAsset.assetId)
+            throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
+
         const embeddedAsset = await getAssetRecord(embeddedAssetId)
-        if (!embeddedAsset || embeddedAsset.organizationId !== hostAsset.organizationId) {
+
+        if (
+            !embeddedAsset
+            || embeddedAsset.organizationId !== hostAsset.organizationId
+        )
             throw new Error(`EMBEDDED_ASSET_TENANT_MISMATCH:${embeddedAssetId}`)
-        }
+
         const references = await AssetModel.listReferences(embeddedAssetId)
         const surfacePrefix = role === 'content'
             ? `document#${hostAsset.assetId}#content`
             : role === 'capabilityArtifact'
-            ? `capabilityArtifact#${hostAsset.assetId}`
-            : `conversation#${hostAsset.assetId}#media#`
-        const referenced = references.some((reference) =>
-            reference.type === 'workspace'
-            && (role === 'content' || role === 'capabilityArtifact'
-                ? reference.surfaceIds?.includes(surfacePrefix)
-                : reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix)))
+                ? `capabilityArtifact#${hostAsset.assetId}`
+                : `conversation#${hostAsset.assetId}#media#`
+        const referenced = references.some(
+            reference =>
+                reference.type === 'workspace'
+                && (role === 'content'
+                    || role === 'capabilityArtifact'
+                    ? reference.surfaceIds?.includes(surfacePrefix)
+                    : reference.surfaceIds?.some(surfaceId => surfaceId.startsWith(surfacePrefix))),
         )
-        if (!referenced) throw new Error(`EMBEDDED_ASSET_REFERENCE_MISSING:${embeddedAssetId}`)
+
+        if (!referenced)
+            throw new Error(`EMBEDDED_ASSET_REFERENCE_MISSING:${embeddedAssetId}`)
     }
 }
 
@@ -316,7 +465,14 @@ const settleOnce = async ({
     holderId?: string
     requester?: AssetRequesterContext
 }): Promise<AssetDocumentPointer> => {
-    if (!verifyLease(asset, workspaceId, leaseId, holderId)) throw new Error('LEASE_INVALID')
+    if (!verifyLease(
+        asset,
+        workspaceId,
+        leaseId,
+        holderId,
+    ))
+        throw new Error('LEASE_INVALID')
+
     const snapshot = await loadSnapshot(asset, role)
     const transport = AssetProseMirrorStepTransport.fromSingleton()
     const events = await transport.replay(
@@ -328,31 +484,50 @@ const settleOnce = async ({
         1,
         10000,
     )
-    const incorporatedStreamSequence = events.reduce(
-        (latest, event) => Math.max(latest, event.streamSequence),
-        0,
-    )
+    const incorporatedStreamSequence = events.reduce((latest, event) => Math.max(latest, event.streamSequence), 0)
     const engine = new HeadlessProseMirrorEngine({
-        ...getHeadlessEngineConfig(asset, role, snapshot?.doc, snapshot?.version ?? 0),
+        ...getHeadlessEngineConfig(
+            asset,
+            role,
+            snapshot?.doc,
+            snapshot?.version ?? 0,
+        ),
     })
+
     for (const event of events) {
-        if (event.kind !== 'STEP') continue
-        if (event.version <= engine.version) continue
+        if (event.kind !== 'STEP')
+            continue
+
+        if (event.version <= engine.version)
+            continue
+
         engine.applyStepJson(event.step)
     }
-    if (snapshot && engine.version <= snapshot.version) return asset.documents[role]!
+
+    if (
+        snapshot
+        && engine.version <= snapshot.version
+    )
+        return asset.documents[role]!
 
     const json = engine.snapshot()
     assertAssetBackedMediaNodes(json)
+
     if (role === 'capabilityArtifact') {
         const definition = getArtifactDefinition(asset)
-        if (!definition) throw new Error('CAPABILITY_ARTIFACT_DEFINITION_REQUIRED')
-        if (snapshot?.doc) definition.assertEditableMutation(snapshot.doc, json)
-        else definition.assertInitialDocument(json)
+
+        if (!definition)
+            throw new Error('CAPABILITY_ARTIFACT_DEFINITION_REQUIRED')
+
+        if (snapshot?.doc)
+            definition.assertEditableMutation(snapshot.doc, json)
+        else
+            definition.assertInitialDocument(json)
     }
+
     const embeddedReferenceRole: AssetReferenceDocumentRole | undefined = role === 'content'
-            || role === 'conversation'
-            || role === 'capabilityArtifact'
+        || role === 'conversation'
+        || role === 'capabilityArtifact'
         ? role
         : undefined
     const tracksEmbeddedAssets = Boolean(embeddedReferenceRole)
@@ -366,7 +541,10 @@ const settleOnce = async ({
         ? `capabilityArtifact#${asset.assetId}`
         : `document#${asset.assetId}#content`
     const newlyAttachedEmbeddedAssetIds: string[] = []
-    const bytes = Buffer.from(JSON.stringify(json), 'utf8')
+    const bytes = Buffer.from(
+        JSON.stringify(json),
+        'utf8',
+    )
     const blob = await BlobModel.store({
         organizationId: asset.organizationId,
         bytes,
@@ -403,7 +581,11 @@ const settleOnce = async ({
         })
     let oldBlobDeletionRequired = false
     const oldBlobHash = asset.documents[role]?.blobHash
-    if (oldBlobHash && oldBlobHash !== blob.blobHash) {
+
+    if (
+        oldBlobHash
+        && oldBlobHash !== blob.blobHash
+    ) {
         const removal = await buildBlobReferenceRemovalOperations({
             organizationId: asset.organizationId,
             blobHash: oldBlobHash,
@@ -413,52 +595,76 @@ const settleOnce = async ({
         operations.push(...removal.operations)
         oldBlobDeletionRequired = removal.deletionRequired
     }
+
     const next: Asset = {
         ...asset,
-        documents: { ...asset.documents, [role]: pointer },
+        documents: {
+            ...asset.documents,
+            [role]: pointer,
+        },
         revision: asset.revision + 1,
         updatedAt: now,
     }
     const projectionOperations = await buildAssetProjectionOperations(next)
-    operations.push({
-        type: 'update',
-        tableName: assetsTableName(),
-        key: { assetId: asset.assetId },
-        updates: {
-            documents: next.documents,
-            revision: next.revision,
-            updatedAt: now,
+    operations.push(
+        {
+            type: 'update',
+            tableName: assetsTableName(),
+            key: { assetId: asset.assetId },
+            updates: {
+                documents: next.documents,
+                revision: next.revision,
+                updatedAt: now,
+            },
+            conditionExpression: '#revision = :expectedRevision AND #editLease = :expectedEditLease AND #editLease.#expiresAt > :now',
+            expressionAttributeNames: {
+                '#revision': 'revision',
+                '#editLease': 'editLease',
+                '#expiresAt': 'expiresAt',
+            },
+            expressionAttributeValues: {
+                ':expectedRevision': asset.revision,
+                ':expectedEditLease': asset.editLease,
+                ':now': now,
+            },
         },
-        conditionExpression: '#revision = :expectedRevision AND #editLease = :expectedEditLease AND #editLease.#expiresAt > :now',
-        expressionAttributeNames: {
-            '#revision': 'revision',
-            '#editLease': 'editLease',
-            '#expiresAt': 'expiresAt',
-        },
-        expressionAttributeValues: {
-            ':expectedRevision': asset.revision,
-            ':expectedEditLease': asset.editLease,
-            ':now': now,
-        },
-    }, ...projectionOperations)
+        ...projectionOperations,
+    )
+
     try {
         if (tracksEmbeddedAssets) {
-            if (role === 'content' || role === 'capabilityArtifact') {
-                if (!requester) throw new Error('DOCUMENT_SETTLEMENT_REQUESTER_REQUIRED')
+            if (
+                role === 'content'
+                || role === 'capabilityArtifact'
+            ) {
+                if (!requester)
+                    throw new Error('DOCUMENT_SETTLEMENT_REQUESTER_REQUIRED')
+
                 for (const embeddedAssetId of nextEmbeddedAssetIds) {
-                    if (previousEmbeddedAssetIds.has(embeddedAssetId)) continue
+                    if (previousEmbeddedAssetIds.has(embeddedAssetId))
+                        continue
+
                     const attached = await AssetModel.attachWorkspaceReference({
                         assetId: embeddedAssetId,
                         workspaceId,
                         requester,
                         surfaceId: embeddedSurfaceId,
                     })
-                    if ('error' in attached) throw new Error(attached.error)
+
+                    if ('error' in attached)
+                        throw new Error(attached.error)
+
                     newlyAttachedEmbeddedAssetIds.push(embeddedAssetId)
                 }
             }
-            await validateEmbeddedAssetReferences({ hostAsset: asset, doc: json, role })
+
+            await validateEmbeddedAssetReferences({
+                hostAsset: asset,
+                doc: json,
+                role,
+            })
         }
+
         await dynamoDBService.transactWrite({
             operations,
             logConditionalCheckFailures: false,
@@ -472,42 +678,75 @@ const settleOnce = async ({
                 surfaceId: embeddedSurfaceId,
             }).catch(() => undefined)
         }
+
         throw error
     }
+
     publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
+
     if (incorporatedStreamSequence > 0) {
-        const timer = setTimeout(async () => {
-            try {
-                await transport.purgeThrough(
-                    { organizationId: asset.organizationId, assetId: asset.assetId, role },
-                    incorporatedStreamSequence,
-                )
-            } catch (error) {
-                console.error('Settled Asset step purge failed:', {
-                    assetId: asset.assetId,
-                    role,
-                    error,
-                })
-            }
-        }, SETTLED_STEP_REPLAY_GRACE_MS)
-        if (typeof timer === 'object' && 'unref' in timer) timer.unref()
+        const timer = setTimeout(
+            async () => {
+                try {
+                    await transport.purgeThrough(
+                        {
+                            organizationId: asset.organizationId,
+                            assetId: asset.assetId,
+                            role,
+                        },
+                        incorporatedStreamSequence,
+                    )
+                } catch (error) {
+                    debugError(
+                        'Settled Asset step purge failed:',
+                        {
+                            assetId: asset.assetId,
+                            role,
+                            error,
+                        },
+                    )
+                }
+            },
+            SETTLED_STEP_REPLAY_GRACE_MS,
+        )
+
+        if (
+            typeof timer === 'object'
+            && 'unref' in timer
+        )
+            timer.unref()
     }
-    if (oldBlobDeletionRequired && oldBlobHash) {
-        await enqueueBlobDeletion({ organizationId: asset.organizationId, blobHash: oldBlobHash })
-    }
+
+    if (
+        oldBlobDeletionRequired
+        && oldBlobHash
+    )
+        await enqueueBlobDeletion({
+            organizationId: asset.organizationId,
+            blobHash: oldBlobHash,
+        })
+
     for (const embeddedAssetId of previousEmbeddedAssetIds) {
-        if (nextEmbeddedAssetIds.has(embeddedAssetId)) continue
-        if (role === 'content' || role === 'capabilityArtifact') {
+        if (nextEmbeddedAssetIds.has(embeddedAssetId))
+            continue
+
+        if (
+            role === 'content'
+            || role === 'capabilityArtifact'
+        ) {
             await enqueueAssetSurfaceCleanup({
                 assetId: embeddedAssetId,
                 organizationId: asset.organizationId,
                 surfaceId: embeddedSurfaceId,
             })
+
             continue
         }
+
         const references = await AssetModel.listReferences(embeddedAssetId)
+
         for (const reference of references) {
-            for (const surfaceId of reference.surfaceIds?.filter((value) => value.startsWith(`conversation#${asset.assetId}#media#`)) ?? []) {
+            for (const surfaceId of reference.surfaceIds?.filter(value => value.startsWith(`conversation#${asset.assetId}#media#`)) ?? []) {
                 await enqueueAssetSurfaceCleanup({
                     assetId: embeddedAssetId,
                     organizationId: asset.organizationId,
@@ -516,6 +755,7 @@ const settleOnce = async ({
             }
         }
     }
+
     return pointer
 }
 
@@ -530,17 +770,25 @@ const settleImmediately = async ({
     trigger,
     coalescedBatchCount,
 }: AssetDocumentSettlementExecution): Promise<AssetDocumentPointer> => {
-    const key = getAssetDocumentSettlementKey({ organizationId, assetId, role })
-    const startedAt = Date.now()
-    let attempts = 0
-    console.info('[AssetDocumentSettlement] started', {
-        key,
+    const key = getAssetDocumentSettlementKey({
         organizationId,
         assetId,
         role,
-        trigger,
-        coalescedBatchCount,
     })
+    const startedAt = Date.now()
+    let attempts = 0
+    debugInfo(
+        '[AssetDocumentSettlement] started',
+        {
+            key,
+            organizationId,
+            assetId,
+            role,
+            trigger,
+            coalescedBatchCount,
+        },
+    )
+
     try {
         const pointer = await assetDocumentSettlementCoordinator.run(
             key,
@@ -548,11 +796,14 @@ const settleImmediately = async ({
                 await runOperationWithRetry({
                     operation: async () => {
                         attempts += 1
-                        const asset = await getAssetRecord(
-                            assetId,
-                            'AssetDocumentService.settle:getCurrent',
+                        const asset = await getAssetRecord(assetId, 'AssetDocumentService.settle:getCurrent')
+
+                        if (
+                            !asset
+                            || asset.organizationId !== organizationId
                         )
-                        if (!asset || asset.organizationId !== organizationId) throw new Error('ASSET_NOT_FOUND')
+                            throw new Error('ASSET_NOT_FOUND')
+
                         return await settleOnce({
                             asset,
                             role,
@@ -566,37 +817,48 @@ const settleImmediately = async ({
                     maxAttempts: ASSET_DOCUMENT_SETTLEMENT_MAX_ATTEMPTS,
                 }),
         )
-        console.info('[AssetDocumentSettlement] completed', {
-            key,
-            organizationId,
-            assetId,
-            role,
-            trigger,
-            coalescedBatchCount,
-            version: pointer.version,
-            attempts,
-            durationMs: Date.now() - startedAt,
-        })
+        debugInfo(
+            '[AssetDocumentSettlement] completed',
+            {
+                key,
+                organizationId,
+                assetId,
+                role,
+                trigger,
+                coalescedBatchCount,
+                version: pointer.version,
+                attempts,
+                durationMs: Date.now() - startedAt,
+            },
+        )
+
         return pointer
     } catch (error) {
-        console.error('[AssetDocumentSettlement] failed', {
-            key,
-            organizationId,
-            assetId,
-            role,
-            trigger,
-            coalescedBatchCount,
-            attempts,
-            durationMs: Date.now() - startedAt,
-            ...getSettlementErrorFields(error),
-        })
+        debugError(
+            '[AssetDocumentSettlement] failed',
+            {
+                key,
+                organizationId,
+                assetId,
+                role,
+                trigger,
+                coalescedBatchCount,
+                attempts,
+                durationMs: Date.now() - startedAt,
+                ...getSettlementErrorFields(error),
+            },
+        )
+
         throw error
     }
 }
 
 const assetDocumentSettlementScheduler = new KeyedIdleBatchScheduler<AssetDocumentSettlementRequest>({
     delayMs: ASSET_DOCUMENT_SETTLEMENT_IDLE_MS,
-    onFlush: async ({ value, coalescedRequestCount }) => {
+    onFlush: async ({
+        value,
+        coalescedRequestCount,
+    }) => {
         await settleImmediately({
             ...value,
             trigger: 'step-idle',
@@ -604,11 +866,14 @@ const assetDocumentSettlementScheduler = new KeyedIdleBatchScheduler<AssetDocume
         })
     },
     onError: (error, batch) => {
-        console.error('[AssetDocumentSettlement] idle flush rejected', {
-            key: batch.key,
-            coalescedBatchCount: batch.coalescedRequestCount,
-            ...getSettlementErrorFields(error),
-        })
+        debugError(
+            '[AssetDocumentSettlement] idle flush rejected',
+            {
+                key: batch.key,
+                coalescedBatchCount: batch.coalescedRequestCount,
+                ...getSettlementErrorFields(error),
+            },
+        )
     },
 })
 
@@ -622,16 +887,21 @@ const settle = async ({
     const cancelledBatchCount = trigger === 'step-idle'
         ? 0
         : assetDocumentSettlementScheduler.cancel(key)
+
     if (cancelledBatchCount > 0) {
-        console.info('[AssetDocumentSettlement] pending idle flush cancelled', {
-            key,
-            organizationId: request.organizationId,
-            assetId: request.assetId,
-            role: request.role,
-            trigger,
-            cancelledBatchCount,
-        })
+        debugInfo(
+            '[AssetDocumentSettlement] pending idle flush cancelled',
+            {
+                key,
+                organizationId: request.organizationId,
+                assetId: request.assetId,
+                role: request.role,
+                trigger,
+                cancelledBatchCount,
+            },
+        )
     }
+
     return await settleImmediately({
         ...request,
         trigger,
@@ -650,17 +920,37 @@ const replaceSystemSnapshot = async ({
     doc: object
     version: number
 }): Promise<AssetDocumentPointer> => {
-    if (role === 'provenance') throw new Error('USE_PROVENANCE_MATERIALIZER')
-    new HeadlessProseMirrorEngine(getHeadlessEngineConfig(asset, role, doc, version))
+    if (role === 'provenance')
+        throw new Error('USE_PROVENANCE_MATERIALIZER')
+
+    new HeadlessProseMirrorEngine(
+        getHeadlessEngineConfig(
+            asset,
+            role,
+            doc,
+            version,
+        ),
+    )
+
     if (role === 'capabilityArtifact') {
         const definition = getArtifactDefinition(asset)
-        if (!definition) throw new Error('CAPABILITY_ARTIFACT_DEFINITION_REQUIRED')
+
+        if (!definition)
+            throw new Error('CAPABILITY_ARTIFACT_DEFINITION_REQUIRED')
+
         const previous = await loadSnapshot(asset, role)
-        if (previous?.doc) definition.assertEditableMutation(previous.doc, doc)
-        else definition.assertInitialDocument(doc)
+
+        if (previous?.doc)
+            definition.assertEditableMutation(previous.doc, doc)
+        else
+            definition.assertInitialDocument(doc)
     }
+
     assertAssetBackedMediaNodes(doc)
-    const bytes = Buffer.from(JSON.stringify(doc), 'utf8')
+    const bytes = Buffer.from(
+        JSON.stringify(doc),
+        'utf8',
+    )
     const blob = await BlobModel.store({
         organizationId: asset.organizationId,
         bytes,
@@ -696,7 +986,11 @@ const replaceSystemSnapshot = async ({
         })
     const oldBlobHash = asset.documents[role]?.blobHash
     let oldBlobDeletionRequired = false
-    if (oldBlobHash && oldBlobHash !== blob.blobHash) {
+
+    if (
+        oldBlobHash
+        && oldBlobHash !== blob.blobHash
+    ) {
         const removal = await buildBlobReferenceRemovalOperations({
             organizationId: asset.organizationId,
             blobHash: oldBlobHash,
@@ -706,26 +1000,47 @@ const replaceSystemSnapshot = async ({
         operations.push(...removal.operations)
         oldBlobDeletionRequired = removal.deletionRequired
     }
+
     const next: Asset = {
         ...asset,
-        documents: { ...asset.documents, [role]: pointer },
+        documents: {
+            ...asset.documents,
+            [role]: pointer,
+        },
         revision: asset.revision + 1,
         updatedAt: now,
     }
-    operations.push({
-        type: 'update',
-        tableName: assetsTableName(),
-        key: { assetId: asset.assetId },
-        updates: { documents: next.documents, revision: next.revision, updatedAt: now },
-        conditionExpression: '#revision = :expectedRevision',
-        expressionAttributeNames: { '#revision': 'revision' },
-        expressionAttributeValues: { ':expectedRevision': asset.revision },
-    }, ...await buildAssetProjectionOperations(next))
-    await dynamoDBService.transactWrite({ operations, origin: 'AssetDocumentService.replaceSystemSnapshot' })
+    operations.push(
+        {
+            type: 'update',
+            tableName: assetsTableName(),
+            key: { assetId: asset.assetId },
+            updates: {
+                documents: next.documents,
+                revision: next.revision,
+                updatedAt: now,
+            },
+            conditionExpression: '#revision = :expectedRevision',
+            expressionAttributeNames: { '#revision': 'revision' },
+            expressionAttributeValues: { ':expectedRevision': asset.revision },
+        },
+        ...await buildAssetProjectionOperations(next),
+    )
+    await dynamoDBService.transactWrite({
+        operations,
+        origin: 'AssetDocumentService.replaceSystemSnapshot',
+    })
     publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
-    if (oldBlobDeletionRequired && oldBlobHash) {
-        await enqueueBlobDeletion({ organizationId: asset.organizationId, blobHash: oldBlobHash })
-    }
+
+    if (
+        oldBlobDeletionRequired
+        && oldBlobHash
+    )
+        await enqueueBlobDeletion({
+            organizationId: asset.organizationId,
+            blobHash: oldBlobHash,
+        })
+
     return pointer
 }
 
@@ -744,29 +1059,57 @@ const AssetDocumentService = {
         payload: AssetSubmitStepsPayload
         requester: AssetRequesterContext
     }): Promise<SubmitResult | { error: string }> => {
-        if (!ASSET_DOCUMENT_ROLES.includes(payload.role)) return { error: 'INVALID_DOCUMENT_ROLE' }
-        if (payload.role === 'provenance') return { error: 'PROVENANCE_IS_READ_ONLY' }
-        if (!Array.isArray(payload.steps) || payload.steps.length < 1 || payload.steps.length > 50) {
+        if (!ASSET_DOCUMENT_ROLES.includes(payload.role))
+            return { error: 'INVALID_DOCUMENT_ROLE' }
+
+        if (payload.role === 'provenance')
+            return { error: 'PROVENANCE_IS_READ_ONLY' }
+
+        if (
+            !Array.isArray(payload.steps)
+            || payload.steps.length < 1
+            || payload.steps.length > 50
+        )
             return { error: 'INVALID_STEP_BATCH' }
-        }
+
         if (
             !Number.isSafeInteger(payload.baseVersion)
             || payload.baseVersion < 0
             || !Number.isSafeInteger(payload.expectedVersion)
             || payload.expectedVersion < 0
-        ) return { error: 'INVALID_DOCUMENT_VERSION' }
+        )
+            return { error: 'INVALID_DOCUMENT_VERSION' }
+
         const authorized = await AssetModel.get({
             assetId: payload.assetId,
             requester,
             origin: 'AssetDocumentService.submitSteps:authorize',
         })
-        if ('error' in authorized) return authorized
+
+        if ('error' in authorized)
+            return authorized
+
         const asset = authorized
-        if (asset.organizationId !== payload.organizationId) return { error: 'NOT_FOUND' }
-        if (!asset.documents[payload.role]) return { error: 'DOCUMENT_ROLE_NOT_FOUND' }
-        if (!requester.editableWorkspaceIds.includes(payload.workspaceId)) return { error: 'PERMISSION_DENIED' }
-        if (!verifyLease(asset, payload.workspaceId, payload.leaseId, payload.holderId)) return { error: 'LEASE_INVALID' }
+
+        if (asset.organizationId !== payload.organizationId)
+            return { error: 'NOT_FOUND' }
+
+        if (!asset.documents[payload.role])
+            return { error: 'DOCUMENT_ROLE_NOT_FOUND' }
+
+        if (!requester.editableWorkspaceIds.includes(payload.workspaceId))
+            return { error: 'PERMISSION_DENIED' }
+
+        if (!verifyLease(
+            asset,
+            payload.workspaceId,
+            payload.leaseId,
+            payload.holderId,
+        ))
+            return { error: 'LEASE_INVALID' }
+
         const result = await AssetProseMirrorStepTransport.fromSingleton().submitSteps(payload)
+
         if (result.status === 'ACCEPTED') {
             const settlementRequest: AssetDocumentSettlementRequest = {
                 organizationId: payload.organizationId,
@@ -782,9 +1125,9 @@ const AssetDocumentService = {
                 settlementRequest,
             )
         }
+
         return result
     },
-
     resume: async ({
         coordinate,
         requester,
@@ -802,33 +1145,58 @@ const AssetDocumentService = {
         activateLiveRelay?: boolean
         workspaceId?: string
     }) => {
-        if (!ASSET_DOCUMENT_ROLES.includes(coordinate.role)) return { error: 'INVALID_DOCUMENT_ROLE' }
+        if (!ASSET_DOCUMENT_ROLES.includes(coordinate.role))
+            return { error: 'INVALID_DOCUMENT_ROLE' }
+
         if (
-            !Number.isSafeInteger(localVersion) || localVersion < 0
-            || !Number.isSafeInteger(localStreamSeq) || localStreamSeq < 0
-        ) {
+            !Number.isSafeInteger(localVersion)
+            || localVersion < 0
+            || !Number.isSafeInteger(localStreamSeq)
+            || localStreamSeq < 0
+        )
             return { error: 'INVALID_DOCUMENT_CURSOR' }
-        }
+
         const authorized = await AssetModel.get({
             assetId: coordinate.assetId,
             requester,
             origin: 'AssetDocumentService.resume:authorize',
         })
-        if ('error' in authorized) return authorized
-        if (authorized.organizationId !== coordinate.organizationId) return { error: 'NOT_FOUND' }
-        if (!authorized.documents[coordinate.role]) return { error: 'DOCUMENT_ROLE_NOT_FOUND' }
+
+        if ('error' in authorized)
+            return authorized
+
+        if (authorized.organizationId !== coordinate.organizationId)
+            return { error: 'NOT_FOUND' }
+
+        if (!authorized.documents[coordinate.role])
+            return { error: 'DOCUMENT_ROLE_NOT_FOUND' }
+
         const asset = authorized
         const liveSubject = activateLiveRelay
             ? workspaceId
-                ? ensureAssetDocumentEventRelay({ coordinate, requester, workspaceId })
+                ? ensureAssetDocumentEventRelay({
+                    coordinate,
+                    requester,
+                    workspaceId,
+                })
                 : undefined
             : undefined
-        if (activateLiveRelay && !workspaceId) return { error: 'WORKSPACE_ID_REQUIRED' }
+
+        if (
+            activateLiveRelay
+            && !workspaceId
+        )
+            return { error: 'WORKSPACE_ID_REQUIRED' }
+
         const snapshot = getSnapshotReference(asset, coordinate.role)
         const transport = AssetProseMirrorStepTransport.fromSingleton()
         const state = await transport.getCurrentSubjectState(coordinate)
         const candidates = state.streamSequence > localStreamSeq
-            ? await transport.replay(coordinate, localStreamSeq + 1, RESUME_EVENT_SCAN_LIMIT)
+            ? await transport.replay(
+                coordinate,
+                localStreamSeq + 1,
+                RESUME_EVENT_SCAN_LIMIT,
+            )
             : []
         const page = buildResumeEventPage({
             candidates,
@@ -837,6 +1205,7 @@ const AssetDocumentService = {
                 ? Math.max(localVersion, snapshot?.version ?? 0)
                 : localVersion,
         })
+
         return {
             snapshot,
             currentVersion: Math.max(snapshot?.version ?? 0, state.documentVersion),
@@ -849,7 +1218,6 @@ const AssetDocumentService = {
             events: page.events,
         }
     },
-
     settle,
 }
 

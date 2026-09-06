@@ -36,18 +36,26 @@ You must produce these structured sections:
 Do not reach for category defaults. Commit to the medium and dominance scores from pixel evidence, not from subject, mood, familiarity, or superficial resemblance.`
 
 const buildAxisDominanceSchema = (): Record<string, any> => {
-    const axes = getExtractors().map((e) => ({ axis: e.axis, displayName: e.displayName, description: e.description }))
+    const axes = getExtractors().map(
+        e => ({
+            axis: e.axis,
+            displayName: e.displayName,
+            description: e.description,
+        }),
+    )
     const properties: Record<string, any> = {}
+
     for (const a of axes) {
         properties[a.axis] = {
             type: 'number',
             description: `0..1 dominance score for ${a.displayName}. ${a.description}`,
         }
     }
+
     return {
         type: 'object',
         properties,
-        required: axes.map((a) => a.axis),
+        required: axes.map(a => a.axis),
         additionalProperties: false,
     }
 }
@@ -64,20 +72,32 @@ const buildRouterSchema = (): VlmJsonSchema => ({
                 items: {
                     type: 'object',
                     properties: {
-                        imageRef: { type: 'string', description: 'input-0 | input-1 | input-2 | …' },
+                        imageRef: {
+                            type: 'string',
+                            description: 'input-0 | input-1 | input-2 | …',
+                        },
                         subjects: {
                             type: 'array',
                             items: {
                                 type: 'object',
                                 properties: {
-                                    label: { type: 'string', description: 'Short label derived only from the visible subject.' },
+                                    label: {
+                                        type: 'string',
+                                        description: 'Short label derived only from the visible subject.',
+                                    },
                                     bbox: {
                                         type: 'array',
                                         description: 'normalized [x0, y0, x1, y1] in 0..1 coordinates',
                                         items: { type: 'number' },
                                     },
-                                    salience: { type: 'integer', description: '1 = primary subject, 2 = secondary, …' },
-                                    description: { type: 'string', description: 'concrete description, naming distinctive rendering details' },
+                                    salience: {
+                                        type: 'integer',
+                                        description: '1 = primary subject, 2 = secondary, …',
+                                    },
+                                    description: {
+                                        type: 'string',
+                                        description: 'concrete description, naming distinctive rendering details',
+                                    },
                                 },
                                 required: ['label', 'bbox', 'salience', 'description'],
                                 additionalProperties: false,
@@ -109,7 +129,10 @@ const buildRouterSchema = (): VlmJsonSchema => ({
             intentResolution: {
                 type: 'object',
                 properties: {
-                    forcedCategory: { type: 'string', description: 'empty string if no forced category, otherwise the user-meaningful category name' },
+                    forcedCategory: {
+                        type: 'string',
+                        description: 'empty string if no forced category, otherwise the user-meaningful category name',
+                    },
                     forcedAxes: {
                         type: 'array',
                         items: { type: 'string' },
@@ -147,51 +170,69 @@ const buildUserMessages = (state: StyleExtractionState): ChatMessage[] => {
     })
 
     for (const ref of state.references) {
-        blocks.push({ type: 'input_image', image_url: ref.url })
+        blocks.push({
+            type: 'input_image',
+            image_url: ref.url,
+        })
     }
 
-    return [{ role: 'user', content: blocks }]
+    return [{
+        role: 'user',
+        content: blocks,
+    }]
 }
 
 const summarizeAssessment = (a: SceneAssessment): string => {
     const topAxes = Object.entries(a.axisDominance)
         .sort(([, av], [, bv]) => (bv as number) - (av as number))
-        .slice(0, 5)
-        .map(([k, v]) => `${k}:${(v as number).toFixed(2)}`)
+        .slice(0, 5).map(([k, v]) => `${k}:${(v as number).toFixed(2)}`)
         .join(' ')
+
     return `medium=${a.medium} topAxes=[${topAxes}] subjects=${a.references.reduce((sum, r) => sum + r.subjects.length, 0)}`
 }
 
-export const runRouter = async (state: StyleExtractionState, logger: StageLogger, _deps: StyleExtractionDependencies): Promise<Partial<StyleExtractionState>> => {
-    return await logger.span('router', state.input.analysisModel.modelVersion, async () => {
-        const natsService = NATS_Service.getInstance()
-        if (!natsService) throw new Error('NATS service not initialized')
+export const runRouter = async (
+    state: StyleExtractionState,
+    logger: StageLogger,
+    _deps: StyleExtractionDependencies,
+): Promise<Partial<StyleExtractionState>> => {
+    return await logger.span(
+        'router',
+        state.input.analysisModel.modelVersion,
+        async () => {
+            const natsService = NATS_Service.getInstance()
 
-        const schema = buildRouterSchema()
-        const messages = buildUserMessages(state)
+            if (!natsService)
+                throw new Error('NATS service not initialized')
 
-        const result = await callStructuredVlm<SceneAssessment>({
-            provider: state.input.analysisProvider,
-            modelVersion: state.input.analysisModel.modelVersion,
-            inferenceCapabilities: state.input.analysisModel.inferenceCapabilities,
-            systemPrompt: SYSTEM_PROMPT,
-            userMessages: messages,
-            schema,
-            natsService,
-            temperature: 0.2,
-            maxTokens: state.input.analysisModel.maxCompletionSize ?? 4096,
-            maxOutputTokensCeiling: state.input.analysisModel.maxCompletionSize,
-            enableThinking: state.input.analysisProvider === 'Anthropic',
-            thinkingBudgetTokens: 4096,
-            onTextChunk: (text) => logger.chunk(text),
-        })
+            const schema = buildRouterSchema()
+            const messages = buildUserMessages(state)
+    
+            const result = await callStructuredVlm<SceneAssessment>({
+                provider: state.input.analysisProvider,
+                modelVersion: state.input.analysisModel.modelVersion,
+                inferenceCapabilities: state.input.analysisModel.inferenceCapabilities,
+                systemPrompt: SYSTEM_PROMPT,
+                userMessages: messages,
+                schema,
+                natsService,
+                temperature: 0.2,
+                maxTokens: state.input.analysisModel.maxCompletionSize ?? 4096,
+                maxOutputTokensCeiling: state.input.analysisModel.maxCompletionSize,
+                enableThinking: state.input.analysisProvider === 'Anthropic',
+                thinkingBudgetTokens: 4096,
+                onTextChunk: text => logger.chunk(text),
+            })
+    
+            // Trust the router's output shape; we asked for it strictly.
+            const assessment = result.parsed
 
-        // Trust the router's output shape; we asked for it strictly.
-        const assessment = result.parsed
-        return { sceneAssessment: assessment }
-    }, {
-        inputSummary: `references=${state.references.length} intent=${JSON.stringify(state.input.intent ?? '')}`,
-        outputSummarizer: (result) => result.sceneAssessment ? summarizeAssessment(result.sceneAssessment) : 'no assessment',
-        promptPreview: SYSTEM_PROMPT,
-    })
+            return { sceneAssessment: assessment }
+        },
+        {
+            inputSummary: `references=${state.references.length} intent=${JSON.stringify(state.input.intent ?? '')}`,
+            outputSummarizer: result => result.sceneAssessment ? summarizeAssessment(result.sceneAssessment) : 'no assessment',
+            promptPreview: SYSTEM_PROMPT,
+        },
+    )
 }

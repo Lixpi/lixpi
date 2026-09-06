@@ -15,16 +15,16 @@ class Auth0Service {
     private auth0: Auth0Client | null = null
 
     constructor() {
-        if (Auth0Service.instance) {
+        if (Auth0Service.instance)
             return Auth0Service.instance
-        }
+
         Auth0Service.instance = this
     }
 
     static getInstance(): Auth0Service {
-        if (!Auth0Service.instance) {
+        if (!Auth0Service.instance)
             Auth0Service.instance = new Auth0Service()
-        }
+
         return Auth0Service.instance
     }
 
@@ -51,23 +51,39 @@ class Auth0Service {
 
     private async updateAuthData(): Promise<void> {
         try {
-            if (window.location.search.includes('code=') && window.location.search.includes('state=')) {
+            if (
+                window.location.search.includes('code=')
+                && window.location.search.includes('state=')
+            ) {
                 await this.auth0.handleRedirectCallback()
-                window.history.replaceState({}, document.title, window.location.pathname)
+                window.history.replaceState(
+                    {},
+                    document.title,
+                    window.location.pathname,
+                )
             }
 
             const isAuthenticated = await this.auth0.isAuthenticated()
 
             if (isAuthenticated) {
                 const user = await this.auth0.getUser()
-                authStore.setMetaValues({ isLoading: false, isAuthenticated })
+                authStore.setMetaValues({
+                    isLoading: false,
+                    isAuthenticated,
+                })
                 authStore.setDataValues({ user })
             } else {
-                authStore.setMetaValues({ isLoading: false, isAuthenticated: false })
+                authStore.setMetaValues({
+                    isLoading: false,
+                    isAuthenticated: false,
+                })
                 authStore.setDataValues({ user: null })
             }
         } catch (error) {
-            authStore.setMetaValues({ isLoading: false, isAuthenticated: false })
+            authStore.setMetaValues({
+                isLoading: false,
+                isAuthenticated: false,
+            })
             authStore.setDataValues({ user: null })
         }
     }
@@ -78,17 +94,19 @@ class Auth0Service {
 
     public logout(): void {
         this.auth0.logout({ returnTo: AUTH0_LOGIN_URL })
-        authStore.setMetaValues({ isLoading: false, isAuthenticated: false })
+        authStore.setMetaValues({
+            isLoading: false,
+            isAuthenticated: false,
+        })
         authStore.setDataValues({ user: null })
     }
 
     public async getTokenSilently(forceRefresh = false): Promise<string | false> {
         try {
-            return await this.auth0.getTokenSilently(
-                forceRefresh ? { cacheMode: 'off' } : undefined,
-            ) ?? false
+            return (await this.auth0.getTokenSilently(forceRefresh ? { cacheMode: 'off' } : undefined)) ?? false
         } catch (error) {
             await this.login()
+
             return false
         }
     }

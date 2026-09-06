@@ -40,22 +40,31 @@ const capabilityArtifactIcons = {
     'ordered-list': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 896" aria-hidden="true"><path d="${orderedListIcon}"></path></svg>`,
 } as const
 
-export function getCapabilityArtifactIcon(artifactTypeId: string): string {
+export const getCapabilityArtifactIcon = (artifactTypeId: string): string => {
     const definition = capabilityArtifactFrontendRegistry.require(artifactTypeId)
     const icon = capabilityArtifactIcons[definition.iconId as keyof typeof capabilityArtifactIcons]
-    if (!icon) throw new Error(`CAPABILITY_ARTIFACT_ICON_NOT_INSTALLED:${definition.iconId}`)
+
+    if (!icon)
+        throw new Error(`CAPABILITY_ARTIFACT_ICON_NOT_INSTALLED:${definition.iconId}`)
+
     return icon
 }
 
 const styledDocuments = new WeakSet<Document>()
 
-export function createInstalledCapabilityControls(host: CapabilityControlsHost): CapabilityControlsView {
-    const mounted = new Map<string, { root: HTMLElement; controls: CapabilityPromptControls }>()
+export const createInstalledCapabilityControls = (host: CapabilityControlsHost): CapabilityControlsView => {
+    const mounted = new Map<string, {
+        root: HTMLElement
+        controls: CapabilityPromptControls
+    }>()
     ensureCapabilityStyles(host.container.ownerDocument)
 
     const unmount = (module: InstalledFrontendModule): void => {
         const current = mounted.get(module.moduleId)
-        if (!current) return
+
+        if (!current)
+            return
+
         current.controls.destroy()
         current.root.remove()
         mounted.delete(module.moduleId)
@@ -67,15 +76,25 @@ export function createInstalledCapabilityControls(host: CapabilityControlsHost):
 
     return {
         update: () => {
-            const activeModuleIds = new Set(host.getModuleIds())
+            const activeModuleIds = new Set(
+                host.getModuleIds(),
+            )
+
             for (const module of installedModules) {
                 if (!activeModuleIds.has(module.moduleId)) {
                     unmount(module)
+
                     continue
                 }
-                if (mounted.has(module.moduleId)) continue
+
+                if (mounted.has(module.moduleId))
+                    continue
+
                 const definition = capabilityArtifactFrontendRegistry.require(module.artifactTypeId)
-                if (!definition.createPromptControls) continue
+
+                if (!definition.createPromptControls)
+                    continue
+
                 const root = html`<div className="installed-capability-prompt-controls"></div>` as HTMLDivElement
                 host.container.appendChild(root)
                 const controls = definition.createPromptControls({
@@ -83,24 +102,43 @@ export function createInstalledCapabilityControls(host: CapabilityControlsHost):
                     initialValue: host.getCapabilityInputs()[module.toolId],
                     setValue: value => {
                         const inputs = { ...host.getCapabilityInputs() }
-                        if (value) inputs[module.toolId] = value
-                        else delete inputs[module.toolId]
+
+                        if (value)
+                            inputs[module.toolId] = value
+                        else
+                            delete inputs[module.toolId]
+
                         host.setCapabilityInputs(inputs)
                     },
-                    setValid: (valid, message) => host.setValidity(module.toolId, valid, message),
+                    setValid: (valid, message) => host.setValidity(
+                        module.toolId,
+                        valid,
+                        message,
+                    ),
                 })
-                controls.hydrateText?.(host.getPromptText())
-                mounted.set(module.moduleId, { root, controls })
+                controls.hydrateText?.(
+                    host.getPromptText(),
+                )
+                mounted.set(
+                    module.moduleId,
+                    {
+                        root,
+                        controls,
+                    },
+                )
             }
         },
         destroy: () => {
-            for (const module of installedModules) unmount(module)
+            for (const module of installedModules)
+                unmount(module)
         },
     }
 }
 
 export function ensureCapabilityStyles(document: Document): void {
-    if (styledDocuments.has(document)) return
+    if (styledDocuments.has(document))
+        return
+
     const documentHtml = createDocumentHtml(document)
     const style = documentHtml`<style></style>` as HTMLStyleElement
     style.dataset.capabilityStyles = ACTION_TIMELINE_MODULE_ID

@@ -94,8 +94,14 @@ export type CapabilityRunReplay = {
 }
 
 export type CapabilityCatalogTransport = {
-    request: <T>(subject: string, payload: Record<string, unknown>) => Promise<T>
-    subscribe?: (subject: string, listener: (payload: unknown) => void) => { unsubscribe: () => void }
+    request: <T>(
+        subject: string,
+        payload: Record<string, unknown>,
+    ) => Promise<T>
+    subscribe?: (
+        subject: string,
+        listener: (payload: unknown) => void,
+    ) => { unsubscribe: () => void }
 }
 
 export type CapabilityCatalogClientConfig = {
@@ -123,22 +129,41 @@ export class CapabilityCatalogClient {
         this.cacheTtlMs = config.cacheTtlMs ?? 30000
     }
 
-    async search(query: string, limit = 20): Promise<CapabilityCatalogPage> {
+    async search(
+        query: string,
+        limit = 20,
+    ): Promise<CapabilityCatalogPage> {
         const normalizedQuery = normalizeQuery(query)
-        const page = await this.fetchPage(CAPABILITY_CATALOG_SUBJECTS.list, {
-            query: normalizedQuery,
+        const page = await this.fetchPage(
+            CAPABILITY_CATALOG_SUBJECTS.list,
+            {
+                query: normalizedQuery,
+                limit,
+            },
+        )
+
+        return normalizedQuery ? page : rankEmptyCapabilityQuery(
+            page,
+            [...this.recentSelections.values()],
             limit,
-        })
-        return normalizedQuery ? page : rankEmptyCapabilityQuery(page, [...this.recentSelections.values()], limit)
+        )
     }
 
-    list(options: { cursor?: string; kind?: CapabilityKind; query?: string; limit?: number } = {}): Promise<CapabilityCatalogPage> {
-        return this.fetchPage(CAPABILITY_CATALOG_SUBJECTS.list, {
-            cursor: options.cursor,
-            kinds: options.kind ? [options.kind] : undefined,
-            query: normalizeQuery(options.query ?? ''),
-            limit: options.limit ?? 20,
-        })
+    list(options: {
+        cursor?: string
+        kind?: CapabilityKind
+        query?: string
+        limit?: number
+    } = {}): Promise<CapabilityCatalogPage> {
+        return this.fetchPage(
+            CAPABILITY_CATALOG_SUBJECTS.list,
+            {
+                cursor: options.cursor,
+                kinds: options.kind ? [options.kind] : undefined,
+                query: normalizeQuery(options.query ?? ''),
+                limit: options.limit ?? 20,
+            },
+        )
     }
 
     async get(capabilityId: string): Promise<CapabilityDetails> {
@@ -159,10 +184,9 @@ export class CapabilityCatalogClient {
             grants?: CapabilityAccessGrant[]
         }>(CAPABILITY_CATALOG_SUBJECTS.get, { capabilityId })
         const inputSchemaResourceId = response.manifest.tool?.inputSchema.resourceId
-        const inputSchema = normalizeInputSchema(
-            response.resources.find((resource) => resource.resourceId === inputSchemaResourceId)?.content,
-        )
+        const inputSchema = normalizeInputSchema(response.resources.find(resource => resource.resourceId === inputSchemaResourceId)?.content)
         const catalogItem = this.catalogItems.get(response.record.capabilityId)
+
         return {
             scopeAndOwner: `${response.record.scope}#${response.record.scopeOwnerId}`,
             scopeOwnerId: response.record.scopeOwnerId,
@@ -179,11 +203,13 @@ export class CapabilityCatalogClient {
             catalogExposure: response.record.catalogExposure,
             status: response.record.status,
             updatedAt: response.record.updatedAt,
-            references: response.references.map((reference) => ({
-                capabilityId: reference.capabilityId,
-                kind: reference.kind,
-                name: reference.name ?? `${reference.capabilityId} (unavailable)`,
-            })),
+            references: response.references.map(
+                reference => ({
+                    capabilityId: reference.capabilityId,
+                    kind: reference.kind,
+                    name: reference.name ?? `${reference.capabilityId} (unavailable)`,
+                }),
+            ),
             inputSchema,
             record: response.record,
             manifest: response.manifest,
@@ -201,115 +227,190 @@ export class CapabilityCatalogClient {
         assertValidCapabilityManifest(input.manifest)
         const record = await this.request<CapabilityCatalogRecord>(CAPABILITY_CATALOG_SUBJECTS.create, { ...input })
         this.invalidate()
+
         return record
     }
 
     async update(
         details: CapabilityDetails,
         manifest: CapabilityManifest,
-        catalog: { summary: string; tags: string[] } = details,
+        catalog: {
+            summary: string
+            tags: string[]
+        } = details,
     ): Promise<CapabilityCatalogRecord> {
         assertValidCapabilityManifest(manifest)
-        const record = await this.request<CapabilityCatalogRecord>(CAPABILITY_CATALOG_SUBJECTS.update, {
-            manifest,
-            scope: details.record.scope,
-            scopeOwnerId: details.record.scopeOwnerId,
-            storageOwnerId: details.record.storageOwnerId,
-            summary: catalog.summary,
-            tags: catalog.tags,
-            expectedManifestBlobHash: details.record.manifestBlobHash,
-        })
+        const record = await this.request<CapabilityCatalogRecord>(
+            CAPABILITY_CATALOG_SUBJECTS.update,
+            {
+                manifest,
+                scope: details.record.scope,
+                scopeOwnerId: details.record.scopeOwnerId,
+                storageOwnerId: details.record.storageOwnerId,
+                summary: catalog.summary,
+                tags: catalog.tags,
+                expectedManifestBlobHash: details.record.manifestBlobHash,
+            },
+        )
         this.invalidate()
+
         return record
     }
 
-    async setStatus(details: CapabilityDetails, status: 'active' | 'disabled'): Promise<CapabilityCatalogRecord> {
-        const record = await this.request<CapabilityCatalogRecord>(CAPABILITY_CATALOG_SUBJECTS.update, {
-            capabilityId: details.capabilityId,
-            expectedManifestBlobHash: details.record.manifestBlobHash,
-            status,
-        })
+    async setStatus(
+        details: CapabilityDetails,
+        status: 'active' | 'disabled',
+    ): Promise<CapabilityCatalogRecord> {
+        const record = await this.request<CapabilityCatalogRecord>(
+            CAPABILITY_CATALOG_SUBJECTS.update,
+            {
+                capabilityId: details.capabilityId,
+                expectedManifestBlobHash: details.record.manifestBlobHash,
+                status,
+            },
+        )
         this.invalidate()
+
         return record
     }
 
     async delete(details: CapabilityDetails): Promise<CapabilityCatalogRecord> {
-        const record = await this.request<CapabilityCatalogRecord>(CAPABILITY_CATALOG_SUBJECTS.delete, {
-            capabilityId: details.capabilityId,
-            expectedManifestBlobHash: details.record.manifestBlobHash,
-        })
+        const record = await this.request<CapabilityCatalogRecord>(
+            CAPABILITY_CATALOG_SUBJECTS.delete,
+            {
+                capabilityId: details.capabilityId,
+                expectedManifestBlobHash: details.record.manifestBlobHash,
+            },
+        )
         this.invalidate()
+
         return record
     }
 
-    async grant(capabilityId: string, principalId: string, accessLevel: CapabilityAccessLevel): Promise<CapabilityAccessGrant> {
-        const grant = await this.request<CapabilityAccessGrant>(CAPABILITY_CATALOG_SUBJECTS.grant, {
-            capabilityId,
-            principalId,
-            accessLevel,
-        })
+    async grant(
+        capabilityId: string,
+        principalId: string,
+        accessLevel: CapabilityAccessLevel,
+    ): Promise<CapabilityAccessGrant> {
+        const grant = await this.request<CapabilityAccessGrant>(
+            CAPABILITY_CATALOG_SUBJECTS.grant,
+            {
+                capabilityId,
+                principalId,
+                accessLevel,
+            },
+        )
         this.invalidate()
+
         return grant
     }
 
-    async revoke(capabilityId: string, principalId: string): Promise<void> {
-        await this.request(CAPABILITY_CATALOG_SUBJECTS.revoke, { capabilityId, principalId })
+    async revoke(
+        capabilityId: string,
+        principalId: string,
+    ): Promise<void> {
+        await this.request(
+            CAPABILITY_CATALOG_SUBJECTS.revoke,
+            {
+                capabilityId,
+                principalId,
+            },
+        )
         this.invalidate()
     }
 
-    async run(capabilityId: string, input: Record<string, CapabilityJsonValue>): Promise<CapabilityRun> {
-        return this.request<CapabilityRun>(CAPABILITY_CATALOG_SUBJECTS.run, {
-            capabilityId,
-            arguments: input,
-            origin: 'panel',
-        })
+    async run(
+        capabilityId: string,
+        input: Record<string, CapabilityJsonValue>,
+    ): Promise<CapabilityRun> {
+        return this.request<CapabilityRun>(
+            CAPABILITY_CATALOG_SUBJECTS.run,
+            {
+                capabilityId,
+                arguments: input,
+                origin: 'panel',
+            },
+        )
     }
 
-    async replay(runId: string, cursor?: string): Promise<CapabilityRunReplay> {
+    async replay(
+        runId: string,
+        cursor?: string,
+    ): Promise<CapabilityRunReplay> {
         const run = await this.request<CapabilityRun>(CAPABILITY_CATALOG_SUBJECTS.getRun, { runId })
         const response = await this.request<{
-            events: Array<{ event: CapabilityRunEvent; streamSequence: number }>
+            events: Array<{
+                event: CapabilityRunEvent
+                streamSequence: number
+            }>
             hasMore: boolean
-        }>(CAPABILITY_CATALOG_SUBJECTS.replay, {
-            runId,
-            startStreamSequence: cursor ? Number(cursor) : 1,
-            maxMessages: 1000,
-        })
+        }>(
+            CAPABILITY_CATALOG_SUBJECTS.replay,
+            {
+                runId,
+                startStreamSequence: cursor ? Number(cursor) : 1,
+                maxMessages: 1000,
+            },
+        )
         const lastSequence = response.events.at(-1)?.streamSequence
+
         return {
             run,
-            events: response.events.map((envelope) => envelope.event),
-            ...(response.hasMore && lastSequence ? { cursor: String(lastSequence + 1) } : {}),
+            events: response.events.map(envelope => envelope.event),
+            ...(response.hasMore
+                && lastSequence
+                ? { cursor: String(lastSequence + 1) }
+                : {}),
         }
     }
 
-    subscribeToRunEvents(runId: string, listener: (event: CapabilityRunEvent) => void): () => void {
+    subscribeToRunEvents(
+        runId: string,
+        listener: (event: CapabilityRunEvent) => void,
+    ): () => void {
         const subscribe = this.config.transport.subscribe
-        if (!subscribe) return () => undefined
+
+        if (!subscribe)
+            return () => undefined
+
         const userId = this.config.getUserId?.() ?? ''
-        if (!userId) throw new Error('Capability run events require an authenticated user')
+
+        if (!userId)
+            throw new Error('Capability run events require an authenticated user')
+
         const subject = [
             getCapabilityUserEventSubject(userId, NATS_SUBJECTS.CAPABILITY_SUBJECTS.RUN.STATUS),
             this.config.workspaceId.replace(/[^A-Za-z0-9_-]/g, '_'),
             runId.replace(/[^A-Za-z0-9_-]/g, '_'),
         ].join('.')
-        const subscription = subscribe(subject, (payload) => {
+        const subscription = subscribe(subject, payload => {
             const envelope = payload as {
                 workspaceId?: unknown
                 event?: CapabilityRunEvent
             }
-            if (envelope.workspaceId !== this.config.workspaceId || envelope.event?.runId !== runId) return
+
+            if (
+                envelope.workspaceId !== this.config.workspaceId
+                || envelope.event?.runId !== runId
+            )
+                return
+
             listener(envelope.event)
         })
+
         return () => subscription.unsubscribe()
     }
 
     rememberSelection(item: CapabilityCatalogItem): void {
         this.recentSelections.delete(item.capabilityId)
         this.recentSelections.set(item.capabilityId, item)
+
         while (this.recentSelections.size > 20) {
             const oldestCapabilityId = this.recentSelections.keys().next().value
-            if (typeof oldestCapabilityId !== 'string') break
+
+            if (typeof oldestCapabilityId !== 'string')
+                break
+
             this.recentSelections.delete(oldestCapabilityId)
         }
     }
@@ -318,16 +419,31 @@ export class CapabilityCatalogClient {
         this.cache.clear()
     }
 
-    private fetchPage(subject: string, payload: Record<string, unknown>): Promise<CapabilityCatalogPage> {
+    private fetchPage(
+        subject: string,
+        payload: Record<string, unknown>,
+    ): Promise<CapabilityCatalogPage> {
         const cacheKey = `${subject}:${stablePayloadKey(payload)}`
         const cached = this.cache.get(cacheKey)
-        if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.page)
+
+        if (
+            cached
+            && cached.expiresAt > Date.now()
+        )
+            return Promise.resolve(cached.page)
 
         const inFlight = this.pending.get(cacheKey)
-        if (inFlight) return inFlight
 
-        const request = this.loadAndCachePage(cacheKey, subject, payload)
+        if (inFlight)
+            return inFlight
+
+        const request = this.loadAndCachePage(
+            cacheKey,
+            subject,
+            payload,
+        )
         this.pending.set(cacheKey, request)
+
         return request
     }
 
@@ -337,31 +453,55 @@ export class CapabilityCatalogClient {
         payload: Record<string, unknown>,
     ): Promise<CapabilityCatalogPage> {
         try {
-            const rawPage = await this.request<{ items: CapabilityMeta[]; cursor?: string }>(subject, payload)
+            const rawPage = await this.request<{
+                items: CapabilityMeta[]
+                cursor?: string
+            }>(subject, payload)
             const page: CapabilityCatalogPage = {
-                items: rawPage.items.map((item) => ({
-                    ...item,
-                    scope: item.scope,
-                })),
+                items: rawPage.items.map(
+                    item => ({
+                        ...item,
+                        scope: item.scope,
+                    }),
+                ),
                 cursor: rawPage.cursor,
             }
-            for (const item of page.items) this.catalogItems.set(item.capabilityId, item)
-            this.cache.set(cacheKey, { page, expiresAt: Date.now() + this.cacheTtlMs })
+
+            for (const item of page.items)
+                this.catalogItems.set(item.capabilityId, item)
+
+            this.cache.set(
+                cacheKey,
+                {
+                    page,
+                    expiresAt: Date.now() + this.cacheTtlMs,
+                },
+            )
+
             return page
         } finally {
             this.pending.delete(cacheKey)
         }
     }
 
-    private async request<T>(subject: string, payload: Record<string, unknown>): Promise<T> {
+    private async request<T>(
+        subject: string,
+        payload: Record<string, unknown>,
+    ): Promise<T> {
         const token = await this.config.getToken()
-        const response = await this.config.transport.request<T>(subject, {
-            token,
-            workspaceId: this.config.workspaceId,
-            organizationId: this.config.organizationId,
-            ...withoutUndefinedValues(payload),
-        }) as T & { error?: string }
-        if (response?.error) throw new Error(response.error)
+        const response = (await this.config.transport.request<T>(
+            subject,
+            {
+                token,
+                workspaceId: this.config.workspaceId,
+                organizationId: this.config.organizationId,
+                ...withoutUndefinedValues(payload),
+            },
+        )) as T & { error?: string }
+
+        if (response?.error)
+            throw new Error(response.error)
+
         return response
     }
 }
@@ -374,48 +514,73 @@ export function rankEmptyCapabilityQuery(
     const ranked: CapabilityCatalogItem[] = []
     const seen = new Set<string>()
     const push = (item: CapabilityCatalogItem): void => {
-        if (seen.has(item.capabilityId) || ranked.length >= limit) return
+        if (
+            seen.has(item.capabilityId)
+            || ranked.length >= limit
+        )
+            return
+
         seen.add(item.capabilityId)
         ranked.push(item)
     }
     recentSelections.slice().reverse().forEach(push)
-    page.items
-        .filter((item) => item.tags.includes('recommended'))
-        .sort(compareCapabilityCatalogItems)
-        .forEach(push)
+    page.items.filter(item => item.tags.includes('recommended'))
+        .sort(compareCapabilityCatalogItems).forEach(push)
     page.items.forEach(push)
-    return { items: ranked, cursor: page.cursor }
+
+    return {
+        items: ranked,
+        cursor: page.cursor,
+    }
 }
 
-function compareCapabilityCatalogItems(left: CapabilityCatalogItem, right: CapabilityCatalogItem): number {
+function compareCapabilityCatalogItems(
+    left: CapabilityCatalogItem,
+    right: CapabilityCatalogItem,
+): number {
     return left.normalizedName.localeCompare(right.normalizedName)
         || left.kind.localeCompare(right.kind)
         || left.capabilityId.localeCompare(right.capabilityId)
 }
 
 function normalizeInputSchema(value: unknown): CapabilityInputSchema | undefined {
-    if (!value || typeof value !== 'object') return undefined
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Partial<CapabilityInputSchema>
-    if (candidate.type !== 'object' || !candidate.properties || typeof candidate.properties !== 'object') return undefined
+
+    if (
+        candidate.type !== 'object'
+        || !candidate.properties
+        || typeof candidate.properties !== 'object'
+    )
+        return undefined
+
     return candidate as CapabilityInputSchema
 }
 
-export function parseCapabilityManifestJson(value: string): CapabilityManifest {
+export const parseCapabilityManifestJson = (value: string): CapabilityManifest => {
     let parsed: unknown
+
     try {
         parsed = JSON.parse(value)
     } catch {
         throw new Error('Manifest must be valid JSON')
     }
+
     assertValidCapabilityManifest(parsed)
+
     return parsed
 }
 
 function assertValidCapabilityManifest(value: unknown): asserts value is CapabilityManifest {
     const validation = validateCapabilityManifest(value)
-    if (!validation.valid) {
+
+    if (!validation.valid)
         throw new Error(`Invalid manifest: ${validation.issues[0]?.message ?? validation.issues[0]?.code ?? 'unknown issue'}`)
-    }
 }
 
 export function normalizeQuery(query: string): string {
@@ -423,9 +588,15 @@ export function normalizeQuery(query: string): string {
 }
 
 function stablePayloadKey(payload: Record<string, unknown>): string {
-    return JSON.stringify(Object.entries(withoutUndefinedValues(payload)).sort(([left], [right]) => left.localeCompare(right)))
+    return JSON.stringify(
+        Object.entries(
+            withoutUndefinedValues(payload),
+        ).sort(([left], [right]) => left.localeCompare(right)),
+    )
 }
 
 function withoutUndefinedValues(payload: Record<string, unknown>): Record<string, unknown> {
-    return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined))
+    return Object.fromEntries(
+        Object.entries(payload).filter(([, value]) => value !== undefined),
+    )
 }
