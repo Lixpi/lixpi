@@ -28,7 +28,6 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
         // Add decoded user info to each subject payload
         data.user = {
             userId: decoded.sub,
-            stripeCustomerId: decoded.stripe_customer_id,
         }
 
         // Delete token from subject payload to make it cleaner because the token won't be used again anywhere else down the chain

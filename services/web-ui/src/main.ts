@@ -7,7 +7,6 @@ import {
     type AuthClientInstance,
 } from '@lixpi/auth-client'
 
-import SubscriptionService from '$src/services/subscription-service.ts'
 import OrganizationService from '$src/services/organization-service.ts'
 import AiModelService from '$src/services/ai-model-service.ts'
 import WorkspaceService from '$src/services/workspace-service.ts'
@@ -116,7 +115,6 @@ const application = createWebClientService<WebUiDependencies>({
         })
         servicesStore.setDataValues({
             nats,
-            subscriptionService: new SubscriptionService(),
             aiModelService,
             assetService,
             workspaceService: new WorkspaceService({

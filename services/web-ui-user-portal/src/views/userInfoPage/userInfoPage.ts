@@ -130,11 +130,6 @@ class UserInfoPage implements UserInfoPageInstance {
 
     private renderUser(user: User): void {
         const html = createDocumentHtml(this.document)
-        const subscriptionStatus = createGentelellaStatus({
-            document: this.document,
-            label: user.hasActiveSubscription ? 'Active' : 'Inactive',
-            tone: user.hasActiveSubscription ? 'green' : 'gray',
-        })
         const organizations = user.organizations.length > 0
             ? user.organizations.join(', ')
             : 'None'
@@ -163,10 +158,6 @@ class UserInfoPage implements UserInfoPageInstance {
                     <div className="user-portal-user-field">
                         <dt className="user-portal-user-term">Family name</dt>
                         <dd className="user-portal-user-value">${user.familyName || 'Not available'}</dd>
-                    </div>
-                    <div className="user-portal-user-field">
-                        <dt className="user-portal-user-term">Subscription</dt>
-                        <dd className="user-portal-user-value">${subscriptionStatus.el}</dd>
                     </div>
                     <div className="user-portal-user-field user-portal-wide-user-field">
                         <dt className="user-portal-user-term">Organizations</dt>

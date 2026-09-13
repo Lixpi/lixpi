@@ -14,15 +14,11 @@ import { createUserInfoPage } from './userInfoPage.ts'
 
 const userFixture: User = {
     userId: 'user-123',
-    stripeCustomerId: 'customer-123',
     email: 'alex@example.com',
     name: 'Alex Rivera',
     givenName: 'Alex',
     familyName: 'Rivera',
     avatar: '',
-    hasActiveSubscription: true,
-    balance: '25',
-    currency: 'USD',
     recentTags: [],
     organizations: ['organization-123'],
     createdAt: Date.UTC(2026, 0, 2),
@@ -45,7 +41,6 @@ describe('userInfoPage', () => {
         expect(page.el.textContent).toContain('Alex Rivera')
         expect(page.el.textContent).toContain('alex@example.com')
         expect(page.el.textContent).toContain('organization-123')
-        expect(page.el.textContent).toContain('Active')
 
         store.setMetaValues({ loadingStatus: LoadingStatus.error })
 

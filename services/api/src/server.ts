@@ -21,7 +21,6 @@ import { createServer } from 'http'
 
 import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
-import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
 import {
     aiInteractionSubjects,
@@ -90,9 +89,8 @@ global.dynamoDBService = new DynamoDBService({
 // here instead of sorting after the fact so startup logs and generated auth
 // permissions stay readable and predictable.
 const subscriptions = [
-    // Identity, billing, and model metadata.
+    // Identity and model metadata.
     ...userSubjects,
-    ...subscriptionSubjects,
     ...aiModelSubjects,
 
     // AI orchestration, replay streams, and media description.

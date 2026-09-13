@@ -183,10 +183,7 @@ const workspace = {
 }
 
 const baseMessageData = {
-    user: {
-        userId: 'user-1',
-        stripeCustomerId: 'stripe-1',
-    },
+    user: { userId: 'user-1' },
     messages: [{
         role: 'user',
         content: 'Hello',
@@ -430,7 +427,6 @@ describe('AI interaction message routing', () => {
             workspaceId: 'workspace-1',
             eventMeta: {
                 userId: 'user-1',
-                stripeCustomerId: 'stripe-1',
                 organizationId: 'org-1',
                 workspaceId: 'workspace-1',
                 aiChatThreadId: 'conv-1',

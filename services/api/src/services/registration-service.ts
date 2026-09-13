@@ -46,7 +46,6 @@ class RegistrationService {
             if (isMockAuthEnabled) {
                 auth0User = {
                     sub: decodedToken.sub,
-                    stripe_customer_id: decodedToken.stripe_customer_id || 'cus_mock_stripe_test',
                     email: decodedToken.email || 'test@local.dev',
                     name: decodedToken.name || 'Test User',
                     given_name: decodedToken.given_name || 'Test',
@@ -63,7 +62,6 @@ class RegistrationService {
 
             const {
                 sub: userId,
-                stripe_customer_id: stripeCustomerId,
                 email,
                 name,
                 given_name: givenName,
@@ -76,7 +74,6 @@ class RegistrationService {
                 error,
             } = await this.createUser({
                 userId,
-                stripeCustomerId,
                 email,
                 name,
                 givenName,
@@ -126,7 +123,6 @@ class RegistrationService {
 
     async createUser({
         userId,
-        stripeCustomerId,
         email,
         name,
         givenName,
@@ -136,13 +132,11 @@ class RegistrationService {
         try {
             const user = await User.create({
                 userId, // Partition key
-                stripeCustomerId, // Sort key
                 email,
                 name,
                 givenName,
                 familyName,
                 avatar,
-                hasActiveSubscription: false,
             })
 
             return { user }

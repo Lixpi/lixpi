@@ -69,7 +69,6 @@ const mocks = vi.hoisted(() => {
 
     const jwtAuthMiddleware = vi.fn(() => 'jwt-auth-middleware')
     const userSubjects = ['user-subject']
-    const subscriptionSubjects = ['subscription-subject']
     const aiModelSubjects = ['ai-model-subject']
     const aiInteractionSubjects = ['ai-interaction-subject']
     const mediaGenerationRequestSubjects = ['media-generation-request-subject']
@@ -142,7 +141,6 @@ const mocks = vi.hoisted(() => {
         natsGetInstance,
         jwtAuthMiddleware,
         userSubjects,
-        subscriptionSubjects,
         aiModelSubjects,
         aiInteractionSubjects,
         mediaGenerationRequestSubjects,
@@ -235,7 +233,6 @@ vi.mock('./NATS/middleware/nats-auth-middleware.ts', () => ({
     jwtAuthMiddleware: mocks.jwtAuthMiddleware,
 }))
 vi.mock('./NATS/subscriptions/user-subjects.ts', () => ({ userSubjects: mocks.userSubjects }))
-vi.mock('./NATS/subscriptions/subscription-subjects.ts', () => ({ subscriptionSubjects: mocks.subscriptionSubjects }))
 vi.mock('./NATS/subscriptions/ai-model-subjects.ts', () => ({ aiModelSubjects: mocks.aiModelSubjects }))
 vi.mock('./NATS/subscriptions/ai-interaction-subjects.ts', () => ({
     aiInteractionSubjects: mocks.aiInteractionSubjects,
@@ -366,7 +363,6 @@ const resetMockState = (): void => {
 describe('services/api server startup', () => {
     const expectedSubscriptionOrder = [
         ...mocks.userSubjects,
-        ...mocks.subscriptionSubjects,
         ...mocks.aiModelSubjects,
         ...mocks.aiInteractionSubjects,
         ...mocks.mediaGenerationRequestSubjects,

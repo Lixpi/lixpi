@@ -993,10 +993,7 @@ export const aiInteractionSubjects = [
         },
         handler: async (data: any, _msg: any) => {
             const {
-                user: {
-                    userId,
-                    stripeCustomerId,
-                },
+                user: { userId },
                 aiReasoningModels,
                 aiImageModels,
                 aiVideoModels,
@@ -1018,7 +1015,6 @@ export const aiInteractionSubjects = [
             } = data as {
                 user: {
                     userId: string
-                    stripeCustomerId: string
                 }
                 workspaceId: string
                 conversationAssetId: string
@@ -1765,7 +1761,6 @@ export const aiInteractionSubjects = [
                                         videoDuration,
                                     },
                                     resumePayload,
-                                    stripeCustomerId,
                                 },
                             },
                             bindings: mediaReferenceBindings,
@@ -2082,7 +2077,6 @@ export const aiInteractionSubjects = [
                                         },
                                         eventMeta: {
                                             userId,
-                                            stripeCustomerId,
                                             organizationId,
                                             workspaceId,
                                             aiChatThreadId,
@@ -2242,7 +2236,6 @@ export const aiInteractionSubjects = [
                                             proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
                                             eventMeta: {
                                                 userId,
-                                                stripeCustomerId,
                                                 organizationId,
                                                 workspaceId,
                                                 aiChatThreadId,
@@ -2546,7 +2539,6 @@ export const resumeAiInteractionMediaGenerationRequest = async ({
     request: MediaGenerationRequest
     user: {
         userId: string
-        stripeCustomerId?: string
     }
 }): Promise<void> => {
     if (
@@ -2558,7 +2550,6 @@ export const resumeAiInteractionMediaGenerationRequest = async ({
     const checkpoint = await new MediaGenerationRequestService().getCheckpoint(request)
     const configuration = checkpoint.configuration as {
         resumePayload?: Record<string, unknown>
-        stripeCustomerId?: string
     }
 
     if (!configuration.resumePayload)
@@ -2574,7 +2565,6 @@ export const resumeAiInteractionMediaGenerationRequest = async ({
             ...configuration.resumePayload,
             user: {
                 userId: user.userId,
-                stripeCustomerId: user.stripeCustomerId ?? configuration.stripeCustomerId ?? '',
             },
             resumeGenerationRequestId: request.generationRequestId,
             ...(request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))
