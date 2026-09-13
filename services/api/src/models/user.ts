@@ -26,7 +26,6 @@ export default {
     create: async (user: Partial<User>): Promise<User | undefined> => {
         const newUserData = {
             userId: user.userId, // Partition key
-            stripeCustomerId: user.stripeCustomerId, // Sort key
             email: user.email,
             name: user.name,
             givenName: user.givenName,

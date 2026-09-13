@@ -11,15 +11,11 @@ export type UserStoreMeta = {
 
 const emptyUser: User = {
     userId: '',
-    stripeCustomerId: '',
     email: '',
     name: '',
     givenName: '',
     familyName: '',
     avatar: '',
-    hasActiveSubscription: false,
-    balance: '0',
-    currency: '',
     recentTags: [],
     organizations: [],
     createdAt: 0,

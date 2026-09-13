@@ -13,7 +13,6 @@ export type UsageEventMeta = {
     userId?: string
     organizationId?: string
     workspaceId?: string
-    stripeCustomerId?: string
     documentId?: string
     aiChatThreadId?: string
     [key: string]: unknown

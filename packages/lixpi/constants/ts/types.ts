@@ -6,18 +6,13 @@ import {
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
 
-// NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
     userId: string
-    stripeCustomerId?: string
     email: string
     name: string
     givenName: string
     familyName: string
     avatar: string
-    hasActiveSubscription: boolean
-    balance: string
-    currency: string
     recentTags: string[]
     organizations: string[]
     createdAt: number
@@ -2155,13 +2150,6 @@ export type WorkspaceAccessList = {
     accessLevel: AccessLevel
     createdAt: number
     updatedAt: number
-}
-
-export type SubscriptionBalanceUpdateEvent = {
-    userId: string
-    stripeCustomerId: string
-    organizationId: string
-    amount: string
 }
 
 // AI Chat message types - multimodal support (OpenAI Responses API format)

@@ -89,13 +89,6 @@ export enum LoadingStatus {
     error = 'error',
 }
 
-export enum PaymentProcessingStatus {
-    idle = 'idle',
-    processing = 'processing',
-    success = 'success',
-    error = 'error',
-}
-
 export enum AuthenticationStatus {
     success = 'Success',
     userNotFound = 'User Not Found',

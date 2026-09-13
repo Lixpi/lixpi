@@ -7,7 +7,6 @@ type Meta = {
 
 export type Services = {
     nats: any
-    subscriptionService: any
     aiModelService: any
     projectService: any
     organizationService: any
@@ -24,7 +23,6 @@ const initialState: {
     },
     data: {
         nats: null,
-        subscriptionService: null,
         aiModelService: null,
         projectService: null,
         organizationService: null,
