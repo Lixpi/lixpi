@@ -40,6 +40,7 @@ services:
             # store alone only avoids re-downloading, not re-linking.
             npm_config_store_dir: /pnpm-store
         volumes:
+            - ./infrastructure/init-script:/usr/src/init-config-source:ro,cached
             - ./services/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
             - typescript-test-runner-pnpm-store:/pnpm-store
 
@@ -212,6 +213,8 @@ services:
             - ./packages/lixpi/ui-primitives/src:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-primitives/src:ro,cached
             - ./packages/lixpi/auth-client/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/auth-client/package.json:ro,cached
             - ./packages/lixpi/auth-client/src:/usr/src/service/web-ui-user-portal/packages/lixpi/auth-client/src:ro,cached
+            - ./packages/lixpi/user-portal/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/user-portal/package.json:ro,cached
+            - ./packages/lixpi/user-portal/src:/usr/src/service/web-ui-user-portal/packages/lixpi/user-portal/src:ro,cached
             - ./packages/lixpi/web-client-service-factory/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/web-client-service-factory/package.json:ro,cached
             - ./packages/lixpi/web-client-service-factory/src:/usr/src/service/web-ui-user-portal/packages/lixpi/web-client-service-factory/src:ro,cached
             - ./packages/lixpi/web-client-service-factory/styles:/usr/src/service/web-ui-user-portal/packages/lixpi/web-client-service-factory/styles:ro,cached
@@ -222,6 +225,7 @@ services:
             - typescript-test-runner-node-modules-web-ui-user-portal-ui-kit-gentelella:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-ui-primitives:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-primitives/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-auth-client:/usr/src/service/web-ui-user-portal/packages/lixpi/auth-client/node_modules
+            - typescript-test-runner-node-modules-web-ui-user-portal-user-portal:/usr/src/service/web-ui-user-portal/packages/lixpi/user-portal/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-web-client-service-factory:/usr/src/service/web-ui-user-portal/packages/lixpi/web-client-service-factory/node_modules
 
             # --- ai-model-registry domain ---
@@ -363,6 +367,9 @@ services:
             - ./packages/lixpi/auth-client/package.json:/usr/src/service/shared/auth-client/package.json:cached
             - ./packages/lixpi/auth-client/src:/usr/src/service/shared/auth-client/src:cached
             - ./packages/lixpi/auth-client/vitest.config.ts:/usr/src/service/shared/auth-client/vitest.config.ts:cached
+            - ./packages/lixpi/user-portal/package.json:/usr/src/service/shared/user-portal/package.json:cached
+            - ./packages/lixpi/user-portal/src:/usr/src/service/shared/user-portal/src:cached
+            - ./packages/lixpi/user-portal/vitest.config.ts:/usr/src/service/shared/user-portal/vitest.config.ts:cached
             - ./packages/lixpi/web-client-service-factory/package.json:/usr/src/service/shared/web-client-service-factory/package.json:cached
             - ./packages/lixpi/web-client-service-factory/src:/usr/src/service/shared/web-client-service-factory/src:cached
             - ./packages/lixpi/web-client-service-factory/styles:/usr/src/service/shared/web-client-service-factory/styles:cached
@@ -388,6 +395,7 @@ services:
             - typescript-test-runner-node-modules-shared-ui-kit:/usr/src/service/shared/ui-kit/node_modules
             - typescript-test-runner-node-modules-shared-ui-kit-gentelella:/usr/src/service/shared/ui-kit-gentelella/node_modules
             - typescript-test-runner-node-modules-shared-auth-client:/usr/src/service/shared/auth-client/node_modules
+            - typescript-test-runner-node-modules-shared-user-portal:/usr/src/service/shared/user-portal/node_modules
             - typescript-test-runner-node-modules-shared-web-client-service-factory:/usr/src/service/shared/web-client-service-factory/node_modules
             - typescript-test-runner-node-modules-shared-usage-reporter:/usr/src/service/shared/usage-reporter/node_modules
         networks:
@@ -440,6 +448,7 @@ volumes:
     typescript-test-runner-node-modules-web-ui-user-portal-ui-kit-gentelella:
     typescript-test-runner-node-modules-web-ui-user-portal-ui-primitives:
     typescript-test-runner-node-modules-web-ui-user-portal-auth-client:
+    typescript-test-runner-node-modules-web-ui-user-portal-user-portal:
     typescript-test-runner-node-modules-web-ui-user-portal-web-client-service-factory:
     typescript-test-runner-node-modules-ai-model-registry:
     typescript-test-runner-node-modules-ai-model-registry-constants-ts:
@@ -473,4 +482,5 @@ volumes:
     typescript-test-runner-node-modules-shared-ui-kit:
     typescript-test-runner-node-modules-shared-ui-kit-gentelella:
     typescript-test-runner-node-modules-shared-auth-client:
+    typescript-test-runner-node-modules-shared-user-portal:
     typescript-test-runner-node-modules-shared-web-client-service-factory:

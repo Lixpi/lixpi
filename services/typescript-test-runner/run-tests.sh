@@ -102,6 +102,13 @@ run_shared() {
 }
 
 case "$domain" in
+    init-config)
+        mkdir -p /usr/src/service /usr/src/packages/lixpi/debug-tools/ts
+        cp -R /usr/src/init-config-source /usr/src/service/init-config
+        cp /usr/src/service/shared/debug-tools/ts/package.json /usr/src/service/shared/debug-tools/ts/debug-tools.ts /usr/src/packages/lixpi/debug-tools/ts/
+        (cd /usr/src/packages/lixpi/debug-tools/ts && pnpm install --prod)
+        run_domain init-config "$@"
+        ;;
     api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site)
         run_domain "$domain" "$@"
         ;;
@@ -117,7 +124,7 @@ case "$domain" in
         run_shared
         ;;
     *)
-        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site|shared|all} [vitest args]" >&2
+        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site|init-config|shared|all} [vitest args]" >&2
         exit 1
         ;;
 esac

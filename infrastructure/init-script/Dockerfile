@@ -8,7 +8,7 @@ WORKDIR /app
 # Copy package files and install dependencies
 COPY packages/lixpi/debug-tools/ts /packages/lixpi/debug-tools/ts
 COPY infrastructure/init-script/package.json ./
-RUN pnpm install
+RUN pnpm --dir /packages/lixpi/debug-tools/ts install --prod && pnpm install --prod
 
 # Copy source files
 COPY infrastructure/init-script/setup-env.ts ./

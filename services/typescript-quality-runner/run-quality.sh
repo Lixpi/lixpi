@@ -147,6 +147,7 @@ run_shared() {
         ui-kit-gentelella \
         ui-primitives \
         auth-client \
+        user-portal \
         web-client-service-factory \
         usage-reporter
     do
@@ -250,6 +251,7 @@ run_all() {
         packages/lixpi/ui-kit-gentelella \
         packages/lixpi/ui-primitives \
         packages/lixpi/auth-client \
+        packages/lixpi/user-portal \
         packages/lixpi/web-client-service-factory \
         packages/lixpi/usage-reporter
 }

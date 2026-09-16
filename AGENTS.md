@@ -61,6 +61,6 @@ Start at the documentation index, then read [Maintaining Documentation](document
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.
 
-## Cross-repo metering contract
+## Cross-repo provider-usage contract
 
-The usage-metering wire contract — the `metrics.*` subjects in `packages/lixpi/constants/nats-subjects.json` (`METRICS_SUBJECTS`) and the check/confirm request/response shapes in `packages/lixpi/usage-reporter/src/usage-metering-contract.ts` (used by that package's `usage-metering-client.ts`) — is served by a hosted metering backend in a separate repository. Do not change this contract surface without explicit user allowance. If the user does allow a change, it must be mirrored in that backend in the same change, and remind the user that both sides must be updated and released together — a one-sided change silently breaks the wire.
+The provider-usage wire contract — the `metrics.*` subjects in `packages/lixpi/constants/nats-subjects.json` (`METRICS_SUBJECTS`) and the request-authorization and usage-recording request/response shapes in `packages/lixpi/usage-reporter/src/provider-usage-contract.ts` (used by that package's `provider-usage-client.ts`) — is served by a hosted provider-usage responder in a separate repository. Do not change this contract surface without explicit user allowance. If the user does allow a change, it must be mirrored in that backend in the same change, and remind the user that both sides must be updated and released together — a one-sided change silently breaks the wire.
