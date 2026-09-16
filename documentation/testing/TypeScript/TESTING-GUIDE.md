@@ -29,7 +29,7 @@ Use the same command for every configured service. The optional test path is rel
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
 ```
 
-The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `docs-site` runs source-registry and Markdoc link tests without building the documentation site. `all` runs service and shared-package suites; invoke `docs-site` separately.
+The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `docs-site` runs source-registry and Markdoc link tests without building the documentation site. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `docs-site` and `init-config` separately.
 
 `--rm` removes the container after the run, `-T` disables pseudo-TTY allocation, and `--no-deps` prevents unrelated services from starting. Both profiles are required because Compose validates cross-profile dependencies before selecting the target service.
 
