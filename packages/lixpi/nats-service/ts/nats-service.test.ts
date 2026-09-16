@@ -148,7 +148,6 @@ describe('NatsService', () => {
         objmMock = {
             create: vi.fn(),
             open: vi.fn(),
-            destroy: vi.fn(),
         }
         objmConstructorMock.mockReturnValue(objmMock)
 
@@ -166,6 +165,7 @@ describe('NatsService', () => {
                 info: vi.fn(),
                 update: vi.fn(),
                 add: vi.fn(),
+                delete: vi.fn(),
                 purge: vi.fn(),
             },
             consumers: {
@@ -289,6 +289,42 @@ describe('NatsService', () => {
             expect(wsConnectMock).toHaveBeenCalledTimes(1)
             expect(connectMock).not.toHaveBeenCalled()
             expect((service as any).isConnected()).toBe(true)
+        })
+
+        it('passes the configured inbox prefix to the NATS connection', async () => {
+            const service = new (NatsService as any)({
+                webSocket: true,
+                inboxPrefix: '_INBOX.757365722d31',
+            })
+
+            await service.connect()
+
+            expect(wsConnectMock.mock.calls[0]?.[0]).toMatchObject({
+                inboxPrefix: '_INBOX.757365722d31',
+            })
+        })
+
+        it('notifies registered reconnect listeners after subscriptions are restored', async () => {
+            const listener = vi.fn()
+            const service = new (NatsService as any)({
+                subscriptions: [{
+                    subject: 'events',
+                    handler: vi.fn(),
+                }],
+            })
+            const stop = service.onReconnect(listener)
+
+            await service.connect()
+
+            expect(connectionMock.subscribe).toHaveBeenCalledWith(
+                'events',
+                {},
+            )
+            expect(listener).toHaveBeenCalledOnce()
+
+            stop()
+            service['notifyReconnect']()
+            expect(listener).toHaveBeenCalledOnce()
         })
 
         it('uses token authenticator flow when token getter is configured', async () => {
@@ -623,6 +659,15 @@ describe('NatsService', () => {
 
             expect(result).toBe(objectStore)
             expect(objmMock.create).toHaveBeenCalledWith('bucket', { replicas: 5, description: 'test' })
+        })
+
+        it('deletes the JetStream stream that backs an object store', async () => {
+            jetstreamManagerMockInstance.streams.delete.mockResolvedValue(true)
+            const service = new (NatsService as any)({})
+            service['nc'] = connectionMock
+
+            await expect(service.deleteObjectStore('bucket')).resolves.toBe(true)
+            expect(jetstreamManagerMockInstance.streams.delete).toHaveBeenCalledWith('OBJ_bucket')
         })
 
         it('returns null when opening missing object stores or streams', async () => {

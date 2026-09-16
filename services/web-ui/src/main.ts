@@ -2,6 +2,7 @@ import { configureUiKit } from '@lixpi/ui-kit'
 import { createHelpTooltipProvider } from '@lixpi/ui-kit/components/help-tooltip'
 import { createWebClientService } from '@lixpi/web-client-service-factory'
 import NatsService from '@lixpi/nats-service'
+import { getNatsUserInboxPrefix } from '@lixpi/constants'
 import {
     createAuthClient,
     type AuthClientInstance,
@@ -70,6 +71,7 @@ const application = createWebClientService<WebUiDependencies>({
             webSocket: true,
             name: 'web-client',
             token: session?.accessToken,
+            inboxPrefix: session ? getNatsUserInboxPrefix(session.userId) : undefined,
             getToken: session?.getToken,
             onAuthError: session
                 ? async () => void (await session.refreshToken())

@@ -138,6 +138,10 @@ await natsService.disconnect()
 
 Thrown request/reply handler failures are transported as `{ error: message }` for JSON payloads and as the message string for buffer payloads. Callers must treat an `error` response as a failed operation; the reply layer never serializes a native `Error` object directly.
 
+`inboxPrefix` (`inbox_prefix` in Python) configures the underlying connection's request/reply namespace. Browser callers pass `getNatsUserInboxPrefix(session.userId)` from `@lixpi/constants`, which produces `_INBOX.<hex-encoded-user-id>`. The auth callout grants only this user's inbox subtree. Service reply permissions are configured separately.
+
+`onReconnect(listener)` (`on_reconnect` in Python) returns a function that removes the listener. Listeners run after configured subscriptions are initialized on a recovered connection, including replacement of a closed connection. Dynamic subscriptions must be rebound by their owner when the underlying connection is replaced. Module pages use this hook to rebind their subscriptions and refetch authoritative state; they remove the listener during teardown. Python listeners may be asynchronous.
+
 ### JetStream Object Store (TypeScript)
 
 ```typescript

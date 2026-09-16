@@ -230,14 +230,11 @@ export type ProviderState = {
     capabilityMediaExecutionPlan?: CapabilityMediaExecutionPlan | undefined
     capabilityMediaTrace?: CapabilityJsonValue | undefined
 
-    // Metrics — transient per-run identity. workflowId is minted in validateRequest
-    // and groups this run's calls; workflowSeq is a 1-based counter per confirmed
-    // provider call. metricsOperationId correlates the check to its confirm(s)
-    // (opaque; from the check response; empty when metrics is disabled).
+    // Transient workflow identity and the opaque request authorization correlation.
     workflowId?: string | undefined
     workflowSeq?: number | undefined
-    metricsOperationId?: string | undefined
-    metricsAdmissionApproved?: boolean | undefined
+    requestAuthorizationId?: string | undefined
+    providerRequestAuthorized?: boolean | undefined
 
     // Multi-model media generation request-group metadata.
     generationRun?: MediaGenerationRunMeta | undefined
@@ -365,8 +362,8 @@ export const channels: Record<keyof ProviderState, {
     capabilityMediaTrace: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },
-    metricsOperationId: { reducer: keep },
-    metricsAdmissionApproved: { reducer: keep },
+    requestAuthorizationId: { reducer: keep },
+    providerRequestAuthorized: { reducer: keep },
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },
     replayMediaPrompts: { reducer: keep },

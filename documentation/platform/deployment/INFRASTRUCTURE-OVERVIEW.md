@@ -316,7 +316,9 @@ Each service gets a `taskRole` with only the permissions it actually needs:
 
 ## Web Client Deployment
 
-[`web-ui.ts`](../../../infrastructure/pulumi/src/resources/web-ui.ts) provides the shared static-SPA resource. The main UI wrapper creates the apex and `www` aliases, while [`web-ui-user-portal.ts`](../../../infrastructure/pulumi/src/resources/web-ui-user-portal.ts) creates an independent bucket and distribution with only the `user-portal.<domain>` alias. Both are static assets, not running services:
+[`web-ui.ts`](../../../infrastructure/pulumi/src/resources/web-ui.ts) provides the shared static-SPA resource. The main UI wrapper creates the apex and `www` aliases, while [`web-ui-user-portal.ts`](../../../infrastructure/pulumi/src/resources/web-ui-user-portal.ts) creates an independent bucket and distribution with only the `user-portal.<domain>` alias. Both serve static assets.
+
+The shared resource accepts `artifactManagement: 'external'` when another deployment pipeline owns asset production and publication. For the portal, set `USER_PORTAL_ARTIFACT_MANAGEMENT=external`. Pulumi still manages the bucket, distribution, and DNS, but omits its Docker build, S3 upload, and invalidation commands. The default `infrastructure` mode follows the build flow below. An external publisher must upload a complete artifact and invalidate changed entry paths; the public source does not select or load additional modules.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%

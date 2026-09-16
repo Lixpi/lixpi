@@ -14,6 +14,7 @@ import {
     jetstreamManager,
     type JetStreamClient,
     type JetStreamManager,
+    type StreamConfig,
 } from '@nats-io/jetstream'
 import {
     Objm,
@@ -73,6 +74,7 @@ export type NatsServiceConfig = {
     servers?: string[]
     webSocket?: boolean
     name?: string
+    inboxPrefix?: string
     token?: string
     user?: string
     pass?: string
@@ -109,7 +111,7 @@ export type NatsSubjectSubscription<T = any> = {
     handler: (
         data: T,
         msg: Msg,
-    ) => Promise<void> | void
+    ) => Promise<unknown> | unknown
 }
 
 export type RequestOptions = {
@@ -285,6 +287,7 @@ export const generateSelfIssuedJWT = (
 export default class NatsService {
     private static instance: NatsService | null = null
     private nc: NatsConnection | null = null
+    private readonly reconnectListeners = new Set<() => void>()
     private js: JetStreamClient | null = null
     private jsm: JetStreamManager | null = null
     private objm: Objm | null = null
@@ -400,6 +403,8 @@ export default class NatsService {
                             if (!this.subscriptionsInitialized)
                                 await this.initSubscriptions()
 
+                            this.notifyReconnect()
+
                             break
                         case 'error':
                             err('NATS -> connection error:', status)
@@ -467,7 +472,7 @@ export default class NatsService {
             try {
                 const subscriptionType = listener.type ?? 'subscribe'
 
-                let subscription: Subscription
+                let subscription: Subscription | null
 
                 if (subscriptionType === 'reply') {
                     subscription = this.reply(
@@ -608,6 +613,7 @@ export default class NatsService {
         ])
         this.monitorStatus()
         await this.initSubscriptions()
+        this.notifyReconnect()
     }
 
     private async reportConnectError(error: unknown): Promise<void> {
@@ -725,6 +731,7 @@ export default class NatsService {
         const options: ConnectionOptions = {
             servers,
             name,
+            ...(this.config.inboxPrefix ? { inboxPrefix: this.config.inboxPrefix } : {}),
             maxReconnectAttempts: -1,
             reconnectTimeWait: 500,
             // Reject the initial connect on failure instead of retrying silently in
@@ -829,6 +836,22 @@ export default class NatsService {
 
     getConnection(): NatsConnection | null {
         return this.nc
+    }
+
+    onReconnect(listener: () => void): () => void {
+        this.reconnectListeners.add(listener)
+
+        return () => void this.reconnectListeners.delete(listener)
+    }
+
+    private notifyReconnect(): void {
+        for (const listener of this.reconnectListeners) {
+            try {
+                listener()
+            } catch (error) {
+                err('NATS -> reconnect listener failed', error)
+            }
+        }
     }
 
     // Publish JSON data to a subject.
@@ -1081,8 +1104,8 @@ export default class NatsService {
     }
 
     async deleteObjectStore(bucketName: string): Promise<boolean> {
-        const objm = this.getObjectStoreManager()
-        const result = await objm.destroy(bucketName)
+        const jsm = await this.getJetStreamManager()
+        const result = await jsm.streams.delete(`OBJ_${bucketName}`)
         info(`Object Store bucket deleted: ${bucketName}`)
 
         return result
@@ -1134,7 +1157,7 @@ export default class NatsService {
         }
     }
 
-    async ensureJetStreamStream(config: Record<string, any>): Promise<any> {
+    async ensureJetStreamStream(config: Partial<StreamConfig> & Pick<StreamConfig, 'name'>): Promise<any> {
         const jsm = await this.getJetStreamManager()
 
         try {
@@ -1151,11 +1174,12 @@ export default class NatsService {
                 subjects: nextSubjects,
             }
             const requestedEntries = Object.entries(requestedConfig)
+            const currentConfig = streamInfo.config as unknown as Record<string, unknown>
             const isCurrent = requestedEntries.every(([key, value]) => {
                 if (key === 'subjects')
                     return JSON.stringify(streamInfo.config.subjects ?? []) === JSON.stringify(value)
 
-                return streamInfo.config[key] === value
+                return currentConfig[key] === value
             })
 
             if (isCurrent)

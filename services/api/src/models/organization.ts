@@ -35,6 +35,45 @@ const getOrganizationRecord = async (organizationId: string): Promise<Record<str
 }
 
 const OrganizationModel = {
+    getSelfMembership: async ({
+        organizationId,
+        userId,
+    }: {
+        organizationId: string
+        userId: string
+    }): Promise<{
+        organizationId: string
+        userId: string
+        name: string
+        accessLevel: 'owner' | 'editor' | 'viewer'
+    }> => {
+        const org = await dynamoDBService.getItem({
+            tableName: getDynamoDbTableStageName(
+                'ORGANIZATIONS',
+                ORG_NAME,
+                STAGE,
+            ),
+            key: { organizationId },
+            consistentRead: true,
+            origin: 'model::Organization->getSelfMembership()',
+        })
+        const accessLevel = org?.accessList?.[userId]
+
+        if (
+            !org
+            || typeof org.name !== 'string'
+            || !['owner', 'editor', 'viewer'].includes(accessLevel)
+        )
+            throw new Error('ORGANIZATION_ACCESS_DENIED')
+
+        return {
+            organizationId,
+            userId,
+            name: org.name,
+            accessLevel,
+        }
+    },
+
     getOrganization: async ({
         organizationId,
         userId,

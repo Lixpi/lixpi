@@ -5,7 +5,7 @@ description: The vendor token formula for token-metered video models, the provis
 
 # Seedance video tokens
 
-Seedance models on BytePlus ModelArk are billed in vendor video tokens, not in seconds. A spend authorization has to speak that unit, so a clip's duration is converted before it reaches the metering backend. Sending seconds against a token tariff understates the cost by orders of magnitude.
+Seedance models on BytePlus ModelArk report vendor video tokens. Request authorization uses that unit, so clip duration is converted into a token estimate before authorization.
 
 `estimateVideoTokens` does that conversion.
 
@@ -36,7 +36,7 @@ The vendor table that would settle it ([ModelArk 2291680](https://docs.byteplus.
 
 For each cell, take the larger of the two sources on each axis independently, then round each axis up to a multiple of 16, which is the padding the first-party page shows (1080p 16:9 is 1920x1088, not 1920x1080). Every result sits at or above both sources.
 
-**Keep that bias when the real table lands.** Over-estimating only makes the admission gate stricter. Under-estimating lets a run through that the balance cannot cover, which is the exact failure this path exists to remove. If a real value is in doubt, round it up rather than reproducing it exactly.
+Keep the estimate conservative when replacing the provisional table. Underestimating allows a provider request whose actual usage exceeds the authorized estimate. If a value is uncertain, round the usage estimate up.
 
 The bias is not merely cautious. Inverting BytePlus's published per-video prices for 5s 16:9 clips back through the formula gives the true pixel area, and the placeholders land just above it every time:
 
@@ -46,7 +46,7 @@ The bias is not merely cautious. Inverting BytePlus's published per-video prices
 | 720p | $0.76 | $7.0/M | ~926,476 px | 1280x720 = 921,600 px (agrees within the rounding of a two-decimal price: 1280x720 prices at $0.756) |
 | 1080p | $1.87 | $7.7/M | 2,072,381 px | 1920x1088 = 2,088,960 px (+0.8%) |
 
-Source A's 480p 16:9 of 864x480 would have come in 2.8% low and undercharged the gate. Everything except 16:9 remains unvalidated, as does 720p and 1080p beyond that single published sample, so no cell is promoted out of provisional status on this evidence.
+Source A's 480p 16:9 of 864x480 would have come in 2.8% low and underestimated usage. Everything except 16:9 remains unvalidated, as does 720p and 1080p beyond that single published sample, so no cell is promoted out of provisional status on this evidence.
 
 ## Unknown tiers and ratios
 
@@ -58,4 +58,4 @@ BytePlus documents that a minimum token consumption applies when the input conta
 
 ## When the vendor table lands
 
-Both `TODO(seedance-frame-sizes)` markers in `src/video-token-accounting.ts` are the work: replace the frame sizes with BytePlus's own table, fill in the input minimum, drop the `PROVISIONAL_` naming and the `provisional` flag, and update this page. Until then `logSpendAuthorization` warns on every provisional estimate so no one reads one as a real cost.
+Both `TODO(seedance-frame-sizes)` markers in `src/video-token-accounting.ts` are the work: replace the frame sizes with BytePlus's own table, fill in the input minimum, drop the `PROVISIONAL_` naming and the `provisional` flag, and update this page. Until then `logRequestAuthorization` warns on every provisional estimate so no one reads one as a real cost.

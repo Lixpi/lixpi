@@ -17,8 +17,7 @@
         "@lixpi/auth-client": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
-        "@lixpi/ui-kit-gentelella": "workspace:*",
-        "@lixpi/ui-primitives": "workspace:*",
+        "@lixpi/user-portal": "workspace:*",
         "@lixpi/web-client-service-factory": "workspace:*"
     },
     "devDependencies": {

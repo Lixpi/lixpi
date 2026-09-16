@@ -11,7 +11,10 @@ import {
 import {
     type NatsService,
 } from '@lixpi/nats-service'
-import { getNatsUserSubjectToken } from '@lixpi/constants'
+import {
+    getNatsUserInboxPrefix,
+    getNatsUserSubjectToken,
+} from '@lixpi/constants'
 import {
     info,
     err,
@@ -29,7 +32,7 @@ type AuthenticatedNatsClient = {
     // NEX lands in NEX so its control-plane subjects stay account-isolated.
     targetNatsAccount: string
     // Internal services provide a complete allowlist. Browser/Auth0 users derive
-    // permissions from the subscription table instead.
+    // permissions from explicit browser templates instead.
     servicePermissions?: ServiceAuthConfig['permissions']
 }
 
@@ -65,6 +68,11 @@ type RawNKeyChallengeFields = {
     clientSignature: string
     // Server nonce that the client had to sign to prove possession of the seed.
     challengeNonce: string
+}
+
+export type BrowserPermissionTemplate = {
+    pub?: { allow: string[] }
+    sub?: { allow: string[] }
 }
 
 type ResolvedNatsPermissions = {
@@ -106,12 +114,11 @@ const appendUniquePermissionSubjects = ({
 // service permissions unchanged because they are already the security boundary.
 //
 // Regular Auth0 users do not carry permissions in their browser token. Their
-// permissions are derived from the subscription registry, with every `{userId}`
-// placeholder expanded to the authenticated user. That keeps per-user subjects
-// scoped without requiring dynamic NATS config.
+// permission templates are separate from responder registration. Placeholders
+// expand from the verified identity, including the user's reply inbox.
 const getPermissionsForUser = (
     userId: string,
-    subscriptions: any[],
+    browserPermissionTemplates: BrowserPermissionTemplate[],
     servicePermissions?: ServiceAuthConfig['permissions'],
 ) => {
     // If service-specific permissions are provided, use them
@@ -125,43 +132,53 @@ const getPermissionsForUser = (
     const resolvedPermissions: ResolvedNatsPermissions = {
         pub: {
             allow: [
-                '_INBOX.>',
+                `${getNatsUserInboxPrefix(userId)}.>`,
             ],
         },
         sub: {
             allow: [
-                '_INBOX.>',
+                `${getNatsUserInboxPrefix(userId)}.>`,
             ],
         },
     }
     const seenPublicationSubjects = new Set(resolvedPermissions.pub.allow)
     const seenSubscriptionSubjects = new Set(resolvedPermissions.sub.allow)
 
-    for (const subscription of subscriptions) {
-        if (subscription.permissions) {
-            const {
-                pub: publicationPermissions,
-                sub: subscriptionPermissions,
-            } = subscription.permissions
+    for (const permissions of browserPermissionTemplates) {
+        const {
+            pub: publicationPermissions,
+            sub: subscriptionPermissions,
+        } = permissions
 
-            appendUniquePermissionSubjects({
-                target: resolvedPermissions.pub.allow,
-                seen: seenPublicationSubjects,
-                subjectPatterns: publicationPermissions?.allow ?? [],
-                userId,
-            })
-            appendUniquePermissionSubjects({
-                target: resolvedPermissions.sub.allow,
-                seen: seenSubscriptionSubjects,
-                subjectPatterns: subscriptionPermissions?.allow ?? [],
-                userId,
-            })
-        }
+        appendUniquePermissionSubjects({
+            target: resolvedPermissions.pub.allow,
+            seen: seenPublicationSubjects,
+            subjectPatterns: publicationPermissions?.allow ?? [],
+            userId,
+        })
+        appendUniquePermissionSubjects({
+            target: resolvedPermissions.sub.allow,
+            seen: seenSubscriptionSubjects,
+            subjectPatterns: subscriptionPermissions?.allow ?? [],
+            userId,
+        })
     }
 
     info('Final resolved permissions:', resolvedPermissions)
 
     return resolvedPermissions
+}
+
+const assertBrowserInboxPermissionsAreScoped = (browserPermissionTemplates: BrowserPermissionTemplate[]): void => {
+    const subjects = browserPermissionTemplates.flatMap(
+        template => [
+            ...(template.pub?.allow ?? []),
+            ...(template.sub?.allow ?? []),
+        ],
+    )
+
+    if (subjects.some(subject => subject.startsWith('_INBOX.')))
+        throw new Error('Browser inbox permissions are derived from the authenticated user')
 }
 
 // Decodes a base64url value into bytes.
@@ -176,9 +193,6 @@ const decodeBase64Url = (value: string): Buffer => {
 
     return Buffer.from(padded, 'base64')
 }
-
-// Re-export verifyNKeySignedJWT from auth-service for backwards compatibility
-export { verifyNKeySignedJWT } from '@lixpi/auth-service'
 
 // Authenticates an internal service that connects through the original Lixpi
 // service-token path.
@@ -550,12 +564,12 @@ const decryptAuthorizationRequest = ({
 const createAuthorizationResponseJwt = async ({
     authorizationRequest,
     authenticatedClient,
-    subscriptions,
+    browserPermissionTemplates,
     authorizationIssuerKeyPair,
 }: {
     authorizationRequest: NatsAuthCalloutRequest
     authenticatedClient: AuthenticatedNatsClient
-    subscriptions: any[]
+    browserPermissionTemplates: BrowserPermissionTemplate[]
     authorizationIssuerKeyPair: ReturnType<typeof fromSeed>
 }): Promise<string> => {
     const sessionUserPublicNKey = authorizationRequest.nats?.user_nkey
@@ -569,7 +583,7 @@ const createAuthorizationResponseJwt = async ({
 
     const permissions = getPermissionsForUser(
         authenticatedClient.userId,
-        subscriptions,
+        browserPermissionTemplates,
         authenticatedClient.servicePermissions,
     )
 
@@ -620,7 +634,7 @@ const createAuthorizationResponseJwt = async ({
 // throwing out of the subscription callback.
 export const startNatsAuthCalloutService = async ({
     natsService,
-    subscriptions,
+    browserPermissionTemplates,
     nKeyIssuerSeed,
     xKeyIssuerSeed,
     jwtAudience,
@@ -631,7 +645,7 @@ export const startNatsAuthCalloutService = async ({
     serviceAuthConfigs = [],
 }: {
     natsService: NatsService
-    subscriptions: any[]
+    browserPermissionTemplates: BrowserPermissionTemplate[]
     nKeyIssuerSeed: string
     xKeyIssuerSeed: string
     jwtAudience: string
@@ -641,6 +655,8 @@ export const startNatsAuthCalloutService = async ({
     natsAuthAccount: string
     serviceAuthConfigs?: ServiceAuthConfig[]
 }) => {
+    assertBrowserInboxPermissionsAreScoped(browserPermissionTemplates)
+
     if (!nKeyIssuerSeed)
         throw new Error('Issuer seed for NATS auth callout not provided!')
 
@@ -682,7 +698,7 @@ export const startNatsAuthCalloutService = async ({
                 return createAuthorizationResponseJwt({
                     authorizationRequest,
                     authenticatedClient,
-                    subscriptions,
+                    browserPermissionTemplates,
                     authorizationIssuerKeyPair,
                 })
             } catch (caughtError: any) {

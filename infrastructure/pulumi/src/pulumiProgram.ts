@@ -407,6 +407,7 @@ export const createInfrastructure = async () => {
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC ?? '',
+            NATS_SERVICE_AUTH_REGISTRATIONS: process.env.NATS_SERVICE_AUTH_REGISTRATIONS ?? '[]',
             NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
             NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             ORIGIN_HOST_URL: ORIGIN_HOST_URL!,
@@ -548,7 +549,13 @@ export const createInfrastructure = async () => {
     })
 
     const userPortalDomainName = `user-portal.${DOMAIN_NAME!}`
+    const userPortalArtifactManagement = process.env.USER_PORTAL_ARTIFACT_MANAGEMENT ?? 'infrastructure'
+
+    if (!['infrastructure', 'external'].includes(userPortalArtifactManagement))
+        throw new Error('USER_PORTAL_ARTIFACT_MANAGEMENT must be infrastructure or external')
+
     const webUIUserPortal = await createWebUIUserPortal({
+        artifactManagement: userPortalArtifactManagement as 'infrastructure' | 'external',
         orgName: ORG_NAME!,
         stage: STAGE!,
         domainName: userPortalDomainName,

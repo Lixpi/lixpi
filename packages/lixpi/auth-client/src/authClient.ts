@@ -24,6 +24,7 @@ export type AuthClientFeatures = {
 
 export type AuthClientSession = {
     accessToken: string
+    userId: string
     getToken: (forceRefresh?: boolean) => Promise<string | false>
     refreshToken: () => Promise<string | false>
 }
@@ -31,6 +32,36 @@ export type AuthClientSession = {
 type AuthClientBaseConfig = {
     authStore?: AuthStateStore
     userStore?: UserStateStore
+}
+
+// This claim selects the client's routing namespace. Servers verify the token
+// independently before granting permissions or returning application data.
+const getSessionUserId = (accessToken: string): string => {
+    const encodedPayload = accessToken.split('.')[1]
+
+    if (!encodedPayload)
+        throw new Error('Authentication token has no payload')
+
+    const bytes = Uint8Array.from(
+        atob(
+            encodedPayload.replaceAll('-', '+').replaceAll('_', '/'),
+        ),
+        character => character.charCodeAt(0),
+    )
+    const payload: unknown = JSON.parse(
+        new TextDecoder().decode(bytes),
+    )
+
+    if (
+        !payload
+        || typeof payload !== 'object'
+        || !('sub' in payload)
+        || typeof payload.sub !== 'string'
+        || !payload.sub
+    )
+        throw new Error('Authentication token has no user identity')
+
+    return payload.sub
 }
 
 export type AuthClientConfig = AuthClientBaseConfig & (
@@ -105,6 +136,7 @@ class AuthClient implements AuthClientInstance {
 
         return {
             accessToken,
+            userId: getSessionUserId(accessToken),
             getToken: forceRefresh => this.getTokenSilently(forceRefresh),
             refreshToken: () => this.getTokenSilently(true),
         }

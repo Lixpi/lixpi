@@ -44,7 +44,6 @@ class GentelellaButton implements GentelellaButtonInstance {
         this.spinnerEl = html`
             <span
                 className=${`${gentelellaClasses.button.spinner} ${gentelellaClasses.spinner.base} ${gentelellaClasses.spinner.small}`}
-                hidden
             ></span>
         ` as HTMLSpanElement
         this.labelEl = html`<span>${config.label ?? ''}</span>` as HTMLSpanElement
@@ -57,14 +56,16 @@ class GentelellaButton implements GentelellaButtonInstance {
                 onclick=${config.onClick}
             >
                 ${this.iconEl}
-                ${this.spinnerEl}
                 ${this.labelEl}
             </button>
         ` as HTMLButtonElement
     }
 
     setBusy(busy: boolean): void {
-        this.spinnerEl.hidden = !busy
+        if (busy)
+            this.el.insertBefore(this.spinnerEl, this.labelEl)
+        else
+            this.spinnerEl.remove()
 
         if (this.iconEl)
             this.iconEl.hidden = busy

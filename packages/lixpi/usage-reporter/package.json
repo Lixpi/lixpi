@@ -17,7 +17,6 @@
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
-        "chalk": "*",
-        "decimal.js": "*"
+        "chalk": "*"
     }
 }

@@ -3,12 +3,7 @@ import {
     type AiModelInferenceProvider,
 } from '@lixpi/constants'
 
-// The vocabulary every metering surface shares: who a charge belongs to, what a
-// provider call consumed, and what a model costs where it runs. Kept in one file so
-// the reporter, the estimator and the wire mapper cannot drift apart.
-
-// Who a charge belongs to. Callers carry more than metering needs, so extra keys
-// travel rather than being stripped.
+// Identity and measured dimensions associated with one provider call.
 export type UsageEventMeta = {
     userId?: string
     organizationId?: string
@@ -19,7 +14,7 @@ export type UsageEventMeta = {
 }
 
 // What one text call consumed. Cached tokens are a subset of prompt tokens and
-// reasoning tokens a subset of completion tokens, which the backend prices against.
+// reasoning tokens a subset of completion tokens, for normalized provider usage.
 export type TokenUsageCounts = {
     promptTokens: number
     promptAudioTokens: number

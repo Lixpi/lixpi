@@ -68,15 +68,16 @@ const mocks = vi.hoisted(() => {
     const natsGetInstance = vi.fn(() => natsInstance)
 
     const jwtAuthMiddleware = vi.fn(() => 'jwt-auth-middleware')
-    const userSubjects = ['user-subject']
-    const aiModelSubjects = ['ai-model-subject']
-    const aiInteractionSubjects = ['ai-interaction-subject']
-    const mediaGenerationRequestSubjects = ['media-generation-request-subject']
-    const mediaDescriptorSubjects = ['media-descriptor-subject']
-    const workspaceSubjects = ['workspace-subject']
-    const assetSubjects = ['asset-subject']
-    const capabilitySubjects = ['capability-subject']
-    const promptReferenceSubjects = ['prompt-reference-subject']
+    const userSubjects = [{ subject: 'user-subject' }]
+    const organizationMembershipSubjects = [{ subject: 'organization-membership-subject' }]
+    const aiModelSubjects = [{ subject: 'ai-model-subject' }]
+    const aiInteractionSubjects = [{ subject: 'ai-interaction-subject' }]
+    const mediaGenerationRequestSubjects = [{ subject: 'media-generation-request-subject' }]
+    const mediaDescriptorSubjects = [{ subject: 'media-descriptor-subject' }]
+    const workspaceSubjects = [{ subject: 'workspace-subject' }]
+    const assetSubjects = [{ subject: 'asset-subject' }]
+    const capabilitySubjects = [{ subject: 'capability-subject' }]
+    const promptReferenceSubjects = [{ subject: 'prompt-reference-subject' }]
     const setCapabilityRunDispatcher = vi.fn()
     const setPromptReferenceModuleCatalog = vi.fn()
     const capabilityModuleCatalog = {}
@@ -86,6 +87,7 @@ const mocks = vi.hoisted(() => {
     }
 
     const startNatsAuthCalloutService = vi.fn(async () => undefined)
+    const parseAdditionalServiceAuthConfigs = vi.fn(() => [])
 
     const assetRoutes = {}
     const workspaceExportRoutes = {}
@@ -109,8 +111,8 @@ const mocks = vi.hoisted(() => {
         }
     }
 
-    const usageMeteringOptionsFromEnv = vi.fn(() => ({}))
-    const UsageMeteringClient = vi.fn()
+    const providerUsageOptionsFromEnv = vi.fn(() => ({}))
+    const ProviderUsageClient = vi.fn()
 
     const log = vi.fn()
     const info = vi.fn()
@@ -141,6 +143,7 @@ const mocks = vi.hoisted(() => {
         natsGetInstance,
         jwtAuthMiddleware,
         userSubjects,
+        organizationMembershipSubjects,
         aiModelSubjects,
         aiInteractionSubjects,
         mediaGenerationRequestSubjects,
@@ -154,6 +157,7 @@ const mocks = vi.hoisted(() => {
         capabilityModuleCatalog,
         capabilityDispatcher,
         startNatsAuthCalloutService,
+        parseAdditionalServiceAuthConfigs,
         assetRoutes,
         workspaceExportRoutes,
         capabilityRoutes,
@@ -174,8 +178,8 @@ const mocks = vi.hoisted(() => {
         startAssetMaintenanceWorker,
         CapabilityRunEventRelay,
         capabilityRunEventRelayStart,
-        usageMeteringOptionsFromEnv,
-        UsageMeteringClient,
+        providerUsageOptionsFromEnv,
+        ProviderUsageClient,
         log,
         info,
         infoStr,
@@ -229,10 +233,17 @@ vi.mock('@lixpi/nats-auth-callout-service', () => ({
     startNatsAuthCalloutService: mocks.startNatsAuthCalloutService,
 }))
 
+vi.mock('@lixpi/nats-auth-callout-service/service-registrations', () => ({
+    parseAdditionalServiceAuthConfigs: mocks.parseAdditionalServiceAuthConfigs,
+}))
+
 vi.mock('./NATS/middleware/nats-auth-middleware.ts', () => ({
     jwtAuthMiddleware: mocks.jwtAuthMiddleware,
 }))
 vi.mock('./NATS/subscriptions/user-subjects.ts', () => ({ userSubjects: mocks.userSubjects }))
+vi.mock('./NATS/subscriptions/organization-membership-subjects.ts', () => ({
+    organizationMembershipSubjects: mocks.organizationMembershipSubjects,
+}))
 vi.mock('./NATS/subscriptions/ai-model-subjects.ts', () => ({ aiModelSubjects: mocks.aiModelSubjects }))
 vi.mock('./NATS/subscriptions/ai-interaction-subjects.ts', () => ({
     aiInteractionSubjects: mocks.aiInteractionSubjects,
@@ -287,8 +298,8 @@ vi.mock('./services/capability-run-event-log.ts', () => ({
 }))
 
 vi.mock('@lixpi/usage-reporter', () => ({
-    UsageMeteringClient: mocks.UsageMeteringClient,
-    usageMeteringOptionsFromEnv: mocks.usageMeteringOptionsFromEnv,
+    ProviderUsageClient: mocks.ProviderUsageClient,
+    providerUsageOptionsFromEnv: mocks.providerUsageOptionsFromEnv,
 }))
 
 const loadServer = async (): Promise<void> => {
@@ -340,12 +351,13 @@ const resetMockState = (): void => {
     mocks.natsInstance.drain.mockClear()
     mocks.natsInstance.request.mockClear()
     mocks.startNatsAuthCalloutService.mockClear()
+    mocks.parseAdditionalServiceAuthConfigs.mockClear()
     mocks.createLlmModule.mockClear()
     mocks.setLlmModule.mockClear()
     mocks.setPromptReferenceModuleCatalog.mockClear()
     mocks.startAssetMaintenanceWorker.mockClear()
-    mocks.usageMeteringOptionsFromEnv.mockClear()
-    mocks.UsageMeteringClient.mockClear()
+    mocks.providerUsageOptionsFromEnv.mockClear()
+    mocks.ProviderUsageClient.mockClear()
     mocks.log.mockClear()
     mocks.info.mockClear()
     mocks.infoStr.mockClear()
@@ -363,6 +375,7 @@ const resetMockState = (): void => {
 describe('services/api server startup', () => {
     const expectedSubscriptionOrder = [
         ...mocks.userSubjects,
+        ...mocks.organizationMembershipSubjects,
         ...mocks.aiModelSubjects,
         ...mocks.aiInteractionSubjects,
         ...mocks.mediaGenerationRequestSubjects,
@@ -422,13 +435,16 @@ describe('services/api server startup', () => {
         })
         expect(mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]).toMatchObject({
             natsService: mocks.natsInstance,
-            subscriptions: expectedSubscriptionOrder,
+            browserPermissionTemplates: [{
+                pub: { allow: ['portal.module.*.{userIdToken}.request.>'] },
+                sub: { allow: ['portal.module.*.{userIdToken}.event.>'] },
+            }],
             nKeyIssuerSeed: 'nats-auth-nkey-seed',
             xKeyIssuerSeed: 'nats-auth-xkey-seed',
         })
         expect(mocks.createLlmModule).toHaveBeenCalledWith({
             natsService: mocks.natsInstance,
-            usageMetering: expect.anything(),
+            providerUsage: expect.anything(),
         })
         expect(mocks.getLlmModule()?.seedCapabilities).toHaveBeenCalledTimes(1)
         expect(mocks.setPromptReferenceModuleCatalog).toHaveBeenCalledWith(mocks.capabilityModuleCatalog)

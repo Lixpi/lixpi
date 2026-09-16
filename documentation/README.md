@@ -49,7 +49,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Data Storage](platform/DATA-STORAGE.md) | Asset/Blob tables, typed references, scope projections, organization Object Store layout, deletion/repair, and revision-2 portability |
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
-| [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | `@lixpi/usage-reporter` — per-endpoint rates, the admission check, measured usage, the metering port, money settings |
+| [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | Provider request authorization, measured usage, and provider tariff metadata |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
 | [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | Three-node ECS EC2 NATS cluster, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |

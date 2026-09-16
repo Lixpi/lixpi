@@ -66,7 +66,7 @@ class GentelellaCard implements GentelellaCardInstance {
                         aria-label="Toggle card content"
                         onclick=${() => this.setCollapsed(!this.bodyEl.hidden)}
                     >⌃</button>
-                `
+                ` as HTMLButtonElement
                 this.headerEl.append(collapseButton)
             }
         }

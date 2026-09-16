@@ -656,8 +656,8 @@ const buildCapabilityMediaExecutionContext = (
         eventMeta: state.eventMeta,
         generationRun,
         workflowId: state.workflowId,
-        metricsOperationId: state.metricsOperationId,
-        metricsAdmissionApproved: state.metricsAdmissionApproved,
+        requestAuthorizationId: state.requestAuthorizationId,
+        providerRequestAuthorized: state.providerRequestAuthorized,
     }
 }
 

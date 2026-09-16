@@ -87,6 +87,7 @@ services:
             - ./packages/lixpi/ui-kit-gentelella/styles:/usr/src/repository/packages/lixpi/ui-kit-gentelella/styles:cached
             - ./packages/lixpi/ui-primitives/src:/usr/src/repository/packages/lixpi/ui-primitives/src:cached
             - ./packages/lixpi/auth-client/src:/usr/src/repository/packages/lixpi/auth-client/src:cached
+            - ./packages/lixpi/user-portal/src:/usr/src/repository/packages/lixpi/user-portal/src:cached
             - ./packages/lixpi/web-client-service-factory/src:/usr/src/repository/packages/lixpi/web-client-service-factory/src:cached
             - ./packages/lixpi/web-client-service-factory/styles:/usr/src/repository/packages/lixpi/web-client-service-factory/styles:cached
         working_dir: /usr/src/repository

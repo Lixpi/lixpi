@@ -11,7 +11,7 @@ description: How browser applications configure identity-provider authentication
 
 `createAuthClient()` selects Auth0 or LocalAuth0 from the `auth.mock.enabled` flag. The resulting client exposes `init()`, `login()`, `logout()`, and `getTokenSilently()`. Auth0 uses its local-storage cache and enables silent iframe fallback when a refresh token is unavailable on a newly opened origin. LocalAuth0 stores the token under its configured storage key.
 
-The main UI and user portal create separate clients because their redirect origins differ. Both can use the same Auth0 application and Universal Login session. `initializeSession()` initializes enabled authentication and returns an access token plus token-read and token-refresh functions. The session does not name a transport, so each service maps it into its own NATS or HTTP connection options.
+The main UI and user portal create separate clients because their redirect origins differ. Both can use the same Auth0 application and Universal Login session. `initializeSession()` returns the access token, its decoded subject as `userId`, and token-read and token-refresh functions. The decoded subject selects the client's routing namespace and does not authorize access. Both browser composition roots pass `getNatsUserInboxPrefix(session.userId)` to NATS; the auth callout independently verifies the token before granting that reply namespace.
 
 ## Current-user loading
 

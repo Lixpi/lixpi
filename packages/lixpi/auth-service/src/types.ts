@@ -22,5 +22,9 @@ export type ServiceAuthConfig = {
     permissions: {
         pub: { allow: string[] }
         sub: { allow: string[] }
+        resp?: {
+            max: number
+            ttl: number
+        }
     }
 }

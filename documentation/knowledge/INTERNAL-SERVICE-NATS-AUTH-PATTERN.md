@@ -232,47 +232,31 @@ The TypeScript equivalent uses `NatsService` from `@lixpi/nats-service` with the
 
 ### Step 4: Auth callout registers the service (TypeScript)
 
-The auth callout is configured inside `services/api/src/server.ts` when the API server starts. After the `services/llm-api` migration, the `serviceAuthConfigs` array is empty. To re-add an internal service, append an entry like the one that used to register `svc:llm-service`:
+The API loads deployment-owned registrations through `NATS_SERVICE_AUTH_REGISTRATIONS`. Each registration names a unique service identity, a public user NKey, an explicit account, and nonempty subject allowlists. Keep seeds in the service's deployment secrets. The parser rejects duplicate keys and identities, malformed subjects, and wildcards outside a concrete module namespace or explicitly prefixed service inbox. See [the auth-callout package](../../packages/lixpi/nats-auth-callout-service/README.md) for the complete validation contract.
 
 ```typescript
+const additionalServices = parseAdditionalServiceAuthConfigs(
+    env.NATS_SERVICE_AUTH_REGISTRATIONS,
+    builtInServiceAuthConfigs,
+)
+
 await startNatsAuthCalloutService({
-    natsService: await NATS_Service.getInstance(),
-    subscriptions,
+    natsService: apiNatsService,
+    browserPermissionTemplates,
     nKeyIssuerSeed: env.NATS_AUTH_NKEY_ISSUER_SEED,
     xKeyIssuerSeed: env.NATS_AUTH_XKEY_ISSUER_SEED,
     jwtAudience: env.AUTH0_API_IDENTIFIER,
-    jwtIssuer: /* Auth0 issuer */,
-    algorithms: ['RS256'],
-    jwksUri: /* Auth0 JWKS URI */,
+    jwtIssuer,
+    jwtAlgorithms: ['RS256'],
+    jwksUri,
     natsAuthAccount: env.NATS_AUTH_ACCOUNT,
-    serviceAuthConfigs: [
-        {
-            publicKey: env.NATS_MY_SERVICE_NKEY_PUBLIC,    // UA... (matches `iss` in service JWTs)
-            userId: 'svc:my-service',                       // Must match service's user_id / sub claim
-            account: 'AUTH',                                // Optional; defaults to natsAuthAccount
-            permissions: {
-                pub: {
-                    allow: [
-                        'my.service.responses.>',           // Subjects this service may publish to
-                        '$JS.API.>',                        // Optional: JetStream API for object-store access
-                        '$JS.FC.>',                         // Optional: JetStream flow control
-                        '$JS.ACK.>',                        // Optional: JetStream acknowledgements
-                    ],
-                },
-                sub: {
-                    allow: [
-                        'my.service.requests',              // Subjects this service may subscribe to
-                        '_INBOX.>',                         // Reply inbox for request/reply
-                        '$JS.>',                            // Optional: All JetStream subjects
-                    ],
-                },
-            },
-        },
-    ],
+    serviceAuthConfigs: [...builtInServiceAuthConfigs, ...additionalServices],
 })
 ```
 
-The `userId` field in `serviceAuthConfigs` must exactly match the `sub` claim in the JWT the service generates. The `publicKey` must match the `iss` claim. If either mismatches, the callout rejects the connection. `account` is optional and defaults to `natsAuthAccount`; set it when the issued NATS user JWT should target another configured account such as `NEX`.
+The registration's `userId` must exactly match the service JWT's `sub`, and its `publicKey` must match `iss`. Additional registrations require an explicit account. Built-in registrations may omit it to use `natsAuthAccount`.
+
+Use `_INBOX.<service-prefix>.>` for the service's own reply subscription. A service that answers requests can receive `resp: { max: 1, ttl: 10000000000 }` for one temporary reply within ten seconds. Additional registrations cannot grant persistent global inbox access. Browser connections use `_INBOX.<user-token>.>` independently of the service inbox.
 
 ### Step 5: Callout verifies the service (TypeScript)
 

@@ -585,6 +585,7 @@ services:
             NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
 
             # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
+            NATS_SERVICE_AUTH_REGISTRATIONS: ${NATS_SERVICE_AUTH_REGISTRATIONS:-[]}
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
@@ -744,6 +745,8 @@ services:
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
 
             # App host addresses
+            NATS_SERVICE_AUTH_REGISTRATIONS: ${NATS_SERVICE_AUTH_REGISTRATIONS:-[]}
+            USER_PORTAL_ARTIFACT_MANAGEMENT: ${USER_PORTAL_ARTIFACT_MANAGEMENT:-infrastructure}
             ORIGIN_HOST_URL: ${ORIGIN_HOST_URL}
             API_HOST_URL: ${API_HOST_URL}
 

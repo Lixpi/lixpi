@@ -4,6 +4,8 @@
 
 The package does not start a browser application, connect to NATS, or mount UI. A service composition root maps its transport-neutral auth session into its own connection dependency, then injects that dependency into `@lixpi/web-client-service-factory`.
 
+`initializeSession()` returns `userId` from the access token's subject alongside the token and refresh functions. This decoded value selects a client routing namespace; it is not an authorization decision. The NATS auth callout and application responders verify the token independently.
+
 ```typescript
 import { createAuthClient } from '@lixpi/auth-client'
 

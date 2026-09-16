@@ -59,8 +59,8 @@ const natsService = { publish: vi.fn() } as any
 
 const createRegistry = () => {
     const process = vi.fn(async () => ({}))
-    const preflightAdmission = vi.fn(async () => ({ metricsAdmissionApproved: true }))
-    const getOrCreate = vi.fn(() => ({ preflightAdmission }))
+    const preflightProviderRequestAuthorization = vi.fn(async () => ({ providerRequestAuthorized: true }))
+    const getOrCreate = vi.fn(() => ({ preflightProviderRequestAuthorization }))
     const remove = vi.fn()
     const stopGroup = vi.fn(async () => undefined)
     const stopGroupsWithPrefix = vi.fn(async () => undefined)
@@ -68,7 +68,7 @@ const createRegistry = () => {
 
     return {
         process,
-        preflightAdmission,
+        preflightProviderRequestAuthorization,
         getOrCreate,
         remove,
         stopGroup,
@@ -221,7 +221,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         const state1 = registry.process.mock.calls[1]?.[2] as any
 
         expect(state0.preflightResolved).toBe(true)
-        expect(state0.metricsAdmissionApproved).toBe(true)
+        expect(state0.providerRequestAuthorized).toBe(true)
         expect(state0.mediaFanoutPlan.imageModels).toHaveLength(1)
         expect(state0.mediaFanoutPlan.videoModels).toHaveLength(0)
         expect(state0.generationRun.reasoningRunId).toBe('request-2:reasoning:0')
@@ -1010,9 +1010,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 ],
             } as any
         })
-        registry.preflightAdmission.mockRejectedValueOnce(new Error('UsageMetering: balance does not cover this workflow'))
+        registry.preflightProviderRequestAuthorization.mockRejectedValueOnce(new Error('ProviderRequestAuthorization: request denied'))
 
-        await expect(orchestrator.process(createRequest())).rejects.toThrow('UsageMetering: balance does not cover this workflow')
+        await expect(orchestrator.process(createRequest())).rejects.toThrow('ProviderRequestAuthorization: request denied')
 
         expect(workspaceContextSpy).not.toHaveBeenCalled()
         expect(generatedAssetStorageMocks.ensurePendingGeneratedAssets).not.toHaveBeenCalled()

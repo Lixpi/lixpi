@@ -1,6 +1,14 @@
 # Environment Setup Script
 
-Interactive setup wizard for generating `.env` configuration files for Lixpi development.
+Interactive setup wizard for creating or updating `.env` configuration files for Lixpi development. `init-config.sh` and `init-config.bat` launch the same Dockerized wizard.
+
+The first prompt offers **Generate new** or **Edit existing**. Editing lists the available `.env.*` files in the project root, then asks whether to override the selected file completely or make partial updates. Complete replacement writes to the selected filename. Generating a new configuration asks for the developer name and environment; a matching filename triggers the same update choice before any further settings or credential generation.
+
+A complete override runs the configuration wizard with fresh values and NATS credentials. Partial editing uses the same wizard and asks whether to edit each group. Skipping a group preserves its values and shows no child prompts. Within a selected group, the existing conditional flow applies: local DynamoDB skips the custom endpoint, LocalAuth0 skips real Auth0 credentials, disabled AWS setup skips its fields, and Bedrock skips direct provider keys.
+
+An active field offers **Use existing value** or **Override value**. Explicitly empty values offer **Keep empty**; absent values offer only **Set new value**. Inapplicable fields are skipped even when empty or absent. The editor preserves custom variables and assignments outside the selected fields, including their comments, quoting, interpolation, multiline values, and line endings. Changing a wizard setting also updates the environment variables derived from that setting.
+
+NATS key pairs and passwords are reused unless their replacement is selected. Missing pairs are generated; an existing seed with a missing public key derives that public key without rotating the seed. Selected AWS SSO edits merge into the matching `.aws/config` profile and session while retaining unrelated profiles. Cancelling before saving leaves the files unchanged.
 
 ## What It Does
 
@@ -62,6 +70,8 @@ For automated environments without TTY:
 docker run --rm -v "$(pwd):/workspace" lixpi/setup --non-interactive --name=john --env=local
 ```
 
+Non-interactive mode refuses to replace an existing configuration. Run interactive setup to choose how to update it.
+
 ### Help
 
 ```bash
@@ -90,7 +100,7 @@ Complete environment configuration including:
 - NATS servers, keys, and passwords
 - Auth0 configuration
 - API keys
-- Metrics admission (`METRICS_ENABLED=false` by default)
+- Provider request authorization (`METRICS_ENABLED=false` by default)
 
 ### `.aws/config` (Optional)
 
@@ -110,3 +120,13 @@ When you select **local** environment:
 - **Prompts**: `@clack/prompts` for beautiful interactive CLI
 - **Key Generation**: `@nats-io/nkeys` for cryptographic key pairs
 - **No host dependencies**: Everything runs inside Docker
+
+## Verification
+
+Run the configuration editor and prompt-flow tests in the shared TypeScript test runner:
+
+```bash
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner init-config
+```
+
+The tests use synthetic configuration contents and mocked prompts. They do not read or update a developer's environment file.

@@ -1,0 +1,38 @@
+{
+    "version": 1,
+    "authorizationRequest": {
+        "orgId": "org_1",
+        "userId": "usr_1",
+        "workspaceId": "workspace_1",
+        "workflowId": "workflow_1",
+        "model": "OpenAI:gpt-5",
+        "modality": "tokens",
+        "estimatedUnits": 1200
+    },
+    "authorizationResult": {
+        "authorized": true,
+        "authorizationId": "authorization_1"
+    },
+    "usageRecordRequest": {
+        "providerRequestId": "provider_request_1",
+        "authorizationId": "authorization_1",
+        "orgId": "org_1",
+        "userId": "usr_1",
+        "workspaceId": "workspace_1",
+        "workflowId": "workflow_1",
+        "workflowSeq": 1,
+        "model": "OpenAI:gpt-5",
+        "modality": "tokens",
+        "measuringUnit": "tokens",
+        "usage": {
+            "promptTokens": 800,
+            "completionTokens": 400,
+            "cachedTokens": 100,
+            "reasoningTokens": 50
+        },
+        "occurredAt": "2026-01-01T00:00:00Z"
+    },
+    "usageRecordResult": {
+        "recorded": true
+    }
+}

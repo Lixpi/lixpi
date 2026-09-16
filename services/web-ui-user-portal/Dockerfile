@@ -13,6 +13,7 @@ COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/ui-kit-gentelella ./packages/lixpi/ui-kit-gentelella
 COPY ./packages/lixpi/ui-primitives ./packages/lixpi/ui-primitives
 COPY ./packages/lixpi/auth-client ./packages/lixpi/auth-client
+COPY ./packages/lixpi/user-portal ./packages/lixpi/user-portal
 COPY ./packages/lixpi/web-client-service-factory ./packages/lixpi/web-client-service-factory
 COPY ./services/web-ui-user-portal/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
