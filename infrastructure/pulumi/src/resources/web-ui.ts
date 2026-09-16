@@ -34,6 +34,9 @@ export type StaticWebClientArgs = {
     // Web UI configuration
     environment: WebClientEnvironment
 
+    // An external publisher can own artifacts while this component owns hosting.
+    artifactManagement?: 'infrastructure' | 'external'
+
     // Optional configuration
     dockerBuildContext: string
     dockerfilePath: string
@@ -65,6 +68,7 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
         buildDirectory,
         builderContainerName,
         bucketNameSegment,
+        artifactManagement = 'infrastructure',
     } = args
 
     // Resource naming
@@ -118,89 +122,93 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
         },
     )
 
-    // Build web UI Docker image locally (no ECR push needed)
-    const {
-        image: webUIBuildImage,
-        imageTag: webUIImageTag,
-    } = buildDockerImage({
-        imageName: `${formattedServiceName}-build`,
-        dockerBuildContext,
-        dockerfilePath,
-        platforms: ['linux/amd64'],
-        buildArgs: Object.entries(environment).reduce(
-            (acc, [key, value]) => ({
-                ...acc,
-                [key]: value,
-            }),
+    let uploadExec: Command | undefined
+
+    if (artifactManagement === 'infrastructure') {
+        // Build web UI Docker image locally (no ECR push needed)
+        const {
+            image: webUIBuildImage,
+            imageTag: webUIImageTag,
+        } = buildDockerImage({
+            imageName: `${formattedServiceName}-build`,
+            dockerBuildContext,
+            dockerfilePath,
+            platforms: ['linux/amd64'],
+            buildArgs: Object.entries(environment).reduce(
+                (acc, [key, value]) => ({
+                    ...acc,
+                    [key]: value,
+                }),
+                {
+                    VITE_NATS_SERVER: environment.VITE_NATS_SERVER,
+                },
+            ),
+            push: false,
+            noCache: true,
+            buildOnPreview: true,
+            exports: [
+                {
+                    docker: {
+                        names: [`${formattedServiceName}-build:latest`.toLowerCase()],
+                    },
+                },
+            ],
+        }) as DockerImageLocalResult
+
+        // Prepare environment variables for docker run only
+        const envVars = pulumi.all(
+            Object.entries(environment).map(([key, value]) => pulumi.output(value).apply(v => `-e ${key}=${v}`)),
+        ).apply(flags => flags.join(' '))
+
+        // Run a container to build the site, and extract the build artifacts
+        const buildCommand = pulumi.interpolate`
+            docker stop ${builderContainerName} >/dev/null 2>&1 || true && \
+            docker rm ${builderContainerName} >/dev/null 2>&1 || true && \
+            docker run -d --name ${builderContainerName} ${envVars} ${webUIImageTag} tail -f /dev/null && \
+            docker exec ${builderContainerName} pnpm run build && \
+            mkdir -p ${buildDirectory} && \
+            docker cp ${builderContainerName}:/usr/src/service/dist/. ${buildDirectory}/ && \
+            docker stop ${builderContainerName} && \
+            docker rm ${builderContainerName}
+        `
+
+        // Run the build command
+        const buildExec = new Command(
+            `${formattedServiceName}-build-exec`,
             {
-                VITE_NATS_SERVER: environment.VITE_NATS_SERVER,
-            },
-        ),
-        push: false,
-        noCache: true,
-        buildOnPreview: true,
-        exports: [
-            {
-                docker: {
-                    names: [`${formattedServiceName}-build:latest`.toLowerCase()],
+                create: buildCommand,
+                update: buildCommand,
+                environment: {
+                    // Add a timestamp to force the command to run on every update
+                    TIMESTAMP: new Date().toISOString(),
                 },
             },
-        ],
-    }) as DockerImageLocalResult
-
-    // Prepare environment variables for docker run only
-    const envVars = pulumi.all(
-        Object.entries(environment).map(([key, value]) => pulumi.output(value).apply(v => `-e ${key}=${v}`)),
-    ).apply(flags => flags.join(' '))
-
-    // Run a container to build the site, and extract the build artifacts
-    const buildCommand = pulumi.interpolate`
-        docker stop ${builderContainerName} >/dev/null 2>&1 || true && \
-        docker rm ${builderContainerName} >/dev/null 2>&1 || true && \
-        docker run -d --name ${builderContainerName} ${envVars} ${webUIImageTag} tail -f /dev/null && \
-        docker exec ${builderContainerName} pnpm run build && \
-        mkdir -p ${buildDirectory} && \
-        docker cp ${builderContainerName}:/usr/src/service/dist/. ${buildDirectory}/ && \
-        docker stop ${builderContainerName} && \
-        docker rm ${builderContainerName}
-    `
-
-    // Run the build command
-    const buildExec = new Command(
-        `${formattedServiceName}-build-exec`,
-        {
-            create: buildCommand,
-            update: buildCommand,
-            environment: {
-                // Add a timestamp to force the command to run on every update
-                TIMESTAMP: new Date().toISOString(),
+            {
+                replaceOnChanges: ['*'],
+                dependsOn: [webUIBuildImage],
             },
-        },
-        {
-            replaceOnChanges: ['*'],
-            dependsOn: [webUIBuildImage],
-        },
-    )
+        )
 
-    // Upload the built assets to S3 using aws cli sync
-    const s3SyncCommand = pulumi.interpolate`
-        aws s3 sync ${buildDirectory} s3://${siteBucket.bucket} --delete
-    `
-    const uploadExec = new Command(
-        `${formattedServiceName}-upload-exec`,
-        {
-            create: s3SyncCommand,
-            update: s3SyncCommand,
-            environment: {
-                // Add a timestamp to force the command to run on every update
-                TIMESTAMP: new Date().toISOString(),
+        // Upload the built assets to S3 using aws cli sync
+        const s3SyncCommand = pulumi.interpolate`
+            aws s3 sync ${buildDirectory} s3://${siteBucket.bucket} --delete
+        `
+        uploadExec = new Command(
+            `${formattedServiceName}-upload-exec`,
+            {
+                create: s3SyncCommand,
+                update: s3SyncCommand,
+                environment: {
+                    // Add a timestamp to force the command to run on every update
+                    TIMESTAMP: new Date().toISOString(),
+                },
             },
-        },
-        {
-            dependsOn: [buildExec, siteBucket, webUIBuildImage],
-            replaceOnChanges: ['*'],
-        },
-    )
+            {
+                dependsOn: [buildExec, siteBucket, webUIBuildImage],
+                replaceOnChanges: ['*'],
+            },
+        )
+    }
 
     // Create CloudFront distribution
     const distribution = new aws.cloudfront.Distribution(
@@ -210,7 +218,7 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
             isIpv6Enabled: true,
             httpVersion: 'http3',
             priceClass: 'PriceClass_All', // Use global edge locations for worldwide distribution
-    
+
             // Origins configuration
             origins: [{
                 domainName: siteBucket.bucketRegionalDomainName,
@@ -219,7 +227,7 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
                     originAccessIdentity: originAccessIdentity.cloudfrontAccessIdentityPath,
                 },
             }],
-    
+
             // Default behavior
             defaultCacheBehavior: {
                 allowedMethods: ['GET', 'HEAD', 'OPTIONS'], // ALLOW_GET_HEAD_OPTIONS
@@ -238,7 +246,7 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
                 maxTtl: 86400,
                 compress: true,
             },
-    
+
             // Restrictions
             restrictions: {
                 geoRestriction: {
@@ -246,14 +254,14 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
                     locations: [],
                 },
             },
-    
+
             // SSL certificate
             viewerCertificate: {
                 acmCertificateArn: certificateArn,
                 sslSupportMethod: 'sni-only',
                 minimumProtocolVersion: 'TLSv1.2_2021',
             },
-    
+
             // Custom error responses - redirect to index.html for SPA
             customErrorResponses: [
                 {
@@ -267,41 +275,44 @@ export const createStaticWebClient = async (args: StaticWebClientArgs) => {
                     responsePagePath: '/index.html',
                 },
             ],
-    
+
             aliases,
-    
+
             // Wait for invalidation to complete
             waitForDeployment: true,
         },
         {
-            dependsOn: [originAccessIdentity, uploadExec],
+            dependsOn: [originAccessIdentity, ...(uploadExec ? [uploadExec] : [])],
         },
     )
 
-    // Create CloudFront invalidation to ensure latest content is served
-    const invalidationCommand = pulumi.interpolate`
-        aws cloudfront create-invalidation --distribution-id ${distribution.id} --paths "/*"
-    `
-    const invalidationExec = new Command(
-        `${formattedServiceName}-invalidation-exec`,
-        {
-            create: invalidationCommand,
-            update: invalidationCommand,
-            environment: {
-                // Add a timestamp to force the command to run on every update
-                TIMESTAMP: new Date().toISOString(),
+    if (uploadExec) {
+        // Create CloudFront invalidation to ensure latest content is served
+        const invalidationCommand = pulumi.interpolate`
+            aws cloudfront create-invalidation --distribution-id ${distribution.id} --paths "/*"
+        `
+        new Command(
+            `${formattedServiceName}-invalidation-exec`,
+            {
+                create: invalidationCommand,
+                update: invalidationCommand,
+                environment: {
+                    // Add a timestamp to force the command to run on every update
+                    TIMESTAMP: new Date().toISOString(),
+                },
             },
-        },
-        {
-            dependsOn: [uploadExec, distribution],
-            replaceOnChanges: ['*'],
-        },
-    )
+            {
+                dependsOn: [uploadExec, distribution],
+                replaceOnChanges: ['*'],
+            },
+        )
+    }
 
     return {
         siteBucket,
         distribution,
         outputs: {
+            bucketName: siteBucket.bucket,
             websiteUrl: pulumi.interpolate`https://${domainName}`,
             domainName,
             distributionId: distribution.id,

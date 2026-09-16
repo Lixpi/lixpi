@@ -25,6 +25,13 @@ export const getNatsUserSubjectToken = (userId: string): string => [...new TextE
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
 
+export const getNatsUserInboxPrefix = (userId: string): string => {
+    if (!userId)
+        throw new Error('A user identity is required for a NATS reply inbox')
+
+    return `_INBOX.${getNatsUserSubjectToken(userId)}`
+}
+
 export const getAiInteractionResponseSubject = (
     userId: string,
     scopeId: string,
@@ -92,9 +99,4 @@ export enum LoadingStatus {
 export enum AuthenticationStatus {
     success = 'Success',
     userNotFound = 'User Not Found',
-    noActiveSubscription = 'No Active Subscription',
-}
-
-export enum UserSubscription {
-    minimumBalance = '5',
 }

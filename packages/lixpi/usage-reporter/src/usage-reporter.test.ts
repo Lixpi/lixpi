@@ -58,9 +58,9 @@ const seedanceMeta = {
     },
 } as unknown as MeteredAiModel
 
-describe('UsageReporter.priceVideoCall', () => {
-    it('bills VEO per second (unchanged): price-per-second × duration', () => {
-        const report = reporter.priceVideoCall({
+describe('UsageReporter.measureVideoUsage', () => {
+    it('measures a VEO request in seconds without calculating money', () => {
+        const report = reporter.measureVideoUsage({
             ...baseArgs,
             aiModelMetaInfo: veoMeta,
             durationSeconds: 8,
@@ -69,14 +69,16 @@ describe('UsageReporter.priceVideoCall', () => {
         })
 
         expect(report?.video.measuringUnit).toBe('seconds')
-        expect(report?.video.pricePerSecond).toBe('0.4')
-        expect(report?.video.purchasedFor).toBe('3.2')
-        expect(report?.video.soldToClientFor).toBe('3.2')
+        expect(report?.video.durationSeconds).toBe(8)
+        expect(report?.video.resolution).toBe('1080p')
+        expect(report?.video.aspectRatio).toBe('16:9')
         expect(report?.video.totalTokens).toBeUndefined()
+        expect('purchasedFor' in report.video).toBe(false)
+        expect('soldToClientFor' in report.video).toBe(false)
     })
 
-    it('bills Seedance per token: total_tokens × price / pricePer', () => {
-        const report = reporter.priceVideoCall({
+    it('measures Seedance usage in tokens', () => {
+        const report = reporter.measureVideoUsage({
             ...baseArgs,
             aiModelMetaInfo: seedanceMeta,
             durationSeconds: 5,
@@ -88,16 +90,16 @@ describe('UsageReporter.priceVideoCall', () => {
 
         expect(report?.video.measuringUnit).toBe('tokens')
         expect(report?.video.totalTokens).toBe(184320)
-        expect(report?.video.pricePer).toBe('1000000')
-        expect(report?.video.price).toBe('4.3')
-        // 184320 × 4.30 / 1000000 = 0.792576 (the proposal's "$0.000793" is an arithmetic slip).
-        expect(report?.video.purchasedFor).toBe('0.792576')
-        expect(report?.video.soldToClientFor).toBe('0.792576')
-        expect(report?.video.pricePerSecond).toBeUndefined()
+        expect(report?.video.completionTokens).toBe(184320)
+        expect(report?.video.durationSeconds).toBe(5)
+        expect(report?.video.resolution).toBe('720p')
+        expect(report?.video.aspectRatio).toBe('16:9')
+        expect('purchasedFor' in report.video).toBe(false)
+        expect('soldToClientFor' in report.video).toBe(false)
     })
 
-    it('treats a token-metered model with no token usage as zero cost', () => {
-        const report = reporter.priceVideoCall({
+    it('records zero tokens when a token-metered response omits token usage', () => {
+        const report = reporter.measureVideoUsage({
             ...baseArgs,
             aiModelMetaInfo: seedanceMeta,
             durationSeconds: 5,
@@ -107,6 +109,6 @@ describe('UsageReporter.priceVideoCall', () => {
 
         expect(report?.video.measuringUnit).toBe('tokens')
         expect(report?.video.totalTokens).toBe(0)
-        expect(report?.video.purchasedFor).toBe('0')
+        expect(report?.video.completionTokens).toBe(0)
     })
 })

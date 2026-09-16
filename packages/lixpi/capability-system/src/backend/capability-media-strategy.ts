@@ -76,8 +76,8 @@ export type CapabilityMediaExecutionContext = {
     eventMeta: Record<string, unknown>
     generationRun?: MediaGenerationRunMeta
     workflowId?: string
-    metricsOperationId?: string
-    metricsAdmissionApproved?: boolean
+    requestAuthorizationId?: string
+    providerRequestAuthorized?: boolean
 }
 
 export type CapabilityMediaExecutionResult = {

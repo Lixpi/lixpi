@@ -5,6 +5,7 @@ packages:
   - "packages/lixpi/ui-kit-gentelella"
   - "packages/lixpi/ui-primitives"
   - "packages/lixpi/auth-client"
+  - "packages/lixpi/user-portal"
   - "packages/lixpi/web-client-service-factory"
 
 allowBuilds:

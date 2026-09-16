@@ -25,8 +25,9 @@ Web UI and API clients authenticate via Auth0 OAuth2 flow. The auth callout veri
 
 - RS256 signature verification
 - Token expiration enforced
-- Permissions derived from subscription configs
-- User-specific templating via `{userId}`
+- Browser permission templates supplied separately from responder registration
+- Identity-specific templating via `{userId}` and subject-safe `{userIdToken}`
+- Replies limited to `_INBOX.<userIdToken>.>`
 
 ### NKey JWTs (Internal Services)
 
@@ -55,7 +56,12 @@ import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
 
 await startNatsAuthCalloutService({
     natsService: natsServiceInstance,
-    subscriptions: [...],  // Your NATS subscription configs
+    browserPermissionTemplates: [
+        {
+            pub: { allow: ['portal.module.*.{userIdToken}.request.>'] },
+            sub: { allow: ['portal.module.*.{userIdToken}.event.>'] },
+        },
+    ],
     nKeyIssuerSeed: process.env.NATS_AUTH_NKEY_ISSUER_SEED,
     xKeyIssuerSeed: process.env.NATS_AUTH_XKEY_ISSUER_SEED,
     jwtAudience: process.env.AUTH0_API_IDENTIFIER,
@@ -86,6 +92,12 @@ await startNatsAuthCalloutService({
 ```
 
 ### Adding a New Service
+
+The API reads additional registrations from `NATS_SERVICE_AUTH_REGISTRATIONS`, a JSON array of `ServiceAuthConfig` values. Import `parseAdditionalServiceAuthConfigs()` directly from `@lixpi/nats-auth-callout-service/service-registrations`. An omitted variable or `[]` registers no extra service. The array is deployment configuration; it contains public keys and explicit permissions, never seeds. The parser rejects malformed or unknown fields, duplicate service IDs/public keys (including built-in registrations), non-user NKeys, missing accounts, and empty publish/subscribe lists before the API connects to NATS.
+
+Additional service IDs follow `svc:<lowercase-id>`. Concrete subjects are allowed; wildcard permissions must stay under a concrete `portal.module.<module-id>.<user-token-or-*>.request/event` subtree or an explicit `_INBOX.<service-prefix>.>` inbox. Service subscriptions may receive module requests, and service publications may emit module events. System-subject wildcards and `_INBOX.>` are rejected. A service responder can use `resp: { max: 1, ttl: 10000000000 }` to answer one received request within ten seconds instead of holding a permanent global publish grant. The validator caps response permission at those limits.
+
+Registering a responder does not automatically grant browser access. The API explicitly collects public subscription permission templates and supplies its generic module request/event templates. Browser reply grants always start at the verified user's inbox prefix. Service registrations remain a separate, complete allowlist.
 
 1. **Generate NKey pair:**
    ```bash

@@ -114,6 +114,7 @@
 		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState"
 	},
 	"ORGANIZATION_SUBJECTS": {
+		"GET_MEMBERSHIP": "organization.membership.get",
 		"GET_ORGANIZATION": "organization.get",
 		"CREATE_ORGANIZATION": "organization.create",
 		"UPDATE_ORGANIZATION": "organization.update",
@@ -122,7 +123,7 @@
 		"DELETE_ORGANIZATION_TAG": "organization.deleteTag"
 	},
 	"METRICS_SUBJECTS": {
-		"USAGE_CHECK": "metrics.usage.check",
-		"USAGE_CONFIRM": "metrics.usage.confirm"
+		"PROVIDER_REQUEST_AUTHORIZE": "metrics.provider.request.authorize",
+		"PROVIDER_USAGE_RECORD": "metrics.provider.usage.record"
 	}
 }

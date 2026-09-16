@@ -31,6 +31,8 @@ const card = createGentelellaCard({
 
 Every factory returns an instance that owns its root element and a `destroy()` method. Stateful components expose focused methods such as `setBusy()`, `setActiveValue()`, or `setActivePath()`. Configuration accepts caller-owned content and optional application class names, so components can be composed without depending on a service.
 
+Buttons attach their spinner only while `setBusy(true)` is active and remove it on `setBusy(false)`. This keeps the theme's explicit spinner display rule from making an idle button appear busy.
+
 ## Public surfaces
 
 - `components/*` covers the complete reusable component vocabulary from the upstream production demos: foundation, navigation, layouts, feedback, forms, tables, charts and maps, widgets, app surfaces, commerce, admin, auth, media, marketing, theme controls, and overlays. It does not copy complete demo pages.
@@ -50,5 +52,5 @@ Run the package tests and quality checks through the repository's Docker runners
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared ui-kit-gentelella
-docker compose --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner shared ui-kit-gentelella validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared ui-kit-gentelella validate
 ```

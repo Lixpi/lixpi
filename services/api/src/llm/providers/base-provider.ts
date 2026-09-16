@@ -20,14 +20,13 @@ import {
 } from '@lixpi/constants'
 
 import {
-    METRICS_CURRENCY,
-    logRecordedSpend,
-    logSpendAuthorization,
+    logRecordedProviderUsage,
+    logRequestAuthorization,
     usageRecordForImageCall,
     usageRecordForTextCall,
     usageRecordForVideoCall,
-    type RecordedUsageRequest,
-    type UsageMeteringClient,
+    type ProviderUsageRecordRequest,
+    type ProviderUsageClient,
     type UsageReporter,
 } from '@lixpi/usage-reporter'
 
@@ -52,7 +51,7 @@ import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
 import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
-import { estimateSpendForGraphRun } from '../usage/spend-estimate.ts'
+import { estimateProviderUsageForGraphRun } from '../usage/provider-usage-estimate.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
@@ -104,10 +103,9 @@ export type BaseProviderDeps = {
         options?: MediaRouterOptions,
     ) => Promise<Partial<ProviderState>>
     capabilityDispatcher?: CapabilityDispatcher
-    // Metrics (optional — absent/disabled = the open-source plug, i.e. today's
-    // behavior). The synchronous check/confirm run on the workflow path via this
-    // abstract metering client (see @lixpi/usage-reporter).
-    usageMetering?: UsageMeteringClient
+    // Provider usage is optional. When it is absent or disabled, the open-source
+    // plug authorizes locally and discards usage records.
+    providerUsage?: ProviderUsageClient
     mediaProviderDefinition: MediaProviderDefinition
 }
 
@@ -542,8 +540,8 @@ export abstract class BaseProvider {
             videoSourceDurationSeconds: characterCreatorSelected ? undefined : requestData.videoSourceDurationSeconds,
             workflowId: requestData.workflowId,
             workflowSeq: requestData.workflowSeq,
-            metricsOperationId: requestData.metricsOperationId,
-            metricsAdmissionApproved: requestData.metricsAdmissionApproved,
+            requestAuthorizationId: requestData.requestAuthorizationId,
+            providerRequestAuthorized: requestData.providerRequestAuthorized,
             generationRun: requestData.generationRun,
             mediaFanoutPlan,
             replayMediaPrompts: requestData.replayMediaPrompts,
@@ -836,31 +834,28 @@ export abstract class BaseProvider {
             })
         }
 
-        if (state.metricsAdmissionApproved)
+        if (state.providerRequestAuthorized)
             return {}
 
-        return this.metricsCheck(state)
+        return this.authorizeProviderRequest(state)
     }
 
     // The matrix orchestrator calls this before resolving or persisting shared
     // lineage. Its result is forwarded to the child run, which skips a duplicate
-    // admission check while retaining the operation identity for usage confirms.
-    async preflightAdmission(state: ProviderState): Promise<Partial<ProviderState>> {
+    // authorization while retaining its identity for usage records.
+    async preflightProviderRequestAuthorization(state: ProviderState): Promise<Partial<ProviderState>> {
         return {
             ...await this.validateRequest(state),
-            metricsAdmissionApproved: true,
+            providerRequestAuthorized: true,
         }
     }
 
-    // Synchronous spend check before the paid provider call: ask the metering port
-    // whether the balance covers this run. Fail-closed — a denied (or, per the
-    // client's policy, an unreachable) port stops the run before any provider spend.
-    // Disabled = the open-source plug, which always approves. On admission, mint the
-    // per-run workflowId so the confirm calls can be grouped.
-    private async metricsCheck(state: ProviderState): Promise<Partial<ProviderState>> {
-        const usageMetering = this.deps.usageMetering
+    // Authorize this provider request before transport. A denied or unavailable
+    // authorization stops execution according to the configured policy.
+    private async authorizeProviderRequest(state: ProviderState): Promise<Partial<ProviderState>> {
+        const providerUsage = this.deps.providerUsage
 
-        if (!usageMetering?.enabled)
+        if (!providerUsage?.enabled)
             return {}
 
         const userId = state.eventMeta?.userId ?? ''
@@ -874,9 +869,9 @@ export abstract class BaseProvider {
             modality,
             estimatedUnits,
             basis,
-        } = estimateSpendForGraphRun(state)
+        } = estimateProviderUsageForGraphRun(state)
 
-        const authorization = await usageMetering.authorizeSpend({
+        const authorization = await providerUsage.authorizeRequest({
             orgId,
             userId,
             workspaceId: state.workspaceId,
@@ -884,9 +879,8 @@ export abstract class BaseProvider {
             model,
             modality,
             estimatedUnits,
-            currency: METRICS_CURRENCY,
         })
-        logSpendAuthorization({
+        logRequestAuthorization({
             model,
             modality,
             estimatedUnits,
@@ -895,27 +889,22 @@ export abstract class BaseProvider {
             response: authorization,
         })
 
-        if (!authorization.approved) {
+        if (!authorization.authorized) {
             const reason = authorization.reason ? `: ${authorization.reason}` : ''
 
-            throw new Error(`UsageMetering: balance does not cover this workflow (${workflowKind}${reason})`)
+            throw new Error(`ProviderUsage: provider request was not authorized (${workflowKind}${reason})`)
         }
 
-        // Thread the metering side's operation id into graph state so each recorded
+        // Thread the authorization ID into graph state so each recorded
         // call can correlate back to this authorization.
         return {
             workflowId,
             workflowSeq: 0,
-            metricsOperationId: authorization.operationId,
+            requestAuthorizationId: authorization.authorizationId,
         }
     }
 
-    // Labels the run by its broadest enabled modality, for the denial message only.
-    // It deliberately does NOT drive the check's modality: the check names
-    // state.modelVersion, and a reasoning model has no image or video tariff, so
-    // escalating here would get every image-enabled chat run denied as unpriceable.
-    // The image and video calls this run may go on to make are separate paid calls
-    // through transient media providers, each admitted against its own media model.
+    // Labels the workflow in denial messages; authorization uses the called model.
     private deriveWorkflowKind(state: ProviderState): string {
         if (state.enableVideoGeneration)
             return 'chat_video'
@@ -1686,15 +1675,12 @@ export abstract class BaseProvider {
         if (state.error)
             return {}
 
-        // Confirm one provider call per modality, each with a 1-based workflowSeq
-        // under the run's workflowId (for grouping/display). confirm is awaited but
-        // best-effort — the client logs failures rather than failing the completed
-        // request. workflowId is only set when the check admitted the run (enabled).
-        const meteringOn = !!(this.deps.usageMetering?.enabled && state.workflowId)
+        // Record measured usage after each provider call. Recording is best-effort.
+        const meteringOn = !!(this.deps.providerUsage?.enabled && state.workflowId)
         let seq = state.workflowSeq ?? 0
 
         if (state.usage) {
-            const spend = this.deps.usageReporter.priceTextCall({
+            const measuredUsage = this.deps.usageReporter.measureTextUsage({
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
@@ -1706,53 +1692,48 @@ export abstract class BaseProvider {
 
             if (
                 meteringOn
-                && spend
+                && measuredUsage
             ) {
-                await this.recordSpend(
-                    {
-                        ...usageRecordForTextCall(
-                            spend,
-                            state.workflowId!,
-                            ++seq,
-                        ),
-                        operationId: state.metricsOperationId,
-                    },
-                    spend.total,
-                )
+                await this.recordProviderUsage({
+                    ...usageRecordForTextCall(
+                        measuredUsage,
+                        state.workflowId!,
+                        ++seq,
+                    ),
+                    authorizationId: state.requestAuthorizationId,
+                })
             }
         }
 
         if (state.imageUsage) {
-            const spend = this.deps.usageReporter.priceImageCall({
+            const measuredUsage = this.deps.usageReporter.measureImageUsage({
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
                 imageSize: state.imageUsage.size,
                 imageQuality: state.imageUsage.quality,
+                generatedCount: state.imageUsage.generatedCount,
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
 
             if (
                 meteringOn
-                && spend
+                && measuredUsage
             ) {
-                await this.recordSpend(
-                    {
-                        ...usageRecordForImageCall(
-                            spend,
-                            state.workflowId!,
-                            ++seq,
-                        ),
-                        operationId: state.metricsOperationId,
-                    },
-                    spend.image,
-                )
+                await this.recordProviderUsage({
+                    ...usageRecordForImageCall(
+                        measuredUsage,
+                        state.workflowId!,
+                        ++seq,
+                    ),
+                    authorizationId: state.requestAuthorizationId,
+                })
             }
         }
 
         if (state.videoUsage) {
-            const spend = this.deps.usageReporter.priceVideoCall({
+            const measuredUsage = this.deps.usageReporter.measureVideoUsage({
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.videoModelMetaInfo ?? state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
@@ -1768,42 +1749,28 @@ export abstract class BaseProvider {
 
             if (
                 meteringOn
-                && spend
+                && measuredUsage
             ) {
-                await this.recordSpend(
-                    {
-                        ...usageRecordForVideoCall(
-                            spend,
-                            state.workflowId!,
-                            ++seq,
-                        ),
-                        operationId: state.metricsOperationId,
-                    },
-                    spend.video,
-                )
+                await this.recordProviderUsage({
+                    ...usageRecordForVideoCall(
+                        measuredUsage,
+                        state.workflowId!,
+                        ++seq,
+                    ),
+                    authorizationId: state.requestAuthorizationId,
+                })
             }
         }
 
         return { workflowSeq: seq }
     }
 
-    // Reports one measured provider call and logs it in the same shape as the
-    // authorization that admitted it, so the pair reads together. The reporter has
-    // already priced the call locally; that cost reaches the log only, never the
-    // wire, because the metering backend owns pricing.
-    private async recordSpend(
-        request: RecordedUsageRequest,
-        cost: {
-            purchasedFor: string
-            soldToClientFor: string
-        },
-    ): Promise<void> {
-        const response = await this.deps.usageMetering!.recordSpend(request)
-        logRecordedSpend({
+    // Record and log measured provider usage with its request authorization ID.
+    private async recordProviderUsage(request: ProviderUsageRecordRequest): Promise<void> {
+        const response = await this.deps.providerUsage!.recordUsage(request)
+        logRecordedProviderUsage({
             request,
             response,
-            purchasedFor: cost.purchasedFor,
-            soldToClientFor: cost.soldToClientFor,
         })
     }
 

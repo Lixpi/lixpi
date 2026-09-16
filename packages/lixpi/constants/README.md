@@ -2,6 +2,8 @@
 
 Shared runtime contracts for TypeScript services and the browser.
 
+`getNatsUserSubjectToken(userId)` encodes UTF-8 bytes as hex for a single NATS subject token. `getNatsUserInboxPrefix(userId)` builds `_INBOX.<token>` and rejects an empty identity. The browser connection and server-issued permissions must use the same prefix. `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` names the service-only self-membership responder.
+
 ## Storage contracts
 
 `ts/asset-types.ts` defines Asset, Meta, ACL, typed references, edit leases, media/rendition states, Blob rows/references, and rendition job request/response types.
@@ -16,7 +18,7 @@ Capability data contracts remain in `ts/types.ts`. Manifest, workflow, resource,
 
 `ts/aws-resources.ts` contains only active DynamoDB resource names, including the six revision-2 tables. `nats-subjects.json` contains active Asset/Blob processing and maintenance subjects, Capability subjects, and the internal Character panel fidelity subject.
 
-Nothing here prices anything. Rates, usage reports, the metering check/confirm contract, and the money constants live in [`@lixpi/usage-reporter`](../usage-reporter/README.md); `nats-subjects.json` still carries the `METRICS_SUBJECTS` that contract travels on, because every subject in the system is listed there. An `AiModel` from this package therefore has no `pricing` field, which is what makes it safe to hand straight to the browser.
+`AiModel` carries browser-safe model metadata. Provider tariff helpers and the neutral authorization and usage-record types live in [`@lixpi/usage-reporter`](../usage-reporter/README.md). `METRICS_SUBJECTS` declares their paired NATS subjects.
 
 ## Main files
 

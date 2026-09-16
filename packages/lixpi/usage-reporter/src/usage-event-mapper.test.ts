@@ -10,9 +10,9 @@ import {
     usageRecordForVideoCall,
 } from './usage-event-mapper.ts'
 import {
-    type TextCallSpend,
-    type ImageCallSpend,
-    type VideoCallSpend,
+    type TextProviderUsage,
+    type ImageProviderUsage,
+    type VideoProviderUsage,
 } from './usage-reporter.ts'
 
 const eventMeta = {
@@ -41,7 +41,7 @@ describe('usageRecordForTextCall', () => {
             reasoningTokens: 30,
         },
         total: { usageTokens: 812 },
-    } as unknown as TextCallSpend
+    } as unknown as TextProviderUsage
 
     it('maps tokens to a usage record with the prompt and completion split, and no cost', () => {
         const req = usageRecordForTextCall(report, 'wf_a1b2', 1)
@@ -61,9 +61,9 @@ describe('usageRecordForTextCall', () => {
                 cachedTokens: 100,
                 reasoningTokens: 30,
             },
-            currency: 'USD',
         })
         expect(req.occurredAt).toBe('2026-01-01T00:00:00.000Z')
+        expect('currency' in req).toBe(false)
         expect('resaleCost' in req).toBe(false)
     })
 })
@@ -75,11 +75,8 @@ describe('usageRecordForImageCall', () => {
             size: '1024x1024',
             quality: 'high',
             count: 1,
-            pricePerImageResale: '0.05',
-            purchasedFor: '0.04',
-            soldToClientFor: '0.05',
         },
-    } as unknown as ImageCallSpend
+    } as unknown as ImageProviderUsage
 
     it('maps an image call to count/size/quality dimensions', () => {
         const req = usageRecordForImageCall(report, 'wf_a1b2', 2)
@@ -105,10 +102,8 @@ describe('usageRecordForVideoCall', () => {
                 durationSeconds: 8,
                 resolution: '720p',
                 aspectRatio: '16:9',
-                purchasedFor: '0.64',
-                soldToClientFor: '0.80',
             },
-        } as unknown as VideoCallSpend
+        } as unknown as VideoProviderUsage
         const req = usageRecordForVideoCall(report, 'wf_a1b2', 3)
         expect(req).toMatchObject({
             modality: 'video',
@@ -128,10 +123,8 @@ describe('usageRecordForVideoCall', () => {
                 durationSeconds: 5,
                 totalTokens: 1000,
                 completionTokens: 1000,
-                purchasedFor: '0.02',
-                soldToClientFor: '0.03',
             },
-        } as unknown as VideoCallSpend
+        } as unknown as VideoProviderUsage
         const req = usageRecordForVideoCall(report, 'wf_a1b2', 4)
         expect(req).toMatchObject({
             modality: 'video',

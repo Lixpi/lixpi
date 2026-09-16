@@ -23,7 +23,7 @@ import {
 
 import {
     UsageReporter,
-    type UsageMeteringClient,
+    type ProviderUsageClient,
 } from '@lixpi/usage-reporter'
 import {
     assertValidMediaProviderDefinition,
@@ -31,8 +31,8 @@ import {
 } from './media-provider-definition.ts'
 
 // Metrics dependencies threaded into every provider's graph deps.
-export type UsageMeteringDeps = {
-    usageMetering?: UsageMeteringClient
+export type ProviderUsageDeps = {
+    providerUsage?: ProviderUsageClient
 }
 
 export type ProviderConstructor = new(
@@ -65,7 +65,7 @@ export class ProviderRegistry {
     constructor(
         private readonly natsService: NatsService,
         definitions: Partial<Record<ProviderName, MediaProviderDefinition>>,
-        private readonly meteringDeps: UsageMeteringDeps = {},
+        private readonly meteringDeps: ProviderUsageDeps = {},
     ) {
         const missingProviders = PROVIDER_NAMES.filter(provider => !definitions[provider])
 
@@ -118,7 +118,7 @@ export class ProviderRegistry {
 
                 return this.videoRouter(state, options)
             },
-            usageMetering: this.meteringDeps.usageMetering,
+            providerUsage: this.meteringDeps.providerUsage,
             mediaProviderDefinition: definition,
         }
     }

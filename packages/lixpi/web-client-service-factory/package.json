@@ -11,6 +11,7 @@
         ".": "./src/index.ts",
         "./vite": "./src/vite/index.ts",
         "./styles/foundation": {
+            "types": "./styles/styles.d.ts",
             "sass": "./styles/foundation.scss",
             "style": "./styles/foundation.scss",
             "default": "./styles/foundation.scss"

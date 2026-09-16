@@ -21,7 +21,7 @@ import {
 } from '../capability-system/capability-runtime.ts'
 import { createDefaultCapabilityModuleCatalog } from '../installed-capabilities.ts'
 import {
-    type UsageMeteringClient,
+    type ProviderUsageClient,
 } from '@lixpi/usage-reporter'
 import { createCharacterCreatorRuntimePorts } from '../capability-system/character-creator-platform-adapter.ts'
 
@@ -49,8 +49,8 @@ export type LlmModule = {
 export type LlmModuleDeps = {
     natsService: NatsService
     // Metrics integration (optional — absent/disabled = the open-source plug, i.e.
-    // today's behavior). Synchronous check/confirm run via this client.
-    usageMetering?: UsageMeteringClient
+    // today's behavior). Request authorization and usage recording run through this client.
+    providerUsage?: ProviderUsageClient
 }
 
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
@@ -58,7 +58,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
         deps.natsService,
         CURRENT_MEDIA_PROVIDER_DEFINITIONS,
         {
-            usageMetering: deps.usageMetering,
+            providerUsage: deps.providerUsage,
         },
     )
 
@@ -80,7 +80,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
             registry,
             natsService: deps.natsService,
         }),
-        usageMetering: deps.usageMetering,
+        providerUsage: deps.providerUsage,
     })
     capabilityModules.registerMediaStrategies(capabilityMediaStrategies)
     capabilityModules.registerActions(capabilityActionRegistry)

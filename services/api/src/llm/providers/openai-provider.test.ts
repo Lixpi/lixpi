@@ -85,9 +85,9 @@ const makeDeps = (): BaseProviderDeps => ({
         publish: vi.fn(),
     } as any,
     usageReporter: {
-        priceTextCall: vi.fn(),
-        priceImageCall: vi.fn(),
-        priceVideoCall: vi.fn(),
+        measureTextUsage: vi.fn(),
+        measureImageUsage: vi.fn(),
+        measureVideoUsage: vi.fn(),
     } as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),

@@ -1,6 +1,6 @@
 import {
-    estimateSpendForRun,
-    type SpendEstimate,
+    estimateProviderUsageForRun,
+    type ProviderUsageEstimate,
     type MeteredAiModel,
 } from '@lixpi/usage-reporter'
 
@@ -10,11 +10,8 @@ import {
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import { estimateInputTokens } from '../providers/provider-input-budget.ts'
 
-// The graph run, told to metering in metering's own terms. What a run is worth is
-// @lixpi/usage-reporter's question; what a run contains is this service's, so the
-// prompt is measured here with the provider's own tokenizer and handed over as a
-// number.
-export const estimateSpendForGraphRun = (state: ProviderState): SpendEstimate => {
+// Adapt graph state to a provider-usage estimate using the input-token heuristic.
+export const estimateProviderUsageForGraphRun = (state: ProviderState): ProviderUsageEstimate => {
     // Reproduces getSystemPrompt(hasImageModel, hasVideoModel) as the reasoning
     // adapters call it. The image and video instruction blocks dwarf the base
     // prompt, so omitting them when a media model is attached would understate the
@@ -24,7 +21,7 @@ export const estimateSpendForGraphRun = (state: ProviderState): SpendEstimate =>
         systemPrompt: getSystemPrompt(!!state.imageModelVersion, !!state.videoModelVersion),
     }).inputTokens
 
-    return estimateSpendForRun({
+    return estimateProviderUsageForRun({
         model: state.aiModelMetaInfo as MeteredAiModel,
         promptTokensMeasured,
         maxCompletionSize: state.maxCompletionSize,

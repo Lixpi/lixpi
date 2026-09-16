@@ -12,7 +12,11 @@ import {
 
 import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
-import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
+import {
+    startNatsAuthCalloutService,
+    type BrowserPermissionTemplate,
+} from '@lixpi/nats-auth-callout-service'
+import { parseAdditionalServiceAuthConfigs } from '@lixpi/nats-auth-callout-service/service-registrations'
 import {
     type ServiceAuthConfig,
 } from '@lixpi/auth-service'
@@ -21,6 +25,7 @@ import { createServer } from 'http'
 
 import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
+import { organizationMembershipSubjects } from './NATS/subscriptions/organization-membership-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
 import {
     aiInteractionSubjects,
@@ -51,9 +56,9 @@ import { getCapabilityDispatcher } from './capability-system/capability-runtime.
 import { asCapabilityArguments } from './capability-system/capability-state-resolver.ts'
 
 import {
-    UsageMeteringClient,
-    usageMeteringOptionsFromEnv,
-    type UsageMeteringTransport,
+    ProviderUsageClient,
+    providerUsageOptionsFromEnv,
+    type ProviderUsageTransport,
 } from '@lixpi/usage-reporter'
 
 const env = process.env
@@ -91,6 +96,7 @@ global.dynamoDBService = new DynamoDBService({
 const subscriptions = [
     // Identity and model metadata.
     ...userSubjects,
+    ...organizationMembershipSubjects,
     ...aiModelSubjects,
 
     // AI orchestration, replay streams, and media description.
@@ -105,6 +111,20 @@ const subscriptions = [
     // Capability catalog commands and generic Tool run transport.
     ...capabilitySubjects,
     ...promptReferenceSubjects,
+]
+
+const browserPermissionTemplates: BrowserPermissionTemplate[] = [
+    ...subscriptions.flatMap(
+        subscription =>
+            'permissions' in subscription
+                && subscription.permissions
+                ? [subscription.permissions]
+                : [],
+    ),
+    {
+        pub: { allow: ['portal.module.*.{userIdToken}.request.>'] },
+        sub: { allow: ['portal.module.*.{userIdToken}.event.>'] },
+    },
 ]
 
 // Registered NATS-internal identities that the auth callout can authenticate
@@ -230,6 +250,8 @@ if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
 }
 
 // Initialize with your NATS server connection
+serviceAuthConfigs.push(...parseAdditionalServiceAuthConfigs(env.NATS_SERVICE_AUTH_REGISTRATIONS, serviceAuthConfigs))
+
 const apiNatsService = await NATS_Service.init({
     servers: env.NATS_SERVERS,
     name: 'api-server',
@@ -248,13 +270,13 @@ await startAssetMaintenanceWorker(apiNatsService)
 new CapabilityRunEventRelay(apiNatsService).start()
 
 await startNatsAuthCalloutService({
-    natsService: await NATS_Service.getInstance(),
-    subscriptions,
+    natsService: apiNatsService,
+    browserPermissionTemplates,
     nKeyIssuerSeed: env.NATS_AUTH_NKEY_ISSUER_SEED,
     xKeyIssuerSeed: env.NATS_AUTH_XKEY_ISSUER_SEED,
     jwtAudience: env.AUTH0_API_IDENTIFIER,
     jwtIssuer: env.MOCK_AUTH0 === 'true' ? `http://${env.MOCK_AUTH0_DOMAIN}/` : `${env.AUTH0_DOMAIN}/`,
-    algorithms: ['RS256'],
+    jwtAlgorithms: ['RS256'],
     jwksUri: env.MOCK_AUTH0 === 'true' ? env.MOCK_AUTH0_JWKS_URI : `${env.AUTH0_DOMAIN}/.well-known/jwks.json`,
     natsAuthAccount: env.NATS_AUTH_ACCOUNT,
     // Service registrations are passed into the generic auth-callout package so
@@ -269,33 +291,30 @@ await startNatsAuthCalloutService({
     serviceAuthConfigs,
 })
 
-// Usage metering. The spend guard is synchronous: authorize before a paid provider
-// call, record what it used after. Requests use the raw NATS_Service.request so they
-// bypass the global JWT middleware, because an internal metering subject carries no
-// user token. With METRICS_ENABLED unset this is the plug: every spend is authorized
-// and recording is a no-op.
-const usageMeteringConnection = (await NATS_Service.getInstance())!
-const usageMeteringTransport: UsageMeteringTransport = {
+// Authorize provider requests and record measured usage over the internal NATS port.
+// These service requests carry no browser token and bypass the JWT middleware.
+const providerUsageConnection = (await NATS_Service.getInstance())!
+const providerUsageTransport: ProviderUsageTransport = {
     request: (
         subject,
         data,
         timeoutMs,
-    ) => usageMeteringConnection.request(
+    ) => providerUsageConnection.request(
         subject,
         data,
         timeoutMs,
     ),
 }
-const usageMetering = new UsageMeteringClient(
-    usageMeteringTransport,
-    usageMeteringOptionsFromEnv(),
+const providerUsage = new ProviderUsageClient(
+    providerUsageTransport,
+    providerUsageOptionsFromEnv(),
 )
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
 const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
-    usageMetering,
+    providerUsage,
 })
 setPromptReferenceModuleCatalog(llmModule.capabilityModuleCatalog)
 await llmModule.seedCapabilities()

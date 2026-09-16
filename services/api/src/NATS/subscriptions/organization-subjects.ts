@@ -7,26 +7,6 @@ import { NATS_SUBJECTS } from '@lixpi/constants'
 const { ORGANIZATION_SUBJECTS } = NATS_SUBJECTS
 
 export const organizationSubjects = [
-    // Organization ------------------------------------------------------------------------------------------------
-    {
-        subject: ORGANIZATION_SUBJECTS.GET_ORGANIZATION,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ORGANIZATION_SUBJECTS.GET_ORGANIZATION] },
-            sub: { allow: [] },
-        },
-        handler: async (data, msg) => {
-            const { organizationId } = data
-            const userId = data.user?.userId
-
-            return await Organization.getOrganization({
-                organizationId,
-                userId,
-            })
-        },
-    },
-
     {
         subject: ORGANIZATION_SUBJECTS.CREATE_ORGANIZATION,
         type: 'reply',

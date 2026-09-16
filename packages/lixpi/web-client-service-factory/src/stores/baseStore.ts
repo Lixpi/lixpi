@@ -140,13 +140,13 @@ export const createStore = <
         isBaseStoreState(initialState)
             ? new BaseStoreImplementation(initialState, options)
             : new StoreImplementation(initialState, options)
-    ) as StoreForState<State>
+    ) as unknown as StoreForState<State>
 
     if (!createMethods)
-        return baseStore as StoreWithMethods<State, Methods>
+        return baseStore as unknown as StoreWithMethods<State, Methods>
 
     return {
         ...baseStore,
         ...createMethods(baseStore),
-    } as StoreWithMethods<State, Methods>
+    } as unknown as StoreWithMethods<State, Methods>
 }

@@ -339,7 +339,7 @@ services/api/src/
 │   │   ├── video-publisher.ts        # VIDEO_PENDING/GENERATING/COMPLETE/ERROR, MP4/MOV validation
 │   │   ├── media-branch-resolver.ts  # VLM gate generalized to video; VEO ref mapping
 │   │   └── stream-publisher.ts       # videoGenerationTrace()
-│   ├── usage/check-metering.ts       # graph run → @lixpi/usage-reporter's admission estimate
+│   ├── usage/provider-usage-estimate.ts # graph run to @lixpi/usage-reporter's authorization estimate
 │   ├── config.ts                     # VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS
 │   └── prompts/
 │       ├── load-prompts.ts           # getSystemPrompt(includeVideoGeneration)

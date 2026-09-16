@@ -1,0 +1,30 @@
+{
+    "name": "@lixpi/user-portal",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "exports": {
+        ".": "./src/index.ts",
+        "./styles": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/styles.scss",
+            "style": "./src/styles.scss",
+            "default": "./src/styles.scss"
+        }
+    },
+    "dependencies": {
+        "@lixpi/auth-client": "workspace:*",
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/nats-service": "workspace:*",
+        "@lixpi/ui-kit-gentelella": "workspace:*",
+        "@lixpi/ui-primitives": "workspace:*",
+        "@lixpi/web-client-service-factory": "workspace:*"
+    },
+    "devDependencies": {
+        "happy-dom": "*",
+        "vitest": "*"
+    }
+}

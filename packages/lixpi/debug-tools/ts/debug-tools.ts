@@ -1,7 +1,7 @@
 import util from 'util'
 import chalk from 'chalk'
 
-let safeInspect = val => {
+const safeInspect = (val: unknown): string => {
     try {
         return util.inspect(
             val,
@@ -16,14 +16,14 @@ let safeInspect = val => {
             val,
             null,
             2,
-        )
+        ) ?? String(val)
     }
 }
 
 // Iterating over the arguments and formatting them, if they are objects, using safeInspect, otherwise just returning them as they are
-const formatArgs = args => args.map(arg => (typeof arg === 'string' ? arg : safeInspect(arg)))
+const formatArgs = (args: unknown[]): unknown[] => args.map(arg => (typeof arg === 'string' ? arg : safeInspect(arg)))
 
-export const log = (...args) => {
+export const log = (...args: unknown[]): void => {
     if (typeof args[0] === 'string')
         console.log(
             chalk.green(args[0]),
@@ -35,7 +35,7 @@ export const log = (...args) => {
         console.log(...formatArgs(args))
 }
 
-export const info = (...args) => {
+export const info = (...args: unknown[]): void => {
     if (typeof args[0] === 'string')
         console.info(
             chalk.blue(args[0]),
@@ -51,7 +51,7 @@ export const infoStr = (args: string[]) => void console.info(
     args.join(''),
 )
 
-export const warn = (...args) => {
+export const warn = (...args: unknown[]): void => {
     if (typeof args[0] === 'string')
         console.warn(
             chalk.yellow(args[0]),
@@ -63,7 +63,7 @@ export const warn = (...args) => {
         console.warn(...formatArgs(args))
 }
 
-export const err = (...args) => {
+export const err = (...args: unknown[]): void => {
     if (typeof args[0] === 'string')
         console.error(
             chalk.red(args[0]),

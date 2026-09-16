@@ -1,18 +1,14 @@
-import { METRICS_CURRENCY } from './constants.ts'
 import {
-    type RecordedUsageRequest,
-} from './usage-metering-contract.ts'
+    type ProviderUsageRecordRequest,
+} from './provider-usage-contract.ts'
 import {
-    type TextCallSpend,
-    type ImageCallSpend,
-    type VideoCallSpend,
+    type TextProviderUsage,
+    type ImageProviderUsage,
+    type VideoProviderUsage,
 } from './usage-reporter.ts'
 
-// Priced calls to usage records: one record per provider call, carrying measured
-// unit counts and no money. See ../documentation/RECORDED-SPEND.md.
-
-// The fields every priced call carries, whatever it produced.
-type CallSpendIdentity = {
+// One dimensioned usage record per provider call.
+type ProviderCallIdentity = {
     eventMeta: {
         organizationId?: string
         userId?: string
@@ -25,7 +21,7 @@ type CallSpendIdentity = {
 }
 
 const sharedRecordFields = (
-    call: CallSpendIdentity,
+    call: ProviderCallIdentity,
     workflowId: string,
     workflowSeq: number,
 ) => ({
@@ -36,15 +32,14 @@ const sharedRecordFields = (
     workflowId,
     workflowSeq,
     model: call.modelVersion,
-    currency: METRICS_CURRENCY,
     occurredAt: new Date(call.aiRequestFinishedAt || Date.now()).toISOString(),
 })
 
 export const usageRecordForTextCall = (
-    call: TextCallSpend,
+    call: TextProviderUsage,
     workflowId: string,
     workflowSeq: number,
-): RecordedUsageRequest => {
+): ProviderUsageRecordRequest => {
     return {
         ...sharedRecordFields(
             call,
@@ -63,10 +58,10 @@ export const usageRecordForTextCall = (
 }
 
 export const usageRecordForImageCall = (
-    call: ImageCallSpend,
+    call: ImageProviderUsage,
     workflowId: string,
     workflowSeq: number,
-): RecordedUsageRequest => {
+): ProviderUsageRecordRequest => {
     return {
         ...sharedRecordFields(
             call,
@@ -84,15 +79,13 @@ export const usageRecordForImageCall = (
 }
 
 export const usageRecordForVideoCall = (
-    call: VideoCallSpend,
+    call: VideoProviderUsage,
     workflowId: string,
     workflowSeq: number,
-): RecordedUsageRequest => {
+): ProviderUsageRecordRequest => {
     const video = call.video
 
-    // Seconds of source video fed in. Omitted for text-to-video, which is what
-    // absent means on the wire. The backend prices a run with video input at a
-    // different rate from one without, so this selects the tariff.
+    // Preserve the source-video dimension when present.
     const inputVideoFields = typeof video.inputVideoSeconds === 'number'
         && video.inputVideoSeconds > 0
         ? { inputVideoSeconds: video.inputVideoSeconds }
@@ -111,6 +104,7 @@ export const usageRecordForVideoCall = (
             measuringUnit: 'tokens',
             usage: {
                 videoTokens: video.totalTokens ?? 0,
+                resolution: video.resolution,
                 ...inputVideoFields,
             },
         }

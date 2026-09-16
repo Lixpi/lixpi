@@ -1,7 +1,7 @@
 import {
-    type BillingUnit,
+    type UsageUnit,
     type MeteredModality,
-} from './usage-metering-contract.ts'
+} from './provider-usage-contract.ts'
 import { pricingForCalledInferenceProvider } from './model-pricing.ts'
 import {
     type MeteredAiModel,
@@ -9,17 +9,16 @@ import {
 import { estimateVideoTokens } from './video-token-accounting.ts'
 import { UNMEASURED_PROMPT_GROWTH_FACTOR } from './constants.ts'
 
-// The pre-call spend estimate: an upper bound, in the unit the named model is
-// metered in. Every rule here rounds toward charging more, for reasons documented in
-// ../documentation/SPEND-AUTHORIZATION.md.
+// The pre-call upper-bound estimate uses the named model\'s usage unit.
+// See ../documentation/REQUEST-AUTHORIZATION.md.
 
 // How an estimate was arrived at, for the usage log. Only the fields the modality
 // set are filled in.
-export type SpendEstimateBasis = {
-    measuringUnit: BillingUnit
+export type ProviderUsageEstimateBasis = {
+    measuringUnit: UsageUnit
     promptTokensMeasured?: number
     promptGrowthFactor?: number
-    promptTokensCharged?: number
+    promptTokensUpperBound?: number
     completionCeiling?: number
     completionCeilingFrom?: 'maxCompletionSize' | 'contextWindowRemainder' | 'unknown'
     videoSeconds?: number
@@ -29,15 +28,15 @@ export type SpendEstimateBasis = {
     provisionalVideoFrame?: string
 }
 
-export type SpendEstimate = {
+export type ProviderUsageEstimate = {
     modality: MeteredModality
     estimatedUnits: number
-    basis: SpendEstimateBasis
+    basis: ProviderUsageEstimateBasis
 }
 
 // One run, reduced to what an estimate reads. The caller owns the request and the
 // tokenizer, so the prompt arrives here already measured.
-export type SpendEstimateInput = {
+export type ProviderUsageEstimateInput = {
     model: MeteredAiModel
     // Prompt tokens as the provider's own tokenizer counts them, system prompt
     // included. The growth margin below is applied to this.
@@ -117,8 +116,8 @@ const generatesModality = (
     )
 }
 
-// The unit this model's video is metered in, which the recorded spend prices on too.
-const videoBillingUnit = (model: MeteredAiModel): string => {
+// The unit this model's video is metered in, which the usage record uses too.
+const videoUsageUnit = (model: MeteredAiModel): string => {
     const video = asRecord(
         asRecord(
             pricingForCalledInferenceProvider(model),
@@ -143,7 +142,7 @@ const publishedClipDurations = (model: MeteredAiModel): number[] => {
 // The request is normalized onto one of the model's own duration options upstream,
 // so the longest option is a guaranteed ceiling and a published duration is exact.
 const boundedClipSeconds = (
-    run: SpendEstimateInput,
+    run: ProviderUsageEstimateInput,
     model: MeteredAiModel,
 ): number => {
     const catalogSeconds = publishedClipDurations(model)
@@ -164,13 +163,13 @@ const boundedClipSeconds = (
 // Seconds for a per-second model (VEO), vendor video tokens for a token-metered one
 // (Seedance). The authorization carries no unit, so the count has to already be in
 // the one the model's tariff meters.
-const estimateVideoSpend = (run: SpendEstimateInput): SpendEstimate => {
+const estimateVideoUsage = (run: ProviderUsageEstimateInput): ProviderUsageEstimate => {
     // Always the model the authorization names, never a routed-to model: the estimate
-    // has to describe the same model the backend is about to price.
+    // has to describe the same model the request will call.
     const model = run.model
     const seconds = boundedClipSeconds(run, model)
 
-    if (videoBillingUnit(model) === 'seconds') {
+    if (videoUsageUnit(model) === 'seconds') {
         return {
             modality: 'video',
             estimatedUnits: seconds,
@@ -209,23 +208,23 @@ const estimateVideoSpend = (run: SpendEstimateInput): SpendEstimate => {
     }
 }
 
-const estimateTextSpend = (run: SpendEstimateInput): SpendEstimate => {
+const estimateTextUsage = (run: ProviderUsageEstimateInput): ProviderUsageEstimate => {
     const maxCompletionTokens = positiveInteger(run.maxCompletionSize)
         ?? positiveInteger(run.model?.maxCompletionSize)
     const contextWindow = positiveInteger(run.model?.contextWindow)
     const promptTokensMeasured = Math.max(0, run.promptTokensMeasured)
-    const promptTokensCharged = Math.ceil(promptTokensMeasured * UNMEASURED_PROMPT_GROWTH_FACTOR)
+    const promptTokensUpperBound = Math.ceil(promptTokensMeasured * UNMEASURED_PROMPT_GROWTH_FACTOR)
     const completionCeiling = maxCompletionTokens
-        ?? remainingContextWindow(contextWindow, promptTokensCharged)
+        ?? remainingContextWindow(contextWindow, promptTokensUpperBound)
 
     return {
         modality: 'tokens',
-        estimatedUnits: promptTokensCharged + completionCeiling,
+        estimatedUnits: promptTokensUpperBound + completionCeiling,
         basis: {
             measuringUnit: 'tokens',
             promptTokensMeasured,
             promptGrowthFactor: UNMEASURED_PROMPT_GROWTH_FACTOR,
-            promptTokensCharged,
+            promptTokensUpperBound,
             completionCeiling,
             completionCeilingFrom: maxCompletionTokens !== undefined
                 ? 'maxCompletionSize'
@@ -238,8 +237,8 @@ const estimateTextSpend = (run: SpendEstimateInput): SpendEstimate => {
 
 // What the named model is metered as, never what the run might go on to do. A
 // reasoning run gates as tokens even with media generation enabled, because each
-// media call is admitted separately against its own model.
-const meteredModalityOf = (run: SpendEstimateInput): MeteredModality => {
+// media call is authorized separately against its own model.
+const meteredModalityOf = (run: ProviderUsageEstimateInput): MeteredModality => {
     const model = run.model
 
     if (generatesModality(model, 'video_generation'))
@@ -251,13 +250,13 @@ const meteredModalityOf = (run: SpendEstimateInput): MeteredModality => {
     return 'tokens'
 }
 
-// Every part of one run's spend authorization, derived together so the unit count can
+// Every part of one run's request authorization, derived together so the unit count can
 // never disagree with the modality it is counted in.
-export const estimateSpendForRun = (run: SpendEstimateInput): SpendEstimate => {
+export const estimateProviderUsageForRun = (run: ProviderUsageEstimateInput): ProviderUsageEstimate => {
     const modality = meteredModalityOf(run)
 
     // One image-generation run produces one image. Fanout and multi-pass runs are
-    // each admitted separately.
+    // each authorized separately.
     if (modality === 'image')
         return {
             modality,
@@ -266,7 +265,7 @@ export const estimateSpendForRun = (run: SpendEstimateInput): SpendEstimate => {
         }
 
     if (modality === 'video')
-        return estimateVideoSpend(run)
+        return estimateVideoUsage(run)
 
-    return estimateTextSpend(run)
+    return estimateTextUsage(run)
 }

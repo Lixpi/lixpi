@@ -30,6 +30,32 @@ import { createGentelellaTabs } from './tabs/tabs.ts'
 afterEach(() => void document.body.replaceChildren())
 
 describe('Gentelella component factories', () => {
+    it('mounts the spinner only while busy, despite the theme display rule', () => {
+        const style = document.createElement('style')
+        style.textContent = '.btn-spinner { display: inline-block; }'
+        document.body.append(style)
+        const button = createGentelellaButton({ label: 'Refresh balances' })
+        document.body.append(button.el)
+
+        expect(button.el.querySelector('.btn-spinner')).toBeNull()
+        expect(button.el.hasAttribute('aria-busy')).toBe(false)
+
+        button.setBusy(true)
+        button.setBusy(true)
+        expect(button.el.querySelectorAll('.btn-spinner')).toHaveLength(1)
+        expect(button.el.getAttribute('aria-busy')).toBe('true')
+
+        button.setBusy(false)
+        expect(button.el.querySelector('.btn-spinner')).toBeNull()
+        expect(button.el.hasAttribute('aria-busy')).toBe(false)
+        expect(button.el.textContent).toBe('Refresh balances')
+
+        button.setBusy(true)
+        expect(button.el.querySelectorAll('.btn-spinner')).toHaveLength(1)
+        button.setBusy(false)
+        expect(button.el.querySelector('.btn-spinner')).toBeNull()
+    })
+
     it('builds and updates interactive controls', () => {
         const onClick = vi.fn()
         const button = createGentelellaButton({

@@ -1,5 +1,5 @@
-// Turns a clip's duration into the vendor token count Seedance is billed in, for
-// the pre-call spend gate. The formula, its sources, and the state of the frame
+// Turns a clip's duration into the vendor token count reported by Seedance, for
+// the pre-call usage estimate. The formula, its sources, and the state of the frame
 // sizes below are in ../documentation/SEEDANCE-VIDEO-TOKENS.md.
 //
 //   tokens = (input seconds + output seconds) × width × height × 24 / 1024
@@ -16,9 +16,8 @@ export type VideoFrameSize = {
 // TODO(seedance-frame-sizes): replace with BytePlus's own Seedance 2.0 output
 // dimension table. EVERY NUMBER BELOW IS A PLACEHOLDER, NOT SOURCED DATA. It is
 // biased high on purpose, and any replacement must keep that bias: over-estimating
-// only tightens the gate, while under-estimating lets through a run the balance
-// cannot cover. How these were derived and how they calibrate against published
-// prices is in ../documentation/SEEDANCE-VIDEO-TOKENS.md.
+// preserves a conservative upper-bound estimate. The frame derivation and
+// calibration against published provider information are in ../documentation/SEEDANCE-VIDEO-TOKENS.md.
 const PROVISIONAL_SEEDANCE_FRAME_SIZES: Record<string, Record<string, VideoFrameSize>> = {
     '480p': {
         '16:9': {

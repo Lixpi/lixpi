@@ -1,22 +1,17 @@
+import { createAuthClient } from '@lixpi/auth-client'
+import { getNatsUserInboxPrefix } from '@lixpi/constants'
 import {
-    createAuthClient,
-    type AuthClientInstance,
-} from '@lixpi/auth-client'
-import { createWebClientService } from '@lixpi/web-client-service-factory'
+    accountPortalModule,
+    createUserPortal,
+} from '@lixpi/user-portal'
 import NatsService from '@lixpi/nats-service'
 
-import { routes } from '$src/routes.ts'
-import { createLayout } from '$src/views/layouts/layout.ts'
 import '@lixpi/web-client-service-factory/styles/foundation'
-import '$src/styles.scss'
+import '@lixpi/user-portal/styles'
 
 const portalUrl = import.meta.env.VITE_USER_PORTAL_URL
-type UserPortalDependencies = {
-    auth: AuthClientInstance
-    nats: NatsService
-}
-
-const application = createWebClientService<UserPortalDependencies>({
+const application = createUserPortal({
+    modules: [accountPortalModule],
     createDependencies: async () => {
         const auth = createAuthClient({
             auth: {
@@ -44,6 +39,7 @@ const application = createWebClientService<UserPortalDependencies>({
             webSocket: true,
             name: 'web-client-user-portal',
             token: session?.accessToken,
+            inboxPrefix: session ? getNatsUserInboxPrefix(session.userId) : undefined,
             getToken: session?.getToken,
             onAuthError: session
                 ? async () => void (await session.refreshToken())
@@ -54,26 +50,6 @@ const application = createWebClientService<UserPortalDependencies>({
             auth,
             nats,
         }
-    },
-    routing: { routes },
-    createView: ({
-        dependencies: { auth },
-        router,
-    }) => createLayout({
-        router,
-        userStore: auth.userStore,
-    }),
-    destroyDependencies: async ({ nats }) => await nats.disconnect(),
-    startServices: async ({ dependencies: {
-        auth,
-        nats,
-    } }) => {
-        if (auth.features.currentUser)
-            await auth.loadCurrentUser({
-                requestClient: {
-                    request: (subject, payload) => nats.request(subject, payload),
-                },
-            })
     },
     onError: error => console.error('User portal failed to start', error),
 })

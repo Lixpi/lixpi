@@ -1,12 +1,13 @@
-// Everything Lixpi knows about what a provider call consumed and what it costs.
-// Nothing here decides what a run does; it decides what a run is worth.
+// Provider request authorization, measured usage, and provider catalog tariff metadata.
+
+export { PROVIDER_USAGE_CONTRACT_VERSION } from './provider-usage-contract.ts'
 
 export {
-    UsageMeteringClient,
-    usageMeteringOptionsFromEnv,
-    type UsageMeteringOptions,
-    type UsageMeteringTransport,
-} from './usage-metering-client.ts'
+    ProviderUsageClient,
+    providerUsageOptionsFromEnv,
+    type ProviderUsageOptions,
+    type ProviderUsageTransport,
+} from './provider-usage-client.ts'
 
 export {
     pricingForCalledInferenceProvider,
@@ -14,17 +15,13 @@ export {
     withoutInferenceProviderPricing,
 } from './model-pricing.ts'
 
-export {
-    METRICS_CURRENCY,
-    MICRO_DOLLARS_PER_USD,
-    UNMEASURED_PROMPT_GROWTH_FACTOR,
-} from './constants.ts'
+export { UNMEASURED_PROMPT_GROWTH_FACTOR } from './constants.ts'
 
 export {
-    estimateSpendForRun,
-    type SpendEstimate,
-    type SpendEstimateBasis,
-    type SpendEstimateInput,
+    estimateProviderUsageForRun,
+    type ProviderUsageEstimate,
+    type ProviderUsageEstimateBasis,
+    type ProviderUsageEstimateInput,
 } from './usage-estimator.ts'
 
 export {
@@ -34,15 +31,15 @@ export {
 } from './usage-event-mapper.ts'
 
 export {
-    logSpendAuthorization,
-    logRecordedSpend,
+    logRequestAuthorization,
+    logRecordedProviderUsage,
 } from './usage-log.ts'
 
 export {
     UsageReporter,
-    type ImageCallSpend,
-    type TextCallSpend,
-    type VideoCallSpend,
+    type ImageProviderUsage,
+    type TextProviderUsage,
+    type VideoProviderUsage,
 } from './usage-reporter.ts'
 
 export {
@@ -52,14 +49,15 @@ export {
 } from './video-token-accounting.ts'
 
 export type {
-    SpendAuthorizationRequest,
-    SpendAuthorizationResponse,
-    RecordedUsageRequest,
-    RecordedUsageResponse,
-    BillingUnit,
+    ProviderRequestAuthorizationRequest,
+    ProviderRequestAuthorizationResult,
+    ProviderRequestAuthorizationReason,
+    ProviderUsageRecordRequest,
+    ProviderUsageRecordResult,
+    UsageUnit,
     MeteredModality,
     MeasuredUsage,
-} from './usage-metering-contract.ts'
+} from './provider-usage-contract.ts'
 
 export type {
     AiModelPricing,

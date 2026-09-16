@@ -22,10 +22,17 @@ vi.mock('./auth/createAuthService.ts', () => ({
     createAuthService: () => mocks,
 }))
 
+const tokenForUser = (userId: string): string => [
+    'header',
+    Buffer.from(JSON.stringify({ sub: userId })).toString('base64url'),
+    'signature',
+].join('.')
+
 describe('auth client', () => {
     it('combines authentication and current-user loading behind one injected client', async () => {
         vi.resetAllMocks()
-        mocks.getTokenSilently.mockResolvedValue('token-1')
+        const accessToken = tokenForUser('user-1')
+        mocks.getTokenSilently.mockResolvedValue(accessToken)
         const userState = createUserStore()
         const request = vi.fn(async () => ({
             userId: 'user-1',
@@ -52,7 +59,7 @@ describe('auth client', () => {
         expect(client.userStore).toBe(userState)
         expect(request).toHaveBeenCalledWith(
             expect.any(String),
-            { token: 'token-1' },
+            { token: accessToken },
         )
         expect(userState.getData('userId')).toBe('user-1')
         expect(userState.getMeta('loadingStatus')).toBe(LoadingStatus.success)
@@ -98,7 +105,8 @@ describe('auth client', () => {
 
     it('initializes an access-token session for injected transports', async () => {
         vi.resetAllMocks()
-        mocks.getTokenSilently.mockResolvedValue('token-1')
+        const accessToken = tokenForUser('auth0|user-1')
+        mocks.getTokenSilently.mockResolvedValue(accessToken)
         const client = createAuthClient({
             auth: {
                 audience: 'audience',
@@ -112,9 +120,30 @@ describe('auth client', () => {
         const session = await client.initializeSession()
 
         expect(mocks.init).toHaveBeenCalledOnce()
-        expect(session?.accessToken).toBe('token-1')
+        expect(session?.accessToken).toBe(accessToken)
+        expect(session?.userId).toBe('auth0|user-1')
         await session?.refreshToken()
         expect(mocks.getTokenSilently).toHaveBeenLastCalledWith(true)
+    })
+
+    it('rejects a session token without a user identity', async () => {
+        vi.resetAllMocks()
+        mocks.getTokenSilently.mockResolvedValue([
+            'header',
+            Buffer.from('{}').toString('base64url'),
+            'signature',
+        ].join('.'))
+        const client = createAuthClient({
+            auth: {
+                audience: 'audience',
+                clientId: 'client-id',
+                domain: 'auth.example.com',
+                logoutReturnTo: 'https://example.com',
+                redirectUri: 'https://example.com',
+            },
+        })
+
+        await expect(client.initializeSession()).rejects.toThrow('Authentication token has no user identity')
     })
 
     it('skips disabled authentication and current-user loading', async () => {

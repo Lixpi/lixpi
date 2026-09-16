@@ -86,3 +86,5 @@ A module-owned instruction Skill uses `createInstructionSkillPackage()` with an 
 - Put each concrete cross-runtime module in `capabilities/<module-id>` and colocate its shared, backend, frontend, Skills, Tools, schemas, resources, and tests.
 - Keep concrete DynamoDB, NATS, LangGraph state, provider SDK clients, and application module registration in the consuming service. Expose them to modules only through package-owned typed ports.
 - Add new public modules through the relevant `index.ts` file.
+
+Provider-request authorization identity in the media execution context is opaque. A strategy must authorize each separately invoked provider request; it cannot reuse a parent request\'s authorization for additional calls.

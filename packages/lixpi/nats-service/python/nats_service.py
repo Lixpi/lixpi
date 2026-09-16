@@ -156,6 +156,7 @@ class NatsServiceConfig:
         on_auth_error: Optional[Callable[[Exception], Any]] = None,
         stream_replicas: int = DEFAULT_STREAM_REPLICAS,
         initial_connect_max_attempts: int = DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS,
+        inbox_prefix: Optional[str] = None,
     ):
         """
         Initialize NATS service configuration.
@@ -202,6 +203,7 @@ class NatsServiceConfig:
         self.on_auth_error = on_auth_error
         self.stream_replicas = stream_replicas
         self.initial_connect_max_attempts = initial_connect_max_attempts
+        self.inbox_prefix = inbox_prefix
 
 
 class NatsService:
@@ -213,6 +215,7 @@ class NatsService:
     _instance: Optional['NatsService'] = None
 
     def __init__(self, config: NatsServiceConfig):
+        self._reconnect_listeners: List[Callable] = []
         """
         Initialize NATS service.
 
@@ -394,6 +397,8 @@ class NatsService:
         }
 
         self._apply_authentication(options)
+        if self.config.inbox_prefix:
+            options["inbox_prefix"] = self.config.inbox_prefix.encode("utf-8")
         return options
 
     def _apply_authentication(self, options: Dict[str, Any]) -> None:
@@ -510,6 +515,7 @@ class NatsService:
 
         # Initialize subscriptions from config
         await self._init_subscriptions()
+        await self._notify_reconnect()
 
     async def _report_connect_error(self, error: BaseException) -> None:
         """Log a failed connect attempt and let the caller refresh credentials."""
@@ -833,6 +839,25 @@ class NatsService:
         # Check if subscriptions need to be initialized after reconnect
         if not self._subscriptions_initialized:
             await self._init_subscriptions()
+        await self._notify_reconnect()
+
+    def on_reconnect(self, listener: Callable) -> Callable:
+        self._reconnect_listeners.append(listener)
+
+        def remove_listener() -> None:
+            if listener in self._reconnect_listeners:
+                self._reconnect_listeners.remove(listener)
+
+        return remove_listener
+
+    async def _notify_reconnect(self) -> None:
+        for listener in list(self._reconnect_listeners):
+            try:
+                result = listener()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception as error:
+                err(f"NATS -> reconnect listener failed: {error}")
 
     async def _closed_callback(self) -> None:
         """Handle NATS connection closure."""

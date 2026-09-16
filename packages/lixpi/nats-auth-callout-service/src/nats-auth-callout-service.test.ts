@@ -165,7 +165,7 @@ describe('startNatsAuthCalloutService', () => {
     it('throws when NATS auth signer seed is not provided', async () => {
         await expect(startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions: [],
+            browserPermissionTemplates: [],
             nKeyIssuerSeed: '',
             xKeyIssuerSeed: 'xKeyIssuerSeed',
             jwtAudience: 'aud',
@@ -178,7 +178,7 @@ describe('startNatsAuthCalloutService', () => {
     it('throws when auth-callout XKey seed is not provided', async () => {
         await expect(startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions: [],
+            browserPermissionTemplates: [],
             nKeyIssuerSeed: 'nKeyIssuerSeed',
             xKeyIssuerSeed: '',
             jwtAudience: 'aud',
@@ -186,6 +186,21 @@ describe('startNatsAuthCalloutService', () => {
             jwksUri: 'https://example.com/jwks',
             natsAuthAccount: 'AUTH',
         })).rejects.toThrow('xKeyIssuerSeed for NATS auth callout not provided!')
+    })
+
+    it('rejects browser templates that try to grant a persistent inbox wildcard', async () => {
+        await expect(startNatsAuthCalloutService({
+            natsService: natsServiceMock as unknown as any,
+            browserPermissionTemplates: [{
+                pub: { allow: ['_INBOX.>'] },
+            }],
+            nKeyIssuerSeed: 'nKeyIssuerSeed',
+            xKeyIssuerSeed: 'xKeyIssuerSeed',
+            jwtAudience: 'aud',
+            jwtIssuer: 'iss',
+            jwksUri: 'https://example.com/jwks',
+            natsAuthAccount: 'AUTH',
+        })).rejects.toThrow('Browser inbox permissions are derived from the authenticated user')
     })
 
     it('authenticates regular users from Auth0 token and deduplicates expanded permissions', async () => {
@@ -209,24 +224,20 @@ describe('startNatsAuthCalloutService', () => {
             return null
         })
 
-        const subscriptions = [
+        const browserPermissionTemplates = [
             {
-                permissions: {
-                    pub: { allow: ['workspace.{userId}.write', 'workspace.{userId}.write', '_INBOX.>'] },
-                    sub: { allow: ['notify.{userId}', 'notify.{userId}.done'] },
-                },
+                pub: { allow: ['workspace.{userId}.write', 'workspace.{userId}.write'] },
+                sub: { allow: ['notify.{userId}', 'notify.{userId}.done'] },
             },
             {
-                permissions: {
-                    pub: { allow: ['chat.broadcast'] },
-                    sub: { allow: ['notify.{userId}'] },
-                },
+                pub: { allow: ['chat.broadcast'] },
+                sub: { allow: ['notify.{userId}'] },
             },
         ]
 
         await startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions,
+            browserPermissionTemplates,
             nKeyIssuerSeed: 'nKeyIssuerSeed',
             xKeyIssuerSeed: 'xKeyIssuerSeed',
             jwtAudience: 'aud',
@@ -244,8 +255,8 @@ describe('startNatsAuthCalloutService', () => {
 
         const permissions = extractEncodedPermissions(encodeUserMock.mock.calls)
         expect(permissions).toEqual({
-            pub: { allow: ['_INBOX.>', 'workspace.user:regular.write', 'chat.broadcast'] },
-            sub: { allow: ['_INBOX.>', 'notify.user:regular', 'notify.user:regular.done'] },
+            pub: { allow: ['_INBOX.757365723a726567756c6172.>', 'workspace.user:regular.write', 'chat.broadcast'] },
+            sub: { allow: ['_INBOX.757365723a726567756c6172.>', 'notify.user:regular', 'notify.user:regular.done'] },
             type: 'user',
             version: 2,
         })
@@ -268,10 +279,10 @@ describe('startNatsAuthCalloutService', () => {
             authorizationIssuerKeyPair,
             expect.objectContaining({
                 pub: {
-                    allow: ['_INBOX.>', 'workspace.user:regular.write', 'chat.broadcast'],
+                    allow: ['_INBOX.757365723a726567756c6172.>', 'workspace.user:regular.write', 'chat.broadcast'],
                 },
                 sub: {
-                    allow: ['_INBOX.>', 'notify.user:regular', 'notify.user:regular.done'],
+                    allow: ['_INBOX.757365723a726567756c6172.>', 'notify.user:regular', 'notify.user:regular.done'],
                 },
             }),
             { aud: 'AUTH' },
@@ -316,7 +327,7 @@ describe('startNatsAuthCalloutService', () => {
 
         await startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions: [],
+            browserPermissionTemplates: [],
             nKeyIssuerSeed: 'nKeyIssuerSeed',
             xKeyIssuerSeed: 'xKeyIssuerSeed',
             jwtAudience: 'aud',
@@ -372,7 +383,7 @@ describe('startNatsAuthCalloutService', () => {
 
         await startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions: [],
+            browserPermissionTemplates: [],
             nKeyIssuerSeed: 'nKeyIssuerSeed',
             xKeyIssuerSeed: 'xKeyIssuerSeed',
             jwtAudience: 'aud',
@@ -433,7 +444,7 @@ describe('startNatsAuthCalloutService', () => {
 
         await startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions: [],
+            browserPermissionTemplates: [],
             nKeyIssuerSeed: 'nKeyIssuerSeed',
             xKeyIssuerSeed: 'xKeyIssuerSeed',
             jwtAudience: 'aud',
@@ -467,7 +478,7 @@ describe('startNatsAuthCalloutService', () => {
 
         await startNatsAuthCalloutService({
             natsService: natsServiceMock as unknown as any,
-            subscriptions: [],
+            browserPermissionTemplates: [],
             nKeyIssuerSeed: 'nKeyIssuerSeed',
             xKeyIssuerSeed: 'xKeyIssuerSeed',
             jwtAudience: 'aud',

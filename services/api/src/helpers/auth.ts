@@ -6,8 +6,6 @@ import {
     createJwtVerifier,
     type JwtVerificationResult,
 } from '@lixpi/auth-service'
-import { err } from '@lixpi/debug-tools'
-
 import RegistrationService from '../services/registration-service.ts'
 
 const {
@@ -99,12 +97,17 @@ const getAuthCacheExpiresAt = (decoded: JwtVerificationResult['decoded']): numbe
 export const authenticateTokenOnRequest = async ({
     token,
     eventName,
+    requireFreshVerification = false,
 }: {
     token: string
     eventName?: string
+    requireFreshVerification?: boolean
 }): Promise<JwtVerificationResult> => {
     if (!token)
         return { error: 'No token provided' }
+
+    if (requireFreshVerification)
+        return jwtVerifier.verify(token)
 
     const cacheKey = getAuthRequestCacheKey(token, eventName)
     const cached = getCachedAuthResult(cacheKey)
@@ -135,20 +138,6 @@ export const authenticateTokenOnRequest = async ({
             // the issue must be addressed when registration flow is complete'
             // const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
             //             `)
-
-            // TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            // err('TODO: Turn back balance verification !!!!!!!!!!!!!!!', decoded)
-
-            // if (eventName === AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE) {
-            //     const userSubscriptionStatus = await subscriptionService.checkUserBalance({ userId: decoded.sub })
-
-            //     if (userSubscriptionStatus === AuthenticationStatus.noActiveSubscription) {
-            //         reject({ error: AuthenticationStatus.noActiveSubscription })
-            //     }
-            // }
-
-            // TODO: Turn back balance verification !!!!!!!!!!!!!!!
-            // TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
             const result = { decoded }
             cacheSuccessfulAuthResult(cacheKey, result)

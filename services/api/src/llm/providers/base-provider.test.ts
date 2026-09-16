@@ -548,8 +548,8 @@ describe('BaseProvider request validation', () => {
 
     it('denies a run whose spend cannot be authorized before resolving or persisting media lineage', async () => {
         const nats = makeFakeNats()
-        const authorizeSpend = vi.fn().mockResolvedValue({
-            approved: false,
+        const authorizeRequest = vi.fn().mockResolvedValue({
+            authorized: false,
             reason: 'metrics_unreachable',
         })
         const provider = new TestProvider('ws-1:thread-1', {
@@ -557,9 +557,9 @@ describe('BaseProvider request validation', () => {
             usageReporter: {} as any,
             runImageRouter: vi.fn(),
             runVideoRouter: vi.fn(),
-            usageMetering: {
+            providerUsage: {
                 enabled: true,
-                authorizeSpend,
+                authorizeRequest,
             },
         } as BaseProviderDeps)
         const planMediaBranchLineage = vi.spyOn(provider as any, 'planMediaBranchLineage')
@@ -584,7 +584,7 @@ describe('BaseProvider request validation', () => {
             },
         })
 
-        expect(authorizeSpend).toHaveBeenCalledOnce()
+        expect(authorizeRequest).toHaveBeenCalledOnce()
         expect(planMediaBranchLineage).not.toHaveBeenCalled()
         expect(streamTokens).not.toHaveBeenCalled()
         expect(result.error).toContain('metrics_unreachable')
@@ -596,9 +596,9 @@ describe('BaseProvider request validation', () => {
             storeWorkspaceImage: vi.fn(),
             storeWorkspaceVideo: vi.fn(),
             usageReporter: {
-                priceTextCall: vi.fn(),
-                priceImageCall: vi.fn(),
-                priceVideoCall: vi.fn(),
+                measureTextUsage: vi.fn(),
+                measureImageUsage: vi.fn(),
+                measureVideoUsage: vi.fn(),
             } as any,
             runImageRouter: vi.fn(),
             runVideoRouter: vi.fn(),
@@ -636,9 +636,9 @@ describe('BaseProvider request validation', () => {
             storeWorkspaceImage: vi.fn(),
             storeWorkspaceVideo: vi.fn(),
             usageReporter: {
-                priceTextCall: vi.fn(),
-                priceImageCall: vi.fn(),
-                priceVideoCall: vi.fn(),
+                measureTextUsage: vi.fn(),
+                measureImageUsage: vi.fn(),
+                measureVideoUsage: vi.fn(),
             } as any,
             runImageRouter: vi.fn(),
             runVideoRouter: vi.fn(),
@@ -1539,17 +1539,17 @@ describe('BaseProvider process failure path', () => {
 
 describe('BaseProvider usage lifecycle', () => {
     it('skips usage reporter calls when the workflow failed upstream', async () => {
-        const priceTextCall = vi.fn()
-        const priceImageCall = vi.fn()
-        const priceVideoCall = vi.fn()
+        const measureTextUsage = vi.fn()
+        const measureImageUsage = vi.fn()
+        const measureVideoUsage = vi.fn()
         const provider = new TestProvider('ws1:thread1', {
             natsService: { publish: vi.fn() } as any,
             storeWorkspaceImage: vi.fn(),
             storeWorkspaceVideo: vi.fn(),
             usageReporter: {
-                priceTextCall,
-                priceImageCall,
-                priceVideoCall,
+                measureTextUsage,
+                measureImageUsage,
+                measureVideoUsage,
             },
             runImageRouter: vi.fn(),
             runVideoRouter: vi.fn(),
@@ -1573,23 +1573,23 @@ describe('BaseProvider usage lifecycle', () => {
             eventMeta: {},
         } as any)
 
-        expect(priceTextCall).not.toHaveBeenCalled()
-        expect(priceImageCall).not.toHaveBeenCalled()
-        expect(priceVideoCall).not.toHaveBeenCalled()
+        expect(measureTextUsage).not.toHaveBeenCalled()
+        expect(measureImageUsage).not.toHaveBeenCalled()
+        expect(measureVideoUsage).not.toHaveBeenCalled()
     })
 
     it('reports token, image, and video usage with generated metadata', async () => {
-        const priceTextCall = vi.fn()
-        const priceImageCall = vi.fn()
-        const priceVideoCall = vi.fn()
+        const measureTextUsage = vi.fn()
+        const measureImageUsage = vi.fn()
+        const measureVideoUsage = vi.fn()
         const provider = new TestProvider('ws1:thread1', {
             natsService: { publish: vi.fn() } as any,
             storeWorkspaceImage: vi.fn(),
             storeWorkspaceVideo: vi.fn(),
             usageReporter: {
-                priceTextCall,
-                priceImageCall,
-                priceVideoCall,
+                measureTextUsage,
+                measureImageUsage,
+                measureVideoUsage,
             },
             runImageRouter: vi.fn(),
             runVideoRouter: vi.fn(),
@@ -1633,9 +1633,9 @@ describe('BaseProvider usage lifecycle', () => {
             eventMeta: { requestId: 'req-1' },
         } as any)
 
-        expect(priceTextCall).toHaveBeenCalledOnce()
-        expect(priceImageCall).toHaveBeenCalledOnce()
-        expect(priceVideoCall).toHaveBeenCalledOnce()
+        expect(measureTextUsage).toHaveBeenCalledOnce()
+        expect(measureImageUsage).toHaveBeenCalledOnce()
+        expect(measureVideoUsage).toHaveBeenCalledOnce()
     })
 
     it('finishes prose-mirror stream during cleanup', async () => {

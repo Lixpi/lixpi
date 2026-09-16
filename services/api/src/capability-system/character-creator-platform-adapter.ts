@@ -202,9 +202,9 @@ const generateCapabilityImage = async (
             abortSignal: args.signal,
             eventMeta: args.context.eventMeta,
             generationRun: args.context.generationRun,
-            metricsAdmissionApproved: args.context.metricsAdmissionApproved,
+            providerRequestAuthorized: false,
             workflowId: args.context.workflowId,
-            metricsOperationId: args.context.metricsOperationId,
+            requestAuthorizationId: undefined,
         })
         throwIfProviderCancelled(result, args.signal)
 
