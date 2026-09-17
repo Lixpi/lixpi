@@ -8,6 +8,7 @@ import {
     type CanvasPort,
     type ResizeHandle,
 } from '../../shared/index.ts'
+import { portElementData } from '../connectors/port-elements.ts'
 import { Lifetime } from './lifetime.ts'
 import { NodeResizeHandles } from './node-shell.ts'
 
@@ -101,15 +102,18 @@ export class NodeHandles {
                     width: `${size}px`,
                     height: `${size}px`,
                 }
-                const data = {
-                    nodeid: this.options.nodeId,
-                    handleid: port.id,
-                    handlepos: port.direction,
-                    id: `${this.options.flowId}-${this.options.nodeId}-${port.id}-${role}`,
-                }
+                const data = portElementData(
+                    this.options.flowId,
+                    {
+                        nodeId: this.options.nodeId,
+                        id: port.id,
+                        type: role,
+                        position: port.direction,
+                    },
+                )
                 const handle = html`
                     <div
-                        className="canvas-port nopan connectable connectableend xy-flow__handle ${role} ${port.direction}"
+                        className="canvas-port nopan"
                         data=${data}
                         style=${style}
                     ></div>

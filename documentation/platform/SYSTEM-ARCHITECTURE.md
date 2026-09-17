@@ -43,7 +43,7 @@ Everything fans out from NATS. The browser connects to NATS over a WebSocket; th
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TB
     subgraph Client["Client Tier"]
-        UI["Web UI<br/>TypeScript SPA · @xyflow/system · ProseMirror"]
+        UI["Web UI<br/>TypeScript SPA · Canvas Engine · ProseMirror"]
         Portal["User Portal<br/>TypeScript SPA · Gentelella"]
     end
 
@@ -216,7 +216,7 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
 | `@lixpi/prosemirror` | Shared ProseMirror schema, headless engine, stream assembly helpers, lineage projection helpers, and document-step transport types used by API and web-ui |
-| `@xyflow/system` | Framework-agnostic pan/zoom and coordinate math used through its low-level API rather than a framework wrapper |
+| Canvas Engine | Native viewport input, graph/port geometry and connector paths |
 
 ## Where to Go Next
 

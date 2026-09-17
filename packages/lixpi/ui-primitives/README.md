@@ -1,8 +1,8 @@
 # UI Primitives
 
-[Gradients](docs/GRADIENTS.md) covers shared color and rendering utilities. [Color analysis](docs/COLOR-ANALYSIS.md) explains the numeric analysis workflow and its limits. See [license and dependency notices](NOTICES.md).
+[Gradients](docs/GRADIENTS.md) covers shared color and rendering utilities. [Color analysis](docs/COLOR-ANALYSIS.md) explains the numeric analysis workflow and its limits.
 
-`@lixpi/ui-primitives` supplies shared DOM templates, SVG utilities, gradients, easing functions and Sass transition helpers. It has no dependency on UI-kit, canvas packages, application settings or services. Icon artwork, concrete icon definitions, SVG textures and their licenses belong to [UI-kit](../ui-kit/README.md).
+`@lixpi/ui-primitives` supplies shared DOM templates, SVG utilities, gradients, easing functions and Sass transition helpers. It has no dependency on UI-kit, canvas packages, application settings or services. Icon artwork, concrete icon definitions and SVG textures belong to [UI-kit](../ui-kit/README.md).
 
 Consumers import TypeScript source through explicit package exports. No package build or generated JavaScript is required.
 

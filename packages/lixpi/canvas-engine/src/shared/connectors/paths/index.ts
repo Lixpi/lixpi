@@ -1,18 +1,16 @@
-// Path building utilities wrapping XYFlow edge utilities
-// Provides both XYFlow standard paths and custom path types
+// Pure connector geometry, including obstacle-aware orthogonal routing.
 
 import {
     getBezierPath,
     getStraightPath,
     getSmoothStepPath,
-    Position,
-} from '@xyflow/system'
+} from './standard.ts'
 import {
     type PathType,
     type ComputedPath,
     type AnchorPosition,
     type NodeConfig,
-} from './types.ts'
+} from '../path-types.ts'
 
 // Simple node bounds type for path obstacle avoidance
 type NodeBounds = {
@@ -23,21 +21,7 @@ type NodeBounds = {
     height: number
 }
 
-// Convert our simplified anchor position to XYFlow's Position enum
-const toXYFlowPosition = (position: AnchorPosition): Position => {
-    switch (position) {
-        case 'left':
-            return Position.Left
-        case 'right':
-            return Position.Right
-        case 'top':
-            return Position.Top
-        case 'bottom':
-            return Position.Bottom
-        case 'center':
-            return Position.Bottom // Default to bottom for center
-    }
-}
+const toPathDirection = (position: AnchorPosition) => (position === 'center' ? 'bottom' : position)
 
 // Build a horizontal symmetric S-curve bezier path
 // Leaves horizontally from source, transitions in the middle, arrives horizontally at target
@@ -752,10 +736,10 @@ export const computePath = (
             const [path, labelX, labelY, offsetX, offsetY] = getBezierPath({
                 sourceX,
                 sourceY,
-                sourcePosition: toXYFlowPosition(sourcePosition),
+                sourcePosition: toPathDirection(sourcePosition),
                 targetX,
                 targetY,
-                targetPosition: toXYFlowPosition(targetPosition),
+                targetPosition: toPathDirection(targetPosition),
                 curvature,
             })
 
@@ -787,10 +771,10 @@ export const computePath = (
             const [path, labelX, labelY, offsetX, offsetY] = getSmoothStepPath({
                 sourceX,
                 sourceY,
-                sourcePosition: toXYFlowPosition(sourcePosition),
+                sourcePosition: toPathDirection(sourcePosition),
                 targetX,
                 targetY,
-                targetPosition: toXYFlowPosition(targetPosition),
+                targetPosition: toPathDirection(targetPosition),
                 borderRadius: 8, // Default border radius
                 offset: 20, // Default orthogonal offset
             })

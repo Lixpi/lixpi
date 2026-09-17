@@ -1,12 +1,12 @@
 import {
     computePath,
     applyOffset,
-} from './paths.ts'
+} from '../../shared/connectors/paths/index.ts'
 import {
     type EdgeConfig,
     type NodeConfig,
     type AnchorPosition,
-} from './types.ts'
+} from '../../shared/connectors/path-types.ts'
 import {
     type ConnectorRenderDatum,
     type ConnectorArrow,

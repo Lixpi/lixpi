@@ -46,6 +46,7 @@ vi.mock('pixi.js', async importOriginal => {
 })
 
 let queued: Map<number, FrameRequestCallback>
+let observedResize: () => void
 
 beforeEach(() => {
     applications.length = 0
@@ -61,6 +62,9 @@ beforeEach(() => {
     vi.stubGlobal(
         'ResizeObserver',
         class {
+            constructor(callback: () => void) {
+                observedResize = callback
+            }
             observe() {}
             disconnect() {}
         },
@@ -79,7 +83,88 @@ const root = () => {
     } as unknown as HTMLElement
 }
 
+const flushFrame = (): void => {
+    const callbacks = Array.from(queued.values())
+    queued.clear()
+
+    for (const callback of callbacks)
+        callback(10)
+}
+
 describe('CanvasRenderer lifecycle', () => {
+    it('keeps the displayed surface unchanged until a matching frame is drawn during live resize', async () => {
+        const container = root()
+        const renderer = new CanvasRenderer({
+            root: container,
+            onError: vi.fn(),
+        })
+        const app = applications[0]
+        const surface = {
+            width: 0,
+            height: 0,
+        }
+        const events: string[] = []
+        app.renderer.resize.mockImplementation((width: number, height: number) => {
+            surface.width = width
+            surface.height = height
+            events.push(`resize:${width}x${height}`)
+        })
+        app.render.mockImplementation(() => events.push(`render:${surface.width}x${surface.height}`))
+        app.finish()
+        await renderer.ready
+        renderer.setViewport({
+            x: 120,
+            y: -80,
+            zoom: 0.32,
+        })
+        flushFrame()
+        events.length = 0
+        const transforms = app.stage.children.map((layer: any) => ({
+            x: layer.x,
+            y: layer.y,
+            scaleX: layer.scale.x,
+            scaleY: layer.scale.y,
+        }))
+
+        for (const height of [260, 220, 180]) {
+            container.getBoundingClientRect = () => ({
+                width: 400,
+                height,
+            }) as DOMRect
+            observedResize()
+            expect(surface).toEqual({
+                width: 400,
+                height: 300,
+            })
+            expect(events).toEqual([])
+        }
+
+        flushFrame()
+        expect(events).toEqual(['resize:400x180', 'render:400x180'])
+        expect(app.stage.children.map((layer: any) => ({
+            x: layer.x,
+            y: layer.y,
+            scaleX: layer.scale.x,
+            scaleY: layer.scale.y,
+        }))).toEqual(transforms)
+        events.length = 0
+        renderer.resize({
+            width: 500,
+            height: 350,
+        })
+        expect(surface).toEqual({
+            width: 400,
+            height: 180,
+        })
+        renderer.renderNow()
+        expect(events).toEqual(['resize:500x350', 'render:500x350'])
+        events.length = 0
+        flushFrame()
+        expect(events).toEqual(['render:500x350'])
+        renderer.destroy()
+        await vi.waitFor(() => expect(app.destroy).toHaveBeenCalledOnce())
+    })
+
     it('disconnects an observer when root observation fails during construction', () => {
         const disconnect = vi.fn()
         vi.stubGlobal(
@@ -111,10 +196,11 @@ describe('CanvasRenderer lifecycle', () => {
         app.finish()
         expect(await renderer.ready).toBe(true)
         expect(container.appendChild).toHaveBeenCalledWith(app.canvas)
-        expect(app.renderer.resize).toHaveBeenCalledWith(400, 300)
+        expect(app.renderer.resize).not.toHaveBeenCalled()
 
         for (const callback of Array.from(queued.values())) callback(10)
 
+        expect(app.renderer.resize).toHaveBeenCalledWith(400, 300)
         expect(app.render).toHaveBeenCalledOnce()
         renderer.destroy()
         await vi.waitFor(() => expect(app.destroy).toHaveBeenCalledOnce())

@@ -14,6 +14,7 @@ import {
     type ConnectionEdge,
 } from './connection-types.ts'
 import { flattenSvgPath } from '@lixpi/ui-primitives/svg'
+import { portElementData } from './port-elements.ts'
 
 const nodes: ConnectionNode[] = [
     {
@@ -157,6 +158,121 @@ afterEach(() => {
 })
 
 describe('ConnectionManager gesture ownership', () => {
+    it('cancels touch reconnection without deleting its edge', () => {
+        const {
+            manager,
+            paneEl,
+            onEdgesChange,
+        } = setup()
+        manager.syncEdges([existingEdge])
+        const event = (type: string, x: number) => {
+            const result = new Event(type, {
+                bubbles: true,
+                cancelable: true,
+            })
+            const touches = [{
+                identifier: 1,
+                clientX: x,
+                clientY: 155,
+            }]
+            Object.defineProperties(result, {
+                touches: { value: touches },
+                changedTouches: { value: touches },
+            })
+
+            return result as TouchEvent
+        }
+        manager.onHandlePointerDown(event('touchstart', 205), {
+            nodeId: 'a',
+            handleId: 'right',
+            isTarget: false,
+            handleDomNode: paneEl,
+            reconnectingEdgeId: 'ab',
+            edgeUpdaterType: 'target',
+        })
+        document.dispatchEvent(event('touchmove', 300))
+        expect(frames.size).toBe(1)
+        document.dispatchEvent(event('touchcancel', 300))
+        document.dispatchEvent(event('touchend', 405))
+        expect(onEdgesChange).not.toHaveBeenCalled()
+        expect(frames.size).toBe(0)
+    })
+
+    it('rejects a direct self-hit without deleting a reconnected edge', () => {
+        const {
+            manager,
+            paneEl,
+            start,
+            onEdgesChange,
+        } = setup()
+        manager.syncEdges([existingEdge])
+        const handle = document.createElement('div')
+        handle.className = 'canvas-port'
+
+        for (const [key, value] of Object.entries(portElementData(manager.flowId, {
+            nodeId: 'a',
+            id: 'left',
+            type: 'target',
+            position: 'left',
+        }))) handle.dataset[key] = value
+
+        paneEl.append(handle)
+        vi.spyOn(document, 'elementFromPoint').mockReturnValue(handle)
+        start(true)
+        move(300, 300)
+        release(300, 300)
+        expect(onEdgesChange).not.toHaveBeenCalled()
+    })
+
+    it('does not adopt a direct port from another pane with matching IDs', () => {
+        const first = setup()
+        const other = setup(800)
+        const handle = document.createElement('div')
+        handle.className = 'canvas-port'
+
+        for (const [key, value] of Object.entries(portElementData(other.manager.flowId, {
+            nodeId: 'b',
+            id: 'left',
+            type: 'target',
+            position: 'left',
+        }))) handle.dataset[key] = value
+
+        other.paneEl.append(handle)
+        vi.spyOn(document, 'elementFromPoint').mockReturnValue(handle)
+        first.start()
+        move(405)
+        release(405)
+        expect(first.onEdgesChange).not.toHaveBeenCalled()
+    })
+
+    it('does not publish menu completion after cleanup destroys its owner', () => {
+        const {
+            manager,
+            onConnectorGeometry,
+            onEdgesChange,
+        } = setup()
+        manager.startConnectionFromMenu('a')
+        move(400, 150)
+        onConnectorGeometry.mockImplementation(() => manager.destroy())
+        release(400, 150)
+        expect(onEdgesChange).not.toHaveBeenCalled()
+    })
+
+    it('cancels menu connections on blur and restores the cursor', () => {
+        const {
+            manager,
+            paneEl,
+            onEdgesChange,
+        } = setup()
+        paneEl.style.cursor = 'default'
+        manager.startConnectionFromMenu('a')
+        move(400, 150)
+        window.dispatchEvent(new Event('blur'))
+        release(400, 150)
+        expect(onEdgesChange).not.toHaveBeenCalled()
+        expect(paneEl.style.cursor).toBe('default')
+    })
+
     it('reports auto-pan failure through its owner and cancels only that connection', async () => {
         const first = setup()
         const second = setup(800)

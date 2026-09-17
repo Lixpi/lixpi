@@ -115,7 +115,7 @@ ComfyUI's **architectural RFC** is unusually candid about the trade-offs[¹²]:
 | Hit-testing | **QuadTree spatial queries** | O(log n) instead of O(n) |
 | State management | **Yjs CRDT** | Reactive position/size updates |
 
-The RFC explicitly contrasts this against React Flow / xyflow:
+The RFC describes the benefit of keeping pointer movement outside React's rendering cycle:
 
 > "Avoids routing every mouse-move pixel through React hooks, prop subscriptions, and virtual DOM reconciliation."
 
@@ -336,7 +336,7 @@ PIXI.js v8 is the right primitive: it gives you WebGPU when available, falls bac
 
 ### 7.3 Keep what already works
 
-The current `XYPanZoom`, `XYDrag`, `XYHandle`, `XYResizer` from `@xyflow/system` are **pure math state machines** with zero rendering. They produce numbers and call back. Continue using them — they are renderer-agnostic. Apply the resulting transform to PIXI's `viewport` instead of (or in addition to) the CSS transform on a DOM element.
+The live engine keeps input separate from rendering. `ViewportController` owns native viewport gestures; `ViewportBridge` applies the resulting transform to DOM and renderer targets. Connection and node gestures have engine owners. These input modules attach DOM listeners and manage browser resources; only the shared geometry layer is DOM-free.
 
 ### 7.4 Keep ProseMirror for the focused editor only
 
@@ -429,7 +429,7 @@ This will get you cleanly to ~1,000 mixed nodes feeling smooth, which already ex
 Introduce PIXI as the renderer for **media nodes only** (image, video, generation placeholders):
 
 - Stand up a single PIXI `Application` with WebGPU preferred, WebGL fallback
-- Reuse the current `XYPanZoom` state — apply its transform to PIXI's root container instead of CSS
+- Share the engine viewport transform through `ViewportBridge` with both DOM roots and renderer targets.
 - Render image nodes as `Sprite`s from a `TextureSource` atlas; load proxies via `createImageBitmap` in a Web Worker
 - Connector lines: SVG stays for now (low edge counts); migrate to PIXI `MeshLine` only if profiling demands
 - Document and chat-thread nodes: stay as DOM overlays positioned via `worldToScreen` math
@@ -493,7 +493,7 @@ By adopting this hybrid:
 - **A real video pipeline** that respects the browser's hardware decoder limits instead of fighting them
 - **A first-class mask editor** that sits on the same WebGPU substrate, ready for SAM2 inference today and future segmentation models tomorrow
 - **No bet on a custom C++ renderer** — Lixpi gets ~80% of Figma's rendering ceiling at ~5% of Figma's renderer team cost, by leveraging PIXI v8's WebGPU support and the browser's native compositor
-- **Independence from `@xyflow/system`'s opinions** about DOM structure — XYPanZoom and friends are pure math; they work with PIXI as well as DOM
+- **Input ownership:** Canvas Engine owns its DOM interaction and cleanup. Shared geometry is independent of browser APIs, while native input remains a frontend concern.
 
 ---
 

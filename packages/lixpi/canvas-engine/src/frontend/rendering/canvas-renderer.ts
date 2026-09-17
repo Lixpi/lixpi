@@ -62,6 +62,7 @@ export class CanvasRenderer {
         width: 1,
         height: 1,
     }
+    private renderedSize: CanvasEngineSize | null = null
 
     constructor(private readonly options: CanvasRendererOptions) {
         this.frames = new FrameScheduler({
@@ -180,9 +181,8 @@ export class CanvasRenderer {
             height: Math.max(1, bounds.height),
         }
 
-        if (this.initialized)
-            this.app.renderer.resize(this.size.width, this.size.height)
-
+        // ResizeObserver can run after the frame callback. Keep the displayed
+        // surface at its last painted size until the next render can replace it.
         this.invalidate()
     }
 
@@ -237,6 +237,14 @@ export class CanvasRenderer {
 
         if (this.destroyed)
             return
+
+        if (
+            this.renderedSize?.width !== this.size.width
+            || this.renderedSize?.height !== this.size.height
+        ) {
+            this.app.renderer.resize(this.size.width, this.size.height)
+            this.renderedSize = { ...this.size }
+        }
 
         this.backend.renderCaptures(this.app.renderer)
         this.backend.prepareProjection({

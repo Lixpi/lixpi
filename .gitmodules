@@ -1,4 +1,0 @@
-[submodule "packages-vendor/xyflow"]
-	path = packages-vendor/xyflow
-	url = https://github.com/xyflow/xyflow.git
-	branch = main

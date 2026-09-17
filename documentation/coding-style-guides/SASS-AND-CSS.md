@@ -51,7 +51,7 @@ Do not create feature-local hover labels, arrows, positioning rules, or tooltip 
 
 ## External Class Contracts
 
-Leave third-party or externally defined class names unchanged, even when they use a different naming system. For example, `xyflow__viewport` and `xy-flow__handle` are `@xyflow/system` integration contracts, not Lixpi naming decisions.
+Leave third-party or externally defined class names unchanged, even when they use a different naming system. For example, `ProseMirror` and CodeMirror's `cm-` classes are editor integration contracts.
 
 Before renaming a selector, determine whether it is:
 

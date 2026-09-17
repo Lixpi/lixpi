@@ -7,10 +7,9 @@ import {
 } from 'vitest'
 
 const backends = vi.hoisted(() => [] as any[])
-vi.mock('@xyflow/system', () => ({
-    PanOnScrollMode: { Free: 'free' },
-    infiniteExtent: [[-Infinity, -Infinity], [Infinity, Infinity]],
-    XYPanZoom: vi.fn(() => {
+vi.mock('./viewport-input.ts', () => ({
+    ViewportInput: class {
+        constructor() {
         const backend = {
             update: vi.fn(),
             syncViewport: vi.fn(),
@@ -20,7 +19,8 @@ vi.mock('@xyflow/system', () => ({
         backends.push(backend)
 
         return backend
-    }),
+        }
+    },
 }))
 
 import { ViewportController } from './viewport-controller.ts'

@@ -1,14 +1,14 @@
 // Type definitions for connector path math and shared infographic node data.
 
 // Position anchor point on a node's perimeter
-// Matches XYFlow's Position enum but as union type for flexibility
+// Directional paths treat center as bottom.
 export type AnchorPosition = 'left' | 'right' | 'top' | 'bottom' | 'center'
 
 // Path rendering strategy
 export type PathType =
-    | 'bezier' // XYFlow getBezierPath (curved, respects Position)
-    | 'straight' // XYFlow getStraightPath (direct line)
-    | 'smoothstep' // XYFlow getSmoothStepPath (orthogonal with rounded corners)
+    | 'bezier' // Cubic curve respecting endpoint direction
+    | 'straight' // Direct line
+    | 'smoothstep' // Orthogonal segments with rounded corners
     | 'horizontal-bezier' // Custom symmetric S-curve for horizontal flows
     | 'orthogonal' // Circuit board style: horizontal → vertical → horizontal with rounded corners
 

@@ -1,6 +1,6 @@
 # Canvas Engine
 
-[Rendering and lifecycle](docs/RENDERING-ENGINE.md), [connections](docs/EDGES-AND-CONNECTIONS.md), [collisions](docs/COLLISION-RESOLUTION.md), [media resources](docs/IMAGE-RENDERING-PERFORMANCE.md), and [XYFlow integration](docs/xyflow/overview.md) document the engine. [Engine-only example](examples/engine-only.ts) uses public exports. See [license and dependency notices](NOTICES.md).
+[Rendering and lifecycle](docs/RENDERING-ENGINE.md), [connections](docs/EDGES-AND-CONNECTIONS.md), [collisions](docs/COLLISION-RESOLUTION.md), [media resources](docs/IMAGE-RENDERING-PERFORMANCE.md), and [viewport input](docs/VIEWPORT-INPUT.md) document the engine. [Engine-only example](examples/engine-only.ts) uses public exports.
 
 `@lixpi/canvas-engine` supplies generic scene geometry, collisions, layout, connectors and browser rendering. Component data is opaque to the engine. It does not depend on Lixpi Assets, generation requests, application stores or the constants package.
 
@@ -10,7 +10,7 @@ Shared DOM, SVG, gradients and easing utilities belong to [UI Primitives](../ui-
 
 Add Canvas Engine and UI Primitives to the consuming workspace. Imports resolve directly to TypeScript; there is no generated distribution or package build. The consumer's frontend tooling must handle TypeScript, Sass package exports and module workers created with `new URL(..., import.meta.url)`. The image decoder also accepts a `workerFactory` when a host needs explicit worker construction.
 
-Use public export paths rather than importing from another package's `src/`. Keep `src/`, `package.json`, the package license and notices together. Shared and backend entrypoints can run without a DOM; frontend entrypoints require browser APIs. Import `@lixpi/canvas-engine/styles/interaction` once for each application using automatic canvas input.
+Use public export paths rather than importing from another package's `src/`. Shared and backend entrypoints can run without a DOM; frontend entrypoints require browser APIs. Import `@lixpi/canvas-engine/styles/interaction` once for each application using automatic canvas input.
 
 The [engine-only example](examples/engine-only.ts) receives a sized root and error callback, registers a basic node, and accepts engine intents into its own snapshot. Destroy its returned owner when the host unmounts.
 
@@ -71,7 +71,7 @@ Scene snapshots reject nonfinite or negative geometry, duplicate IDs, missing/cy
 
 `/frontend/viewport` exports `ViewportBridge`, which applies one viewport to the supplied DOM root, overlay roots and renderer targets. Targets expose only `setViewport`; no rendering-library object crosses this boundary.
 
-`ViewportController` owns pan/zoom on an explicit root and reports transform changes. Each `lock()` call returns its own release callback; releasing one interaction does not unlock another. Configuration and viewport state belong to the instance. Programmatic `syncViewport()` applies authoritative state without reporting a new user interaction.
+`ViewportController` owns native pan/zoom on an explicit root and reports transform changes. Its private `ViewportInput` owns Pointer Events, wheel policy, contact tracking, pointer capture and cancellable zoom animation. Each `lock()` call returns its own release callback; releasing one interaction does not unlock another. Configuration and viewport state belong to the instance. Programmatic `syncViewport()` applies authoritative state without reporting a new user interaction. The input root leases `touch-action: none` while drag input is enabled; excluded editors retain their own descendant scroll containers. See [viewport input](docs/VIEWPORT-INPUT.md) for touch policy and desktop WebView integration.
 
 `/frontend/runtime` exports `GestureController`, `GeometryOverrides`, `InteractionLocks`, `CanvasScrollLock` and `NodeLayerManager`. Gestures own document listeners, optional pointer capture and leased cursor styles. They end once or cancel on Escape, window blur, pointer cancellation or explicit owner disposal. Call `cancelAll('scene-change')` before replacing interaction state. Each geometry override scope can affect only its own entries; higher priorities override lower ones, and ending a gesture reveals an underlying product projection. Clearing the owner expires its scopes, so late callbacks cannot change a replacement scene.
 
@@ -91,6 +91,8 @@ Shared resize functions accept explicit minimum/maximum dimensions, handle direc
 
 A finite `sourceAnchorT` returned by the content policy overrides the vertical position of a left/right named port and aligns an eligible target. Returning null or a nonfinite value preserves the configured port. Top/bottom ports retain their explicit coordinates.
 
+`ConnectionGeometry` stages complete extent-aware graph snapshots and caches resolved port centers. `PortMeasurement` reads fallback DOM ports with explicitly supplied zoom; registered ports bypass DOM measurement. Shared path and coordinate helpers have no browser dependencies. Internal connector callers import path functions and types directly from their defining modules under `src/shared/connectors/`.
+
 Each connection manager has its own flow identity and owns connector hover/click listeners, handle gestures and auto-pan work. `cancelTransientConnection()` ends a gesture without treating it as an empty-space reconnect drop. Escape, blur, source-node removal and disposal cancel the same way. An actual reconnect drop in empty space removes its edge. Late auto-pan completion cannot resume a cancelled gesture.
 
 `/frontend/media` exports `ImageDecoder`. Each instance owns a lazy worker pool. Pass a URL or a source descriptor with credentials/headers, and an optional abort signal per request. Cancellation rejects that request and closes late bitmaps; destruction rejects pending requests and terminates only that instance's workers. The worker is TypeScript source resolved relative to the package. A caller can provide a worker factory when its environment requires another URL or worker setup.
@@ -98,6 +100,8 @@ Each connection manager has its own flow identity and owns connector hover/click
 Components acquire images and native playback URLs through their drawing scope's `media` service. Supply `mediaResolver` to the renderer to map content descriptors and rendition IDs into sources; the engine does not construct application URLs. Image leases share decoding and cached textures by content key, version and rendition. Each request and scope can cancel independently. Larger decoded renditions can satisfy smaller requests, and mipmaps support zoomed-out rendering. Idle textures are evicted according to `mediaCache` limits; live leases remain retained. Source cleanup runs after decoding, and decoded bitmaps remain owned until their texture can be physically disposed. Playback resolvers must return URLs usable by native media elements without custom request headers.
 
 `CanvasRenderer` mounts a transparent drawing surface and exposes `ready`, `setViewport`, `resize`, and `destroy`. Create a drawing scope with `createScope()` for each component or effect. Its `resources` accept opaque handles, pixels, mesh arrays and vector paths. A scope can sample borrowed textures and layers, but can only mutate or release its own allocations. Its abort signal, frame subscriptions and resources end together when the scope or renderer is destroyed. `requestFrame` supplies milliseconds since the preceding frame, starting with zero.
+
+Window and host resizing preserve scene positions and viewport zoom. `resize` queues the latest surface dimensions; the renderer applies its CSS/backing-store size and draws the matching frame together. Between frames, the displayed canvas keeps its last painted pixel size instead of stretching to the host.
 
 Captures declare their source layers/groups and excluded output groups. The backend orders dependent captures, rejects feedback cycles and refreshes captures when included content changes within their bounds. Movement invalidates both the old and new area. Explicit `invalidate(bounds)` uses screen coordinates; omitting bounds invalidates all captures. Resizing a capture preserves its borrowed texture handle. Release the capture, not its texture.
 

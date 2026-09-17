@@ -4,7 +4,7 @@ The Markdoc renderer publishes central documentation and registered package manu
 
 ## Documentation sources
 
-`source-registry.mjs` registers `documentation/`, plus the README, notices and `docs/` directory of the canvas packages, UI Primitives and UI Kit. Package source files and examples remain repository links. The registry excludes dependencies, generated output and hidden directories.
+`source-registry.mjs` registers `documentation/`, plus the README and `docs/` directory of the canvas packages, UI Primitives and UI Kit. Package source files and examples remain repository links. The registry excludes dependencies, generated output and hidden directories.
 
 A source has one output route. Central pages keep their documentation-relative route. Package manuals render below `packages/<package>/`, with the package README at `index.html`. Links are resolved relative to the file that contains them, including links between central and package documentation. Registered images are copied to their registered routes. Links to other repository files resolve to their GitHub source.
 

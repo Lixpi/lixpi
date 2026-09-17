@@ -49,7 +49,6 @@ export class DocumentationSources {
             const root = 'packages/lixpi/' + name
             const route = 'packages/' + name
             this.register(root + '/README.md', route + '/index.html')
-            if (existsSync(path.join(this.repoRoot, root, 'NOTICES.md'))) this.register(root + '/NOTICES.md', route + '/NOTICES.html')
             if (existsSync(path.join(this.repoRoot, root, 'docs'))) this.walk(root + '/docs', route + '/docs', false)
             if (existsSync(path.join(this.repoRoot, root, 'documentation'))) this.walk(root + '/documentation', route + '/documentation', false)
         }
