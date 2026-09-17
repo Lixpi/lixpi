@@ -18,18 +18,10 @@ A few things make it unusual:
 
 ## Quick Start
 
-### 1. Clone with submodules
-
-Third-party sources under `packages-vendor/` are Git submodules ([xyflow](https://github.com/xyflow/xyflow)):
+### 1. Clone the repository
 
 ```bash
-git clone --recurse-submodules <repository-url>
-```
-
-If you already cloned without submodules, initialize them once from the repo root:
-
-```bash
-git submodule update --init --recursive
+git clone <repository-url>
 ```
 
 ### 2. Environment setup
@@ -124,7 +116,7 @@ An animated placeholder appears immediately when generation starts; up to three 
 
 - **LangGraph** — AI workflow orchestration
 - **NATS / NATS JetStream** — messaging backbone for the entire system (end-to-end communication and object storage)
-- **PIXI.js, @xyflow/system, D3** — infinite canvas UI
+- **Canvas Engine, PixiJS, D3** — infinite canvas UI
 - **ProseMirror, CodeMirror** — rich-text editors for AI chat and prompt input
 - **DynamoDB** — persistence
 - **Pulumi, AWS** — cloud deployment (largely cloud-agnostic today; the plan is to go fully cloud-agnostic by swapping DynamoDB for Cassandra)

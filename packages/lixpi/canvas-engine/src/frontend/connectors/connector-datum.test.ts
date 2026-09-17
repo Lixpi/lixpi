@@ -10,7 +10,7 @@ import {
 import {
     type EdgeConfig,
     type NodeConfig,
-} from './types.ts'
+} from '../../shared/connectors/path-types.ts'
 
 const nodes = new Map<string, NodeConfig>([
     ['a', {

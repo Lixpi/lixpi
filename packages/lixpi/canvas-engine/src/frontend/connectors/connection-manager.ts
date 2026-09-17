@@ -1,17 +1,12 @@
 import {
-    adoptUserNodes,
-    updateNodeInternals,
-    Position,
-    type ConnectionInProgress,
-    type Transform,
-    type NodeBase,
-    type InternalNodeBase,
-    type NodeLookup,
-    type ParentLookup,
-    type HandleType,
-    type Connection,
-    type Handle,
-} from '@xyflow/system'
+    type ConnectionSession,
+    type PortConnection,
+    type PortRole,
+    type ResolvedPort,
+} from '../../shared/connectors/geometry-types.ts'
+
+import { ConnectionGeometry } from './connection-geometry.ts'
+import { PortMeasurement } from './port-measurement.ts'
 
 import { ElementStyleLease } from '@lixpi/ui-primitives/dom'
 import {
@@ -23,7 +18,6 @@ import {
 } from '@lixpi/ui-primitives/svg'
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    topoSortByParent,
     getEdgeScaledSizes,
 } from '../../shared/index.ts'
 import { computeConnectorDatum } from './connector-datum.ts'
@@ -37,7 +31,7 @@ import {
     type EdgeAnchor,
     type NodeConfig,
     type AnchorPosition,
-} from './types.ts'
+} from '../../shared/connectors/path-types.ts'
 import {
     type ConnectionNode,
     type ConnectionEdge,
@@ -57,7 +51,7 @@ type HandleMeta = {
     handleId: string
     isTarget: boolean
     handleDomNode: Element
-    edgeUpdaterType?: HandleType
+    edgeUpdaterType?: PortRole
     reconnectingEdgeId?: string
 }
 
@@ -65,19 +59,6 @@ const generateEdgeId = (): string => {
     const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
 
     return `edge-${random}`
-}
-
-const toRendererPoint = (
-    point: {
-        x: number
-        y: number
-    },
-    transform: Transform,
-) => {
-    return {
-        x: (point.x - transform[0]) / transform[2],
-        y: (point.y - transform[1]) / transform[2],
-    }
 }
 
 export const getEdgeAnchorPositions = (edge: ConnectionEdge): {
@@ -130,19 +111,19 @@ const isSameConnection = (
 export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     private readonly config: ConnectionManagerConfig<Node>
 
-    private readonly nodeLookup: NodeLookup<InternalNodeBase> = new Map()
-    private readonly parentLookup: ParentLookup<InternalNodeBase> = new Map()
+    private readonly geometry = new ConnectionGeometry()
+    private readonly measurement: PortMeasurement
 
     private nodeElements: Map<string, HTMLElement> = new Map()
     private nodes: Node[] = []
     private edges: ConnectionEdge[] = []
 
     private selectedEdgeId: string | null = null
-    private connectionInProgress: ConnectionInProgress | null = null
+    private connectionInProgress: ConnectionSession | null = null
 
     private reconnectingEdge: {
         edgeId: string
-        edgeUpdaterType: HandleType
+        edgeUpdaterType: PortRole
     } | null = null
 
     private proximityCandidate: ProximityCandidate | null = null
@@ -232,8 +213,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
 
         this.view = view
 
-        // Ensure XYFlow internals can measure zoom from viewport transform
-        this.config.viewportEl.classList.add('xyflow__viewport')
+        this.measurement = new PortMeasurement(this.config.paneEl, this.flowId)
     }
 
     private portAnchor(
@@ -303,6 +283,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         if (this.destroyed)
             return
 
+        this.geometry.replace(canvasNodes)
         const nodeIds = new Set(
             canvasNodes.map(node => node.nodeId),
         )
@@ -311,91 +292,13 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             if (!nodeIds.has(id))
                 this.nodeElements.delete(id)
 
-        // xyflow's adoptUserNodes requires parents to appear BEFORE their children in the
-        // input array; otherwise it logs a warning and skips parent linkage. Stable
-        // topological sort keeps roots first, then children, preserving original order
-        // among siblings.
-        const sortedNodes = topoSortByParent(canvasNodes)
-
         if (
             this.connectionInProgress
-            && !canvasNodes.some(node => node.nodeId === this.connectionInProgress?.fromHandle.nodeId)
+            && !nodeIds.has(this.connectionInProgress.start.nodeId)
         )
             this.cancelTransientConnection()
 
         this.nodes = canvasNodes
-
-        const xyNodes: NodeBase[] = sortedNodes.map(
-            n => ({
-                id: n.nodeId,
-                data: {},
-                position: {
-                    x: n.position.x,
-                    y: n.position.y,
-                },
-                width: n.dimensions.width,
-                height: n.dimensions.height,
-                // xyflow-native parent-child fields. When `parentId` is set, `position` is
-                // parent-relative; xyflow auto-derives `positionAbsolute`. `expandParent`
-                // causes the parent to grow when this child is moved past its bounds.
-                ...(n.parentId !== undefined ? { parentId: n.parentId } : {}),
-                ...(n.extent !== undefined ? { extent: n.extent } : {}),
-                ...(n.expandParent !== undefined ? { expandParent: n.expandParent } : {}),
-                // `measured` must be set for XYFlow's parseHandles to preserve existing handleBounds
-                measured: {
-                    width: n.dimensions.width,
-                    height: n.dimensions.height,
-                },
-                // Provide synthetic handles so XYHandle can find handle bounds
-                // for programmatic connection triggers (e.g. bubble menu).
-                // Without DOM handle elements, handleBounds would otherwise be empty.
-                handles: n.ports
-                    ? n.ports.flatMap(
-                        port =>
-                            (port.role === 'both' ? ['source', 'target'] as const : [port.role === 'input' ? 'target' : 'source'] as const).map(
-                                type => ({
-                                    id: port.id,
-                                    type,
-                                    position: port.direction as Position,
-                                    x: port.anchor.x - 5,
-                                    y: port.anchor.y - 5,
-                                    width: 10,
-                                    height: 10,
-                                }),
-                            ),
-                    )
-                    : [
-                        {
-                            id: 'left',
-                            type: 'target' as const,
-                            position: Position.Left,
-                            x: 0,
-                            y: n.dimensions.height / 2,
-                            width: 10,
-                            height: 10,
-                        },
-                        {
-                            id: 'right',
-                            type: 'source' as const,
-                            position: Position.Right,
-                            x: n.dimensions.width,
-                            y: n.dimensions.height / 2,
-                            width: 10,
-                            height: 10,
-                        },
-                    ],
-            }),
-        )
-
-        adoptUserNodes(
-            xyNodes,
-            this.nodeLookup,
-            this.parentLookup,
-            {
-                nodeOrigin: [0, 0],
-                elevateNodesOnSelect: false,
-            },
-        )
     }
 
     public registerNodeElement(
@@ -407,26 +310,23 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
 
         this.nodeElements.set(nodeId, nodeElement)
 
-        // Registered ports already provide measured geometry. DOM content may
-        // have a different footprint, particularly for compact pending nodes.
-        if (this.nodes.find(node => node.nodeId === nodeId)?.ports)
+        if (this.nodes.find(node => node.nodeId === nodeId)?.ports !== undefined)
             return
 
-        const updates = new Map([
-            [nodeId, {
-                id: nodeId,
-                nodeElement: nodeElement as HTMLDivElement,
-            }],
-        ])
+        const node = this.geometry.get(nodeId)
 
-        updateNodeInternals(
-            updates,
-            this.nodeLookup,
-            this.parentLookup,
-            this.config.paneEl,
-            [0, 0],
-            undefined,
+        if (!node)
+            return
+
+        const measured = this.measurement.read(
+            nodeId,
+            nodeElement,
+            this.config.getTransform()[2],
+            node.bounds,
         )
+
+        if (measured)
+            this.geometry.measure(nodeId, measured)
     }
 
     public syncEdges(edges: ConnectionEdge[]) {
@@ -473,61 +373,45 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
 
         this.cancelTransientConnection()
 
-        const node = this.nodeLookup.get(nodeId)
+        const node = this.geometry.get(nodeId)
 
         if (!node)
             return
 
-        const sourceHandle: Handle | null = node.internals.handleBounds?.source?.[0] ?? null
+        const sourceHandle = this.geometry.ports.find(port => port.nodeId === nodeId && port.type === 'source')
 
         if (!sourceHandle)
             return
 
-        const fromPosition = sourceHandle.position ?? Position.Right
-        const fromX = (sourceHandle.x ?? 0) + node.internals.positionAbsolute.x + (sourceHandle.width ?? 0) / 2
-        const fromY = (sourceHandle.y ?? 0) + node.internals.positionAbsolute.y + (sourceHandle.height ?? 0) / 2
-
-        const from = {
-            x: fromX,
-            y: fromY,
-        }
-
-        const fromHandle: Handle = {
-            ...sourceHandle,
-            nodeId,
-            type: 'source',
-            position: fromPosition,
-        }
-
-        // Don't render the in-progress line until the first mousemove.
-        // The initial `to` value is a placeholder — displaying it causes a
-        // visual glitch where the dashed line extends beyond the cursor due
-        // to coordinate-system round-trip imprecision between screen-relative
-        // and renderer coordinates. The first mousemove provides exact coords.
+        const connectionEpoch = ++this.connectionEpoch
+        let ended = false
+        const fromHandle = sourceHandle
+        // Menu sessions wait for movement before drawing.
         this.connectionInProgress = {
-            inProgress: true,
-            pointer: {
-                x: 0,
-                y: 0,
-            },
             isValid: null,
-            from,
-            fromHandle,
-            fromPosition,
-            fromNode: node,
-            to: {
+            start: fromHandle,
+            candidate: null,
+            panePointer: {
                 x: 0,
                 y: 0,
             },
-            toHandle: null,
-            toPosition: Position.Left,
-            toNode: null,
+            worldPointer: {
+                x: 0,
+                y: 0,
+            },
         }
 
         // Change cursor to crosshair on the pane
         const cursor = new ElementStyleLease(this.config.paneEl, { cursor: 'crosshair' })
 
         const onMouseMove = (e: MouseEvent) => {
+            if (
+                ended
+                || this.destroyed
+                || this.connectionEpoch !== connectionEpoch
+            )
+                return
+
             const transform = this.config.getTransform()
             const containerBounds = this.config.paneEl.getBoundingClientRect()
 
@@ -554,19 +438,12 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             this.connectionInProgress = {
                 ...this.connectionInProgress!,
                 isValid,
-                to: closestHandle
-                    && isValid
-                    ? {
-                        x: closestHandle.x,
-                        y: closestHandle.y,
-                    }
-                    : {
-                        x: screenRelX,
-                        y: screenRelY,
-                    },
-                toHandle: closestHandle ?? null,
-                toPosition: closestHandle?.position ?? Position.Left,
-                toNode: closestHandle ? this.nodeLookup.get(closestHandle.nodeId) ?? null : null,
+                candidate: closestHandle ?? null,
+                panePointer: {
+                    x: screenRelX,
+                    y: screenRelY,
+                },
+                worldPointer: rendererPos,
             }
 
             this.render()
@@ -576,15 +453,19 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             e.preventDefault()
             e.stopPropagation()
 
-            const toHandle = this.connectionInProgress?.toHandle
-            const toNode = this.connectionInProgress?.toNode
+            const toHandle = this.connectionInProgress?.candidate
             const isValid = this.connectionInProgress?.isValid
 
             cleanup()
 
             if (
+                this.destroyed
+                || this.connectionEpoch !== connectionEpoch
+            )
+                return
+
+            if (
                 toHandle
-                && toNode
                 && isValid
             ) {
                 const toNodeId = toHandle.nodeId
@@ -642,6 +523,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         }
 
         const cleanup = () => {
+            if (ended)
+                return
+
+            ended = true
             this.document.removeEventListener('mousemove', onMouseMove)
             this.document.removeEventListener(
                 'mousedown',
@@ -654,6 +539,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 true,
             )
             this.document.removeEventListener('keydown', onKeyDown)
+            this.view.removeEventListener('blur', cleanup)
             this.connectionInProgress = null
             cursor.destroy()
             this.menuConnectionCleanup = null
@@ -675,17 +561,18 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             true,
         )
         this.document.addEventListener('keydown', onKeyDown)
+        this.view.addEventListener('blur', cleanup)
     }
 
     private getMenuSnapPoint(
         nodeId: string,
-        handle: Handle,
+        handle: ResolvedPort,
         pointer: {
             x: number
             y: number
         },
     ) {
-        const node = this.nodeLookup.get(nodeId)
+        const node = this.geometry.get(nodeId)
         const canvasNode = this.nodes.find(candidate => candidate.nodeId === nodeId)
 
         if (
@@ -698,22 +585,22 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             }
         }
 
-        const isLeftHandle = handle.id === 'left' || handle.position === Position.Left
+        const isLeftHandle = handle.id === 'left' || handle.position === 'left'
         const port = canvasNode.ports?.find(port => port.id === handle.id)
 
         if (port)
             return {
-                x: node.internals.positionAbsolute.x + port.anchor.x,
-                y: node.internals.positionAbsolute.y + port.anchor.y,
+                x: node.bounds.x + port.anchor.x,
+                y: node.bounds.y + port.anchor.y,
             }
 
         const x = isLeftHandle
-            ? node.internals.positionAbsolute.x
-            : node.internals.positionAbsolute.x + canvasNode.dimensions.width
+            ? node.bounds.x
+            : node.bounds.x + canvasNode.dimensions.width
 
         return {
             x,
-            y: node.internals.positionAbsolute.y + canvasNode.dimensions.height / 2,
+            y: node.bounds.y + canvasNode.dimensions.height / 2,
         }
     }
 
@@ -722,17 +609,14 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             x: number
             y: number
         },
-        fromHandle: Handle,
+        fromHandle: ResolvedPort,
         connectionRadius: number,
-    ): Handle | null {
-        let closest: Handle | null = null
+    ): ResolvedPort | null {
+        let closest: ResolvedPort | null = null
         let minDist = Infinity
 
-        for (const [nodeId, node] of this.nodeLookup) {
-            const handles = [
-                ...(node.internals.handleBounds?.source ?? []),
-                ...(node.internals.handleBounds?.target ?? []),
-            ]
+        for (const [nodeId, node] of this.geometry.entries()) {
+            const handles = node.ports
 
             for (const handle of handles) {
                 // Skip the same handle we're dragging from
@@ -773,7 +657,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
 
     private isMenuConnectionValid(
         sourceNodeId: string,
-        targetHandle: Handle,
+        targetHandle: ResolvedPort,
     ): boolean {
         // No self-loops
         if (targetHandle.nodeId === sourceNodeId)
@@ -827,14 +711,15 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 onError: this.config.onError,
                 domNode: this.config.paneEl,
                 getTransform: this.config.getTransform,
-                nodeLookup: this.nodeLookup,
+                geometry: this.geometry,
+                ownerId: this.flowId,
     
                 nodeId: meta.nodeId,
                 handleId: meta.handleId,
                 isTarget: meta.isTarget,
                 connectionRadius: 30,
     
-                updateConnection: (state: ConnectionInProgress) => {
+                updateConnection: (state: ConnectionSession) => {
                     if (
                         this.destroyed
                         || this.connectionEpoch !== connectionEpoch
@@ -850,7 +735,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                         this.cancelTransientConnection()
                 },
     
-                isValidConnection: (connection: Connection) => {
+                isValidConnection: (connection: PortConnection) => {
                     if (
                         this.destroyed
                         || this.connectionEpoch !== connectionEpoch
@@ -884,7 +769,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     return true
                 },
     
-                onConnect: (connection: Connection) => {
+                onConnect: (connection: PortConnection) => {
                     if (
                         this.destroyed
                         || this.connectionEpoch !== connectionEpoch
@@ -894,11 +779,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     if (this.reconnectingEdge)
                         return
 
-                    // Use the actual drag start/end nodes, not XYFlow's source/target
-                    // which depends on handle types (source/target) not drag direction
+                    // Explicit ports retain their roles. Structural fallback uses drag direction.
                     const usesPorts = this.nodes.some(node => node.nodeId === connection.source && node.ports)
-                    const fromNodeId = usesPorts ? connection.source : this.connectionInProgress?.fromHandle?.nodeId
-                    const fromHandleId = usesPorts ? connection.sourceHandle : this.connectionInProgress?.fromHandle?.id
+                    const fromNodeId = usesPorts ? connection.source : this.connectionInProgress?.start?.nodeId
+                    const fromHandleId = usesPorts ? connection.sourceHandle : this.connectionInProgress?.start?.id
 
                     if (!fromNodeId)
                         return
@@ -950,7 +834,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     this.selectEdge(nextEdge.edgeId)
                 },
     
-                onReconnectEnd: (_event: MouseEvent | TouchEvent, finalState: ConnectionInProgress) => {
+                onReconnectEnd: (_event: MouseEvent | TouchEvent, finalState: ConnectionSession) => {
                     if (
                         this.destroyed
                         || this.connectionEpoch !== connectionEpoch
@@ -963,7 +847,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     const edgeIdToUpdate = this.reconnectingEdge.edgeId
 
                     // If dropped in empty space (no target node), delete the edge
-                    if (!finalState.toNode) {
+                    if (!finalState.candidate) {
                         this.selectEdge(null)
                         this.config.onEdgesChange(
                             this.edges.filter(e => e.edgeId !== edgeIdToUpdate),
@@ -983,41 +867,41 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     const updatedEdge: ConnectionEdge = { ...edgeToUpdate }
     
                     // Get the node being reconnected to
-                    const reconnectedNode = this.nodes.find(n => n.nodeId === finalState.toNode!.id)
+                    const reconnectedNode = this.nodes.find(n => n.nodeId === finalState.candidate!.nodeId)
 
                     // Reconnect logic: edgeUpdaterType tells us which end is being moved
                     // 'source' means moving the source end, 'target' means moving the target end
                     if (this.reconnectingEdge.edgeUpdaterType === 'source') {
-                        updatedEdge.sourceNodeId = finalState.toNode.id
-                        updatedEdge.sourceHandle = finalState.toHandle?.id ?? undefined
+                        updatedEdge.sourceNodeId = finalState.candidate.nodeId
+                        updatedEdge.sourceHandle = finalState.candidate?.id ?? undefined
 
                         // Compute t from drop position
                         if ((this.config.isReconnectionCentered ?? this.config.isCentered)(reconnectedNode))
                             updatedEdge.sourceT = 0.5
                         else if (
                             reconnectedNode
-                            && finalState.toHandle
+                            && finalState.candidate
                         ) {
                             updatedEdge.sourceT = computeTFromPointerPosition(
-                                finalState.toHandle.y,
+                                finalState.candidate.y,
                                 reconnectedNode.position.y,
                                 reconnectedNode.dimensions.height,
                             )
                         } else
                             updatedEdge.sourceT = 0.5
                     } else {
-                        updatedEdge.targetNodeId = finalState.toNode.id
-                        updatedEdge.targetHandle = finalState.toHandle?.id ?? undefined
+                        updatedEdge.targetNodeId = finalState.candidate.nodeId
+                        updatedEdge.targetHandle = finalState.candidate?.id ?? undefined
 
                         // Compute t from drop position
                         if ((this.config.isReconnectionCentered ?? this.config.isCentered)(reconnectedNode))
                             updatedEdge.targetT = 0.5
                         else if (
                             reconnectedNode
-                            && finalState.toHandle
+                            && finalState.candidate
                         ) {
                             updatedEdge.targetT = computeTFromPointerPosition(
-                                finalState.toHandle.y,
+                                finalState.candidate.y,
                                 reconnectedNode.position.y,
                                 reconnectedNode.dimensions.height,
                             )
@@ -1346,33 +1230,20 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
 
         // Add in-progress edge (new connection or reconnecting existing edge)
         if (this.connectionInProgress) {
-            const transform = this.config.getTransform()
-            const to = this.connectionInProgress.toHandle
-                ? {
-                    x: this.connectionInProgress.toHandle.x,
-                    y: this.connectionInProgress.toHandle.y,
-                }
-                : toRendererPoint(
-                    {
-                        x: this.connectionInProgress.to.x,
-                        y: this.connectionInProgress.to.y,
-                    },
-                    transform,
-                )
+            const to = this.connectionInProgress.candidate ?? this.connectionInProgress.worldPointer
 
             const tempNodeId = '__canvas-temp-target'
-            const snappedTargetNodeId = this.connectionInProgress.toHandle?.nodeId
-                ?? this.connectionInProgress.toNode?.id
+            const snappedTargetNodeId = this.connectionInProgress.candidate?.nodeId
                 ?? null
             const snappedTargetNode = snappedTargetNodeId
                 ? this.nodes.find(node => node.nodeId === snappedTargetNodeId) ?? null
                 : null
-            const snappedTargetPosition = this.connectionInProgress.toHandle?.position as 'left' | 'right' | 'top' | 'bottom' | undefined
+            const snappedTargetPosition = this.connectionInProgress.candidate?.position as 'left' | 'right' | 'top' | 'bottom' | undefined
 
             if (
                 !snappedTargetNode
                 || !snappedTargetPosition
-                || !this.connectionInProgress.toHandle
+                || !this.connectionInProgress.candidate
             ) {
                 const tempNode: NodeConfig = {
                     id: tempNodeId,
@@ -1436,16 +1307,16 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 }
             } else {
                 // New connection - use the fromHandle
-                sourceNodeId = this.connectionInProgress.fromHandle.nodeId
-                sourceHandleId = this.connectionInProgress.fromHandle.id ?? undefined
-                sourcePosition = this.connectionInProgress.fromHandle.position as 'left' | 'right'
+                sourceNodeId = this.connectionInProgress.start.nodeId
+                sourceHandleId = this.connectionInProgress.start.id ?? undefined
+                sourcePosition = this.connectionInProgress.start.position as 'left' | 'right'
             }
 
             const snappedTargetT = snappedTargetNode
                 && snappedTargetPosition
-                && this.connectionInProgress.toHandle
+                && this.connectionInProgress.candidate
                 ? computeTFromPointerPosition(
-                    this.connectionInProgress.toHandle.y,
+                    this.connectionInProgress.candidate.y,
                     snappedTargetNode.position.y,
                     snappedTargetNode.dimensions.height,
                 )
@@ -1462,10 +1333,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 ),
                 target: snappedTargetNode
                     && snappedTargetPosition
-                    && this.connectionInProgress.toHandle
+                    && this.connectionInProgress.candidate
                     ? this.portAnchor(
                         snappedTargetNode.nodeId,
-                        this.connectionInProgress.toHandle.id ?? undefined,
+                        this.connectionInProgress.candidate.id ?? undefined,
                         snappedTargetPosition,
                         snappedTargetT,
                         nodeById,
@@ -1840,8 +1711,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             this.paneClickHandler = null
         }
 
-        this.nodeLookup.clear()
-        this.parentLookup.clear()
+        this.geometry.clear()
         this.nodes = []
         this.edges = []
         this.cachedEdgeConfigs = null

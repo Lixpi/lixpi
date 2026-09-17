@@ -18,7 +18,7 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws document, image, video, branch origin, branch fork, and branch line nodes. Standalone conversation Assets render in the right-side AI Chat panel instead of as canvas nodes.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using Canvas Engine for geometry and native viewport input. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws document, image, video, branch origin, branch fork, and branch line nodes. Standalone conversation Assets render in the right-side AI Chat panel instead of as canvas nodes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -171,7 +171,7 @@ Lixpi operates on a highly decoupled microservices architecture. All inter-servi
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TB
     subgraph "Client Tier"
-        UI[TypeScript SPA<br/>@xyflow/system · ProseMirror]
+        UI[TypeScript SPA<br/>Canvas Engine · ProseMirror]
         Portal[User Portal SPA<br/>Gentelella]
     end
 
@@ -411,7 +411,7 @@ Shared packages keep service contracts in sync:
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by API and NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
-| `@xyflow/system` | Framework-agnostic pan/zoom and coordinate math used through its low-level API rather than a framework wrapper |
+| Canvas Engine | Native viewport input, graph/port geometry and connector paths |
 
 ---
 

@@ -1,6 +1,6 @@
 # Canvas Components
 
-[Media surfaces](docs/MEDIA.md) and [canvas effects](docs/EFFECTS.md) describe component contracts and resource ownership. [Media board example](examples/media-board.ts) mounts two independent canvases with supplied media and editor ports. See [license and dependency notices](NOTICES.md).
+[Media surfaces](docs/MEDIA.md) and [canvas effects](docs/EFFECTS.md) describe component contracts and resource ownership. [Media board example](examples/media-board.ts) mounts two independent canvases with supplied media and editor ports.
 
 `@lixpi/canvas-components` is the optional appearance and content layer for `@lixpi/canvas-engine`. Its modules own canvas node surfaces, canvas visual effects and their styles. The engine owns drawing resources and interaction plumbing.
 

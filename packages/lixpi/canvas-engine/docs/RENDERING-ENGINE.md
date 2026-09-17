@@ -27,6 +27,8 @@ World coordinates describe the scene before pan/zoom. Screen coordinates describ
 
 Zoom helpers distinguish world sizes from screen sizes. World-size callers compensate before the viewport transform; screen-space drawing compensates once after projecting points. Adaptive bounded scaling keeps configured size at normal zoom and progressively shrinks controls at lower zoom. Applying both conversions to the same size doubles the compensation.
 
+Host resizing changes the visible area, not the viewport transform or node geometry. Resize observations queue the latest dimensions. The renderer applies the drawing surface size immediately before rendering its captures and main frame, keeping CSS dimensions, backing storage and projection together. Its last painted surface stays at its painted pixel size between frames, including during continuous window or DevTools resizing.
+
 ## Input and collision geometry
 
 The controller composes viewport, selection, marquee, keyboard, node transforms and optional connectors. Set `interaction: false` when supplying custom input. Editable DOM content and handled events remain outside keyboard deletion; instance ownership prevents a key press from deleting another canvas's selection.
@@ -59,6 +61,6 @@ Destroy the controller when unmounting. Disposing one canvas must not terminate 
 
 Neutral interaction/rendering options belong to the engine instance. Geometry and appearance belong to the node registration or effect. Application themes and product presets are supplied by consumers; there is no required application settings module.
 
-The [XYFlow reference](xyflow/overview.md) documents the low-level dependency. Consumers normally use engine contracts rather than its internal node representation.
+[Viewport input](VIEWPORT-INPUT.md) documents native gestures, input policy, coordinate conversion and listener ownership.
 
 Colocated tests exercise scene reconciliation, geometry, input cancellation, captures, media leases and failure cleanup. Renderer tests use controlled backends; they do not establish shader compilation, GPU appearance or browser playback behavior.

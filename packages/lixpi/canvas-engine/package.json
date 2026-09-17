@@ -32,7 +32,6 @@
     },
     "dependencies": {
         "rbush": "*",
-        "@xyflow/system": "*",
         "elkjs": "*",
         "pixi.js": "*",
         "@lixpi/ui-primitives": "workspace:*"

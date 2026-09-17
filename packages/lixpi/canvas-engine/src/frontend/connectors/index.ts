@@ -5,7 +5,7 @@ export {
     computePath,
     computeLabelPosition,
     applyOffset,
-} from './paths.ts'
+} from '../../shared/connectors/paths/index.ts'
 export * from './connector-renderer.ts'
 export * from './connector-datum.ts'
 export * from './connector-spread.ts'
@@ -23,4 +23,4 @@ export type {
     NodeShape,
     NodeAnchorOverride,
     ComputedPath,
-} from './types.ts'
+} from '../../shared/connectors/path-types.ts'

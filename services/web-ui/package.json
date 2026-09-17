@@ -26,7 +26,6 @@
         "type-fest": "*",
         "http-server": "*",
         "uuid": "*",
-        "@xyflow/system": "*",
         "d3-selection": "*",
         "d3-ease": "*",
         "d3-transition": "*",

@@ -252,11 +252,9 @@ export type CanvasNodeDimensions = {
     height: number
 }
 
-// xyflow-native parent-child fields. When `parentId` is set, `position` is
-// relative to the parent's top-left corner (xyflow's contract). `expandParent`
-// causes the parent to auto-grow when this child moves or is resized past the
-// parent's current bounds. `extent: 'parent'` clamps the child inside the
-// parent rect (intentionally not used during region adoption — see plan D11).
+// When parentId is set, position is relative to the parent's top-left corner.
+// Extent limits connection geometry using either local bounds or the parent rect.
+// expandParent remains stored metadata; connection projection does not persist parent growth.
 export type CanvasNodeParentingFields = {
     parentId?: string
     extent?: 'parent' | [[number, number], [number, number]]

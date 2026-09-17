@@ -60,20 +60,6 @@ vi.mock('../rendering/canvas-renderer.ts', () => ({
     },
 }))
 
-vi.mock('@xyflow/system', async importOriginal => {
-    const actual = await importOriginal<typeof import('@xyflow/system')>()
-
-    return {
-        ...actual,
-        XYPanZoom: vi.fn(() => ({
-            update: vi.fn(),
-            syncViewport: vi.fn(),
-            setViewport: vi.fn(async () => true),
-            destroy: vi.fn(),
-        })),
-    }
-})
-
 const geometry: NodeGeometryPolicy = {
     movable: true,
     resize: {
@@ -242,6 +228,85 @@ afterEach(() => {
 })
 
 describe('CanvasController', () => {
+    it('hands native pointer input to a node drag when the compatibility mouse press takes its lock', () => {
+        const {
+            root,
+            contexts,
+            onIntent,
+        } = fixture()
+        const content = contexts.get('a')!.contentRoot
+        content.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            buttons: 1,
+            clientX: 30,
+            clientY: 30,
+        }))
+        mouse(content, 'mousedown', 30, 30)
+        root.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            buttons: 1,
+            clientX: 60,
+            clientY: 50,
+        }))
+        mouse(document, 'mousemove', 60, 50)
+        root.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            clientX: 60,
+            clientY: 50,
+        }))
+        mouse(document, 'mouseup', 60, 50)
+        expect(onIntent.mock.calls.map(([intent]) => intent.kind)).toEqual(['geometry'])
+    })
+
+    it('pans through native middle-button input without starting a marquee or node drag', () => {
+        const {
+            root,
+            onIntent,
+        } = fixture()
+        root.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            button: 1,
+            buttons: 4,
+            clientX: 30,
+            clientY: 30,
+        }))
+        mouse(root, 'mousedown', 30, 30, { button: 1 })
+        root.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            buttons: 4,
+            clientX: 60,
+            clientY: 50,
+        }))
+        mouse(document, 'mousemove', 60, 50, { buttons: 4 })
+        root.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            button: 1,
+            clientX: 60,
+            clientY: 50,
+        }))
+        mouse(document, 'mouseup', 60, 50, { button: 1 })
+        expect(onIntent).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+            kind: 'viewport',
+            viewport: {
+                x: 30,
+                y: 20,
+                zoom: 1,
+            },
+        }))
+    })
+
     it('delivers connection fractions to a custom adapter without emitting a second mutation', () => {
         const {
             canvas,
@@ -660,7 +725,7 @@ describe('CanvasController', () => {
                 },
             },
         })
-        mouse(root.querySelector('[data-handleid="out"]')!, 'mousedown', 120, 60)
+        mouse(root.querySelector('[data-canvas-port-id="out"]')!, 'mousedown', 120, 60)
         mouse(document, 'mousemove', 300, 60)
         mouse(document, 'mouseup', 300, 60)
         expect(onIntent).toHaveBeenCalledExactlyOnceWith({

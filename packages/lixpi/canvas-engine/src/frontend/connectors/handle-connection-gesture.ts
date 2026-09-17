@@ -1,12 +1,17 @@
 import {
-    Position,
-    type Connection,
-    type ConnectionInProgress,
-    type Handle,
-    type HandleType,
-    type NodeLookup,
-    type Transform,
-} from '@xyflow/system'
+    type PortConnection,
+    type ConnectionSession,
+    type PortRole,
+} from '../../shared/connectors/geometry-types.ts'
+import {
+    paneToWorld,
+    type CanvasTransform,
+} from '../../shared/viewport/coordinates.ts'
+import {
+    type ConnectionGeometry,
+} from './connection-geometry.ts'
+import { selectPortCandidate } from '../../shared/connectors/hit-candidate.ts'
+import { readPortElement } from './port-elements.ts'
 import { Lifetime } from '../runtime/lifetime.ts'
 
 type Point = {
@@ -15,25 +20,26 @@ type Point = {
 }
 export type HandleConnectionGestureOptions = {
     domNode: HTMLElement
-    nodeLookup: NodeLookup
+    geometry: ConnectionGeometry
+    ownerId: string
     nodeId: string
     handleId: string
     isTarget: boolean
     connectionRadius: number
-    getTransform: () => Transform
+    getTransform: () => CanvasTransform
     panBy: (delta: Point) => Promise<boolean>
-    isValidConnection: (connection: Connection) => boolean
-    updateConnection: (state: ConnectionInProgress) => void
+    isValidConnection: (connection: PortConnection) => boolean
+    updateConnection: (state: ConnectionSession) => void
     cancelConnection: () => void
-    onConnect: (connection: Connection) => void
+    onConnect: (connection: PortConnection) => void
     onError: (error: unknown) => void
     onReconnectEnd: (
         event: MouseEvent | TouchEvent,
-        state: ConnectionInProgress,
+        state: ConnectionSession,
     ) => void
 }
 
-// Unlike XYHandle.onPointerDown, this gesture exposes cancellation and owns its listeners and frames.
+// Owns one cancellable connection gesture and its listeners and frames.
 export class HandleConnectionGesture {
     private readonly lifetime = new Lifetime()
     private readonly document: Document
@@ -41,8 +47,8 @@ export class HandleConnectionGesture {
     private readonly touchId: number | undefined
     private readonly start: Point
     private pointer: Point
-    private state: ConnectionInProgress | null = null
-    private connection: Connection | null = null
+    private state: ConnectionSession | null = null
+    private connection: PortConnection | null = null
     private frame: number | null = null
     private panning = false
     private moving = false
@@ -123,34 +129,10 @@ export class HandleConnectionGesture {
         } : null
     }
 
-    private handles(): Handle[] {
-        const result: Handle[] = []
-
-        for (const [nodeId, node] of this.options.nodeLookup) {
-            for (const type of ['source', 'target'] as const) {
-                for (const handle of node.internals.handleBounds?.[type] ?? []) {
-                    const {
-                        x,
-                        y,
-                    } = node.internals.positionAbsolute
-                    result.push({
-                        ...handle,
-                        nodeId,
-                        type,
-                        x: x + handle.x + handle.width / 2,
-                        y: y + handle.y + handle.height / 2,
-                    })
-                }
-            }
-        }
-
-        return result
-    }
-
     private update(): void {
         const options = this.options
-        const handles = this.handles()
-        const type: HandleType = options.isTarget ? 'target' : 'source'
+        const handles = options.geometry.ports
+        const type: PortRole = options.isTarget ? 'target' : 'source'
         const fromHandle = handles.find(handle => handle.nodeId === options.nodeId && handle.id === options.handleId && handle.type === type)
 
         if (!fromHandle) {
@@ -165,43 +147,28 @@ export class HandleConnectionGesture {
             x: this.pointer.x - rect.left,
             y: this.pointer.y - rect.top,
         }
-        const world = {
-            x: (pointer.x - x) / zoom,
-            y: (pointer.y - y) / zoom,
-        }
+        const world = paneToWorld(pointer, [x, y, zoom])
         const element = this.document.elementFromPoint?.(this.pointer.x, this.pointer.y)
-        const directHandle = element?.closest<HTMLElement>('.xy-flow__handle')
+        const directElement = element?.closest<HTMLElement>('.canvas-port')
+        const directHandle = directElement ? readPortElement(
+            directElement,
+            options.domNode,
+            options.ownerId,
+        ) : null
         const inside = pointer.x >= 0
             && pointer.y >= 0
             && pointer.x <= rect.width
             && pointer.y <= rect.height
-        let target: Handle | null = null
-        let distance = options.connectionRadius
-
-        if (
-            inside
-            && (!directHandle || options.domNode.contains(directHandle))
-        ) {
-            for (const handle of handles) {
-                if (
-                    handle.type === type
-                    || handle.nodeId === fromHandle.nodeId
-                )
-                    continue
-
-                const nextDistance = Math.hypot(handle.x - world.x, handle.y - world.y)
-
-                if (nextDistance <= distance) {
-                    target = handle
-                    distance = nextDistance
-                }
-            }
-
-            if (directHandle)
-                target = handles.find(
-                    handle => handle.nodeId === directHandle.dataset.nodeid && handle.id === directHandle.dataset.handleid && handle.type !== type,
-                ) ?? target
-        }
+        const target = inside
+            && (!directElement || directHandle !== null)
+            ? selectPortCandidate(
+                handles,
+                fromHandle,
+                world,
+                options.connectionRadius,
+                directHandle,
+            )
+            : null
 
         const source = type === 'source' ? fromHandle : target
         const destination = type === 'source' ? target : fromHandle
@@ -216,27 +183,13 @@ export class HandleConnectionGesture {
             : null
         const isValid = this.connection ? options.isValidConnection(this.connection) : null
         this.state = {
-            inProgress: true,
             isValid,
-            pointer,
-            from: {
-                x: fromHandle.x,
-                y: fromHandle.y,
-            },
-            fromHandle,
-            fromPosition: fromHandle.position,
-            fromNode: options.nodeLookup.get(fromHandle.nodeId)!,
-            to: target
-                && isValid
-                ? {
-                    x: target.x * zoom + x,
-                    y: target.y * zoom + y,
-                }
-                : pointer,
-            toHandle: target,
-            toPosition: target?.position ?? Position.Left,
-            toNode: target ? options.nodeLookup.get(target.nodeId) ?? null : null,
+            start: fromHandle,
+            candidate: target,
+            panePointer: pointer,
+            worldPointer: world,
         }
+
         options.updateConnection(this.state)
     }
 

@@ -4,6 +4,8 @@ Shared runtime contracts for TypeScript services and the browser.
 
 `getNatsUserSubjectToken(userId)` encodes UTF-8 bytes as hex for a single NATS subject token. `getNatsUserInboxPrefix(userId)` builds `_INBOX.<token>` and rejects an empty identity. The browser connection and server-issued permissions must use the same prefix. `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` names the service-only self-membership responder.
 
+Canvas parenting uses parent-relative positions. The engine resolves world bounds and connector extents without changing persisted node geometry.
+
 ## Storage contracts
 
 `ts/asset-types.ts` defines Asset, Meta, ACL, typed references, edit leases, media/rendition states, Blob rows/references, and rendition job request/response types.

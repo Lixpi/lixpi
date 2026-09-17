@@ -1,9 +1,15 @@
+import { ViewportInput } from './viewport-input.ts'
 import {
-    XYPanZoom,
-    infiniteExtent,
-    PanOnScrollMode,
-    type PanZoomInstance,
-} from '@xyflow/system'
+    assertViewport,
+    type CanvasTransform,
+} from '../../shared/viewport/coordinates.ts'
+import {
+    defaultPanZoomConfig,
+    type CanvasPanZoomConfig,
+} from './viewport-input-config.ts'
+export { defaultPanZoomConfig } from './viewport-input-config.ts'
+export type { CanvasPanZoomConfig } from './viewport-input-config.ts'
+export type { CanvasTransform } from '../../shared/viewport/coordinates.ts'
 import {
     type CanvasViewport,
     type Dispose,
@@ -13,31 +19,6 @@ import {
     type InteractionLock,
 } from '../runtime/interaction-locks.ts'
 
-export type CanvasTransform = [number, number, number]
-
-export const defaultPanZoomConfig = (onTransformChange: (transform: CanvasTransform) => void) => {
-    return {
-        noWheelClassName: 'nowheel',
-        noPanClassName: 'nopan',
-        preventScrolling: true,
-        panOnScroll: true,
-        panOnDrag: true,
-        panOnScrollMode: PanOnScrollMode.Free,
-        panOnScrollSpeed: 1,
-        zoomOnPinch: true,
-        zoomOnScroll: false,
-        zoomOnDoubleClick: true,
-        zoomActivationKeyPressed: false,
-        userSelectionActive: false,
-        connectionInProgress: false,
-        paneClickDistance: 0,
-        selectionOnDrag: false,
-        lib: 'xy',
-        onTransformChange,
-    }
-}
-
-export type CanvasPanZoomConfig = ReturnType<typeof defaultPanZoomConfig>
 export type ViewportControllerOptions = {
     root: HTMLElement
     viewport: CanvasViewport
@@ -49,7 +30,7 @@ export type ViewportControllerOptions = {
 }
 
 export class ViewportController {
-    private readonly backend: PanZoomInstance
+    private readonly backend: ViewportInput
     private readonly locks = new InteractionLocks()
     private readonly config: CanvasPanZoomConfig
     private viewport: CanvasViewport
@@ -63,14 +44,12 @@ export class ViewportController {
             ...options.config,
             onTransformChange: this.onTransformChange,
         }
-        this.backend = XYPanZoom({
-            domNode: options.root,
+        this.backend = new ViewportInput({
+            root: options.root,
             viewport: this.viewport,
             minZoom: options.minZoom ?? 0.1,
             maxZoom: options.maxZoom ?? 2,
-            translateExtent: infiniteExtent,
             onDraggingChange: dragging => options.onDraggingChange?.(dragging),
-            onPanZoom: () => {},
         })
 
         try {
@@ -100,13 +79,7 @@ export class ViewportController {
         }
     }
 
-    private validate(viewport: CanvasViewport): void {
-        if (
-            ![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite)
-            || viewport.zoom <= 0
-        )
-            throw new Error('Canvas viewport must be finite with a positive zoom')
-    }
+    private validate = assertViewport
 
     private onTransformChange = (transform: CanvasTransform): void => {
         if (this.destroyed)

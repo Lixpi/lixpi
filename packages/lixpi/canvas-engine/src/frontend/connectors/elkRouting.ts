@@ -6,7 +6,7 @@ import ELK from 'elkjs/lib/elk.bundled.js'
 import {
     type EdgeConfig,
     type NodeConfig,
-} from './types.ts'
+} from '../../shared/connectors/path-types.ts'
 
 type ElkNode = {
     id: string

@@ -1,7 +1,6 @@
 import {
-    type CanvasGeometryNode,
+    type ConnectionGeometryNode,
     type BoundedZoomScalingOptions,
-    type CanvasPort,
 } from '../../shared/index.ts'
 import {
     type ConnectorRenderDatum,
@@ -10,16 +9,12 @@ import {
     type NodeConfig,
     type PathType,
     type MarkerType,
-} from './types.ts'
+} from '../../shared/connectors/path-types.ts'
 import {
     type SpreadEdge,
 } from './connector-spread.ts'
 
-export type ConnectionNode = CanvasGeometryNode & {
-    ports?: readonly CanvasPort[]
-    extent?: 'parent' | [[number, number], [number, number]]
-    expandParent?: boolean
-}
+export type ConnectionNode = ConnectionGeometryNode
 
 export type ConnectionEdge<Data = unknown> = SpreadEdge & {
     pathType?: PathType
