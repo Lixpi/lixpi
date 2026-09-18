@@ -27,6 +27,8 @@ This script runs inside a Docker container and:
    - `createAccount()` → `NATS_AUTH_NKEY_*` (seeds start with `SA`)
    - `createCurve()` → `NATS_AUTH_XKEY_*` (seeds start with `SX`)
    - `createUser()` → `NATS_LLM_SERVICE_NKEY_*` (seeds start with `SU`)
+   - `createUser()` → `NATS_NEX_NODE_NKEY_*` (seeds start with `SU`)
+   - `createUser()` → `NATS_AI_MODEL_REGISTRY_NKEY_*` (seeds start with `SU`)
 
 3. **Creates secure passwords** for NATS system and regular users
 

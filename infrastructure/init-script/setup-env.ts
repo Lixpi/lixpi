@@ -54,6 +54,8 @@ type EnvConfig = {
     natsLlmServiceNkeyPublic: string
     natsNexNodeNkeySeed: string
     natsNexNodeNkeyPublic: string
+    natsAiModelRegistryNkeySeed: string
+    natsAiModelRegistryNkeyPublic: string
     natsSysUserPassword: string
     natsRegularUserPassword: string
 
@@ -232,6 +234,8 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     natsLlmServiceNkeyPublic: ['NATS_LLM_SERVICE_NKEY_PUBLIC'],
     natsNexNodeNkeySeed: ['NATS_NEX_NODE_NKEY_SEED'],
     natsNexNodeNkeyPublic: ['NATS_NEX_NODE_NKEY_PUBLIC'],
+    natsAiModelRegistryNkeySeed: ['NATS_AI_MODEL_REGISTRY_NKEY_SEED'],
+    natsAiModelRegistryNkeyPublic: ['NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC'],
     natsSysUserPassword: ['NATS_SYS_USER_PASSWORD'],
     natsRegularUserPassword: ['NATS_REGULAR_USER_PASSWORD'],
     awsRegion: ['AWS_REGION'],
@@ -755,6 +759,10 @@ const generateNatsKeys = (): {
         seed: string
         public: string
     }
+    aiModelRegistryNkey: {
+        seed: string
+        public: string
+    }
 } => {
     // createAccount() for NATS_AUTH_NKEY_* (seeds start with SA)
     const accountKey = createAccount()
@@ -797,11 +805,24 @@ const generateNatsKeys = (): {
     }
     nexNodeKey.clear()
 
+    // createUser() for NATS_AI_MODEL_REGISTRY_NKEY_* (seeds start with SU) — the
+    // AI Model Registry signs its own JWT with this user nkey and the API
+    // registers the public half with the auth callout.
+    const aiModelRegistryKey = createUser()
+    const aiModelRegistryNkey = {
+        seed: new TextDecoder().decode(
+            aiModelRegistryKey.getSeed(),
+        ),
+        public: aiModelRegistryKey.getPublicKey(),
+    }
+    aiModelRegistryKey.clear()
+
     return {
         authNkey,
         authXkey,
         llmServiceNkey,
         nexNodeNkey,
+        aiModelRegistryNkey,
     }
 }
 
@@ -1217,6 +1238,11 @@ const collectConfiguration = async (
         nexNodeNkey: await fields.keyPair(
             'natsNexNodeNkeySeed',
             'natsNexNodeNkeyPublic',
+            createUser,
+        ),
+        aiModelRegistryNkey: await fields.keyPair(
+            'natsAiModelRegistryNkeySeed',
+            'natsAiModelRegistryNkeyPublic',
             createUser,
         ),
     }
@@ -1752,6 +1778,8 @@ const collectConfiguration = async (
         natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
         natsNexNodeNkeySeed: natsKeys.nexNodeNkey.seed,
         natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
+        natsAiModelRegistryNkeySeed: natsKeys.aiModelRegistryNkey.seed,
+        natsAiModelRegistryNkeyPublic: natsKeys.aiModelRegistryNkey.public,
         natsSysUserPassword,
         natsRegularUserPassword,
         configureAwsSso: configureAwsSso as boolean,
@@ -1820,6 +1848,8 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{NATS_LLM_SERVICE_NKEY_PUBLIC}}': config.natsLlmServiceNkeyPublic,
         '{{NATS_NEX_NODE_NKEY_SEED}}': config.natsNexNodeNkeySeed,
         '{{NATS_NEX_NODE_NKEY_PUBLIC}}': config.natsNexNodeNkeyPublic,
+        '{{NATS_AI_MODEL_REGISTRY_NKEY_SEED}}': config.natsAiModelRegistryNkeySeed,
+        '{{NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}}': config.natsAiModelRegistryNkeyPublic,
         '{{NATS_CORS_COMMENT}}': isLocal ? ' (local development - allow all origins)' : '',
         '{{NATS_ALLOWED_ORIGINS}}': isLocal
             ? '[]'
@@ -2033,6 +2063,8 @@ const main = async (): Promise<void> => {
             natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
             natsNexNodeNkeySeed: natsKeys.nexNodeNkey.seed,
             natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
+            natsAiModelRegistryNkeySeed: natsKeys.aiModelRegistryNkey.seed,
+            natsAiModelRegistryNkeyPublic: natsKeys.aiModelRegistryNkey.public,
             natsSysUserPassword: generateSecurePassword(28),
             natsRegularUserPassword: generateSecurePassword(28),
             configureAwsSso: false,
