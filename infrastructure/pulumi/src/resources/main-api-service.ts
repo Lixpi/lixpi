@@ -49,15 +49,9 @@ export type MainApiServiceArgs = {
         ORG_NAME: string
         ENVIRONMENT: string
         NATS_SERVERS: string
-        NATS_AUTH_ACCOUNT: string
-        NATS_SYS_USER_PASSWORD: string
-        NATS_REGULAR_USER_PASSWORD: string
-        NATS_AUTH_NKEY_ISSUER_SEED: string
-        NATS_AUTH_NKEY_ISSUER_PUBLIC: string
-        NATS_AUTH_XKEY_ISSUER_SEED: string
-        NATS_AUTH_XKEY_ISSUER_PUBLIC: string
-        NATS_NEX_NODE_NKEY_PUBLIC: string
-        NATS_SERVICE_AUTH_REGISTRATIONS: string
+        NATS_API_NKEY_SEED: string
+        NATS_APPLICATION_REGISTRATION: string
+        NATS_REGISTRATION_PASSWORD: string
         ORIGIN_HOST_URL: string
         API_HOST_URL: string
         AUTH0_DOMAIN: string
@@ -171,12 +165,18 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     )
 
     // Allow containers to access bound DynamoDB tables
-    resourceBindings.tables && Object.values(resourceBindings.tables).forEach((table, i) => {
-        const tablePolicy = new aws.iam.Policy(
-            `${formattedServiceName}-dynamo-policy-${i}`,
+    if (
+        resourceBindings.tables
+        && Object.keys(resourceBindings.tables).length
+    )
+        new aws.iam.RolePolicy(
+            `${formattedServiceName}-dynamo-policy`,
             {
-                policy: table.arn.apply(
-                    arn =>
+                role: taskRole.name,
+                policy: pulumi.all(
+                    Object.values(resourceBindings.tables).map(table => table.arn),
+                ).apply(
+                    arns =>
                         JSON.stringify({
                             Version: '2012-10-17',
                             Statement: [{
@@ -190,23 +190,14 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
                                     'dynamodb:PutItem',
                                     'dynamodb:UpdateItem',
                                     'dynamodb:DeleteItem',
-                                    'dynamodb:TransactWriteItems',
+                                    'dynamodb:ConditionCheckItem',
                                 ],
-                                Resource: [arn, `${arn}/index/*`],
+                                Resource: arns.flatMap(arn => [arn, `${arn}/index/*`]),
                             }],
                         }),
                 ),
             },
         )
-
-        new aws.iam.RolePolicyAttachment(
-            `${formattedServiceName}-dynamo-attachment-${i}`,
-            {
-                role: taskRole.name,
-                policyArn: tablePolicy.arn,
-            },
-        )
-    })
 
     // Allow containers to access SSM parameters
     const ssmPolicy = new aws.iam.Policy(
@@ -340,7 +331,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
             ),
         },
         {
-            dependsOn: [image], // Ensure image is fully built and pushed before creating task definition
+            dependsOn: [image],
         },
     )
 

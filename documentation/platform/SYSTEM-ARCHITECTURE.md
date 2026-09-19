@@ -5,14 +5,14 @@ description: The conceptual overview of Lixpi's NATS-first, message-driven servi
 
 # System Architecture
 
-Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, Workspace and Asset CRUD, canvas-state saves, live AI pipeline events, and Asset-role ProseMirror step streams. The API service handles those subjects, persists bounded records in DynamoDB, and hosts the LangGraph workflow in-process. JetStream backs one content-addressed Blob Object Store bucket per organization plus short-lived durable replay logs for AI pipeline events and Asset document steps.
+Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, Workspace and Asset CRUD, canvas-state saves, live AI pipeline events, and Asset-role ProseMirror step streams. The API service handles those subjects, persists domain records in DynamoDB, and hosts the LangGraph workflow in-process. JetStream stores replay logs and maintenance queues; native Object Store holds permanent content-addressed Blobs in organization buckets.
 
 There are still HTTP routes where HTTP is the right tool: Asset upload/import and authenticated rendition download, Range-capable audio/video playback, authenticated Capability resource reads, health checks, and Workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
 
 This page maps how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales.
 
 {% callout type="note" %}
-This page covers the **runtime architecture**. For the AWS deployment topology (Pulumi, ECS/Fargate, CloudFront, the NATS cluster wiring), see [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md).
+Application services use Fargate. Each NATS broker embeds its admission worker on EC2; the cluster starts with three hosts and can scale within configured bounds. Retained EBS preserves JetStream events, work queues, Object Store bytes and NEX state. See [NATS Service](../../services/nats/README.md), [NATS Cluster](./deployment/NATS-CLUSTER.md), and [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md).
 {% /callout %}
 
 ## Services
@@ -24,7 +24,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **web-ui** | TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction. Vanilla TypeScript DOM components with Nano Stores for state |
 | **web-ui-user-portal** | TypeScript | `services/web-ui-user-portal/` | User account SPA at `user-portal.<domain>` with Gentelella components backed by shared browser auth, routing, and user state |
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
-| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, organization Blob Object Store, and JetStream replay logs for pipeline/Asset-document events |
+| **nats** | Go (initially 3 nodes) | [services/nats](../../services/nats/README.md) | Embedded broker and admission, pub/sub, request/reply, JetStream replay and work queues, organization Blob Object Stores and NEX control state |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 | **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
 | **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
@@ -37,7 +37,7 @@ The development-only [AI Model Registry](../../services/ai-model-registry/docume
 
 ### High-Level Architecture
 
-Everything fans out from NATS. The browser connects to NATS over a WebSocket; the API connects to NATS over TLS; the LLM workflow runs inside the API process and publishes streaming events straight onto NATS subjects the browser is already subscribed to.
+Everything fans out from NATS. The browser connects to NATS over a WebSocket; the API connects to the internal TCP listener; the LLM workflow runs inside the API process and publishes streaming events straight onto NATS subjects the browser is already subscribed to.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -48,7 +48,7 @@ graph TB
     end
 
     subgraph Broker["Message Broker"]
-        NATS[("NATS Cluster<br/>Pub/Sub · Request/Reply · JetStream Object Store · Replay Logs")]
+        NATS[("NATS Cluster<br/>Pub/Sub · Request/Reply · Native JetStream")]
     end
 
     subgraph Backend["API Tier"]
@@ -59,6 +59,10 @@ graph TB
     subgraph Workers["NEX Workloads"]
         NEX["services/nex<br/>file conversion · model sync"]
     end
+
+    Admission["Embedded Go admission<br/>One worker per broker"]
+    NATS <-.->|Encrypted callout| Admission
+    Admission -.->|JWKS| Auth
 
     subgraph Identity["Identity Providers"]
         Auth["Auth0 / LocalAuth0<br/>RS256 JWKS"]
@@ -75,7 +79,7 @@ graph TB
     NATS <-->|Publish / Subscribe| API
     API --> LLM
     API --> DDB
-    API <-->|Object Store + JetStream stream API| NATS
+    API <-->|Object Store and JetStream storage| NATS
     NEX <-->|NATS request/reply + Object Store| NATS
     LLM -->|Pipeline events + ProseMirror steps| NATS
     LLM <-->|Vendor SDK calls| Provider
@@ -86,12 +90,12 @@ graph TB
 |------|-----------|----------------|
 | Client | Web UI | Renders the canvas, hosts ProseMirror editors, extracts context from the node graph, and connects to NATS over WebSocket |
 | Client | User Portal | Displays account-management pages and connects to NATS over WebSocket with the same identity-provider session as the main UI |
-| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, Asset-role ProseMirror steps, and rendition requests; stores immutable Blob objects in organization Object Store buckets |
+| Broker | NATS Cluster | Carries commands, auth callouts, live events and rendition requests; stores permanent Blob bytes, event replay logs, document steps, maintenance work and NEX state |
 | API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
 | API | LangGraph workflow | Resolves sealed Capabilities, streams the text model, routes image/video Tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
 | Workers | NEX workloads | Run long-lived background services on NATS, including file conversion/probing and AI-model catalog synchronization |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
-| Storage | DynamoDB | Persists Asset/Blob registries and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
+| Storage | DynamoDB | Persists domain metadata, references and current pointers, with AWS point-in-time recovery |
 | Storage | AI Providers | External text, image, and video models invoked through vendor SDKs |
 
 ## NATS as the Backbone
@@ -100,15 +104,15 @@ Most application behavior in Lixpi flows through NATS. This decision shapes the 
 
 - **End-to-end messaging** — Browser ↔ NATS ↔ backend services. The same bus carries browser requests and inter-service traffic.
 - **Real-time streaming** — AI pipeline events stream directly to clients on per-thread subjects, with no intermediate HTTP streaming layer.
-- **Durable replay windows** — JetStream stores short-lived pipeline event logs and ProseMirror document step logs so a refreshed client can replay missed generation state instead of falling back to stale snapshots.
-- **Centralized auth** — The NATS `auth_callout` delegates "can this connection happen, and what may it do?" to the API service. See [Authentication](./AUTHENTICATION.md).
+- **Durable replay**: Native JetStream streams retain pipeline and document events so an authorized client can replay missed generation state.
+- **Centralized auth** — The NATS `auth_callout` delegates "can this connection happen, and what may it do?" to its embedded Go dispatcher and bounded workers. API request authorization stays in handlers and middleware. See [Authentication](./AUTHENTICATION.md).
 - **Queue groups** — Multiple instances of a service subscribe under a shared queue-group name, and NATS load-balances messages across them automatically. No external load balancer required.
 
 HTTP remains in the system for payloads that are better served as HTTP responses:
 
 | HTTP route family | Why it is HTTP |
 |-------------------|----------------|
-| `/api/assets/*` | Browser Asset upload/import, authenticated rendition download, audio/video Range requests, and media playback need ordinary HTTP semantics. Blob bytes are stored in organization-scoped NATS Object Store buckets; rendition work is handed off over NATS. |
+| `/api/assets/*` | Browser Asset upload/import, authenticated rendition download, audio/video Range requests, and media playback need ordinary HTTP semantics. Permanent Blob bytes use organization-scoped NATS Object Store buckets; rendition work is handed off over NATS. |
 | `/api/workspaces/:workspaceId/export` and `/api/workspaces/:workspaceId/import` | Workspace portability uses ZIP archives and multipart uploads. Normal workspace reads, writes, canvas-state updates, and deletion are still NATS subjects. |
 | `/api/capabilities/*` | Authenticated Capability resource reads use HTTP byte responses; catalog commands and invalidations flow over NATS subjects. |
 | `/health-check` | ECS needs a simple health endpoint. |
@@ -146,7 +150,7 @@ These decisions define the shape of the system and keep subsystem changes from s
 
 ### NATS-First
 
-App commands, auth callouts, Workspace and Asset mutations, canvas-state saves, Blob storage, AI pipeline events, and Asset-role ProseMirror transport all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes live pipeline events directly onto the conversation Asset subjects the browser is already subscribed to, there is no extra HTTP hop between provider output and browser updates. JetStream sits beside that live path for replay and storage, not as a polling layer.
+App commands, auth callouts, Workspace and Asset mutations, canvas-state saves, live AI events and Asset-role ProseMirror transport use NATS. The browser connects through WebSocket. Native JetStream provides durable event publication, authorized replay and maintenance work queues. Permanent Blob reads and writes use native Object Store. Replication, retained broker volumes and verified snapshots protect this data.
 
 The exception is byte transport: media upload/download, video range reads, authenticated previews, and workspace import/export use HTTP because browsers and archives already speak HTTP well.
 
@@ -214,7 +218,6 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 | `@lixpi/canvas-engine` | Shared canvas geometry, collision, lineage layout, connector, animation, and rendering modules split by runtime boundary |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream stream/direct-message helpers, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |
-| `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
 | `@lixpi/prosemirror` | Shared ProseMirror schema, headless engine, stream assembly helpers, lineage projection helpers, and document-step transport types used by API and web-ui |
 | Canvas Engine | Native viewport input, graph/port geometry and connector paths |
 

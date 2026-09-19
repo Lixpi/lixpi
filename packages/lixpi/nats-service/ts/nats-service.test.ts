@@ -95,6 +95,7 @@ const createMockConnection = (overrides: Record<string, any> = {}) => {
             ['noop', { subject: 'noop' }],
         ],
     )
+
     return {
         getServer: vi.fn().mockReturnValue('nats://localhost:4222'),
         isClosed: vi.fn().mockReturnValue(overrides.isClosed ?? false),
@@ -113,8 +114,10 @@ const decodeJwtLikePayload = (token: string) => {
     const parts = token.split('.')
     const decodePart = (part: string) => {
         const padded = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')
+
         return JSON.parse(Buffer.from(padded, 'base64').toString())
     }
+
     return {
         header: decodePart(parts[0]),
         claims: decodePart(parts[1]),
@@ -122,7 +125,10 @@ const decodeJwtLikePayload = (token: string) => {
 }
 
 describe('NatsService', () => {
-    let seedKeyPair: { getPublicKey: ReturnType<typeof vi.fn>; sign: ReturnType<typeof vi.fn> }
+    let seedKeyPair: {
+        getPublicKey: ReturnType<typeof vi.fn>
+        sign: ReturnType<typeof vi.fn>
+    }
     let objmMock: any
     let jetstreamClientMock: any
     let jetstreamManagerMockInstance: any
@@ -179,9 +185,7 @@ describe('NatsService', () => {
         connectionMock = createMockConnection()
         connectMock.mockResolvedValue(connectionMock)
         wsConnectMock.mockResolvedValue(connectionMock)
-        tokenAuthenticatorMock.mockImplementation((valueGetter: () => string | undefined) => {
-            return () => valueGetter()
-        })
+        tokenAuthenticatorMock.mockImplementation((valueGetter: () => string | undefined) => () => valueGetter())
     })
 
     afterEach(() => {
@@ -199,9 +203,15 @@ describe('NatsService', () => {
             vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
 
             const token = generateSelfIssuedJWT('seed', 'svc:test', 2)
-            const { claims, header } = decodeJwtLikePayload(token)
+            const {
+                claims,
+                header,
+            } = decodeJwtLikePayload(token)
             expect(token.split('.')).toHaveLength(3)
-            expect(header).toEqual({ typ: 'JWT', alg: 'EdDSA' })
+            expect(header).toEqual({
+                typ: 'JWT',
+                alg: 'EdDSA',
+            })
             expect(claims.sub).toBe('svc:test')
             expect(claims.iss).toBe('NKEY-TEST-CLIENT')
             expect(claims.iat).toBe(Math.floor(Date.now() / 1000))
@@ -342,7 +352,11 @@ describe('NatsService', () => {
             expect(await optionsFirst.authenticator()).toBe('first-token')
             expect((config as any).getToken).toHaveBeenCalledTimes(1)
 
-            service['nc'] = { isClosed: vi.fn().mockReturnValue(true), status: () => createAsyncIterable([]), protocol: { subscriptions: { subs: new Map() } } } as any
+            service['nc'] = {
+                isClosed: vi.fn().mockReturnValue(true),
+                status: () => createAsyncIterable([]),
+                protocol: { subscriptions: { subs: new Map() } },
+            } as any
             await service.connect()
 
             const optionsSecond = connectMock.mock.calls[1][0] as { authenticator: () => string }
@@ -353,10 +367,16 @@ describe('NatsService', () => {
         it('uses self-issued JWT when nkey seed + userId are configured', async () => {
             const nkeySeed = 'nkey-seed'
             const userId = 'svc:nats'
-            const service = new (NatsService as any)({ nkeySeed, userId })
+            const service = new (NatsService as any)({
+                nkeySeed,
+                userId,
+            })
             await service.connect()
 
-            const options = connectMock.mock.calls[0][0] as { token?: string; authenticator?: unknown }
+            const options = connectMock.mock.calls[0][0] as {
+                token?: string
+                authenticator?: unknown
+            }
             expect(options.token?.split('.')).toHaveLength(3)
             const decodedClaims = decodeJwtLikePayload(options.token || '').claims
             expect(decodedClaims.sub).toBe(userId)
@@ -374,8 +394,19 @@ describe('NatsService', () => {
             connectionMock.subscribe = vi.fn().mockReturnValue(createAsyncIterable([]))
             const service = new (NatsService as any)({
                 subscriptions: [
-                    { subject: 'alpha', payloadType: 'json', handler: vi.fn(), type: 'subscribe', queue: 'q1' },
-                    { subject: 'beta', payloadType: 'buffer', handler: vi.fn(), type: 'reply' },
+                    {
+                        subject: 'alpha',
+                        payloadType: 'json',
+                        handler: vi.fn(),
+                        type: 'subscribe',
+                        queue: 'q1',
+                    },
+                    {
+                        subject: 'beta',
+                        payloadType: 'buffer',
+                        handler: vi.fn(),
+                        type: 'reply',
+                    },
                 ],
             })
             service['nc'] = connectionMock
@@ -401,7 +432,10 @@ describe('NatsService', () => {
             const handler = vi.fn()
             const middleware = [
                 vi.fn(async (data: any) => ({
-                    data: { ...data, transformed: true },
+                    data: {
+                        ...data,
+                        transformed: true,
+                    },
                     msg: data.msg,
                 })),
             ]
@@ -418,7 +452,10 @@ describe('NatsService', () => {
             await flushPending()
 
             expect(middleware[0]).toHaveBeenCalledTimes(1)
-            expect(handler).toHaveBeenCalledWith({ raw: true, transformed: true }, msg)
+            expect(handler).toHaveBeenCalledWith({
+                raw: true,
+                transformed: true,
+            }, msg)
         })
 
         it('replies with encoded payload from handler result', async () => {
@@ -579,7 +616,10 @@ describe('NatsService', () => {
             const closeSpy = vi.fn().mockResolvedValue(undefined)
             const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
             const service = new (NatsService as any)({})
-            service['nc'] = createMockConnection({ close: closeSpy, isClosed: vi.fn().mockReturnValue(false) })
+            service['nc'] = createMockConnection({
+                close: closeSpy,
+                isClosed: vi.fn().mockReturnValue(false),
+            })
             const timer = setTimeout(() => {
                 // placeholder
             }, 10000)
@@ -596,7 +636,10 @@ describe('NatsService', () => {
         it('closes with drain and keeps intention-to-close flag', async () => {
             const drainSpy = vi.fn().mockResolvedValue(undefined)
             const service = new (NatsService as any)({})
-            service['nc'] = createMockConnection({ drain: drainSpy, isClosed: vi.fn().mockReturnValue(false) })
+            service['nc'] = createMockConnection({
+                drain: drainSpy,
+                isClosed: vi.fn().mockReturnValue(false),
+            })
 
             await service.drain()
 
@@ -628,8 +671,14 @@ describe('NatsService', () => {
         })
 
         it('unsubscribes every active subscription when requested', async () => {
-            const first = { subject: 'a', unsubscribe: vi.fn() }
-            const second = { subject: 'b', unsubscribe: vi.fn() }
+            const first = {
+                subject: 'a',
+                unsubscribe: vi.fn(),
+            }
+            const second = {
+                subject: 'b',
+                unsubscribe: vi.fn(),
+            }
             const service = new (NatsService as any)({})
             service['nc'] = createMockConnection({
                 protocolSubs: [['a', first], ['b', second]],
@@ -658,7 +707,10 @@ describe('NatsService', () => {
             })
 
             expect(result).toBe(objectStore)
-            expect(objmMock.create).toHaveBeenCalledWith('bucket', { replicas: 5, description: 'test' })
+            expect(objmMock.create).toHaveBeenCalledWith('bucket', {
+                replicas: 5,
+                description: 'test',
+            })
         })
 
         it('deletes the JetStream stream that backs an object store', async () => {
@@ -690,11 +742,21 @@ describe('NatsService', () => {
                     data: {
                         getReader: () => {
                             let chunks = [new Uint8Array([1, 2]), new Uint8Array([3])]
+
                             return {
                                 read: vi.fn().mockImplementation(async () => {
                                     const value = chunks.shift()
-                                    if (value) return { done: false, value }
-                                    return { done: true, value: undefined }
+
+                                    if (value)
+                                        return {
+                                            done: false,
+                                            value,
+                                        }
+
+                                    return {
+                                        done: true,
+                                        value: undefined,
+                                    }
                                 }),
                             }
                         },
@@ -733,7 +795,10 @@ describe('NatsService', () => {
 
             await expect(service.getJetStreamStreamInfoOrNull('missing')).resolves.toBeNull()
             jetstreamManagerMockInstance.streams.info
-                .mockRejectedValueOnce({ code: 500, message: 'server unavailable' })
+                .mockRejectedValueOnce({
+                    code: 500,
+                    message: 'server unavailable',
+                })
             await expect(service.getJetStreamStreamInfoOrNull('missing')).rejects.toEqual({
                 code: 500,
                 message: 'server unavailable',
@@ -742,12 +807,20 @@ describe('NatsService', () => {
 
         it('merges subjects and scales stream replicas when ensuring stream config', async () => {
             jetstreamManagerMockInstance.streams.info.mockResolvedValueOnce({
-                config: { name: 'stream-x', subjects: ['a', 'b'], num_replicas: 1 },
+                config: {
+                    name: 'stream-x',
+                    subjects: ['a', 'b'],
+                    num_replicas: 1,
+                },
             })
             jetstreamManagerMockInstance.streams.update.mockResolvedValue(undefined)
             jetstreamManagerMockInstance.streams.info.mockResolvedValueOnce({
                 name: 'stream-x',
-                config: { name: 'stream-x', subjects: ['a', 'b', 'c'], num_replicas: 1 },
+                config: {
+                    name: 'stream-x',
+                    subjects: ['a', 'b', 'c'],
+                    num_replicas: 1,
+                },
             })
 
             const service = new (NatsService as any)({})
@@ -796,7 +869,7 @@ describe('NatsService', () => {
 
         it('supports consumeJetStreamMessages with ack and parsing', async () => {
             jetstreamClientMock.consumers.get.mockResolvedValue({
-                consume: vi.fn().mockResolvedValue(createAsyncIterable([
+                fetch: vi.fn().mockResolvedValue(createAsyncIterable([
                     {
                         string: vi.fn().mockReturnValue(JSON.stringify({ kind: 'first' })),
                         subject: 'subject.a',
@@ -817,8 +890,16 @@ describe('NatsService', () => {
             const messages = await service.consumeJetStreamMessages('stream', 'consumer', { maxMessages: 2 })
 
             expect(messages).toEqual([
-                { data: { kind: 'first' }, subject: 'subject.a', seq: 1 },
-                { data: { kind: 'second' }, subject: 'subject.b', seq: 2 },
+                {
+                    data: { kind: 'first' },
+                    subject: 'subject.a',
+                    seq: 1,
+                },
+                {
+                    data: { kind: 'second' },
+                    subject: 'subject.b',
+                    seq: 2,
+                },
             ])
         })
 

@@ -5,11 +5,9 @@ description: Map of the Lixpi documentation for the product, platform, canvas, A
 
 # Lixpi Documentation
 
-Lixpi is a visual, node-based AI workspace for image and video generation pipelines — **the spatial arrangement of nodes _is_ the workflow**. This is the documentation map. Start with the [Product Overview](PRODUCT-OVERVIEW.md), then dive into the domain you care about. The generated site sidebar provides the full current inventory; this page is only the human starting map.
+Lixpi is a visual, node-based AI workspace for image and video generation pipelines — **the spatial arrangement of nodes _is_ the workflow**. This is the documentation map. Start with the [Product Overview](PRODUCT-OVERVIEW.md), then dive into the domain you care about. Search the documentation tree when a page is not listed here.
 
-{% callout type="note" %}
-These docs are authored as Markdoc-friendly Markdown and render to a static HTML site via a standalone, single-dependency renderer in [`site/`](site/README.md). They also read fine as plain Markdown on GitHub.
-{% /callout %}
+These docs are maintained as Markdown and read directly in GitHub or an editor. The static documentation site has been set aside pending its redesign.
 
 ## Start here
 
@@ -22,6 +20,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [Implementation Plans](development-workflow/research-and-development/WRITING-IMPLEMENTATION-PLANS.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
 | [Spike Reports](development-workflow/research-and-development/SPIKE-REPORT-GUIDELINES.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
 | [TypeScript Linting and Formatting](../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
+| [Go Testing and Tooling](testing/Go/TESTING-GUIDE.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
@@ -31,7 +30,7 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 
 1. Before writing or revising documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. If it cannot be resolved or read, stop, report the failure, and wait for the user's instructions.
 2. Use this index for the main product and platform entry points.
-3. Use the generated docs-site sidebar for the complete current file list.
+3. Search the documentation tree for the complete current file list.
 4. Search by the concept you are changing, then read nearby pages before editing.
 5. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
 6. For any code change, read [`Coding Style Guide Selection`](coding-style-guides/USING-CODING-STYLE-GUIDES.md). [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) is mandatory for every TypeScript file in the repository; [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) is additionally mandatory for `services/web-ui` UI work.
@@ -48,11 +47,15 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | Authoritative context, Capability preflight, selected reasoning/media axes, media strategies, lineage, settlement, cancellation, and cleanup |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Data Storage](platform/DATA-STORAGE.md) | Asset/Blob tables, typed references, scope projections, organization Object Store layout, deletion/repair, and revision-2 portability |
-| [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
+| [Authentication](platform/AUTHENTICATION.md) | Embedded Go admission, shared permission contracts, API request authorization, service identities, LocalAuth0 |
+| [NATS Service](../services/nats/README.md) | Embedded broker architecture, peer admission, runtime configuration, certificates, health, maintenance commands and Docker development |
+| [Caddy Certificate Service](../services/caddy/README.md) | Embedded certificate issuance, local CA trust, public renewal, durable ACME state and serving-secret publication |
+| [NATS Subject Registry](../packages/lixpi/nats-subject-registry/README.md) | Subject ownership, endpoint permissions, service allowlists, subscription creation, validation, and release identity |
+| [Dependency and Format Versions](platform/DEPENDENCY-VERSIONS.md) | Image, runtime, library, package, and schema versions, their declaration paths, and update procedure |
 | [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | Provider request authorization, measured usage, and provider tariff metadata |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
-| [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | Three-node ECS EC2 NATS cluster, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |
+| [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | ECS EC2 broker scaling, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |
 | [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — AI-models sync, file conversion/frame extraction, the NEX account and credentials, local and AWS deployment |
 | [Scaling & Operations](platform/deployment/SCALING-AND-OPERATIONS.md) | Scaling profile, capacity ceilings, failure modes, environments, observability |
 
@@ -124,13 +127,3 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | [Why Model Combinations Produce Different Styles](knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md) | Model chaining and visual signatures |
 | [Internal Service NATS Auth Pattern](knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) | NKey-signed service auth recipe |
 | [NATS NEX Execution Engine — How It Works](knowledge/NATS-NEX-EXECUTION-ENGINE-EXPLAINED.md) | Nodes/nexlets/workloads, the Nexfile, every way to run NEX, and the real container/Docker story |
-
-## Manual Docs Rendering
-
-The docs can render to HTML with the zero-framework Markdoc renderer when a human explicitly wants the static site:
-
-```bash
-pnpm docs:build
-```
-
-This is not an agent verification step. See [`site/README.md`](site/README.md) for the renderer details.

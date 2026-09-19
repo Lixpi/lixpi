@@ -16,11 +16,11 @@ export const createNetworkInfrastructure = async () => {
     if (!awsRegion)
         throw new Error('AWS Region configuration is missing. Please set AWS region properly.')
 
-    // Fetch AZs explicitly and validate at least 2 available
+    // Three JetStream replicas need independent Availability Zones.
     const azs = await aws.getAvailabilityZones()
 
-    if (azs.names.length < 2)
-        throw new Error('AWS must have at least 2 Availability Zones available.')
+    if (azs.names.length < 3)
+        throw new Error('NATS requires at least three Availability Zones')
 
     const vpcName = formatStageResourceName(
         'VPC',
@@ -131,6 +131,34 @@ export const createNetworkInfrastructure = async () => {
                 ORG_NAME,
                 STAGE,
             ) },
+        },
+    )
+
+    // Preserve existing subnet addresses when adding the third zone.
+    const publicSubnetAZ3 = new aws.ec2.Subnet(
+        formatStageResourceName(
+            'Public-Subnet-3',
+            ORG_NAME,
+            STAGE,
+        ),
+        {
+            vpcId: vpc.id,
+            cidrBlock: '10.0.4.0/24',
+            availabilityZone: azs.names[2],
+            mapPublicIpOnLaunch: true,
+        },
+    )
+    const privateSubnetAZ3 = new aws.ec2.Subnet(
+        formatStageResourceName(
+            'Private-Subnet-3',
+            ORG_NAME,
+            STAGE,
+        ),
+        {
+            vpcId: vpc.id,
+            cidrBlock: '10.0.5.0/24',
+            availabilityZone: azs.names[2],
+            mapPublicIpOnLaunch: false,
         },
     )
 
@@ -276,12 +304,35 @@ export const createNetworkInfrastructure = async () => {
         },
     )
 
+    new aws.ec2.RouteTableAssociation(
+        formatStageResourceName(
+            'Public-Subnet-Assoc-3',
+            ORG_NAME,
+            STAGE,
+        ),
+        {
+            subnetId: publicSubnetAZ3.id,
+            routeTableId: publicRouteTable.id,
+        },
+    )
+    new aws.ec2.RouteTableAssociation(
+        formatStageResourceName(
+            'Private-Subnet-Assoc-3',
+            ORG_NAME,
+            STAGE,
+        ),
+        {
+            subnetId: privateSubnetAZ3.id,
+            routeTableId: privateRouteTable.id,
+        },
+    )
+
     // Outputs
     const outputs: Record<string, pulumi.Output<any>> = {
         vpcId: vpc.id,
         vpcName: pulumi.output(vpcName),
-        publicSubnetIds: pulumi.all([publicSubnetAZ1.id, publicSubnetAZ2.id]),
-        privateSubnetIds: pulumi.all([privateSubnetAZ1.id, privateSubnetAZ2.id]),
+        publicSubnetIds: pulumi.all([publicSubnetAZ1.id, publicSubnetAZ2.id, publicSubnetAZ3.id]),
+        privateSubnetIds: pulumi.all([privateSubnetAZ1.id, privateSubnetAZ2.id, privateSubnetAZ3.id]),
         natGatewayIp: natEip.publicIp,
     }
 
@@ -290,10 +341,12 @@ export const createNetworkInfrastructure = async () => {
         publicSubnets: [
             publicSubnetAZ1,
             publicSubnetAZ2,
+            publicSubnetAZ3,
         ],
         privateSubnets: [
             privateSubnetAZ1,
             privateSubnetAZ2,
+            privateSubnetAZ3,
         ],
         internetGateway: igw,
         natGateway,

@@ -6,6 +6,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 import { parseEnv } from 'node:util'
+import { registrationEnvironment } from '@lixpi/nats-subject-registry/registration'
 import * as prompts from '@clack/prompts'
 import {
     createAccount,
@@ -54,10 +55,20 @@ type EnvConfig = {
     natsLlmServiceNkeyPublic: string
     natsNexNodeNkeySeed: string
     natsNexNodeNkeyPublic: string
+    natsApiNkeySeed: string
+    natsApiNkeyPublic: string
+    natsFileConversionNkeySeed: string
+    natsFileConversionNkeyPublic: string
+    natsCharacterFidelityNkeySeed: string
+    natsCharacterFidelityNkeyPublic: string
+    natsBackupNkeySeed: string
+    natsBackupNkeyPublic: string
+    natsOperatorNkeySeed: string
+    natsOperatorNkeyPublic: string
     natsAiModelRegistryNkeySeed: string
     natsAiModelRegistryNkeyPublic: string
     natsSysUserPassword: string
-    natsRegularUserPassword: string
+    natsCalloutPassword: string
 
     // AWS SSO (optional)
     configureAwsSso: boolean
@@ -234,10 +245,20 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     natsLlmServiceNkeyPublic: ['NATS_LLM_SERVICE_NKEY_PUBLIC'],
     natsNexNodeNkeySeed: ['NATS_NEX_NODE_NKEY_SEED'],
     natsNexNodeNkeyPublic: ['NATS_NEX_NODE_NKEY_PUBLIC'],
+    natsApiNkeySeed: ['NATS_API_NKEY_SEED'],
+    natsApiNkeyPublic: ['NATS_API_NKEY_PUBLIC'],
+    natsFileConversionNkeySeed: ['NATS_FILE_CONVERSION_NKEY_SEED'],
+    natsFileConversionNkeyPublic: ['NATS_FILE_CONVERSION_NKEY_PUBLIC'],
+    natsCharacterFidelityNkeySeed: ['NATS_CHARACTER_FIDELITY_NKEY_SEED'],
+    natsCharacterFidelityNkeyPublic: ['NATS_CHARACTER_FIDELITY_NKEY_PUBLIC'],
+    natsBackupNkeySeed: ['NATS_BACKUP_NKEY_SEED'],
+    natsBackupNkeyPublic: ['NATS_BACKUP_NKEY_PUBLIC'],
+    natsOperatorNkeySeed: ['NATS_OPERATOR_NKEY_SEED'],
+    natsOperatorNkeyPublic: ['NATS_OPERATOR_NKEY_PUBLIC'],
     natsAiModelRegistryNkeySeed: ['NATS_AI_MODEL_REGISTRY_NKEY_SEED'],
     natsAiModelRegistryNkeyPublic: ['NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC'],
     natsSysUserPassword: ['NATS_SYS_USER_PASSWORD'],
-    natsRegularUserPassword: ['NATS_REGULAR_USER_PASSWORD'],
+    natsCalloutPassword: ['NATS_CALLOUT_PASSWORD'],
     awsRegion: ['AWS_REGION'],
     awsProfileName: ['AWS_PROFILE'],
     hostedZoneDnsRoleArn: ['HOSTED_ZONE_DNS_ROLE_ARN'],
@@ -743,6 +764,26 @@ const printHelp = (): void => {
 // ============================================================================
 
 const generateNatsKeys = (): {
+    apiNkey: {
+        seed: string
+        public: string
+    }
+    fileConversionNkey: {
+        seed: string
+        public: string
+    }
+    characterFidelityNkey: {
+        seed: string
+        public: string
+    }
+    backupNkey: {
+        seed: string
+        public: string
+    }
+    operatorNkey: {
+        seed: string
+        public: string
+    }
     authNkey: {
         seed: string
         public: string
@@ -805,24 +846,30 @@ const generateNatsKeys = (): {
     }
     nexNodeKey.clear()
 
-    // createUser() for NATS_AI_MODEL_REGISTRY_NKEY_* (seeds start with SU) — the
-    // AI Model Registry signs its own JWT with this user nkey and the API
-    // registers the public half with the auth callout.
-    const aiModelRegistryKey = createUser()
-    const aiModelRegistryNkey = {
-        seed: new TextDecoder().decode(
-            aiModelRegistryKey.getSeed(),
-        ),
-        public: aiModelRegistryKey.getPublicKey(),
+    const createIdentity = () => {
+        const key = createUser()
+        const pair = {
+            seed: new TextDecoder().decode(
+                key.getSeed(),
+            ),
+            public: key.getPublicKey(),
+        }
+        key.clear()
+
+        return pair
     }
-    aiModelRegistryKey.clear()
 
     return {
+        apiNkey: createIdentity(),
+        fileConversionNkey: createIdentity(),
+        characterFidelityNkey: createIdentity(),
+        backupNkey: createIdentity(),
+        operatorNkey: createIdentity(),
         authNkey,
         authXkey,
         llmServiceNkey,
         nexNodeNkey,
-        aiModelRegistryNkey,
+        aiModelRegistryNkey: createIdentity(),
     }
 }
 
@@ -1220,6 +1267,31 @@ const collectConfiguration = async (
     await fields.group('NATS Configuration')
 
     const natsKeys = {
+        apiNkey: await fields.keyPair(
+            'natsApiNkeySeed',
+            'natsApiNkeyPublic',
+            createUser,
+        ),
+        fileConversionNkey: await fields.keyPair(
+            'natsFileConversionNkeySeed',
+            'natsFileConversionNkeyPublic',
+            createUser,
+        ),
+        characterFidelityNkey: await fields.keyPair(
+            'natsCharacterFidelityNkeySeed',
+            'natsCharacterFidelityNkeyPublic',
+            createUser,
+        ),
+        backupNkey: await fields.keyPair(
+            'natsBackupNkeySeed',
+            'natsBackupNkeyPublic',
+            createUser,
+        ),
+        operatorNkey: await fields.keyPair(
+            'natsOperatorNkeySeed',
+            'natsOperatorNkeyPublic',
+            createUser,
+        ),
         authNkey: await fields.keyPair(
             'natsAuthNkeySeed',
             'natsAuthNkeyPublic',
@@ -1247,7 +1319,7 @@ const collectConfiguration = async (
         ),
     }
     const natsSysUserPassword = await fields.password('natsSysUserPassword')
-    const natsRegularUserPassword = await fields.password('natsRegularUserPassword')
+    const natsCalloutPassword = await fields.password('natsCalloutPassword')
 
     // -------------------------------------------------------------------------
     // AWS SSO Section
@@ -1770,6 +1842,16 @@ const collectConfiguration = async (
         auth0Domain,
         auth0ClientId,
         auth0Audience,
+        natsApiNkeySeed: natsKeys.apiNkey.seed,
+        natsApiNkeyPublic: natsKeys.apiNkey.public,
+        natsFileConversionNkeySeed: natsKeys.fileConversionNkey.seed,
+        natsFileConversionNkeyPublic: natsKeys.fileConversionNkey.public,
+        natsCharacterFidelityNkeySeed: natsKeys.characterFidelityNkey.seed,
+        natsCharacterFidelityNkeyPublic: natsKeys.characterFidelityNkey.public,
+        natsBackupNkeySeed: natsKeys.backupNkey.seed,
+        natsBackupNkeyPublic: natsKeys.backupNkey.public,
+        natsOperatorNkeySeed: natsKeys.operatorNkey.seed,
+        natsOperatorNkeyPublic: natsKeys.operatorNkey.public,
         natsAuthNkeySeed: natsKeys.authNkey.seed,
         natsAuthNkeyPublic: natsKeys.authNkey.public,
         natsAuthXkeySeed: natsKeys.authXkey.seed,
@@ -1781,7 +1863,7 @@ const collectConfiguration = async (
         natsAiModelRegistryNkeySeed: natsKeys.aiModelRegistryNkey.seed,
         natsAiModelRegistryNkeyPublic: natsKeys.aiModelRegistryNkey.public,
         natsSysUserPassword,
-        natsRegularUserPassword,
+        natsCalloutPassword,
         configureAwsSso: configureAwsSso as boolean,
         awsSsoSessionName,
         awsSsoStartUrl,
@@ -1811,6 +1893,19 @@ const collectConfiguration = async (
 // File Generation
 // ============================================================================
 
+const withNatsRegistration = (content: string): string => {
+    const updates = new EnvFileUpdates(content)
+
+    for (const [name, value] of Object.entries(
+        registrationEnvironment(
+            parseEnv(content),
+        ),
+    ))
+        updates.setValue(name, `'${value}'`)
+
+    return updates.render()
+}
+
 const generateEnvFileContent = (config: EnvConfig): string => {
     const stageName = `${config.developerName}-${config.environment}`
     const isLocal = config.environment === 'local'
@@ -1838,8 +1933,18 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{HOSTED_ZONE_NAME}}': config.hostedZoneName,
         '{{AWS_ROUTE53_PARENT_HOSTED_ZONE_ID}}': config.awsRoute53ParentHostedZoneId,
         '{{NATS_DEBUG_MODE}}': isLocal ? 'true' : 'false',
+        '{{NATS_API_NKEY_SEED}}': config.natsApiNkeySeed,
+        '{{NATS_API_NKEY_PUBLIC}}': config.natsApiNkeyPublic,
+        '{{NATS_FILE_CONVERSION_NKEY_SEED}}': config.natsFileConversionNkeySeed,
+        '{{NATS_FILE_CONVERSION_NKEY_PUBLIC}}': config.natsFileConversionNkeyPublic,
+        '{{NATS_CHARACTER_FIDELITY_NKEY_SEED}}': config.natsCharacterFidelityNkeySeed,
+        '{{NATS_CHARACTER_FIDELITY_NKEY_PUBLIC}}': config.natsCharacterFidelityNkeyPublic,
+        '{{NATS_BACKUP_NKEY_SEED}}': config.natsBackupNkeySeed,
+        '{{NATS_BACKUP_NKEY_PUBLIC}}': config.natsBackupNkeyPublic,
+        '{{NATS_OPERATOR_NKEY_SEED}}': config.natsOperatorNkeySeed,
+        '{{NATS_OPERATOR_NKEY_PUBLIC}}': config.natsOperatorNkeyPublic,
         '{{NATS_SYS_USER_PASSWORD}}': config.natsSysUserPassword,
-        '{{NATS_REGULAR_USER_PASSWORD}}': config.natsRegularUserPassword,
+        '{{NATS_CALLOUT_PASSWORD}}': config.natsCalloutPassword,
         '{{NATS_AUTH_NKEY_SEED}}': config.natsAuthNkeySeed,
         '{{NATS_AUTH_NKEY_PUBLIC}}': config.natsAuthNkeyPublic,
         '{{NATS_AUTH_XKEY_SEED}}': config.natsAuthXkeySeed,
@@ -1948,7 +2053,7 @@ export const writeFiles = async (config: EnvConfig): Promise<void> => {
             throw new Error('The AWS configuration changed during setup. No updates were written; run setup again.')
     }
 
-    const content = config.edits ? config.edits.render(config) : generateEnvFileContent(config)
+    const content = withNatsRegistration(config.edits ? config.edits.render(config) : generateEnvFileContent(config))
 
     if (content !== currentContent)
         fs.writeFileSync(envFilePath, content)
@@ -2055,6 +2160,16 @@ const main = async (): Promise<void> => {
             auth0Domain: '',
             auth0ClientId: '',
             auth0Audience: 'http://localhost:3005',
+            natsApiNkeySeed: natsKeys.apiNkey.seed,
+            natsApiNkeyPublic: natsKeys.apiNkey.public,
+            natsFileConversionNkeySeed: natsKeys.fileConversionNkey.seed,
+            natsFileConversionNkeyPublic: natsKeys.fileConversionNkey.public,
+            natsCharacterFidelityNkeySeed: natsKeys.characterFidelityNkey.seed,
+            natsCharacterFidelityNkeyPublic: natsKeys.characterFidelityNkey.public,
+            natsBackupNkeySeed: natsKeys.backupNkey.seed,
+            natsBackupNkeyPublic: natsKeys.backupNkey.public,
+            natsOperatorNkeySeed: natsKeys.operatorNkey.seed,
+            natsOperatorNkeyPublic: natsKeys.operatorNkey.public,
             natsAuthNkeySeed: natsKeys.authNkey.seed,
             natsAuthNkeyPublic: natsKeys.authNkey.public,
             natsAuthXkeySeed: natsKeys.authXkey.seed,
@@ -2066,7 +2181,7 @@ const main = async (): Promise<void> => {
             natsAiModelRegistryNkeySeed: natsKeys.aiModelRegistryNkey.seed,
             natsAiModelRegistryNkeyPublic: natsKeys.aiModelRegistryNkey.public,
             natsSysUserPassword: generateSecurePassword(28),
-            natsRegularUserPassword: generateSecurePassword(28),
+            natsCalloutPassword: generateSecurePassword(28),
             configureAwsSso: false,
             awsSsoSessionName: '',
             awsSsoStartUrl: '',
@@ -2089,16 +2204,7 @@ const main = async (): Promise<void> => {
             stripePublicKey: '',
         }
 
-        const stageName = `${config.developerName}-${config.environment}`
-        const envFilePath = path.join(WORKSPACE_DIR, `.env.${stageName}`)
-
-        fs.writeFileSync(
-            envFilePath,
-            generateEnvFileContent(config),
-        )
-        debugLog(
-            c.green(`✓ Created .env.${stageName}`),
-        )
+        await writeFiles(config)
         process.exit(0)
     }
 

@@ -1,194 +1,38 @@
-# Caddy Certificate Management
+---
+title: Certificate Manager Infrastructure
+description: Pulumi resources for Caddy Lambda execution, certificate storage, renewal scheduling and alarms.
+---
 
-Previously considered https://certbot.eff.org/pages/about but for some reason decided to go with Caddy.
+# Certificate Manager Infrastructure
 
-## Lambda Issuance Flow (Updated)
+This directory contains Pulumi resources and certificate-reference helpers. The [Caddy service](../../../../../services/caddy/README.md) owns the Go executable, container image, issuance, validation and publication behavior. Its [operations manual](../../../../../services/caddy/documentation/OPERATIONS.md) covers local CA trust, state recovery and delivery diagnosis.
 
-1. Restore persisted ACME account (optional, Secrets Manager) to reduce cold issuance latency.
-2. Generate runtime Caddyfile (domains appended dynamically).
-3. Start Caddy with Route53 DNS provider (auto DNS-01 challenges).
-4. (Best-effort) Poll public DNS for `_acme-challenge.<domain>` TXT visibility (up to 60s) to differentiate record propagation vs. ACME pending.
-5. Adaptive certificate wait loop per domain:
-   - Poll every 5s for first 60s, then every 10s until timeout (default 300s).
-   - After 90s, capture Caddy admin API internal automation state for diagnostics.
-6. On success: export cert + key to Secrets Manager per domain and (if enabled) persist ACME account tarball.
-7. On timeout: dump storage tree + partial ACME order traces for debugging before failing invocation.
+## Image and invocation
 
-## Environment Variables (Key)
+`createLambdaCertificateManager` builds the Dockerfile supplied by its caller and creates the ECR repository and Lambda function. The main Pulumi program supplies `/usr/src/service/services/caddy/Dockerfile` with repository-root context `/usr/src/service`. The image contains the static `lixpi-caddy` executable and CA roots; Lambda starts that executable directly.
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| DOMAINS | Comma-separated list of FQDNs | (required) |
-| CADDY_EMAIL | ACME account email | (required) |
-| STORAGE_TYPE | secrets-manager | secrets-manager |
-| SECRETS_PREFIX | Prefix for Secrets Manager secrets | caddy-cert |
-| AWS_HOSTED_ZONE_ID | Explicit hosted zone for Route53 plugin | auto-detect if empty |
-| CADDY_PERSIST_MODE | If 'secrets-manager', persist ACME account | (disabled) |
-| CERT_TIMEOUT_SECONDS | Total wait for issuance (Lambda path) | 300 |
+The function has a stable name, reserved concurrency of one and a default timeout of 900 seconds. It receives domains, ACME email, hosted-zone ID, state bucket, serving-secret prefix and metric dimension through environment variables. An initial invocation establishes the certificate dependency used by NATS deployment. An EventBridge rule invokes the same function every six hours, with bounded event age and retries. Failed maintenance returns a Lambda invocation error.
 
-## Persistence Strategy
+## Storage and permissions
 
-When `CADDY_PERSIST_MODE=secrets-manager` the `/tmp/caddy/acme` directory is archived and base64 stored at `${SECRETS_PREFIX}-caddy-acme-account`. On next cold start it is restored prior to starting Caddy, avoiding repeated new ACME account registration and speeding re-issuance / renewal.
+The private state bucket enables versioning and AES256 server-side encryption, blocks public access and is protected from Pulumi deletion. Its `caddy-state.tar.gz` object stores durable Caddy account, certificate and renewal state. The function role can read and write that object. One concurrent invocation prevents competing whole-tree uploads.
 
-## Diagnostics Added
+For Secrets Manager publication, the resource creates each serving secret before invoking the function and retains a 30-day deletion recovery window. Secret names derive from the configured prefix and domain. The certificate helper supplies references and environment settings to the consuming deployment. The Caddy executable supports public publication through Secrets Manager; its local mode exports files for Compose.
 
-- DNS TXT presence check (non-fatal) for each domain.
-- Admin API snapshots (certificates + locks) if issuance exceeds 90s.
-- Storage tree + ACME order grep on timeout.
+The function role has Route53 DNS-challenge permissions, scoped to the supplied hosted zone where the AWS action supports it. CloudWatch metric writes are restricted to `Lixpi/Certificates`. Basic Lambda logging permissions are attached, with VPC execution permissions when private subnets are supplied. A VPC-attached function needs outbound connectivity to AWS, DNS and certificate-authority endpoints.
 
-## Diagram
+## Alarms and certificate delivery
 
-```
-┌──────────────────┐
-│ Lambda Invoke    │
-└───────┬──────────┘
-	   │
-	   ▼
-   (Optional) Restore ACME account
-	   │
-	   ▼
-   Generate runtime Caddyfile
-	   │
-	   ▼
-	Start Caddy
-	   │
-	   ▼
-  DNS TXT pre-check loop
-	   │
-	   ▼
- Adaptive cert wait loop
-  (poll fs + admin API)
-	   │
-   ┌─────┴─────┐
-   │ Success   │ Timeout
-   │           │
-   ▼           ▼
- Export &      Dump state + fail
- Persist ACME
-```
-Also in another article https://medium.com/@slimm609/ssl-for-local-development-43c9d75c7ee2 they talked about using public dns record that points to localhost. That would allow to generate a certificate and use dns challenge while running locally, but it makes the service vendor locked. Idally when running locally we don't want to depend on any specific cloud too much.
+CloudWatch alarms detect Lambda errors, two missing six-hour maintenance-success periods and less than seven days of certificate life. Their actions include the manager's SNS topic and any supplied `alarmActions`. The topic ARN is returned as `outputs.alertTopicArn`. `NATS_OPERATIONAL_ALERT_EMAIL` creates an email subscription that the recipient must confirm.
 
-In this article instead https://deliciousbrains.com/ssl-certificate-authority-for-local-https-development/ they talked about creating a local Certificate Authority that browser can trust. That sounds reasonable, that's why we decided to go with Caddy. Because it allows to automage a lot of these steps.
+The [NATS deployment adapter](../NATS-cluster/README.md) reads the published pair and supplies files through a shared volume. The broker validates and rotates those files without restarting its serving process. Brokers can read their serving secret but cannot read ACME account state or publish certificates. Issuance alarms and broker delivery alarms cover separate failure paths; see [Caddy operations](../../../../../services/caddy/documentation/OPERATIONS.md) and [NATS operations](../../../../../services/nats/documentation/OPERATIONS.md).
 
-Caddy uses Route53 module. https://github.com/caddy-dns/route53?tab=readme-ov-file
+## Verification
 
-## Local Development Certificate Setup
-
-This system uses Caddy to generate a local Certificate Authority (CA) and SSL certificates for development. The certificates are automatically generated when starting the development environment.
-
-### Certificate Installation for Browsers
-
-To avoid TLS handshake errors when connecting to `wss://localhost:9222`, you need to install the local CA certificate in your browser/system.
-
-#### 1. Extract CA Certificate
+The colocated Pulumi tests use mocked resources to check concurrency, scheduling, retention and alarms. Run them through the shared infrastructure test domain:
 
 ```bash
-# Extract CA certificate from Docker volume
-docker run --rm -v lixpi_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
+docker compose -f docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner infrastructure src/resources/certificate-manager/lambda-certificate-manager.test.ts
 ```
 
-#### 2. Install Certificate by Operating System
-
-**macOS:**
-```bash
-# Method 1: Command line (requires admin password)
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt
-
-# Method 2: Keychain Access GUI
-# 1. Open Keychain Access app
-# 2. Go to File → Import Items
-# 3. Select ca.crt file
-# 4. Choose "System" keychain
-# 5. Find "Lixpi Local Development CA" certificate
-# 6. Double-click → Trust → "Always Trust"
-```
-
-**Linux (Ubuntu/Debian):**
-```bash
-# Copy certificate to trusted directory
-sudo cp ca.crt /usr/local/share/ca-certificates/lixpi-local-ca.crt
-
-# Update certificate store
-sudo update-ca-certificates
-
-# For Firefox (uses its own certificate store)
-# Go to Preferences → Privacy & Security → Certificates → View Certificates
-# Authorities → Import → Select ca.crt → Trust for websites
-```
-
-**Windows:**
-```bash
-# Method 1: Command line (run as Administrator)
-certlm.msc
-# Import ca.crt into "Trusted Root Certification Authorities"
-
-# Method 2: PowerShell (run as Administrator)
-Import-Certificate -FilePath "ca.crt" -CertStoreLocation Cert:\LocalMachine\Root
-```
-
-#### 3. Browser-Specific Instructions
-
-**Chrome/Edge:**
-- Restart browser after system certificate installation
-- Certificate should be automatically trusted
-
-**Firefox:**
-- Go to `about:preferences#privacy`
-- Scroll to "Certificates" → "View Certificates"
-- Click "Authorities" tab → "Import"
-- Select `ca.crt` → Check "Trust this CA to identify websites"
-
-**Safari:**
-- Uses macOS system certificates automatically
-- Restart Safari after installing via Keychain Access
-
-#### 4. Alternative: Download via Browser
-
-If you have the web-ui running, you can download the certificate directly:
-```
-http://localhost:3001/certs/ca.crt
-```
-
-### Verification
-
-After installation, verify the certificate is trusted:
-
-```bash
-# Test the WebSocket connection
-openssl s_client -connect localhost:9222 -servername localhost -verify_return_error -CAfile ca.crt
-
-# Should show "Verify return code: 0 (ok)"
-```
-
-## Architecture
-
-### Local Development Mode
-- Uses Caddy's internal PKI to generate local CA
-- Creates localhost certificates signed by the local CA
-- Serves certificates via shared Docker volume
-
-### Production Mode
-- Uses Let's Encrypt ACME with Route53 DNS validation
-- Stores certificates in AWS Secrets Manager
-- Automatic renewal every 30 days
-
-## Configuration
-
-### Environment Variables
-
-- `CADDY_LOCAL_MODE`: Set to "true" for local development
-- `DOMAINS`: Comma-separated list of domains for certificates
-- `CADDY_EMAIL`: Email for Let's Encrypt registration
-- `CERTIFICATE_VALIDATION_EMAIL`: Fallback email configuration
-
-### Certificate Storage
-
-**Local Development:**
-- Storage: Docker volume `caddy-certs`
-- CA Certificate: `/certificates/ca.crt`
-- Server Certificate: `/certificates/localhost.crt`
-- Private Key: `/certificates/localhost.key`
-
-**Production:**
-- Storage: AWS Secrets Manager
-- Format: JSON with `certificate` and `private_key` fields
+The [Go Testing and Tooling guide](../../../../../documentation/testing/Go/TESTING-GUIDE.md) documents the Caddy runtime suite. Public ACME issuance and deployed IAM permissions are verified through the target account's deployment process.

@@ -29,7 +29,11 @@ Use the same command for every configured service. The optional test path is rel
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
 ```
 
-The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `docs-site` runs source-registry and Markdoc link tests without building the documentation site. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `docs-site` and `init-config` separately.
+The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `init-config` separately.
+
+The `nex` domain includes `workloads/nats-admission.runtime.test.ts`. Its opt-in application-cluster checks require NATS and LocalAuth0; set `LIXPI_NATS_AUTH_RUNTIME_TEST=true` and mount the selected local environment file read-only at `/run/nats-test.env`. They create and remove a unique Object Store bucket. `shared nats-subject-registry` verifies endpoint permission boundaries, user-scoped events, queues and declaration validation. Isolated Go admission tests are covered in [Go Testing and Tooling](../Go/TESTING-GUIDE.md).
+
+With NEX workloads running, add `LIXPI_NATS_WORKLOAD_RUNTIME_TEST=true` to verify request/reply through conversion and fidelity identities. These requests exercise input rejection without processing user media.
 
 `--rm` removes the container after the run, `-T` disables pseudo-TTY allocation, and `--no-deps` prevents unrelated services from starting. Both profiles are required because Compose validates cross-profile dependencies before selecting the target service.
 
@@ -43,13 +47,27 @@ Without a package name, `shared` runs every shared package that defines `test:ru
 
 ## Vitest Configuration
 
+The `infrastructure` domain copies the Pulumi sources into the disposable runner and uses Pulumi mocks and synthetic AWS responses. Run `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner infrastructure`. It does not preview or deploy a stack, build or publish images, or contact AWS.
+
+The [Go test runner](../Go/TESTING-GUIDE.md) covers snapshot and restore acceptance with disposable brokers, temporary filesystem directories and an in-memory snapshot store. It also verifies compatibility in both directions with the pinned NATS CLI. The broker production image contains no CLI or shell. The infrastructure suite separately verifies the deployment adapter with mocked provider APIs.
+
+`TestLiveScaleInPreservesSingleReplicaAndConcurrentWrites` in the Go broker package runs four disposable brokers, fences placement, evacuates streams and consumers, verifies retained R1 data, and continues R3 writes. The TypeScript infrastructure domain verifies controller transitions, unsafe health and placement rejection, singleton-zone protection, configurable node bounds and DynamoDB PITR.
+
+The API's native storage acceptance uses a disposable NATS 2.15 server. It verifies permanent organization Blob bytes in native Object Store, JetStream event sequencing and deduplication, replay, purge and workqueue acknowledgements. It refuses application broker addresses and skips unless `NATIVE_NATS_TEST_SERVER` is supplied. Execute these commands in order and stop the disposable broker after the test, including after a failure:
+
+```bash
+docker run --rm -d --name lixpi-nats-native-storage-test --network nats nats:2.15.0-alpine@sha256:017eb6d9ec0eda3b7ba4d7858298ef58e4ccebdf7257692b97059dadf29d4552 --jetstream --store_dir /tmp/native-storage-test
+docker compose --profile dev --profile main run --rm --no-deps -T -e NATIVE_NATS_TEST_SERVER=nats://lixpi-nats-native-storage-test:4222 lixpi-typescript-test-runner api src/services/native-nats-storage.runtime.test.ts
+docker stop lixpi-nats-native-storage-test
+```
+
 Each domain owns its Vitest environment, include patterns, setup files, and aliases in `vitest.config.ts`. Browser clients use Happy DOM where their tests need DOM APIs. Add configuration to the domain rather than copying it into this guide or the shared runner.
 
 ## GitHub Actions
 
-The `CI` workflow runs each configured service, shared-package, and documentation domain as an independent matrix job. Each job invokes the same test-runner image through `docker-compose.typescript-test-runner.yml`; the GitHub host does not install pnpm, service dependencies, or Vitest.
+The `CI` workflow groups TypeScript checks under `typescript-tests` and `typescript-quality`, with `TypeScript / Tests` and `TypeScript / Formatting and linting` status names. Each configured service and shared-package test domain runs as an independent matrix job. Each test job invokes the same test-runner image through `docker-compose.typescript-test-runner.yml`; the GitHub host does not install pnpm, service dependencies, or Vitest.
 
-CI sets non-secret local placeholder values for the Vite variables required by the test-runner Compose service and still uses `--no-deps`, so no application, NATS, auth, or database service starts. Pointing Compose at the one-shot runner file preserves the local image, mounts, dispatcher, and domain boundary without requiring a developer `.env` file or parsing the root application graph. The test matrix and formatting-and-linting matrix feed one stable `Required CI gate` status for branch rules.
+CI sets non-secret local placeholder values for the Vite variables required by the test-runner Compose service and still uses `--no-deps`, so no application, NATS, auth, or database service starts. Pointing Compose at the one-shot runner file preserves the local image, mounts, dispatcher, and domain boundary without requiring a developer `.env` file or parsing the root application graph. Both TypeScript matrices and the separate Go quality, test, and build jobs must succeed for the stable `Required CI gate` status used by branch rules.
 
 Tests use **Vitest**. Globals are enabled, so you can use `describe`, `it`, `expect`, `vi` etc. without importing them, but we **do import them explicitly** for clarity.
 

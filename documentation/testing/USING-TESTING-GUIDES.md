@@ -17,5 +17,6 @@ These rules apply before an agent selects or runs any verification command, whet
 - Never write, modify, or run tests unless the user explicitly asks for tests in the current thread.
 - Never open the application in a browser or use browser automation, screenshots, or manual visual inspection to verify work.
 - For TypeScript tests, follow `TypeScript/TESTING-GUIDE.md`. Every TypeScript service and shared package uses the same one-shot `lixpi-typescript-test-runner` command with its configured domain. Application containers do not ship a test runner.
+- For Go tests and tooling, follow [Go/TESTING-GUIDE.md](Go/TESTING-GUIDE.md). Run race-enabled tests through `lixpi-go-test-runner` and formatter/linter autofix through `lixpi-go-quality-runner`.
 
 If tests were not explicitly requested, do not report missing test execution as a verification failure. If tests were explicitly requested and the permitted tests do not cover a changed behavior, report the remaining verification gap rather than substituting a prohibited check.

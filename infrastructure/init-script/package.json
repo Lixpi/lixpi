@@ -5,11 +5,12 @@
     "type": "module",
     "description": "Interactive environment setup script for Lixpi development",
     "scripts": {
-        "setup": "node setup-env.ts"
+        "setup": "node --experimental-transform-types setup-env.ts"
     },
     "dependencies": {
         "@clack/prompts": "*",
-        "@lixpi/debug-tools": "link:../../packages/lixpi/debug-tools/ts",
+        "@lixpi/debug-tools": "workspace:*",
+        "@lixpi/nats-subject-registry": "workspace:*",
         "@nats-io/nkeys": "*",
         "chalk": "*"
     },

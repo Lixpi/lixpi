@@ -7,7 +7,7 @@ export type DockerImageBuildConfig = {
     dockerBuildContext: string
     dockerfilePath: string
     platforms?: string[]
-    buildArgs?: { [key: string]: string }
+    buildArgs?: { [key: string]: pulumi.Input<string> }
     push?: boolean
     buildOnPreview?: boolean
     noCache?: boolean

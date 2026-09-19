@@ -45,16 +45,16 @@ Each workspace has a file-backed JetStream stream for Capability events. Subject
 
 The NATS cluster runs one daemon task on each of three ECS EC2 instances. Each instance mounts an encrypted gp3 EBS volume at `/data/jetstream`. Task restarts and deployments reuse the host volume. Streams and Object Store buckets use three replicas, so one unavailable node does not remove the only copy.
 
-An EventBridge schedule runs `services/nats/backup-streams.sh` every six hours. The task enumerates JetStream streams, runs `nats stream backup`, uploads the snapshot tree to a versioned encrypted S3 bucket, and updates the `LATEST` marker. Bucket lifecycle rules retain recent recovery points and expire older versions.
+An EventBridge schedule runs the Go `lixpi-nats backup` command every six hours. The task captures native AUTH stream snapshots, uploads them to the backup bucket, then writes `COMPLETE` and updates `LATEST`. Live content reads and writes use NATS Object Store; the snapshot bucket stores recovery artifacts. See [NATS Cluster](../platform/deployment/NATS-CLUSTER.md) for retention and recovery limits.
 
 ## Restore procedure
 
-1. Stop application writers and record the selected snapshot ID.
-2. Verify the target NATS cluster is reachable and has enough storage for the snapshot.
-3. Run `services/nats/restore-streams.sh <snapshot-id>` from the NATS image with the backup bucket, prefix, NATS URL, and system credentials configured.
+1. Select a snapshot ID and prepare an empty recovery cluster isolated from application writers.
+2. Verify the target is reachable and has enough storage for the snapshot.
+3. Run `lixpi-nats restore <snapshot-id>` from the NATS image with the backup bucket, prefix, target NATS URL and operator NKey configured. The command verifies the completion marker and checksums before restoring.
 4. List restored streams and compare stream names, subject filters, message counts, replica counts, and last sequence values with the backup inventory.
 5. Read one known Capability manifest, one resource Blob, and one Capability run replay through the API authorization path.
-6. Resume writers only after those reads pass.
+6. Reconcile the restored content and event histories with DynamoDB domain records before directing application traffic to the recovery target.
 
 Restoring into a non-empty cluster can conflict with existing stream names. Use an isolated recovery cluster unless the incident procedure explicitly calls for an in-place restore.
 

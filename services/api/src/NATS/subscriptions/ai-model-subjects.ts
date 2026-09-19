@@ -1,37 +1,15 @@
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
+import { getNatsSubjectPath } from '@lixpi/constants'
 import { info } from '@lixpi/debug-tools'
 
 import AiModel from '../../models/ai-model.ts'
 
-const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS
-
-export const aiModelSubjects = [
-    // AI Models ------------------------------------------------------------------------------------------------
+export const aiModelSubjects = createNatsSubscriptions(
+    'ai-model',
     {
-        subject: AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS] },
-            sub: { allow: [] },
-        },
-        handler: async (data, msg) => await AiModel.getAvailableAiModels(),
-    },
-
-    {
-        // Published by the AI Model Registry after each catalog sync
-        // (exported from the NEX account, imported into AUTH). The API reads the
-        // catalog live from DynamoDB, so this is a refresh/liveness signal the API
-        // (and any UI granted the subject) can react to.
-        subject: AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED,
-        type: 'subscribe',
-        payloadType: 'json',
-        permissions: {
-            sub: { allow: [AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED] },
-        },
-        handler: async (data, msg) => void info(
+        [getNatsSubjectPath(subjects => subjects.AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS)]: async (data, msg) => await AiModel.getAvailableAiModels(),
+        [getNatsSubjectPath(subjects => subjects.AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED)]: async (data, msg) => void info(
             `AI models sync completed -> new=${data?.totalNew ?? 0} updated=${data?.totalUpdated ?? 0} deleted=${data?.totalDeleted ?? 0} ranAt=${data?.ranAt ?? 'n/a'}`,
         ),
     },
-    // END AI Models ---------------------------------------------------------------------------------------------------
-]
+)

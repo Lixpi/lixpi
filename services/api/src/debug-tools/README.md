@@ -2,6 +2,8 @@
 
 Files in this directory and its child directories are development-only debug tools.
 
+NATS inspection and cleanup tools require `NATS_OPERATOR_NKEY_SEED` and authenticate as `svc:operator` in AUTH. They pass the seed as `nkeySeed` to `@lixpi/nats-service`, which signs a service JWT for the connection. Supply that seed explicitly to an authorized operator container; the API runtime does not receive it.
+
 They are not application runtime code, are not part of supported API behavior, and must not be covered by automated tests. Agents must ignore this directory unless a user explicitly asks to inspect, modify, run, or rely on a file here.
 
 - `inspect-replaced-media-history.ts` is a pre-cutover forensic tool for legacy exports/storage only; it is not compatible with the active Asset/Blob runtime.

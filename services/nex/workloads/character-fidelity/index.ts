@@ -19,13 +19,13 @@ import {
 import { CHARACTER_FIDELITY_MODEL_MANIFEST } from './model-manifest.ts'
 
 const servers = process.env.NATS_SERVERS
-const pass = process.env.NATS_REGULAR_USER_PASSWORD
+const nkeySeed = process.env.NATS_CHARACTER_FIDELITY_NKEY_SEED
 
 if (
     !servers
-    || !pass
+    || !nkeySeed
 ) {
-    err('character-fidelity: NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required; exiting')
+    err('character-fidelity: NATS_SERVERS and NATS_CHARACTER_FIDELITY_NKEY_SEED are required; exiting')
     process.exit(1)
 }
 
@@ -40,8 +40,8 @@ info('character-fidelity: detector and recognizer sessions warmed')
 const service = await NatsService.init({
     servers,
     name: 'nex-character-fidelity',
-    user: 'regular_user',
-    pass,
+    nkeySeed,
+    userId: 'svc:character-fidelity',
     subscriptions: [{
         subject,
         type: 'reply',

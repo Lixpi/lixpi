@@ -10,20 +10,20 @@ const LEGACY_BUCKET_PATTERNS = [
 
 const servers = process.env.NATS_SERVERS
     ?.split(',').map(server => server.trim()).filter(Boolean)
-const password = process.env.NATS_REGULAR_USER_PASSWORD
+const nkeySeed = process.env.NATS_OPERATOR_NKEY_SEED
 
 if (
     !servers?.length
-    || !password
+    || !nkeySeed
 )
-    throw new Error('NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required')
+    throw new Error('NATS_SERVERS and NATS_OPERATOR_NKEY_SEED are required')
 
 const confirmed = process.argv.includes(CONFIRMATION_FLAG)
 const natsService = await NATS_Service.init({
     servers,
     name: 'phase11-legacy-object-store-removal',
-    user: 'regular_user',
-    pass: password,
+    userId: 'svc:operator',
+    nkeySeed,
 })
 
 try {

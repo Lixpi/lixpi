@@ -1,0 +1,53 @@
+version: "2"
+run:
+    timeout: 5m
+    modules-download-mode: readonly
+linters:
+    default: standard
+    enable:
+        - bodyclose
+        - errorlint
+        - forbidigo
+        - gocritic
+        - modernize
+        - noctx
+        - sloglint
+        - usestdlibvars
+        - wsl_v5
+    settings:
+        forbidigo:
+            analyze-types: true
+            forbid:
+                - pattern: ^print(ln)?$
+                  msg: Use log/slog for logging and an explicit writer for command output.
+                - pattern: ^fmt\.Print(f|ln)?$
+                  msg: Use log/slog for logging and an explicit writer for command output.
+        sloglint:
+            args-on-sep-lines: true
+            msg-style: lowercased
+            static-msg: true
+        wsl_v5:
+            allow-first-in-block: false
+            allow-whole-block: false
+            branch-max-lines: 0
+            cuddle-max-statements: 1
+            default: none
+            enable:
+                - after-block
+                - branch
+                - err
+                - for
+                - if
+                - range
+                - return
+                - select
+                - switch
+                - type-switch
+formatters:
+    enable:
+        - gofumpt
+        - goimports
+        - golines
+    settings:
+        golines:
+            max-len: 150

@@ -5,7 +5,7 @@ import {
     it,
     vi,
 } from 'vitest'
-import NatsService from '@lixpi/nats-service'
+
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import { jwtAuthMiddleware } from './nats-auth-middleware.ts'
 
@@ -42,37 +42,8 @@ describe('jwtAuthMiddleware', () => {
         })
     })
 
-    it('lets the encrypted auth callout reach its protocol handler through NatsService.reply', async () => {
-        const encryptedRequest = new Uint8Array([255, 0, 128, 1])
-        const response = Promise.withResolvers<Uint8Array>()
-        const message = {
-            subject: '$SYS.REQ.USER.AUTH',
-            data: encryptedRequest,
-            string: () => new TextDecoder().decode(encryptedRequest),
-            respond: (payload: Uint8Array) => response.resolve(payload),
-        }
-        const service = new (NatsService as any)({ middleware: [jwtAuthMiddleware] })
-        service.nc = {
-            subscribe: () => ({
-                [Symbol.asyncIterator]: async function*() {
-                    yield message
-                },
-            }),
-        }
-        const protocolHandler = vi.fn(async (_payload, msg) => {
-            expect(msg.data).toBe(encryptedRequest)
-
-            return 'signed-authorization-response'
-        })
-
-        service.reply('$SYS.REQ.USER.AUTH', protocolHandler, {}, 'buffer')
-
-        expect(new TextDecoder().decode(await response.promise)).toBe('signed-authorization-response')
-        expect(protocolHandler).toHaveBeenCalledOnce()
-        expect(authenticateTokenOnRequestMock).not.toHaveBeenCalled()
-    })
-
     it.each([
+        '$SYS.REQ.USER.AUTH',
         membershipSubject,
         'user.get',
         '$SYS.REQ.USER.AUTH.extra',

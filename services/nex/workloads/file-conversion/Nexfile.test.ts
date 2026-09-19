@@ -28,6 +28,6 @@ describe('Nexfile — file-conversion workload contract', () => {
 
     it('does not include runtime secrets and documents startup env injection', () => {
         expectSourceToContain('environment: {}', 'runtime env injection map')
-        expectSourceToContain('NATS_SERVERS, NATS_REGULAR_USER_PASSWORD, HOME, PATH', 'commented env contract')
+        expectSourceToContain('NATS_SERVERS, NATS_FILE_CONVERSION_NKEY_SEED, HOME, PATH', 'commented env contract')
     })
 })

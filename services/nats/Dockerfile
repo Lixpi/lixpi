@@ -1,24 +1,23 @@
-# !!!!!!!!! IMPORTANT !!!!!!!!!
-# Using nats:alpine instead of nats:latest because default nats image is extremely minimal
-# and doesn't have shell or any other uitls which makes it very hard to run /entrypoint.sh script.
-# For the sake of simplicity for now just using nats:alpine image.
-# Even though nats official documentation warns about using alpine images in production,
-# !!!!!!!!! IMPORTANT !!!!!!!!!
+# Go targets use the repository root as their build context.
+FROM golangci/golangci-lint:v2.13.2@sha256:ba07dffad130794ae79ebaa0056809d18c0168f3f846480ffd3eb6c04578b83d AS go-lint
+FROM golang:1.26.8-bookworm@sha256:9fdc884aacc3bec89b20ffc69f4bb369c78210e3e4f600387b5128b12c199f81 AS go-base
+ENV GOTOOLCHAIN=local
+WORKDIR /usr/src/service
 
-# Use official NATS image as the base
-FROM nats:alpine
+FROM go-base AS development
+COPY --from=go-lint /usr/bin/golangci-lint /usr/local/bin/golangci-lint
+RUN go install golang.org/x/tools/gopls@v0.22.0 && go install github.com/go-delve/delve/cmd/dlv@v1.27.2
+CMD ["sh"]
 
-COPY --from=natsio/nats-box:latest /usr/local/bin/nats /usr/local/bin/nats
+FROM go-base AS go-build
+COPY services/nats/go.mod services/nats/go.sum ./
+RUN go mod download
+COPY services/nats/cmd ./cmd
+COPY services/nats/internal ./internal
+RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -o /out/lixpi-nats ./cmd/lixpi-nats
 
-# Install curl, openssl, and AWS CLI for ECS metadata queries, health checks, SSL, and CloudMap registration
-RUN apk add --no-cache curl openssl aws-cli jq
-
-# Copy our config file
-COPY nats-server.conf /opt/nats/nats-server.conf
-
-# Create and copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-COPY backup-streams.sh restore-streams.sh /opt/nats/
-RUN chmod +x /entrypoint.sh /opt/nats/backup-streams.sh /opt/nats/restore-streams.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+FROM scratch AS embedded-runtime
+COPY --from=go-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=go-build /out/lixpi-nats /usr/local/bin/lixpi-nats
+COPY services/nats/nats-server.conf /opt/nats/nats-server.conf
+ENTRYPOINT ["/usr/local/bin/lixpi-nats"]

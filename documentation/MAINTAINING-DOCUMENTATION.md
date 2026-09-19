@@ -1,6 +1,6 @@
 ---
 title: Maintaining Documentation
-description: How to discover, move, link, render, and verify Lixpi's developer documentation as the product and architecture change.
+description: How to discover, move, link, and verify Lixpi's developer documentation as the product and architecture change.
 ---
 
 # Maintaining Documentation
@@ -9,7 +9,7 @@ Use this guide when creating, moving, deleting, or reorganizing documentation.
 
 ## Required Writing Skill
 
-Before creating, revising, reviewing, or replying about any documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule. The skill owns prose style, live-system framing, durable factual claims, and document organization. This guide owns discovery, Markdoc compatibility, page moves, navigation, and verification.
+Before creating, revising, reviewing, or replying about any documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule. The skill owns prose style, live-system framing, durable factual claims, and document organization. This guide owns discovery, Markdown conventions, page moves, navigation, and verification.
 
 If the skill cannot be resolved or read, stop immediately. Do not edit the documentation and do not continue the task. Report that `talk-like-a-human` could not be resolved, then wait for the user's instructions.
 
@@ -18,16 +18,16 @@ If the skill cannot be resolved or read, stop immediately. Do not edit the docum
 Do not assume folders, page names, or architecture boundaries are permanent. Before changing documentation:
 
 1. Read the docs index at the root of the documentation tree.
-2. Check the generated docs-site navigation or list the Markdown files.
+2. List or search the Markdown files in the documentation tree.
 3. Read the pages around the area you are changing.
 4. Read nearby source-code READMEs for the implementation area.
 5. Fact-check behavior against the live code before repeating or rewriting it.
 
 The docs index is a map, not a contract. If the product shape changes, update the map to match the new shape. Avoid adding tiny "read this folder first" files whose only job is routing; put real guidance in this guide, in the relevant domain page, or in the docs index.
 
-## Keep Markdoc Compatibility
+## Keep Markdown Portable
 
-These docs are Markdown that must render through the static Markdoc site.
+These docs are read directly as Markdown in GitHub and editors. The static documentation site is currently set aside pending its redesign.
 
 Use this authoring shape:
 
@@ -40,7 +40,7 @@ description: One sentence about what this page covers.
 # Page Title
 ```
 
-Frontmatter is not mandatory for the renderer, but human-facing pages should have it.
+Frontmatter is optional, but human-facing pages should keep it when it already exists.
 
 Use standard Markdown whenever possible:
 
@@ -48,36 +48,26 @@ Use standard Markdown whenever possible:
 - Links to source code outside the documentation tree should be normal relative repo links.
 - Use fenced code blocks with a language tag.
 - Use Mermaid only inside fenced `mermaid` blocks.
-- Use Markdoc callouts for notes, warnings, important details, and tips.
-
-```markdoc
-{% callout type="warning" %}
-Explain the risk and what to do about it.
-{% /callout %}
-```
+- Write notes and warnings as ordinary Markdown paragraphs or blockquotes.
 
 Avoid:
 
-- Raw framework components.
-- Framework component syntax such as JSX.
-- Inline HTML that Markdoc may parse differently from GitHub.
-- Unclosed `{% callout %}` tags.
-- Mermaid diagrams that depend on unsupported runtime plugins.
+- Raw framework components and framework component syntax such as JSX.
+- Inline HTML when standard Markdown expresses the same thing.
+- Mermaid diagrams that depend on editor-specific plugins.
 - Anchor links guessed by hand. Prefer linking to the page when you cannot verify a heading fragment.
-
-The docs build can validate heading IDs and anchor fragments when a human explicitly asks for that check. Do not run it as a default agent step.
 
 ## Package Documentation
 
 Rendering-engine manuals live in `packages/lixpi/canvas-engine/docs/`; reusable canvas surface and effect manuals live in `packages/lixpi/canvas-components/docs/`. Lixpi workspace composition belongs in `packages/lixpi/canvas-components-lixpi-specific/docs/`. Shared DOM, SVG and gradient guidance belongs in `ui-primitives`; generic control guidance belongs in `ui-kit`; Gentelella theme integration and upgrade guidance belongs in `ui-kit-gentelella/documentation/`. Each package README introduces its contracts and links to its manuals. Central canvas pages describe product behavior and persistence, then link to those package entry points.
 
-The [site source registry](site/source-registry.mjs) records authored source paths and output routes. Register package documentation explicitly; do not copy manuals into `documentation/` or ingest an entire package source tree. Keep package links relative to the original file. The same resolver validates and renders links, including package assets and heading fragments.
+Do not copy package manuals into `documentation/`. Keep each manual beside the package it describes, link to it from the central documentation map, and keep links relative to the original file.
 
 ## Service Documentation
 
-A service that owns a body of documentation keeps it in `services/<service>/documentation/`, beside the code it describes. The AI Model Registry is the one that does today: its contract and its maintenance guide live in `services/ai-model-registry/documentation/`, and the service README introduces them.
+A service that owns a body of documentation keeps it in `services/<service>/documentation/`, beside the code it describes. Its README explains the service's responsibilities and links to those manuals. The [AI Model Registry](../services/ai-model-registry/README.md) keeps its catalog contract and maintenance guide there; [NATS](../services/nats/README.md) keeps its broker architecture, configuration and operations guides there.
 
-The central tree links to those pages instead of holding a copy. A domain page, the docs index, or a navigation table gets one line pointing at the service page; nothing is duplicated, and no routing-only file is added to carry the link. Register the service in `SERVICE_NAMES` in the site source registry so its README and documentation directory render with everything else.
+The central tree links to those pages instead of holding a copy. A domain page, the docs index, or a navigation table gets one line pointing at the service page; nothing is duplicated, and no routing-only file is added to carry the link.
 
 ## Moving or Renaming Pages
 
@@ -87,10 +77,10 @@ When reorganizing documentation:
 1. Map old pages to their new homes before deleting anything.
 2. Search for old paths and old page titles across the repo.
 3. Update links in docs, source comments, package READMEs, and tests.
-4. Use static link review, or the Dockerized documentation link tests when tests are explicitly requested. Run a docs build only when separately requested.
+4. Use static link review to verify the changed paths.
 5. If a source-shape test asserts a documentation path, update the test with the new path.
 
-Do not leave references to deleted pages. Keep links defensible from static review unless a requested docs build validates the rendered site.
+Do not leave references to deleted pages. Keep links defensible through static review.
 
 ## Updating the Docs Index
 
@@ -100,16 +90,14 @@ Keep the index useful by:
 
 - Linking to the main entry points for each active domain.
 - Describing what each domain is for.
-- Letting the generated site sidebar provide the exhaustive file inventory.
+- Keeping exhaustive file discovery in repository search instead of duplicating it here.
 - Removing links to pages that became archives, implementation memory, or stale planning notes.
 
 When a domain changes shape, update the index at the same time as the pages. Do not add a separate "using this directory" page just to tell agents to inspect a folder.
 
 ## Verification
 
-Do not run the docs build after documentation changes unless the user explicitly asks for it. Use static review by default.
-
-When a docs build is explicitly requested, run it through the documented Docker-only workflow. Never run `pnpm docs:build` on the host.
+There is no active documentation-site build. Use static review to check links, headings, and surrounding context.
 
 If documentation changes a tested source assertion, run the relevant test through the allowed project test command only when the user explicitly asks for tests in the current thread. For web UI tests, use Dockerized Vitest. Do not use browsers, screenshots, or manual visual inspection as substitutes for permitted tests.
 
@@ -118,6 +106,6 @@ If documentation changes a tested source assertion, run the relevant test throug
 Check these:
 
 - The `talk-like-a-human` rules are satisfied.
-- Links work in the generated site, not only on GitHub.
+- Links resolve from the Markdown files where they are written.
 - The docs index still gives a good starting point.
 - No tiny routing-only guide was added.

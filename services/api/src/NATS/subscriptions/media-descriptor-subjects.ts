@@ -1,6 +1,8 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import { err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import {
+    getNatsSubjectPath,
     MEDIA_DESCRIPTOR_VERSION,
     NATS_SUBJECTS,
     type AiModelId,
@@ -122,161 +124,157 @@ const persistDescriptor = async ({
     return { error: 'REVISION_CONFLICT' }
 }
 
-export const mediaDescriptorSubjects = [{
-    subject: MEDIA_DESCRIBE,
-    type: 'reply',
-    payloadType: 'json',
-    permissions: {
-        pub: { allow: [MEDIA_DESCRIBE] },
-        sub: { allow: [] },
-    },
-    handler: async (data: any) => {
-        const userId = data.user.userId as string
-        const assetId = data.assetId as string
+export const mediaDescriptorSubjects = createNatsSubscriptions(
+    'media-descriptor',
+    {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_DESCRIBE)]: async (data: any) => {
+            const userId = data.user.userId as string
+            const assetId = data.assetId as string
 
-        if (!assetId)
-            return { error: 'ASSET_ID_REQUIRED' }
+            if (!assetId)
+                return { error: 'ASSET_ID_REQUIRED' }
 
-        const requester = typeof data.workspaceId === 'string'
-            && data.workspaceId
-            ? await (async () => {
-                const workspace = await Workspace.getWorkspace({
-                    workspaceId: data.workspaceId,
-                    userId,
-                })
+            const requester = typeof data.workspaceId === 'string'
+                && data.workspaceId
+                ? await (async () => {
+                    const workspace = await Workspace.getWorkspace({
+                        workspaceId: data.workspaceId,
+                        userId,
+                    })
 
-                if (
-                    'error' in workspace
-                    || workspace.deletingAt
-                )
-                    return null
+                    if (
+                        'error' in workspace
+                        || workspace.deletingAt
+                    )
+                        return null
 
-                const organization = await Organization.getOrganization({
-                    organizationId: workspace.organizationId,
-                    userId,
-                })
+                    const organization = await Organization.getOrganization({
+                        organizationId: workspace.organizationId,
+                        userId,
+                    })
 
-                if ('error' in organization)
-                    return null
+                    if ('error' in organization)
+                        return null
 
-                return createAssetRequesterForWorkspaceUser(
-                    workspace,
-                    userId,
-                    true,
-                )
-            })()
-            : await getAssetRequesterContext(userId)
+                    return createAssetRequesterForWorkspaceUser(
+                        workspace,
+                        userId,
+                        true,
+                    )
+                })()
+                : await getAssetRequesterContext(userId)
 
-        if (!requester)
-            return { error: 'WORKSPACE_ACCESS_DENIED' }
+            if (!requester)
+                return { error: 'WORKSPACE_ACCESS_DENIED' }
 
-        const asset = await AssetModel.get({
-            assetId,
-            requester,
-        })
-
-        if ('error' in asset)
-            return asset
-
-        if (!await canEditAssetMetadata(asset, requester))
-            return { error: 'PERMISSION_DENIED' }
-
-        const isMedia = Boolean(asset.media)
-        const descriptorModelId = (isMedia ? settings.mediaDescriptor.defaultVlmModelId : data.aiModel) as AiModelId | undefined
-
-        if (!descriptorModelId?.includes(':'))
-            return { error: 'AI_MODEL_REQUIRED' }
-
-        const [provider, modelVersion] = descriptorModelId.split(':')
-        const aiModelMetaInfo = await AiModel.getAiModel({
-            provider: provider!,
-            model: modelVersion!,
-            omitPricing: true,
-        })
-        const maxTokens = aiModelMetaInfo?.maxCompletionSize || (isMedia ? settings.mediaDescriptor.defaultVlmMaxTokens : undefined)
-        const inferenceCapabilities = aiModelMetaInfo?.inferenceCapabilities
-            ?? (isMedia ? settings.mediaDescriptor.defaultVlmInferenceCapabilities : undefined)
-
-        if (
-            !maxTokens
-            || !inferenceCapabilities
-        )
-            return { error: `AI_MODEL_NOT_FOUND:${descriptorModelId}` }
-
-        const natsService = NATS_Service.getInstance()
-
-        if (!natsService)
-            return { error: 'NATS_UNAVAILABLE' }
-
-        try {
-            let descriptor
-
-            if (isMedia) {
-                const rendition = selectDescriptorRendition(asset)
-
-                if (
-                    rendition?.status !== 'ready'
-                    || !rendition.blobHash
-                )
-                    return { error: 'DESCRIPTOR_RENDITION_NOT_READY' }
-
-                const blob = await BlobModel.get({
-                    organizationId: asset.organizationId,
-                    blobHash: rendition.blobHash,
-                })
-
-                if (!blob)
-                    return { error: 'BLOB_NOT_FOUND' }
-
-                descriptor = await describeMediaStill({
-                    provider: provider as ProviderName,
-                    modelVersion: modelVersion!,
-                    inferenceCapabilities,
-                    imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
-                    natsService,
-                    maxTokens,
-                })
-            } else {
-                descriptor = await describeTextContent({
-                    provider: provider as ProviderName,
-                    modelVersion: modelVersion!,
-                    inferenceCapabilities,
-                    text: await loadAssetText(asset),
-                    title: asset.title,
-                    natsService,
-                    maxTokens,
-                })
-            }
-
-            if (!descriptor.summary.trim())
-                return { error: 'ASSET_DESCRIPTOR_EMPTY' }
-
-            const persisted = await persistDescriptor({
+            const asset = await AssetModel.get({
                 assetId,
                 requester,
-                title: isMedia ? descriptor.title : undefined,
-                descriptor: {
-                    summary: descriptor.summary,
-                    entityTags: descriptor.entityTags,
-                    styleTags: descriptor.styleTags,
-                    status: 'ready',
-                    source: 'analysis',
-                    version: MEDIA_DESCRIPTOR_VERSION,
-                    updatedAt: Date.now(),
-                },
             })
 
-            return 'error' in persisted
+            if ('error' in asset)
+                return asset
+
+            if (!await canEditAssetMetadata(asset, requester))
+                return { error: 'PERMISSION_DENIED' }
+
+            const isMedia = Boolean(asset.media)
+            const descriptorModelId = (isMedia ? settings.mediaDescriptor.defaultVlmModelId : data.aiModel) as AiModelId | undefined
+
+            if (!descriptorModelId?.includes(':'))
+                return { error: 'AI_MODEL_REQUIRED' }
+
+            const [provider, modelVersion] = descriptorModelId.split(':')
+            const aiModelMetaInfo = await AiModel.getAiModel({
+                provider: provider!,
+                model: modelVersion!,
+                omitPricing: true,
+            })
+            const maxTokens = aiModelMetaInfo?.maxCompletionSize || (isMedia ? settings.mediaDescriptor.defaultVlmMaxTokens : undefined)
+            const inferenceCapabilities = aiModelMetaInfo?.inferenceCapabilities
+            ?? (isMedia ? settings.mediaDescriptor.defaultVlmInferenceCapabilities : undefined)
+
+            if (
+                !maxTokens
+                || !inferenceCapabilities
+            )
+                return { error: `AI_MODEL_NOT_FOUND:${descriptorModelId}` }
+
+            const natsService = NATS_Service.getInstance()
+
+            if (!natsService)
+                return { error: 'NATS_UNAVAILABLE' }
+
+            try {
+                let descriptor
+
+                if (isMedia) {
+                    const rendition = selectDescriptorRendition(asset)
+
+                    if (
+                        rendition?.status !== 'ready'
+                        || !rendition.blobHash
+                    )
+                        return { error: 'DESCRIPTOR_RENDITION_NOT_READY' }
+
+                    const blob = await BlobModel.get({
+                        organizationId: asset.organizationId,
+                        blobHash: rendition.blobHash,
+                    })
+
+                    if (!blob)
+                        return { error: 'BLOB_NOT_FOUND' }
+
+                    descriptor = await describeMediaStill({
+                        provider: provider as ProviderName,
+                        modelVersion: modelVersion!,
+                        inferenceCapabilities,
+                        imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
+                        natsService,
+                        maxTokens,
+                    })
+                } else {
+                    descriptor = await describeTextContent({
+                        provider: provider as ProviderName,
+                        modelVersion: modelVersion!,
+                        inferenceCapabilities,
+                        text: await loadAssetText(asset),
+                        title: asset.title,
+                        natsService,
+                        maxTokens,
+                    })
+                }
+
+                if (!descriptor.summary.trim())
+                    return { error: 'ASSET_DESCRIPTOR_EMPTY' }
+
+                const persisted = await persistDescriptor({
+                    assetId,
+                    requester,
+                    title: isMedia ? descriptor.title : undefined,
+                    descriptor: {
+                        summary: descriptor.summary,
+                        entityTags: descriptor.entityTags,
+                        styleTags: descriptor.styleTags,
+                        status: 'ready',
+                        source: 'analysis',
+                        version: MEDIA_DESCRIPTOR_VERSION,
+                        updatedAt: Date.now(),
+                    },
+                })
+
+                return 'error' in persisted
                 ? persisted
                 : {
                     ...persisted.descriptor,
                     title: persisted.title,
                 }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            err(`Asset descriptor failed for ${assetId}: ${message}`)
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error)
+                err(`Asset descriptor failed for ${assetId}: ${message}`)
 
-            return { error: message }
+                return { error: message }
+            }
         }
     },
-}]
+)

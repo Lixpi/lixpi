@@ -1,0 +1,26 @@
+services:
+    lixpi-go-quality-runner:
+        profiles: ["dev"]
+        image: lixpi/go-quality-runner
+        build:
+            context: ./services/go-quality-runner
+        volumes:
+            - ./services/go-quality-runner/run-quality.sh:/usr/src/runner/run-quality.sh:ro,cached
+            - ./services/go-quality-runner/golangci.yml:/usr/src/runner/golangci.yml:ro,cached
+            - ./services/nats/go.mod:/usr/src/manifests/nats/go.mod:cached
+            - ./services/nats/go.sum:/usr/src/manifests/nats/go.sum:cached
+            - ./services/nats/cmd:/usr/src/service/nats/cmd:cached
+            - ./services/nats/internal:/usr/src/service/nats/internal:cached
+            - ./services/nats/nats-server.conf:/usr/src/service/nats/nats-server.conf:ro,cached
+            - ./services/caddy/go.mod:/usr/src/manifests/caddy/go.mod:cached
+            - ./services/caddy/go.sum:/usr/src/manifests/caddy/go.sum:cached
+            - ./services/caddy/cmd:/usr/src/service/caddy/cmd:cached
+            - ./services/caddy/internal:/usr/src/service/caddy/internal:cached
+            - go-quality-runner-module-cache:/go-module-cache
+            - go-quality-runner-build-cache:/go-build-cache
+            - go-quality-runner-lint-cache:/go-lint-cache
+
+volumes:
+    go-quality-runner-module-cache:
+    go-quality-runner-build-cache:
+    go-quality-runner-lint-cache:

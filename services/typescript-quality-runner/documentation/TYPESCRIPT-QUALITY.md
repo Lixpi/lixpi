@@ -36,13 +36,15 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-components format
 ```
 
-The runner also exposes `docs-site`, `infrastructure`, `random-useful-things`, and `quality-runner` domains. TypeScript rules apply to every TypeScript file, while Sass and CSS rules apply to every first-party stylesheet. Use `all` when a repository-wide change needs every configured domain:
+The runner also exposes `infrastructure`, `random-useful-things`, and `quality-runner` domains. TypeScript rules apply to every TypeScript file, while Sass and CSS rules apply to every first-party stylesheet. Use `all` when a repository-wide change needs every configured domain:
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner all validate
 ```
 
 The action is optional and defaults to `validate`.
+
+For a focused change, `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner files fix <repository-path> ...` applies the same autofix pipeline to explicit paths. Use this for files without domain-specific source aliases; domains remain responsible for alias conversion. It avoids formatting unrelated files in a large workspace.
 
 Domain configuration passes source aliases to the extension runner as `specifierPrefix`, `importerScope`, and `targetDirectory` data. The extension runner resolves the narrowest matching importer scope and contains no service names or application paths. Domains without aliases pass an empty list.
 
@@ -195,6 +197,6 @@ The `lixpi/require-ast-formatter-rules` guard runs against every TypeScript impl
 
 ## GitHub Actions
 
-The `CI` workflow runs the quality-runner self-test and every configured quality domain as independent matrix jobs. Each job builds and invokes `lixpi-typescript-quality-runner` through `docker-compose.typescript-quality-runner.yml`, so dprint, Oxlint, Stylelint, and the repository validation scripts never run on the GitHub host.
+The `CI` workflow's `typescript-quality` matrix runs the quality-runner self-test and every configured quality domain under `TypeScript / Formatting and linting` status names. Each job builds and invokes `lixpi-typescript-quality-runner` through `docker-compose.typescript-quality-runner.yml`, so dprint, Oxlint, Stylelint, and the repository validation scripts never run on the GitHub host.
 
-CI points Compose at the one-shot runner file directly. This keeps the same image, bind mounts, dispatcher, and domain commands used locally without parsing the unrelated application and deployment services from the root Compose graph. The matrix feeds one stable `Required CI gate` status after every quality and test job passes.
+CI points Compose at the one-shot runner file directly. This keeps the same image, bind mounts, dispatcher, and domain commands used locally without parsing the unrelated application and deployment services from the root Compose graph. The stable `Required CI gate` status requires both TypeScript matrices and the separate Go quality, test, and build jobs to succeed.

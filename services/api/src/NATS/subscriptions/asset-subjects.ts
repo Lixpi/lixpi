@@ -1,9 +1,10 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import {
     v4 as uuid,
     validate as isUuid,
 } from 'uuid'
 import {
-    NATS_SUBJECTS,
+    getNatsSubjectPath,
     type AssetPrimaryCategory,
     type AssetScope,
     type GeneratedOutputReviewRequest,
@@ -29,7 +30,6 @@ import GeneratedOutputReviewService from '../../services/generated-output-review
 import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
 import AssetSubjectIdentityService from '../../services/asset-subject-identity-service.ts'
 
-const { ASSET_SUBJECTS } = NATS_SUBJECTS
 const generatedOutputReviewService = new GeneratedOutputReviewService()
 const assetSubjectIdentityService = new AssetSubjectIdentityService()
 
@@ -148,16 +148,10 @@ const hasMismatchedConversationIdentity = (
         && record.content.some(child => hasMismatchedConversationIdentity(child, assetId))
 }
 
-export const assetSubjects = [
+export const assetSubjects = createNatsSubscriptions(
+    'asset',
     {
-        subject: ASSET_SUBJECTS.CREATE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.CREATE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.CREATE)]: async (data: any) => {
             const userId = data.user.userId as string
             const requester = await getRequesterContext(userId)
 
@@ -304,18 +298,7 @@ export const assetSubjects = [
 
             return asset
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.GET,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.GET] },
-            sub: {
-                allow: Object.values(ASSET_SUBJECTS.EVENTS).map(subject => `${subject}.{userIdToken}`),
-            },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.GET)]: async (data: any) => {
             const userId = data.user.userId as string
 
             if (
@@ -357,16 +340,7 @@ export const assetSubjects = [
 
             return result
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.LIST,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.LIST] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.LIST)]: async (data: any) => {
             const context = typeof data.workspaceId === 'string'
                 && data.workspaceId
                 ? await getWorkspaceRequesterContext({
@@ -400,16 +374,7 @@ export const assetSubjects = [
 
             return result
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.UPDATE_METADATA,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.UPDATE_METADATA] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.UPDATE_METADATA)]: async (data: any) => {
             const result = await AssetModel.updateMetadata({
                 assetId: data.assetId,
                 requester: await getRequesterContext(data.user.userId),
@@ -420,32 +385,14 @@ export const assetSubjects = [
 
             return result
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) =>
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST)]: async (data: any) =>
             await assetSubjectIdentityService.attest({
                 assetId: data.assetId,
                 assetRevision: data.assetRevision,
                 classification: data.classification as SubjectIdentityClassification,
                 requester: await getRequesterContext(data.user.userId),
             }),
-    },
-    {
-        subject: ASSET_SUBJECTS.CHANGE_SCOPE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.CHANGE_SCOPE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.CHANGE_SCOPE)]: async (data: any) => {
             if (!['workspace', 'user', 'organization'].includes(data.scope))
                 return { error: 'INVALID_SCOPE' }
 
@@ -470,16 +417,7 @@ export const assetSubjects = [
                 scopeOwnerId: data.scopeOwnerId,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.REVIEW_GENERATED_OUTPUT,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.REVIEW_GENERATED_OUTPUT] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.REVIEW_GENERATED_OUTPUT)]: async (data: any) => {
             if (!['output-node', 'branch-lineage'].includes(data.scope))
                 return { error: 'INVALID_REVIEW_SCOPE' }
 
@@ -510,16 +448,7 @@ export const assetSubjects = [
                 requester: await getRequesterContext(data.user.userId),
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.ATTACH,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.ATTACH] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.ATTACH)]: async (data: any) => {
             const requester = await getRequesterContext(data.user.userId)
             const boundary = await authorizeAssetWorkspaceBoundary({
                 assetId: data.assetId,
@@ -539,16 +468,7 @@ export const assetSubjects = [
                 workspaceMutation: data.workspaceMutation,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.DETACH,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.DETACH] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.DETACH)]: async (data: any) => {
             const requester = await getRequesterContext(data.user.userId)
 
             if (data.referenceType === 'catalog')
@@ -586,16 +506,7 @@ export const assetSubjects = [
                 workspaceMutation: data.workspaceMutation,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.ACQUIRE_LEASE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.ACQUIRE_LEASE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.ACQUIRE_LEASE)]: async (data: any) => {
             if (
                 typeof data.holderId !== 'string'
                 || !data.holderId
@@ -627,16 +538,7 @@ export const assetSubjects = [
                 requester: context.requester,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.RENEW_LEASE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.RENEW_LEASE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.RENEW_LEASE)]: async (data: any) => {
             if (
                 typeof data.holderId !== 'string'
                 || !data.holderId
@@ -668,16 +570,7 @@ export const assetSubjects = [
                 holderId: data.holderId,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.RELEASE_LEASE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.RELEASE_LEASE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.RELEASE_LEASE)]: async (data: any) => {
             if (
                 typeof data.holderId !== 'string'
                 || !data.holderId
@@ -709,17 +602,7 @@ export const assetSubjects = [
                 holderId: data.holderId,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.DOCUMENT_SUBMIT_STEPS,
-        type: 'reply',
-        queue: 'assetDocumentSteps',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.DOCUMENT_SUBMIT_STEPS] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.DOCUMENT_SUBMIT_STEPS)]: async (data: any) => {
             if (
                 typeof data.holderId !== 'string'
                 || !data.holderId
@@ -741,17 +624,7 @@ export const assetSubjects = [
                 requester,
             })
         },
-    },
-    {
-        subject: ASSET_SUBJECTS.DOCUMENT_RESUME,
-        type: 'reply',
-        queue: 'assetDocumentSteps',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ASSET_SUBJECTS.DOCUMENT_RESUME] },
-            sub: { allow: [`${ASSET_SUBJECTS.DOCUMENT_EVENTS}.{userIdToken}.>`] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.DOCUMENT_RESUME)]: async (data: any) => {
             const userId = data.user.userId as string
             const activateLiveRelay = data.activateLiveRelay === true
             let requester: Awaited<ReturnType<typeof getRequesterContext>>
@@ -808,4 +681,4 @@ export const assetSubjects = [
             })
         },
     },
-]
+)

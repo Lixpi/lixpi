@@ -1,4 +1,6 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import {
+    getNatsSubjectPath,
     getCapabilityUserEventSubject,
     NATS_SUBJECTS,
     type CapabilityRun,
@@ -187,28 +189,11 @@ const updateCatalog = async (data: any): Promise<unknown> => {
     }
 }
 
-const catalogEventPermission = { sub: { allow: [`${CATALOG.CATALOG_CHANGED}.{userIdToken}`] } }
-
-export const capabilitySubjects = [
+export const capabilitySubjects = createNatsSubscriptions(
+    'capability',
     {
-        subject: CATALOG.SEARCH,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.SEARCH] },
-            sub: { allow: [] },
-        },
-        handler: searchCatalog,
-    },
-    {
-        subject: CATALOG.GET,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.GET] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.SEARCH)]: searchCatalog,
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.GET)]: async (data: any) => {
             try {
                 const requester = await getRequester(data.user.userId)
                 const result = await CapabilityModel.readManifest({
@@ -301,36 +286,9 @@ export const capabilitySubjects = [
                 return { error: (error as Error).message }
             }
         },
-    },
-    {
-        subject: CATALOG.CREATE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.CREATE] },
-            ...catalogEventPermission,
-        },
-        handler: async (data: any) => await saveCatalog(data, 'create'),
-    },
-    {
-        subject: CATALOG.UPDATE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.UPDATE] },
-            ...catalogEventPermission,
-        },
-        handler: updateCatalog,
-    },
-    {
-        subject: CATALOG.DELETE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.DELETE] },
-            ...catalogEventPermission,
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.CREATE)]: async (data: any) => await saveCatalog(data, 'create'),
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.UPDATE)]: updateCatalog,
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.DELETE)]: async (data: any) => {
             try {
                 const removed = await CapabilityModel.remove({
                     capabilityId: data.capabilityId,
@@ -353,16 +311,7 @@ export const capabilitySubjects = [
                 return { error: (error as Error).message }
             }
         },
-    },
-    {
-        subject: CATALOG.GRANT,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.GRANT] },
-            ...catalogEventPermission,
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.GRANT)]: async (data: any) => {
             try {
                 const requester = await getRequester(data.user.userId)
                 const record = await CapabilityModel.authorize({
@@ -395,16 +344,7 @@ export const capabilitySubjects = [
                 return { error: (error as Error).message }
             }
         },
-    },
-    {
-        subject: CATALOG.REVOKE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.REVOKE] },
-            ...catalogEventPermission,
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.REVOKE)]: async (data: any) => {
             try {
                 const requester = await getRequester(data.user.userId)
                 const record = await CapabilityModel.authorize({
@@ -440,36 +380,9 @@ export const capabilitySubjects = [
                 return { error: (error as Error).message }
             }
         },
-    },
-    {
-        subject: CATALOG.LIST,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.LIST] },
-            sub: { allow: [] },
-        },
-        handler: searchCatalog,
-    },
-    {
-        subject: CATALOG.SAVE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CATALOG.SAVE] },
-            ...catalogEventPermission,
-        },
-        handler: async (data: any) => await saveCatalog(data, 'save'),
-    },
-    {
-        subject: RUN.START,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [RUN.START] },
-            sub: { allow: [`${RUN.STATUS}.{userIdToken}.>`] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.LIST)]: searchCatalog,
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.CATALOG.SAVE)]: async (data: any) => await saveCatalog(data, 'save'),
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.RUN.START)]: async (data: any) => {
             const userId = data.user.userId
 
             if (!runDispatcher)
@@ -490,31 +403,13 @@ export const capabilitySubjects = [
                 ...(data.conversationAssetId ? { conversationAssetId: data.conversationAssetId } : {}),
             })
         },
-    },
-    {
-        subject: RUN.STATUS,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [RUN.STATUS] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) =>
-            await CapabilityRunModel.getAuthorized({
-                runId: data.runId,
-                workspaceId: data.workspaceId,
-                userId: data.user.userId,
-            }),
-    },
-    {
-        subject: RUN.RESUME,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [RUN.RESUME] },
-            sub: { allow: [`${RUN.STATUS}.{userIdToken}.>`] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.RUN.STATUS)]: async (data: any) =>
+                await CapabilityRunModel.getAuthorized({
+                    runId: data.runId,
+                    workspaceId: data.workspaceId,
+                    userId: data.user.userId,
+                }),
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.RUN.RESUME)]: async (data: any) => {
             const run = await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
                 workspaceId: data.workspaceId,
@@ -549,16 +444,7 @@ export const capabilitySubjects = [
                 replay,
             }
         },
-    },
-    {
-        subject: RUN.STOP,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [RUN.STOP] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.RUN.STOP)]: async (data: any) => {
             if (!runDispatcher)
                 return { error: 'CAPABILITY_RUNNER_NOT_INITIALIZED' }
 
@@ -581,31 +467,13 @@ export const capabilitySubjects = [
                 runId: run.runId,
             }
         },
-    },
-    {
-        subject: RUN.GET,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [RUN.GET] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) =>
-            await CapabilityRunModel.getAuthorized({
-                runId: data.runId,
-                workspaceId: data.workspaceId,
-                userId: data.user.userId,
-            }),
-    },
-    {
-        subject: RUN.REPLAY,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [RUN.REPLAY] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.RUN.GET)]: async (data: any) =>
+                await CapabilityRunModel.getAuthorized({
+                    runId: data.runId,
+                    workspaceId: data.workspaceId,
+                    userId: data.user.userId,
+                }),
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.RUN.REPLAY)]: async (data: any) => {
             const run = await CapabilityRunModel.getAuthorized({
                 runId: data.runId,
                 workspaceId: data.workspaceId,
@@ -623,4 +491,4 @@ export const capabilitySubjects = [
             })
         },
     },
-]
+)

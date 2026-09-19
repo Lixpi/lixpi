@@ -1,519 +1,83 @@
-# Internal Service NATS Authentication Pattern
+---
+title: Internal Service NATS Authentication
+description: Service identities, scoped NATS permissions, native NKey clients, and credential deployment.
+---
 
-This document describes how internal services authenticate to NATS in the Lixpi system. Use this pattern whenever you add a new internal service (worker, daemon, scheduler) that needs to publish or subscribe on NATS subjects.
+# Internal Service NATS Authentication
 
-The first consumer of this pattern was the `services/llm-api` Python service, which was removed after its workflow was absorbed into `services/api`. The pattern itself is generic and lives on as the recommended way to authenticate internal services. It now has two concrete forms:
+Internal clients authenticate through the [embedded Go broker](../../services/nats/README.md) using registered NKey public keys. They do not need Auth0. The API, conversion worker, fidelity worker, backup CLI, operator tools, NEX, and optional model registry have distinct identities.
 
-- **Self-issued service JWTs** for Lixpi-owned services that can set `auth_token` during connect.
-- **Raw NATS NKey challenge-response** for NATS-native tools such as NEX, where the client already signs the server nonce with a user nkey.
+## Choose the credential path
 
-## When to use it
+TypeScript and Python `NatsService` clients sign a self-issued JWT using their user NKey seed. Its `iss` is the public key and its `sub` must exactly match the registered service ID. The auth responder verifies the signature and token time claims locally, then returns the registration's complete permissions.
 
-| Client type | Auth method | Token source |
-|---|---|---|
-| Web UI / browser users | Auth0 OAuth2/OIDC, RS256 JWTs | Auth0 JWKS endpoint |
-| Internal backend services | Self-issued NKey-signed JWTs, Ed25519 | Service signs its own |
-| NATS-native internal tools, such as NEX | Raw NATS NKey challenge-response | Client signs the server nonce; auth callout verifies `nkey` + `sig` |
+Native NATS clients such as NEX and the backup CLI sign the broker's nonce. Their raw `nkey` and `sig` fields are verified against the same registration. The broker advertises a nonce for native NKey authentication without needing a static entry for each application key. The signed registration determines whether the presented key is admitted.
 
-Use **NKey JWTs** for any service that:
-- Originates traffic from your own infrastructure (ECS task, Lambda, cron job, etc.)
-- Should not depend on Auth0 reachability for its own functioning
-- Needs a narrow, declarative permissions allowlist on NATS subjects
+`nkeySeed` in Lixpi's TypeScript wrapper selects the self-issued JWT path. It is not the bootstrap authenticator. The embedded dispatcher holds `NATS_CALLOUT_PASSWORD` and enters CALLOUT through an in-process connection. External connections cannot use that bootstrap identity.
 
-Use **raw NATS NKey auth through the callout** when the client is a NATS-native tool that cannot practically send a Lixpi self-issued JWT but already supports the standard `nkey` + `sig` connect handshake. The `services/nex` execution-engine node is the current example.
+## Built-in identities
 
-Do **not** use this for traffic that originates from external clients. The auth callout treats anything signed with a registered service public key as fully trusted within the configured permissions, with no per-user identity check beyond the `sub` claim.
+| Environment prefix | Identity | Account | Operations |
+|---|---|---|---|
+| NATS_API | svc:api | AUTH | API handlers, relays, storage, internal requests |
+| NATS_FILE_CONVERSION | svc:file-conversion | AUTH | Conversion requests and Object Store reads/writes |
+| NATS_CHARACTER_FIDELITY | svc:character-fidelity | AUTH | Fidelity requests and Object Store reads |
+| NATS_BACKUP | svc:backup | AUTH | Stream discovery, information and snapshots |
+| NATS_OPERATOR | svc:operator | AUTH | Storage inspection, repair and restore |
+| NATS_NEX_NODE | svc:nex-node | NEX | NEX control plane and its JetStream domain |
+| NATS_AI_MODEL_REGISTRY | svc:ai-model-registry | AUTH | Model-sync completion event |
 
-## End-to-end flow
+Each prefix has a `_NKEY_SEED` held by its client and a `_NKEY_PUBLIC` included in the application registration. The init wizard generates the built-in service keys. Permission declarations live in [the shared service contracts](../../packages/lixpi/nats-subject-registry/src/service-permissions.ts). The [registration builder](../../packages/lixpi/nats-subject-registry/src/registration.ts) binds them to deployment configuration and signs the manifest. API startup applies it before connecting. Keep AUTH storage and NEX placement unchanged when rotating credentials.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-    participant Svc as Internal Service
-    participant NATS as NATS Server
-    participant CO as Auth Callout<br/>(services/api)
-    participant AS as @lixpi/auth-service
+## Add a deployment-owned service
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 1 — SIGN
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(220, 236, 233)
-        Note over Svc, AS: PHASE 1 — SIGN: Service self-issues an Ed25519 JWT
-        activate Svc
-        Svc->>Svc: generateSelfIssuedJWT(nkeySeed, 'svc:my-service')<br/>sub=userId  iss=publicKey  exp=now+1h
-        deactivate Svc
-    end
+Generate a user NKey pair using the Dockerized environment setup or an approved containerized NKey tool. Keep the seed in the client's deployment secrets. Supply the public half and a unique service ID to `NATS_SERVICE_AUTH_REGISTRATIONS` in deployment configuration, then save the environment through [init-config's normal partial-update flow](../../infrastructure/init-script/README.md). That save prepares the signed manifest for API startup.
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 2 — CONNECT
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(195, 222, 221)
-        Note over Svc, AS: PHASE 2 — CONNECT: Service connects, NATS routes to auth callout
-        Svc->>NATS: nats.connect({ token: jwt })
-        activate NATS
-        NATS->>CO: $SYS.REQ.USER.AUTH (xkey-encrypted)
-        activate CO
-        CO->>CO: xkey decrypt → jwt.decode → look up iss in serviceAuthConfigs
-    end
+A registration declares its application account and complete publish/subscribe grants. Deployment configures the authority's permitted accounts; the broker creates them at startup. SYS, CALLOUT and REGISTRATION cannot be application targets. A separate application's initializer can submit its own signed manifest using a separately configured authority.
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3 — VERIFY
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(242, 234, 224)
-        Note over Svc, AS: PHASE 3 — VERIFY: Callout verifies signature and sub claim
-        alt iss matches a registered serviceAuthConfig
-            CO->>AS: verifyNKeySignedJWT(token, publicKey)
-            activate AS
-            AS->>AS: Ed25519 verify + exp/nbf check
-            AS-->>CO: { decoded } or { error }
-            deactivate AS
-            CO->>CO: decoded.sub === serviceConfig.userId
-            CO->>NATS: Sign NATS user JWT with configured permissions
-        else iss not found — fall back to Auth0 JWKS path
-            CO->>AS: jwtVerifier.verify(token) [RS256, JWKS]
-            activate AS
-            AS-->>CO: verified or error
-            deactivate AS
-        end
-        deactivate CO
-    end
+For a portal module, use concrete module subjects such as `portal.module.example.*.request.>`, its corresponding event subtree, and `_INBOX.example-service.>`. The signer is responsible for choosing the least access the service needs; the broker validates NATS subject syntax and the signer's account scope. A responder can use `resp: { max: 1, ttl: 10000000000 }` for a single temporary reply within ten seconds. Browser inboxes remain scoped independently to their authenticated identity. See [the parser contract](../platform/AUTHENTICATION.md#additional-service-registrations).
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 4 — CONNECTED
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(246, 199, 179)
-        Note over Svc, AS: PHASE 4 — CONNECTED: Session active, all pub/sub enforced by NATS
-        NATS-->>Svc: Connected
-        deactivate NATS
-    end
-```
-
-The flow is the same regardless of whether the service is written in Python or TypeScript — both sides of the wire use the same JWT shape.
-
-## NATS-native NKey variation
-
-NEX does not follow the self-issued JWT flow above. The `nex` CLI and node connect with native NATS NKey credentials:
-
-```bash
-nex --nats.nkey "$NATS_NEX_NODE_NKEY_PUBLIC" --nats.seed "$NATS_NEX_NODE_NKEY_SEED" ...
-```
-
-With centralized auth callout enabled, the NATS server still forwards that connection attempt to `services/api`. The auth request contains the client's public `nkey`, the client's `sig`, and the server nonce. The callout finds a matching `serviceAuthConfig`, verifies that `sig` is a valid Ed25519 signature over the nonce, then issues the user JWT for the configured account.
-
-For NEX, that config sets `account: 'NEX'`. This keeps the node's `$NEX.>` control plane in the dedicated NEX account while still using the same centralized auth-callout service as app users and service JWT clients.
-
-The NEX key variables have different owners:
-
-- `NATS_NEX_NODE_NKEY_SEED` is secret and should only be present in the NEX node runtime.
-- `NATS_NEX_NODE_NKEY_PUBLIC` is safe verification material. NEX needs it for the native NATS client flags, the NATS server config needs it to advertise the nonce required by native NKey auth, and `services/api` needs it in `serviceAuthConfigs` so the auth callout can verify the raw NKey signature.
-- The NATS server's static nkey user entry is not the final authorization decision in the current centralized auth-callout design. It enables the native NKey challenge; NATS forwards the auth decision to the API and enforces the returned user JWT.
-
-Local private-repo NEX workloads should currently use `file://` artifacts placed
-in the shared Docker volume mounted at `/opt/nex/private-workloads`, not
-`nats://` Object Store artifacts. NEX 0.4.1 can fetch Object Store artifacts in
-compatible credential setups, but the `--issuer-nkey` path used by Lixpi mints
-NKey credentials while the native artifact fetcher connects with
-`UserJWTAndSeed`. With centralized auth callout enabled, that artifact-fetch
-connection has no usable `auth_token` or raw `nkey` challenge fields and is
-rejected.
-
-## Code samples
-
-The samples below show the concrete implementation shape. If you need to read the full files:
-- `packages/lixpi/nats-service/python/nats_service.py:45-101` — Python signing
-- `packages/lixpi/nats-service/ts/nats-service.ts:86-138` — TypeScript signing
-- `packages/lixpi/auth-service/src/nkey-verifier.ts` — TS verification
-- `packages/lixpi/nats-auth-callout-service/src/nats-auth-callout-service.ts` — auth callout
-
-### Step 1: Service signs a JWT with its NKey seed (Python)
-
-`packages/lixpi/nats-service/python/nats_service.py:45-101`:
-
-```python
-def generate_self_issued_jwt(nkey_seed: str, user_id: str, expiry_hours: int = 1) -> str:
-    # Create NKey pair from seed
-    kp = from_seed(nkey_seed.encode())
-    public_key = kp.public_key.decode()
-
-    # Create JWT claims
-    now = int(time.time())
-    claims = {
-        "sub": user_id,           # Subject: service identity (e.g. 'svc:llm-service')
-        "iss": public_key,        # Issuer: our own public key (NOT a URL)
-        "iat": now,
-        "exp": now + (expiry_hours * 3600),
-    }
-    header = {"typ": "JWT", "alg": "EdDSA"}    # Ed25519 signature algorithm
-
-    def base64url_encode(data: dict) -> str:
-        json_str = json.dumps(data, separators=(',', ':'))
-        encoded = base64.urlsafe_b64encode(json_str.encode()).rstrip(b'=')
-        return encoded.decode()
-
-    header_b64 = base64url_encode(header)
-    claims_b64 = base64url_encode(claims)
-    message = f"{header_b64}.{claims_b64}"
-
-    signature = kp.sign(message.encode())
-    signature_b64 = base64.urlsafe_b64encode(signature).rstrip(b'=').decode()
-
-    return f"{message}.{signature_b64}"
-```
-
-The `lixpi_nats_service` package wraps this — services don't call `generate_self_issued_jwt` directly. They pass `nkey_seed=` and `user_id=` to `NatsServiceConfig`, and the connection logic at `nats_service.py:321-332` regenerates a fresh JWT on every connect:
-
-```python
-def _apply_authentication(self, options: Dict[str, Any]) -> None:
-    if self.config.nkey_seed and self.config.user_id:
-        # Priority 1: Self-issued JWT using NKey seed (Ed25519 signing)
-        info("Generating self-issued JWT...")
-        options["token"] = generate_self_issued_jwt(
-            nkey_seed=self.config.nkey_seed,
-            user_id=self.config.user_id,
-            expiry_hours=1,
-        )
-```
-
-### Step 2: Service signs a JWT with its NKey seed (TypeScript)
-
-`packages/lixpi/nats-service/ts/nats-service.ts:86-138` mirrors the Python version exactly. Same algorithm, same claims, same header — both sides of the wire produce byte-identical JWTs given the same seed and `userId`:
+Initialize a TypeScript client with its seed and matching ID:
 
 ```typescript
-export function generateSelfIssuedJWT(nkeySeed: string, userId: string, expiryHours: number = 1): string {
-    const kp = fromSeed(Buffer.from(nkeySeed))
-    const publicKey = Buffer.from(kp.getPublicKey()).toString('utf-8')
-
-    const now = Math.floor(Date.now() / 1000)
-    const claims = {
-        sub: userId,
-        iss: publicKey,
-        iat: now,
-        exp: now + (expiryHours * 3600),
-    }
-    const header = { typ: 'JWT', alg: 'EdDSA' }
-
-    const base64urlEncode = (data: object): string =>
-        Buffer.from(JSON.stringify(data))
-            .toString('base64')
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-
-    const headerB64 = base64urlEncode(header)
-    const claimsB64 = base64urlEncode(claims)
-    const message = `${headerB64}.${claimsB64}`
-
-    const signature = kp.sign(Buffer.from(message))
-    const signatureB64 = Buffer.from(signature)
-        .toString('base64')
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-
-    return `${message}.${signatureB64}`
-}
-```
-
-### Step 3: Service starts and connects (canonical example)
-
-The original `services/llm-api/src/main.py:50-62` showed the canonical Python service-init pattern (this file no longer exists in the tree — it was removed after the LLM workflow migrated into `services/api`):
-
-```python
-nats_config = NatsServiceConfig(
-    servers=[s.strip() for s in settings.NATS_SERVERS.split(',')],
-    name="llm-api-service",
-    nkey_seed=settings.NATS_NKEY_SEED,    # SU... (Ed25519 seed)
-    user_id="svc:llm-service",            # Must match registered serviceAuthConfig.userId
-    tls_ca_cert=tls_ca_cert,              # Optional, for self-signed dev certs
-    max_reconnect_attempts=-1,
-    reconnect_time_wait=0.5,
-    subscriptions=subscriptions,
-)
-nats_client = await NatsService.init(nats_config)
-```
-
-The TypeScript equivalent uses `NatsService` from `@lixpi/nats-service` with the same `nkeySeed` + `userId` shape.
-
-### Step 4: Auth callout registers the service (TypeScript)
-
-The API loads deployment-owned registrations through `NATS_SERVICE_AUTH_REGISTRATIONS`. Each registration names a unique service identity, a public user NKey, an explicit account, and nonempty subject allowlists. Keep seeds in the service's deployment secrets. The parser rejects duplicate keys and identities, malformed subjects, and wildcards outside a concrete module namespace or explicitly prefixed service inbox. See [the auth-callout package](../../packages/lixpi/nats-auth-callout-service/README.md) for the complete validation contract.
-
-```typescript
-const additionalServices = parseAdditionalServiceAuthConfigs(
-    env.NATS_SERVICE_AUTH_REGISTRATIONS,
-    builtInServiceAuthConfigs,
-)
-
-await startNatsAuthCalloutService({
-    natsService: apiNatsService,
-    browserPermissionTemplates,
-    nKeyIssuerSeed: env.NATS_AUTH_NKEY_ISSUER_SEED,
-    xKeyIssuerSeed: env.NATS_AUTH_XKEY_ISSUER_SEED,
-    jwtAudience: env.AUTH0_API_IDENTIFIER,
-    jwtIssuer,
-    jwtAlgorithms: ['RS256'],
-    jwksUri,
-    natsAuthAccount: env.NATS_AUTH_ACCOUNT,
-    serviceAuthConfigs: [...builtInServiceAuthConfigs, ...additionalServices],
-})
-```
-
-The registration's `userId` must exactly match the service JWT's `sub`, and its `publicKey` must match `iss`. Additional registrations require an explicit account. Built-in registrations may omit it to use `natsAuthAccount`.
-
-Use `_INBOX.<service-prefix>.>` for the service's own reply subscription. A service that answers requests can receive `resp: { max: 1, ttl: 10000000000 }` for one temporary reply within ten seconds. Additional registrations cannot grant persistent global inbox access. Browser connections use `_INBOX.<user-token>.>` independently of the service inbox.
-
-### Step 5: Callout verifies the service (TypeScript)
-
-`packages/lixpi/nats-auth-callout-service/src/nats-auth-callout-service.ts:58-87`:
-
-```typescript
-const authenticateServiceJWT = async (
-    token: string,
-    serviceConfig: ServiceAuthConfig,
-): Promise<{ userId: string, permissions: ServiceAuthConfig['permissions'] }> => {
-    info(`Auth callout: Verifying self-issued JWT (issuer: ${serviceConfig.publicKey.substring(0, 10)}...)`)
-
-    const { decoded, error } = await verifyNKeyJWT({
-        token,
-        publicKey: serviceConfig.publicKey,
-    })
-    if (error) {
-        err('Self-issued JWT verification failed:', error)
-        throw new Error(`Self-issued JWT verification failed: ${error}`)
-    }
-
-    const userId = decoded.sub
-    if (!userId) throw new Error('User ID ("sub") missing in self-issued JWT')
-
-    if (userId !== serviceConfig.userId) {
-        throw new Error(`User ID mismatch: expected ${serviceConfig.userId}, got ${userId}`)
-    }
-
-    info(`Auth callout: Service authenticated via self-issued JWT (${userId})`)
-    return { userId, permissions: serviceConfig.permissions }
-}
-```
-
-### Step 6: NKey signature verification (TypeScript)
-
-`packages/lixpi/auth-service/src/nkey-verifier.ts` is the actual cryptographic verification:
-
-```typescript
-export const verifyNKeySignedJWT = async ({
-    token,
-    publicKey,
-}: { token: string, publicKey: string }): Promise<NKeyVerificationResult> => {
-    if (!token) return { error: 'No token provided' }
-    if (!publicKey) return { error: 'No public key provided' }
-
-    try {
-        const decoded = jwt.decode(token, { complete: true })
-        if (!decoded || typeof decoded === 'string') {
-            return { error: 'Invalid JWT format' }
-        }
-        if (decoded.payload.iss !== publicKey) {
-            return { error: `JWT issuer mismatch: expected ${publicKey}, got ${decoded.payload.iss}` }
-        }
-
-        const nkey = fromPublic(publicKey)
-
-        const parts = token.split('.')
-        if (parts.length !== 3) return { error: 'Invalid JWT structure' }
-
-        const message = `${parts[0]}.${parts[1]}`
-        const signatureB64 = parts[2]
-        const signature = Buffer.from(signatureB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
-
-        if (!nkey.verify(Buffer.from(message), signature)) {
-            return { error: 'Invalid NKey signature' }
-        }
-
-        const now = Math.floor(Date.now() / 1000)
-        if (decoded.payload.exp && decoded.payload.exp < now) return { error: 'JWT expired' }
-        if (decoded.payload.nbf && decoded.payload.nbf > now) return { error: 'JWT not yet valid' }
-
-        return { decoded: decoded.payload }
-    } catch (error: any) {
-        return { error: error.message }
-    }
-}
-```
-
-## Step-by-step recipe: adding a new internal service `my-service`
-
-### 1. Generate an NKey pair
-
-Use the `nsc` CLI (one-time, locally):
-
-```bash
-# Install nsc (macOS)
-brew install nats-io/nats-tools/nsc
-
-# Generate a user-type NKey pair
-nsc generate nkey --user
-# Output:
-#   SU...   ← seed (secret — never commit, treat like a password)
-#   UA...   ← public key (safe to share)
-```
-
-You can also use `nk -gen user` from `nats-io/nkeys` if `nsc` isn't installed.
-
-### 2. Add env vars
-
-Add the seed and public key to your environment configuration. The seed lives where secrets live (AWS Secrets Manager / SSM Parameter Store in prod; `.env` in local dev). The public key is not a secret but should still be passed via env config for clarity.
-
-`.env` (local dev):
-```bash
-NATS_MY_SERVICE_NKEY_SEED=SU...
-NATS_MY_SERVICE_NKEY_PUBLIC=UA...
-```
-
-`docker-compose.yml` (local dev):
-```yaml
-my-service:
-    environment:
-        NATS_NKEY_SEED: ${NATS_MY_SERVICE_NKEY_SEED}
-        # ... other config
-```
-
-`infrastructure/pulumi/src/resources/main-api-service.ts` (production):
-```typescript
-environment: {
-    // ... existing env
-    NATS_MY_SERVICE_NKEY_PUBLIC: env.NATS_MY_SERVICE_NKEY_PUBLIC,    // public — fine to expose
-}
-```
-
-The seed should be plumbed through Secrets Manager rather than as a plain env var in production.
-
-### 3. Service code: initialize NATS with the seed
-
-**Python** (using `lixpi_nats_service`):
-
-```python
-import os
-from lixpi_nats_service import NatsService, NatsServiceConfig
-
-config = NatsServiceConfig(
-    servers=os.environ["NATS_SERVERS"].split(","),
-    name="my-service",
-    nkey_seed=os.environ["NATS_NKEY_SEED"],
-    user_id="svc:my-service",
-    subscriptions=[...],
-)
-await NatsService.init(config)
-```
-
-**TypeScript** (using `@lixpi/nats-service`):
-
-```typescript
-import NatsService from '@lixpi/nats-service'
-
 await NatsService.init({
-    servers: process.env.NATS_SERVERS!.split(','),
-    name: 'my-service',
-    nkeySeed: process.env.NATS_NKEY_SEED!,
-    userId: 'svc:my-service',
-    subscriptions: [/* ... */],
+    servers: process.env.NATS_SERVERS!,
+    name: 'example-service',
+    nkeySeed: process.env.NATS_EXAMPLE_NKEY_SEED!,
+    userId: 'svc:example-service',
+    inboxPrefix: '_INBOX.example-service',
+    subscriptions,
 })
 ```
 
-### 4. Register the service in the auth callout
+The Python wrapper uses `nkey_seed`, `user_id`, and `inbox_prefix` for the equivalent configuration. See the [shared transport](../../packages/lixpi/nats-service/README.md) and [verifier](../../packages/lixpi/auth-service/README.md).
 
-Append a new entry to `serviceAuthConfigs` in `services/api/src/server.ts`:
+Pass client secrets only to their runtime. A service initializing its own registration also receives an approved signed payload and the restricted bootstrap password, never the authority signing seed. New JWT clients do not need a static broker user. Native NKey clients also need the broker's nonce support. Review the full permission path, including replies, stream management, consumer flow control, and Object Store subjects, before deploying.
 
-```typescript
-serviceAuthConfigs: [
-    {
-        publicKey: env.NATS_MY_SERVICE_NKEY_PUBLIC,
-        userId: 'svc:my-service',
-        account: 'AUTH',
-        permissions: {
-            pub: { allow: ['my.service.responses.>'] },
-            sub: { allow: ['my.service.requests', '_INBOX.>'] },
-        },
-    },
-],
-```
+## NEX artifacts
 
-The `userId` must exactly match what the service sends as `sub` in its JWT. The `publicKey` must match the service's `iss`. Permissions are the *complete* allowlist — anything not listed is denied.
+Local private-repository NEX workloads use `file://` artifacts from the shared volume at `/opt/nex/private-workloads`. In NEX 0.4.1, the artifact fetcher's `UserJWTAndSeed` credential path does not present the `auth_token` or raw NKey challenge fields consumed by this callout. Do not switch those artifacts to `nats://` without separately validating the credential path.
 
-### 5. Pulumi infrastructure
+The NEX node uses its own native seed. Conversion and fidelity workloads receive their separate AUTH-account seeds through start-request environment injection; they do not use the node credential for application Object Store access.
 
-Add a new ECS service for `my-service`. Use `infrastructure/pulumi/src/resources/main-api-service.ts` as a template — copy it, rename, swap the Dockerfile path, and pass in the env vars.
+## Backup and operator CLI
 
-**Do not** also add the public key to the NATS cluster's environment unless its config consumes it. The auth callout runs inside `services/api`, so the NATS cluster doesn't need the public key — verify by reading `infrastructure/pulumi/src/resources/NATS-cluster/NATS-cluster.ts` before adding anything there.
+Use `nats --nkey <seed-file>` with a restrictive temporary file, remove it on exit, and keep seeds out of arguments and logs. Backup uses `NATS_BACKUP_NKEY_SEED`; restore and API debug tools use `NATS_OPERATOR_NKEY_SEED`. Backup can snapshot streams but cannot restore or delete them. Operator permissions include the restore upload subjects.
 
-### 6. Verify locally
+The deployed Go image provides `lixpi-nats backup` and `lixpi-nats restore <snapshot-id>` with seeds held in memory. The [cluster guide](../platform/deployment/NATS-CLUSTER.md) describes inventory and recovery checks; the [Go guide](../testing/Go/TESTING-GUIDE.md) documents isolated native-client and snapshot tests.
 
-Start the new service in `docker-compose`. Watch the auth callout logs in `services/api`:
+## Availability and rotation
 
-```
-Auth callout: Service authenticated via self-issued JWT (svc:my-service)
-```
+Each broker tries its local worker first and retries compatible peers on operational failure within the original admission deadline. After the first manifest commits, API downtime does not prevent admission. An empty registry needs its application initializer, and an unavailable registry leader prevents new admissions. Explicit credential denial is terminal. Existing connections retain their issued permissions when workers become unavailable; loss of the accepting broker requires client reconnect.
 
-Then test that permissions are enforced. Try publishing to a subject *not* in the allowlist:
+The wrapper creates a one-hour input JWT when applying authentication. This is not an hourly renewal of an established NATS session. The callout's issued user JWT has no expiry, and this implementation does not disconnect clients when policy changes.
 
-```typescript
-natsService.publish('not.in.allowlist', { hello: 'world' })
-```
+Rotate a client seed and its public registration together, and verify a fresh connection before retiring the previous identity. Plan any revocation of already established sessions separately. Auth0 outages affect browser admissions that need an unavailable key; local service verification remains independent.
 
-The publish should fail with a permissions error visible in the NATS server logs.
+## Decentralized NATS credentials
 
-## Longer-term option: decentralized NATS JWT auth
-
-NATS also supports decentralized JWT/operator auth: an operator signs account JWTs, each account signs user JWTs, and clients connect with standard NATS credentials generated by `nsc` or an equivalent issuer workflow. That model is a better long-term fit if Lixpi wants NATS itself to own most account/user credential issuance instead of routing every service identity through the API auth callout.
-
-What would change:
-
-- Create and distribute an operator JWT, account JWTs for `AUTH`, `NEX`, `SYS`, and any future service accounts, plus scoped user creds per service.
-- Configure the NATS cluster with a resolver or mounted JWT artifacts instead of relying on config-file users plus centralized auth callout for service identities.
-- Rotate service credentials through the NATS account issuer workflow rather than by editing `serviceAuthConfigs` in `services/api`.
-- Keep cross-account exports/imports, such as `NEX` exporting `aiModels.syncCompleted` to `AUTH`, but define users and permissions in account JWTs.
-- Decide whether browser/Auth0 users still use auth callout, or whether only internal services move to decentralized JWT credentials first.
-
-Trade-off: decentralized JWT auth removes some custom callout logic and matches NATS-native account boundaries more closely, but it is an infrastructure migration. It touches local env generation, Docker NATS bootstrapping, Pulumi/ECS secrets, rotation playbooks, and probably developer tooling. For the NEX branch, extending the current callout to verify raw NKey challenge responses is the smaller change.
-
-## Security & operational notes
-
-### Seeds are secrets
-Treat NKey seeds like database passwords:
-- Never commit (`.env` files with real seeds belong in `.gitignore`).
-- Never log (the `generateSelfIssuedJWT` functions intentionally log only the `userId`, never the seed).
-- Production seeds live in AWS Secrets Manager / SSM Parameter Store.
-- Public keys are not secrets but should still be passed via env config for clarity, not hardcoded in source.
-
-### Token rotation
-- The JWT itself rotates every hour automatically — services regenerate it on every NATS connect.
-- The underlying NKey pair should rotate every 90 days, or immediately on suspected compromise.
-- Rotation procedure: generate a new pair, deploy the service with the new seed and `services/api` with the new public key in `serviceAuthConfigs` *in the same change*. Mismatches between the two halves cause connection failures.
-
-### Permissions are the security boundary
-A compromised service credential can only do what its `permissions` allow. Define them as narrowly as possible.
-
-- The previous `svc:llm-service` example had a fairly broad JetStream allowlist (`$JS.>` on subscribe) because it needed object-store access for image resolution. That's a deliberate trade-off, not a recommended default.
-- New services should start with the narrowest possible allowlist and expand only when needed.
-- **Never grant `>` on pub.** A service that can publish to any subject can impersonate other services and the API.
-- The auth callout's permission list is the *complete* allowlist — `_INBOX.>` is needed for any service that uses NATS request/reply, but is not added implicitly.
-
-### Auth callout is a hard dependency
-If `services/api` is down, no NATS clients (web-ui, internal services) can authenticate. Plan recovery scenarios accordingly:
-- Long-running connections established before the callout went down stay connected (NATS doesn't re-validate).
-- New connections fail until the callout is back.
-
-With centralized auth callout enabled, do not assume static config-file users in another account will authenticate independently. Register internal service public keys in `serviceAuthConfigs` and have the callout issue the user JWT for the target account.
-
-### Why we don't use Auth0 for internal services
-- **No external dependency** on Auth0 reachability for internal traffic. The auth callout never has to call out to Auth0 for service tokens.
-- **No Auth0 API costs / rate limits** for service token issuance.
-- **Faster verification**: a local Ed25519 signature check is ~µs; an Auth0 JWKS-fetch + RS256 verify is ~ms (and may need a network round trip on cold cache).
-- **Better blast radius**: a compromised Auth0 tenant doesn't grant the attacker access to internal NATS subjects (because internal services don't trust Auth0 issuers, only the registered NKey public keys).
-
-## References
-
-- `packages/lixpi/auth-service/README.md` — primitives for JWT verification.
-- `packages/lixpi/nats-auth-callout-service/README.md` — auth callout overview.
-- `packages/lixpi/nats-service/python/nats_service.py:45-101` — Python signing implementation.
-- `packages/lixpi/nats-service/ts/nats-service.ts:86-138` — TypeScript signing implementation (byte-identical output to the Python version).
-- `packages/lixpi/auth-service/src/nkey-verifier.ts` — TS verification implementation.
-- `packages/lixpi/nats-auth-callout-service/src/nats-auth-callout-service.ts:58-87` — service-auth path inside the callout.
+An operator/account-JWT resolver is a possible separate infrastructure design. It would require account JWTs, standard client credentials, a resolver, rotation procedures, and review of cross-account exports/imports. It is not part of the embedded callout implementation.
 
 ## History
 
-`services/llm-api/` was the original consumer of this pattern. It was a Python FastAPI service that ran a LangGraph workflow for LLM provider orchestration, authenticating to NATS as `svc:llm-service`. It was removed in 2026 once `@langchain/langgraph` (TypeScript) reached parity with the Python version, allowing the workflow to be absorbed into `services/api` directly. The auth pattern itself was preserved in this document as the canonical recipe for any future internal service. Git history (`git log --all -- services/llm-api/`) shows the original Python integration if needed.
+The removed Python `services/llm-api` was an early consumer of self-issued service JWTs. Its workflow runs in-process in the TypeScript API. The transport's Python implementation remains a reference for independent Python clients; Git history retains the original integration.

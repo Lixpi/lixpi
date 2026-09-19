@@ -9,7 +9,7 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 
 | Workload | Type / lifecycle | What it does |
 |---|---|---|
-| `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as the AUTH-account `regular_user` to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
+| `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as `svc:file-conversion` in AUTH using its own NKey seed to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
 | `character-fidelity` | `native` / `service` | Active responder for photographic Character Creator panel checks. It runs pinned OpenCV Zoo YuNet and SFace ONNX artifacts through single-threaded WASM, reads only validated organization-scoped transient objects, and returns detections plus scalar cosine similarity without embeddings. ([`workloads/character-fidelity`](./workloads/character-fidelity)) |
 | `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
 
@@ -20,8 +20,8 @@ The model catalog is not here. [`services/ai-model-registry`](../ai-model-regist
 The image (`Dockerfile`) is a `node:24-alpine` base + the pinned static `nex` binary. On start, [`entrypoint.sh`](./entrypoint.sh):
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from the pnpm workspace (mirrors `services/api`).
-2. `nex node up` — connects with the NEX nkey; the API auth callout verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.
-3. Deploys service workloads via `nex workload start`, **injecting** the runtime env into each start-request — the native nexlet does **not** inherit the container env. `file-conversion` and `character-fidelity` receive `NATS_SERVERS`, `NATS_REGULAR_USER_PASSWORD`, `HOME`, and `PATH`.
+2. `nex node up` connects with the NEX nkey; the embedded broker's auth worker verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.
+3. Deploys service workloads via `nex workload start`, injecting the runtime env into each start-request. The native nexlet does not inherit the container env. Both workloads receive `NATS_SERVERS`, `HOME`, and `PATH`. File conversion receives `NATS_FILE_CONVERSION_NKEY_SEED`; character fidelity receives `NATS_CHARACTER_FIDELITY_NKEY_SEED`. Each workload receives only its own service seed.
 4. Supervises the node in the foreground.
 
 State is intentionally **not** persisted (`--state kv` omitted): the entrypoint re-deploys the workloads on every boot (idempotent), so there is exactly one instance of each per node and no orphaned KV buckets. See the proposal's "Re-evaluation notes" for the full rationale.
@@ -36,13 +36,15 @@ docker compose --profile main up -d --build lixpi-nex-1   # rebuild just this no
 docker logs -f lixpi-nex-1              # node + workload startup output
 ```
 
-Required env (supplied by `docker-compose.yml` from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_REGULAR_USER_PASSWORD`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
+Required env (supplied by `docker-compose.yml` from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
 
 Credential ownership matters:
 
 - `NATS_NEX_NODE_NKEY_SEED` is secret and belongs only in this NEX container.
-- `NATS_NEX_NODE_NKEY_PUBLIC` is used here as the public half of the native NATS NKey credential and in `services/api` as verification material for auth callout.
-- The NATS server config also lists the NEX public key so the server advertises the nonce required by native NKey auth. That static entry is not the final authorization decision; the API auth callout verifies the raw NKey challenge response and NATS enforces the returned `NEX` account user JWT.
+- `NATS_NEX_NODE_NKEY_PUBLIC` is used here as the public half of the native NATS NKey credential and in `services/nats` as verification material for auth callout.
+- The NATS server config also lists the NEX public key so the server advertises the nonce required by native NKey auth. That static entry is not the final authorization decision; the embedded worker verifies the raw NKey challenge response and NATS enforces the returned `NEX` account user JWT.
+
+Each workload receives its own seed through the entrypoint's start-request environment. Character fidelity uses `svc:character-fidelity` in AUTH with object-read grants. Compose waits for embedded broker admission readiness, so node authentication does not depend on API health. The `nex` test domain includes opt-in application admission and workload checks; commands and required environment are in the [TypeScript testing guide](../../documentation/testing/TypeScript/TESTING-GUIDE.md).
 
 ## Operate
 

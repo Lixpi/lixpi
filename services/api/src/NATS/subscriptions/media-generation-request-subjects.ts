@@ -1,4 +1,6 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import {
+    getNatsSubjectPath,
     getMediaGenerationUserEventSubject,
     NATS_SUBJECTS,
 } from '@lixpi/constants'
@@ -21,16 +23,10 @@ const liveSubjectFor = (
     generationRequestId.replace(/[^A-Za-z0-9_-]/gu, '_'),
 ].join('.')
 
-export const mediaGenerationRequestSubjects = [
+export const mediaGenerationRequestSubjects = createNatsSubscriptions(
+    'media-generation-request',
     {
-        subject: REQUEST.GET,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [REQUEST.GET] },
-            sub: { allow: [`${REQUEST.STATUS}.{userIdToken}.>`] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.GET)]: async (data: any) => {
             const request = await MediaGenerationRequestModel.getAuthorized({
                 generationRequestId: data.generationRequestId,
                 workspaceId: data.workspaceId,
@@ -57,16 +53,7 @@ export const mediaGenerationRequestSubjects = [
                 ),
             }
         },
-    },
-    {
-        subject: REQUEST.REPLAY,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [REQUEST.REPLAY] },
-            sub: { allow: [`${REQUEST.STATUS}.{userIdToken}.>`] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.REPLAY)]: async (data: any) => {
             const request = await MediaGenerationRequestModel.getAuthorized({
                 generationRequestId: data.generationRequestId,
                 workspaceId: data.workspaceId,
@@ -94,16 +81,7 @@ export const mediaGenerationRequestSubjects = [
                 replay,
             }
         },
-    },
-    {
-        subject: REQUEST.RESOLVE_REFERENCE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [REQUEST.RESOLVE_REFERENCE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.RESOLVE_REFERENCE)]: async (data: any) => {
             const request = await new MediaGenerationRequestService().resolveReference({
                 generationRequestId: data.generationRequestId,
                 workspaceId: data.workspaceId,
@@ -122,32 +100,14 @@ export const mediaGenerationRequestSubjects = [
 
             return request
         },
-    },
-    {
-        subject: REQUEST.CANCEL,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [REQUEST.CANCEL] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) =>
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.CANCEL)]: async (data: any) =>
             await new MediaGenerationRequestService().cancel({
                 generationRequestId: data.generationRequestId,
                 workspaceId: data.workspaceId,
                 userId: data.user.userId,
                 requestRevision: data.requestRevision,
             }),
-    },
-    {
-        subject: REQUEST.VERIFICATION_START,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [REQUEST.VERIFICATION_START] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) =>
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.VERIFICATION_START)]: async (data: any) =>
             await new ProviderVerificationCoordinator().start({
                 generationRequestId: data.generationRequestId,
                 workspaceId: data.workspaceId,
@@ -157,16 +117,7 @@ export const mediaGenerationRequestSubjects = [
                 assetId: data.assetId,
                 requester: await getAssetRequesterContext(data.user.userId),
             }),
-    },
-    {
-        subject: REQUEST.VERIFICATION_COMPLETE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [REQUEST.VERIFICATION_COMPLETE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.VERIFICATION_COMPLETE)]: async (data: any) => {
             const request = await new ProviderVerificationCoordinator().complete({
                 stateToken: data.state,
                 resultToken: data.resultToken,
@@ -183,4 +134,4 @@ export const mediaGenerationRequestSubjects = [
             return request
         },
     },
-]
+)

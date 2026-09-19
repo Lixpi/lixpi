@@ -194,12 +194,12 @@ deploy_workload() {
     echo "WARN: workload ${wl_name} deploy did not succeed after retries; node stays up"
 }
 
-# file-conversion: connects to NATS as the AUTH-account regular_user (not the
-# NEX-account creds) so it can read/write organization Blob Object Store buckets.
+# Workloads use their own registered service identities in AUTH.
+# Each workload receives its own seed for access to organization Blob Object Stores.
 FILE_CONVERSION_ENTRY="${SERVICE_DIR}/workloads/file-conversion/index.ts"
-FILE_CONVERSION_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
+FILE_CONVERSION_KEYS="NATS_SERVERS NATS_FILE_CONVERSION_NKEY_SEED"
 CHARACTER_FIDELITY_ENTRY="${SERVICE_DIR}/workloads/character-fidelity/index.ts"
-CHARACTER_FIDELITY_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
+CHARACTER_FIDELITY_KEYS="NATS_SERVERS NATS_CHARACTER_FIDELITY_NKEY_SEED"
 
 # shellcheck disable=SC2086  # intentional word-splitting of the key lists
 deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" \

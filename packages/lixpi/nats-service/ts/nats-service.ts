@@ -1309,7 +1309,7 @@ export default class NatsService {
         seq: number
     }>> {
         const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
-        const messages = await consumer.consume({
+        const messages = await consumer.fetch({
             max_messages: options.maxMessages ?? 100,
             expires: options.expiresMs ?? 1000,
         })
@@ -1344,7 +1344,7 @@ export default class NatsService {
         options: JetStreamConsumeOptions = {},
     ): Promise<number> {
         const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
-        const messages = await consumer.consume({
+        const messages = await consumer.fetch({
             max_messages: options.maxMessages ?? 100,
             expires: options.expiresMs ?? 1000,
         })
