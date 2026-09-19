@@ -45,16 +45,6 @@ services:
             - ./services/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
             - typescript-test-runner-pnpm-store:/pnpm-store
 
-            # Documentation tests have their own dependencies and a read-only repository view.
-            - ./:/repository:ro,cached
-            - ./documentation/site/package.json:/usr/src/service/docs-site/package.json:cached
-            - ./documentation/site/source-registry.mjs:/usr/src/service/docs-site/source-registry.mjs:ro,cached
-            - ./documentation/site/source-registry.test.ts:/usr/src/service/docs-site/source-registry.test.ts:ro,cached
-            - ./documentation/site/markdoc:/usr/src/service/docs-site/markdoc:ro,cached
-            - typescript-test-runner-node-modules-docs-site:/usr/src/service/docs-site/node_modules
-
-
-
             # --- api domain (bind-mounts services/api's own files — same
             #     package.json/pnpm-workspace.yaml/vitest.config.ts the
             #     lixpi-api container uses, no separate copies) ---
@@ -416,7 +406,6 @@ services:
 volumes:
     typescript-test-runner-node-modules-api-nats-subject-registry:
     typescript-test-runner-node-modules-shared-nats-subject-registry:
-    typescript-test-runner-node-modules-docs-site:
     typescript-test-runner-pnpm-store: # Shared pnpm content store for ephemeral test-runner containers
 
     # Persisted node_modules for the test-runner's ephemeral containers (see

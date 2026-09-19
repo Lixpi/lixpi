@@ -36,7 +36,7 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-components format
 ```
 
-The runner also exposes `docs-site`, `infrastructure`, `random-useful-things`, and `quality-runner` domains. TypeScript rules apply to every TypeScript file, while Sass and CSS rules apply to every first-party stylesheet. Use `all` when a repository-wide change needs every configured domain:
+The runner also exposes `infrastructure`, `random-useful-things`, and `quality-runner` domains. TypeScript rules apply to every TypeScript file, while Sass and CSS rules apply to every first-party stylesheet. Use `all` when a repository-wide change needs every configured domain:
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner all validate

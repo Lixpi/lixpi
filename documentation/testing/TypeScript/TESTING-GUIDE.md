@@ -29,7 +29,7 @@ Use the same command for every configured service. The optional test path is rel
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
 ```
 
-The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `docs-site` runs source-registry and Markdoc link tests without building the documentation site. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `docs-site` and `init-config` separately.
+The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `init-config` separately.
 
 The `nex` domain includes `workloads/nats-admission.runtime.test.ts`. Its opt-in application-cluster checks require NATS and LocalAuth0; set `LIXPI_NATS_AUTH_RUNTIME_TEST=true` and mount the selected local environment file read-only at `/run/nats-test.env`. They create and remove a unique Object Store bucket. `shared nats-subject-registry` verifies endpoint permission boundaries, user-scoped events, queues and declaration validation. Isolated Go admission tests are covered in [Go Testing and Tooling](../Go/TESTING-GUIDE.md).
 
@@ -65,7 +65,7 @@ Each domain owns its Vitest environment, include patterns, setup files, and alia
 
 ## GitHub Actions
 
-The `CI` workflow groups TypeScript checks under `typescript-tests` and `typescript-quality`, with `TypeScript / Tests` and `TypeScript / Formatting and linting` status names. Each configured service, shared-package, and documentation test domain runs as an independent matrix job. Each test job invokes the same test-runner image through `docker-compose.typescript-test-runner.yml`; the GitHub host does not install pnpm, service dependencies, or Vitest.
+The `CI` workflow groups TypeScript checks under `typescript-tests` and `typescript-quality`, with `TypeScript / Tests` and `TypeScript / Formatting and linting` status names. Each configured service and shared-package test domain runs as an independent matrix job. Each test job invokes the same test-runner image through `docker-compose.typescript-test-runner.yml`; the GitHub host does not install pnpm, service dependencies, or Vitest.
 
 CI sets non-secret local placeholder values for the Vite variables required by the test-runner Compose service and still uses `--no-deps`, so no application, NATS, auth, or database service starts. Pointing Compose at the one-shot runner file preserves the local image, mounts, dispatcher, and domain boundary without requiring a developer `.env` file or parsing the root application graph. Both TypeScript matrices and the separate Go quality, test, and build jobs must succeed for the stable `Required CI gate` status used by branch rules.
 

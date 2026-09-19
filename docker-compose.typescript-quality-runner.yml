@@ -58,7 +58,6 @@ services:
             - ./services/ai-model-registry/src:/usr/src/repository/services/ai-model-registry/src:cached
             - ./services/ai-model-registry/vite.config.ts:/usr/src/repository/services/ai-model-registry/vite.config.ts:cached
             - ./services/ai-model-registry/vitest.config.ts:/usr/src/repository/services/ai-model-registry/vitest.config.ts:cached
-            - ./documentation/site/assets:/usr/src/repository/documentation/site/assets:cached
             - ./infrastructure/init-script/setup-env.ts:/usr/src/repository/infrastructure/init-script/setup-env.ts:cached
             - ./infrastructure/pulumi/src:/usr/src/repository/infrastructure/pulumi/src:cached
             - ./infrastructure/pulumi/vitest.config.ts:/usr/src/repository/infrastructure/pulumi/vitest.config.ts:cached

@@ -44,8 +44,6 @@ jobs:
                       command: quality-runner validate
                     - name: shared
                       command: shared validate
-                    - name: docs-site
-                      command: docs-site validate
                     - name: infrastructure
                       command: infrastructure validate
                     - name: random-useful-things
@@ -73,7 +71,6 @@ jobs:
                     - ai-model-registry
                     - nex
                     - shared
-                    - docs-site
                     - infrastructure
                     - init-config
         env:

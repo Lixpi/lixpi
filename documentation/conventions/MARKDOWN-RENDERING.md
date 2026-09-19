@@ -10,9 +10,7 @@ Markdown shows up in AI chat responses, style-extraction surfaces, Media Library
 - AI chat text is parsed on the API and assembled into ProseMirror steps through `@lixpi/prosemirror`.
 - Non-editable browser surfaces use `MarkdownStreamRenderer`.
 
-{% callout type="note" %}
-This convention governs **runtime markdown in the web UI** (model output, Capability instructions, and similar surfaces). It is distinct from the documentation site's own **build-time Markdoc renderer** in [`documentation/site/`](../site/README.md), which turns these `.md` docs into static HTML. The two do not share code or this rule.
-{% /callout %}
+This convention governs **runtime markdown in the web UI**: model output, Capability instructions, and similar application surfaces. Developer documentation is maintained as Markdown source and does not use the application's runtime renderer.
 
 ## The Rule
 

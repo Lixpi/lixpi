@@ -116,7 +116,7 @@ case "$domain" in
         cp -R /usr/src/service/shared/nats-subject-registry/src /usr/src/service/init-config/packages/lixpi/nats-subject-registry/
         run_domain init-config "$@"
         ;;
-    api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site)
+    api|web-ui|web-ui-user-portal|ai-model-registry|nex)
         run_domain "$domain" "$@"
         ;;
     shared)
@@ -131,7 +131,7 @@ case "$domain" in
         run_shared
         ;;
     *)
-        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site|init-config|infrastructure|shared|all} [vitest args]" >&2
+        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|init-config|infrastructure|shared|all} [vitest args]" >&2
         exit 1
         ;;
 esac

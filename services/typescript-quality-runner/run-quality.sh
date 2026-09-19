@@ -188,9 +188,6 @@ run_domain() {
         ai-model-registry)
             run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/ai-model-registry","targetDirectory":"services/ai-model-registry/src/client"}]' services/ai-model-registry/src services/ai-model-registry/vite.config.ts services/ai-model-registry/vitest.config.ts
             ;;
-        docs-site)
-            run_action "$action" '[]' documentation/site/assets
-            ;;
         infrastructure)
             run_action "$action" '[]' infrastructure/init-script/setup-env.ts infrastructure/pulumi/src
             ;;
@@ -229,7 +226,6 @@ run_all() {
         services/ai-model-registry/src \
         services/ai-model-registry/vite.config.ts \
         services/ai-model-registry/vitest.config.ts \
-        documentation/site/assets \
         infrastructure/init-script/setup-env.ts \
         infrastructure/pulumi/src \
         random-useful-things \
@@ -262,7 +258,7 @@ cd "$repository_dir"
 # that root. The self-test remains a separate explicit action from normal validation.
 domain="${1:-}"
 if [ -z "$domain" ]; then
-    echo "Usage: run-quality.sh {web-ui|web-ui-user-portal|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner|shared|all|self-test|files} [package] [validate|fix|lint|lint-fix|format|validate-formatting] [file paths]" >&2
+    echo "Usage: run-quality.sh {web-ui|web-ui-user-portal|api|nex|ai-model-registry|infrastructure|random-useful-things|quality-runner|shared|all|self-test|files} [package] [validate|fix|lint|lint-fix|format|validate-formatting] [file paths]" >&2
     exit 1
 fi
 shift
@@ -283,7 +279,7 @@ case "$domain" in
     self-test)
         sh "$runner_dir/test-quality.sh"
         ;;
-    web-ui|web-ui-user-portal|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner)
+    web-ui|web-ui-user-portal|api|nex|ai-model-registry|infrastructure|random-useful-things|quality-runner)
         run_domain "$domain" "${1:-validate}"
         ;;
     *)
