@@ -1,4 +1,6 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import {
+    getNatsSubjectPath,
     NATS_SUBJECTS,
     type PromptReferenceCategory,
 } from '@lixpi/constants'
@@ -68,16 +70,10 @@ const getWorkspaceCatalogContext = async (
     }
 }
 
-export const promptReferenceSubjects = [
+export const promptReferenceSubjects = createNatsSubscriptions(
+    'prompt-reference',
     {
-        subject: CAPABILITY_SUBJECTS.MODULES.LIST,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CAPABILITY_SUBJECTS.MODULES.LIST] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.MODULES.LIST)]: async (data: any) => {
             const userId = data.user.userId as string
             const context = await getWorkspaceCatalogContext(userId, data.workspaceId)
 
@@ -96,16 +92,7 @@ export const promptReferenceSubjects = [
                 ),
             }
         },
-    },
-    {
-        subject: CAPABILITY_SUBJECTS.MODULES.GET,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [CAPABILITY_SUBJECTS.MODULES.GET] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.CAPABILITY_SUBJECTS.MODULES.GET)]: async (data: any) => {
             const userId = data.user.userId as string
             const context = await getWorkspaceCatalogContext(userId, data.workspaceId)
 
@@ -123,16 +110,7 @@ export const promptReferenceSubjects = [
 
             return module ?? { error: 'CAPABILITY_MODULE_NOT_FOUND' }
         },
-    },
-    {
-        subject: PROMPT_REFERENCE_SUBJECTS.LIST,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [PROMPT_REFERENCE_SUBJECTS.LIST] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.PROMPT_REFERENCE_SUBJECTS.LIST)]: async (data: any) => {
             try {
                 const category = data.category as PromptReferenceCategory
 
@@ -159,16 +137,7 @@ export const promptReferenceSubjects = [
                 return { error: (error as Error).message }
             }
         },
-    },
-    {
-        subject: PROMPT_REFERENCE_SUBJECTS.RECORD_ACCEPTED_USE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.PROMPT_REFERENCE_SUBJECTS.RECORD_ACCEPTED_USE)]: async (data: any) => {
             await PromptReferenceRecentModel.recordAccepted({
                 userId: data.user.userId,
                 references: data.references ?? [],
@@ -177,4 +146,4 @@ export const promptReferenceSubjects = [
             return { success: true }
         },
     },
-] as const
+)

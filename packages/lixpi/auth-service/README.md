@@ -2,7 +2,7 @@
 
 Unified authentication library for JWT and NKey token verification. Provides a single source of truth for token validation across all Lixpi services.
 
-`ServiceAuthConfig` carries a public NKey, stable service identity, optional account, publish/subscribe allowlists, and optional `resp` limits. Response permission grants a temporary reply to a received request. Its `ttl` is a NATS duration in nanoseconds. Deployment registration validation lives in `@lixpi/nats-auth-callout-service`.
+`ServiceAuthConfig` carries a public NKey, stable service identity, optional account, publish/subscribe allowlists, and optional `resp` limits. Response permission grants a temporary reply to a received request. Its `ttl` is a NATS duration in nanoseconds. Deployment registration validation lives in the Go broker's `internal/auth` package; see [Authentication](../../../documentation/platform/AUTHENTICATION.md).
 
 ## Overview
 

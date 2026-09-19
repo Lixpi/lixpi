@@ -6,11 +6,11 @@
 # time. That injection is required because the native nexlet does NOT inherit the
 # container env — agents/native/state.go sets the child process env to ONLY
 # start_request.environment (+ NEX_WORKLOAD_* creds). Secrets (the NATS
-# regular-user password) therefore cannot live in this committed file; the
+# file-conversion seed) therefore cannot live in this committed file; the
 # entrypoint supplies them at deploy time.
 #
 # Rather than using the NEX-account credentials the native nexlet mints, this
-# workload connects to NATS as the AUTH-account `regular_user`
+# workload connects to NATS as the AUTH-account `svc:file-conversion`
 # so it can read/write organization Blob Object Store buckets that live in AUTH. The
 # NEX node only supervises this process.
 #
@@ -27,5 +27,5 @@ start_request:
     - "--disable-warning=ExperimentalWarning"
     - "/usr/src/service/workloads/file-conversion/index.ts"
   # The entrypoint injects these from container env at deploy time:
-  #   NATS_SERVERS, NATS_REGULAR_USER_PASSWORD, HOME, PATH
+  #   NATS_SERVERS, NATS_FILE_CONVERSION_NKEY_SEED, HOME, PATH
   environment: {}

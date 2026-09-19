@@ -22,6 +22,7 @@ export const ensureAssetMaintenanceQueue = async (natsService: NATS_Service = ge
         subjects: ['asset.maintenance.>', 'blob.maintenance.>'],
         retention: 'workqueue',
         storage: 'file',
+        num_replicas: 3,
         max_age: 30 * 24 * 60 * 60 * 1000000000,
     })
     await natsService.ensureJetStreamConsumer(

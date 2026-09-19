@@ -21,6 +21,28 @@ import aiInteractionConstants from '../ai-interaction-constants.json' with { typ
 // Single dynamic export of all NATS subjects
 export const NATS_SUBJECTS = natsSubjects
 
+type SubjectTree = { [name: string]: string | SubjectTree }
+type SubjectPaths<Tree, Prefix extends string = ''> = {
+    readonly [Name in keyof Tree & string]: Tree[Name] extends string
+        ? `${Prefix}${Name}`
+        : SubjectPaths<Tree[Name], `${Prefix}${Name}.`>
+}
+
+const buildSubjectPaths = (
+    tree: SubjectTree,
+    prefix = '',
+): SubjectTree => Object.fromEntries(
+    Object.entries(tree).map(
+        ([name, subject]) => [
+            name,
+            typeof subject === 'string' ? `${prefix}${name}` : buildSubjectPaths(subject, `${prefix}${name}.`),
+        ],
+    ),
+)
+const subjectPaths = buildSubjectPaths(NATS_SUBJECTS) as SubjectPaths<typeof NATS_SUBJECTS>
+
+export const getNatsSubjectPath = <Path extends string>(select: (subjects: typeof subjectPaths) => Path): Path => select(subjectPaths)
+
 export const getNatsUserSubjectToken = (userId: string): string => [...new TextEncoder().encode(userId)]
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')

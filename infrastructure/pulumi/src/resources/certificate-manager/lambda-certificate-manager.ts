@@ -46,6 +46,7 @@ export type LambdaCertificateManagerArgs = {
     functionName?: string
     timeout?: number
     memorySize?: number
+    alarmActions?: pulumi.Input<string>[]
 
     // Docker build context (same as ECS version)
     dockerBuildContext: string
@@ -74,11 +75,14 @@ export type LambdaCertificateManagerResult = {
 
     // Certificate secrets (if using secrets-manager storage)
     certificateSecrets: aws.secretsmanager.Secret[]
+    certificateStateBucket: aws.s3.Bucket
+    alertTopic: aws.sns.Topic
 
     // Outputs
     outputs: {
         functionName: pulumi.Output<string>
         functionArn: pulumi.Output<string>
+        alertTopicArn: pulumi.Output<string>
         certificateSecrets: {
             name: pulumi.Output<string>
             arn: pulumi.Output<string>
@@ -101,6 +105,7 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         dockerBuildContext,
         dockerfilePath,
         environment = {},
+        alarmActions = [],
     } = args
 
     // Format names consistently
@@ -109,6 +114,51 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         ORG_NAME || 'lixpi',
         STAGE || 'dev',
     )
+
+    const certificateStateBucket = new aws.s3.Bucket(
+        `${formattedFunctionName}-state`,
+        {
+            forceDestroy: false,
+        },
+        { protect: true },
+    )
+    new aws.s3.BucketVersioning(
+        `${formattedFunctionName}-state-versioning`,
+        {
+            bucket: certificateStateBucket.id,
+            versioningConfiguration: { status: 'Enabled' },
+        },
+    )
+    new aws.s3.BucketServerSideEncryptionConfiguration(
+        `${formattedFunctionName}-state-encryption`,
+        {
+            bucket: certificateStateBucket.id,
+            rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: 'AES256' } }],
+        },
+    )
+    new aws.s3.BucketPublicAccessBlock(
+        `${formattedFunctionName}-state-private`,
+        {
+            bucket: certificateStateBucket.id,
+            blockPublicAcls: true,
+            blockPublicPolicy: true,
+            ignorePublicAcls: true,
+            restrictPublicBuckets: true,
+        },
+    )
+    const alertTopic = new aws.sns.Topic(`${formattedFunctionName}-alerts`, {})
+
+    if (process.env.NATS_OPERATIONAL_ALERT_EMAIL)
+        new aws.sns.TopicSubscription(
+            `${formattedFunctionName}-alert-email`,
+            {
+                topic: alertTopic.arn,
+                protocol: 'email',
+                endpoint: process.env.NATS_OPERATIONAL_ALERT_EMAIL,
+            },
+        )
+
+    const certificateAlarmActions = [alertTopic.arn, ...alarmActions]
 
     // Build and push certificate manager Lambda Docker image to ECR
     const {
@@ -141,6 +191,34 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         },
     )
 
+    const statePolicy = new aws.iam.RolePolicy(
+        `${formattedFunctionName}-state-policy`,
+        {
+            role: lambdaRole.id,
+            policy: pulumi.jsonStringify({
+                Version: '2012-10-17',
+                Statement: [
+                    {
+                        Effect: 'Allow',
+                        Action: ['s3:ListBucket'],
+                        Resource: certificateStateBucket.arn,
+                    },
+                    {
+                        Effect: 'Allow',
+                        Action: ['s3:GetObject', 's3:PutObject'],
+                        Resource: pulumi.interpolate`${certificateStateBucket.arn}/caddy-state.tar.gz`,
+                    },
+                    {
+                        Effect: 'Allow',
+                        Action: ['cloudwatch:PutMetricData'],
+                        Resource: '*',
+                        Condition: { StringEquals: { 'cloudwatch:namespace': 'Lixpi/Certificates' } },
+                    },
+                ],
+            }),
+        },
+    )
+
     // Attach basic Lambda execution policy
     new aws.iam.RolePolicyAttachment(
         `${formattedFunctionName}-basic-execution`,
@@ -168,7 +246,7 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
     const certificatePolicy = new aws.iam.Policy(
         `${formattedFunctionName}-policy`,
         {
-            policy: JSON.stringify({
+            policy: pulumi.jsonStringify({
                 Version: '2012-10-17',
                 Statement: [
                     // Route53 permissions for DNS-01 challenge
@@ -185,10 +263,10 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
                         Effect: 'Allow',
                         Action: [
                             'route53:ChangeResourceRecordSets',
-                            'route53:GetResourceRecordSets',
+                            'route53:GetHostedZone',
                             'route53:ListResourceRecordSets',
                         ],
-                        Resource: 'arn:aws:route53:::hostedzone/*',
+                        Resource: hostedZoneId ? pulumi.interpolate`arn:aws:route53:::hostedzone/${hostedZoneId}` : 'arn:aws:route53:::hostedzone/*',
                     },
                     // Storage-specific permissions
                     ...(storageType === 'secrets-manager'
@@ -200,6 +278,7 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
                                     'secretsmanager:UpdateSecret',
                                     'secretsmanager:PutSecretValue',
                                     'secretsmanager:GetSecretValue',
+                                    'secretsmanager:ListSecretVersionIds',
                                 ],
                                 Resource: `arn:aws:secretsmanager:*:*:secret:${storageConfig.secretsManagerPrefix}-*`,
                             },
@@ -236,7 +315,7 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         },
     )
 
-    new aws.iam.RolePolicyAttachment(
+    const certificatePolicyAttachment = new aws.iam.RolePolicyAttachment(
         `${formattedFunctionName}-cert-policy`,
         {
             role: lambdaRole.name,
@@ -244,64 +323,29 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         },
     )
 
-    // Prepare Lambda environment variables with proper Pulumi Output handling
-    const lambdaEnvironment = hostedZoneId
-        ? pulumi.all([hostedZoneId]).apply(
-            ([zoneId]) => ({
-                // Core certificate manager environment
-                CADDY_LOCAL_MODE: 'false', // Force production mode in Lambda
-                DOMAINS: domains.join(','),
-                CADDY_EMAIL: email,
-                STORAGE_TYPE: storageType,
-                // AWS_REGION is automatically provided by Lambda runtime - don't set it explicitly
-    
-                // Storage-specific environment
-                ...(storageType === 'secrets-manager'
-                    ? {
-                        SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
-                    }
-                    : {}),
-                ...(storageType === 's3'
-                    ? {
-                        S3_BUCKET: storageConfig.s3Bucket?.toString() || '',
-                        S3_PREFIX: storageConfig.s3Prefix || 'certificates',
-                    }
-                    : {}),
-    
-                // Route53 configuration for DNS challenges
-                AWS_HOSTED_ZONE_ID: zoneId || '', // Specific hosted zone ID for DNS challenges
-    
-                // Override any user-provided environment
-                ...environment,
-            }),
-        )
-        : {
-            // Core certificate manager environment
-            CADDY_LOCAL_MODE: 'false', // Force production mode in Lambda
+    const lambdaEnvironment = pulumi.all({
+        zoneId: hostedZoneId ?? '',
+        stateBucket: certificateStateBucket.id,
+        certificateBucket: storageConfig.s3Bucket ?? '',
+    }).apply(
+        ({
+            zoneId,
+            stateBucket,
+            certificateBucket,
+        }) => ({
+            CADDY_STATE_BUCKET: stateBucket,
+            CERT_MANAGER_NAME: formattedFunctionName,
+            CADDY_LOCAL_MODE: 'false',
             DOMAINS: domains.join(','),
             CADDY_EMAIL: email,
             STORAGE_TYPE: storageType,
-            // AWS_REGION is automatically provided by Lambda runtime - don't set it explicitly
-
-            // Storage-specific environment
-            ...(storageType === 'secrets-manager'
-                ? {
-                    SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
-                }
-                : {}),
-            ...(storageType === 's3'
-                ? {
-                    S3_BUCKET: storageConfig.s3Bucket?.toString() || '',
-                    S3_PREFIX: storageConfig.s3Prefix || 'certificates',
-                }
-                : {}),
-
-            // Route53 configuration for DNS challenges
-            AWS_HOSTED_ZONE_ID: '', // Auto-detect hosted zone ID
-
-            // Override any user-provided environment
+            SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
+            S3_BUCKET: certificateBucket,
+            S3_PREFIX: storageConfig.s3Prefix || 'certificates',
+            AWS_HOSTED_ZONE_ID: zoneId,
             ...environment,
-        }
+        }),
+    )
 
     // VPC configuration for Lambda (if provided)
     let vpcConfig: any = {}
@@ -344,7 +388,7 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
                     name: secretName,
                     description: `TLS certificate for ${domain}`,
                     forceOverwriteReplicaSecret: true,
-                    recoveryWindowInDays: 0, // FORCE DELETE with 0 recovery window
+                    recoveryWindowInDays: 30,
                 },
             )
         })
@@ -359,17 +403,17 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         },
     )
 
-    // Create Lambda function using container image
-    // Use a unique resource name AND function name with imageTag to avoid naming conflicts
+    // Keep one function identity so concurrency serialization also covers image updates.
     const lambdaFunction = new aws.lambda.Function(
-        `${formattedFunctionName}-${imageTag}`,
+        formattedFunctionName,
         {
-            name: `${formattedFunctionName}-${imageTag}`,
+            name: formattedFunctionName,
             packageType: 'Image',
             imageUri: imageRef,
             role: lambdaRole.arn,
             timeout,
             memorySize,
+            reservedConcurrentExecutions: 1,
             environment: {
                 variables: lambdaEnvironment,
             },
@@ -381,11 +425,7 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
             publish: true,
         },
         {
-            dependsOn: [...(storageType === 'secrets-manager' ? certificateSecrets : []), image, logGroup],
-            // Force complete resource replacement when any input changes
-            replaceOnChanges: ['*'],
-            // Delete the old function before creating the new one
-            deleteBeforeReplace: true,
+            dependsOn: [...(storageType === 'secrets-manager' ? certificateSecrets : []), image, logGroup, statePolicy, certificatePolicyAttachment],
         },
     )
 
@@ -398,15 +438,12 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
             input: JSON.stringify({
                 action: 'generate_certificates',
                 domains: domains,
-                force: true, // Force generation on initial deployment
             }),
             triggers: {
                 // Retrigger if domains or configuration change
                 domains: domains.join(','),
                 storageType,
                 imageTag,
-                // Add timestamp to force re-invocation when Lambda function is replaced
-                deploymentTimestamp: Date.now().toString(),
             },
         },
         {
@@ -418,6 +455,80 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         },
     )
 
+    const renewalSchedule = new aws.cloudwatch.EventRule(
+        `${formattedFunctionName}-renewal`,
+        {
+            scheduleExpression: 'rate(6 hours)',
+            description: 'Check persisted certificates and renew when they enter the Caddy renewal window',
+        },
+    )
+    new aws.lambda.Permission(
+        `${formattedFunctionName}-scheduled-renewal`,
+        {
+            action: 'lambda:InvokeFunction',
+            function: lambdaFunction.name,
+            principal: 'events.amazonaws.com',
+            sourceArn: renewalSchedule.arn,
+        },
+    )
+    new aws.cloudwatch.EventTarget(
+        `${formattedFunctionName}-renewal-target`,
+        {
+            rule: renewalSchedule.name,
+            arn: lambdaFunction.arn,
+            input: JSON.stringify({ action: 'maintain_certificates' }),
+            retryPolicy: {
+                maximumEventAgeInSeconds: 3600,
+                maximumRetryAttempts: 3,
+            },
+        },
+    )
+    new aws.cloudwatch.MetricAlarm(
+        `${formattedFunctionName}-renewal-errors`,
+        {
+            namespace: 'AWS/Lambda',
+            metricName: 'Errors',
+            dimensions: { FunctionName: lambdaFunction.name },
+            statistic: 'Sum',
+            period: 300,
+            evaluationPeriods: 1,
+            threshold: 1,
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            treatMissingData: 'notBreaching',
+            alarmActions: certificateAlarmActions,
+        },
+    )
+    new aws.cloudwatch.MetricAlarm(
+        `${formattedFunctionName}-renewal-stale`,
+        {
+            namespace: 'Lixpi/Certificates',
+            metricName: 'CertificateMaintenanceSuccess',
+            dimensions: { Manager: formattedFunctionName },
+            statistic: 'Sum',
+            period: 21600,
+            evaluationPeriods: 2,
+            threshold: 1,
+            comparisonOperator: 'LessThanThreshold',
+            treatMissingData: 'breaching',
+            alarmActions: certificateAlarmActions,
+        },
+    )
+    new aws.cloudwatch.MetricAlarm(
+        `${formattedFunctionName}-certificate-expiry`,
+        {
+            namespace: 'Lixpi/Certificates',
+            metricName: 'CertificateSecondsRemaining',
+            dimensions: { Manager: formattedFunctionName },
+            statistic: 'Minimum',
+            period: 21600,
+            evaluationPeriods: 1,
+            threshold: 604800,
+            comparisonOperator: 'LessThanThreshold',
+            treatMissingData: 'breaching',
+            alarmActions: certificateAlarmActions,
+        },
+    )
+
     return {
         repository,
         image,
@@ -426,9 +537,12 @@ export const createLambdaCertificateManager = async (args: LambdaCertificateMana
         logGroup,
         initialCertificateGeneration,
         certificateSecrets,
+        certificateStateBucket,
+        alertTopic,
         outputs: {
             functionName: lambdaFunction.name,
             functionArn: lambdaFunction.arn,
+            alertTopicArn: alertTopic.arn,
             certificateSecrets: certificateSecrets.map(
                 secret => ({
                     name: secret.name,

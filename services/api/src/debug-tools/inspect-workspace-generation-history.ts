@@ -72,8 +72,8 @@ const createNatsService = async (): Promise<NATS_Service> => {
     return await NATS_Service.init({
         servers: process.env.NATS_SERVERS as any,
         name: 'api-inspect-workspace-generation-history',
-        user: 'regular_user',
-        pass: requireEnv('NATS_REGULAR_USER_PASSWORD'),
+        userId: 'svc:operator',
+        nkeySeed: requireEnv('NATS_OPERATOR_NKEY_SEED'),
         ...(process.env.NATS_STREAM_REPLICAS
             ? { streamReplicas: Number(process.env.NATS_STREAM_REPLICAS) }
             : {}),

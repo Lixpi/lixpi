@@ -117,7 +117,7 @@ docker compose exec -T lixpi-ai-model-registry \
 
 `--no-write` skips DynamoDB, `--no-fetch` merges the tree as it stands without asking any source. Over HTTP, `GET /api/models` returns the merged catalog, `GET /api/models/drift` returns the disagreements, and `POST /api/models/sync` runs one.
 
-The scheduled loop is off unless `MODEL_CATALOG_SYNC_ENABLED=true`, so starting a container locally never writes DynamoDB on its own. On AWS the loop is on, the catalog tree ships read-only in the image, and each finished run publishes `aiModels.syncCompleted` with the run totals and drift counts. That NATS connection needs `NATS_AI_MODEL_REGISTRY_NKEY_SEED` here and the matching `NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC` registered with the API's auth callout; without the seed the sync still runs and only the event is skipped.
+The scheduled loop is off unless `MODEL_CATALOG_SYNC_ENABLED=true`, so starting a container locally never writes DynamoDB on its own. On AWS the loop is on, the catalog tree ships read-only in the image, and each finished run publishes `aiModels.syncCompleted` with the run totals and drift counts. That NATS connection needs `NATS_AI_MODEL_REGISTRY_NKEY_SEED` here and the matching `NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC` registered with the embedded Go broker; without the seed the sync still runs and only the event is skipped.
 
 ## Running it
 

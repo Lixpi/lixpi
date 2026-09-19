@@ -6,20 +6,17 @@ import chalk from 'chalk'
 import {
     log,
     infoStr,
-    warn,
     err,
 } from '@lixpi/debug-tools'
 
 import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
+import { NatsRegistrationClient } from '@lixpi/nats-service/registration'
 import {
-    startNatsAuthCalloutService,
-    type BrowserPermissionTemplate,
-} from '@lixpi/nats-auth-callout-service'
-import { parseAdditionalServiceAuthConfigs } from '@lixpi/nats-auth-callout-service/service-registrations'
-import {
-    type ServiceAuthConfig,
-} from '@lixpi/auth-service'
+    policyDigest,
+    policySchemaVersion,
+} from '@lixpi/nats-subject-registry/policy'
+import { composeApiSubscriptions } from './NATS/create-nats-subscriptions.ts'
 
 import { createServer } from 'http'
 
@@ -90,173 +87,33 @@ global.dynamoDBService = new DynamoDBService({
 // .getAvailableAiModels) and does not run the sync itself. See
 // documentation/platform/deployment/NEX-EXECUTION-ENGINE.md.
 
-// NATS registration order is the order below. Keep related subjects together
-// here instead of sorting after the fact so startup logs and generated auth
-// permissions stay readable and predictable.
-const subscriptions = [
-    // Identity and model metadata.
-    ...userSubjects,
-    ...organizationMembershipSubjects,
-    ...aiModelSubjects,
+const subscriptions = composeApiSubscriptions({
+    user: userSubjects,
+    'organization-membership': organizationMembershipSubjects,
+    'ai-model': aiModelSubjects,
+    'ai-interaction': aiInteractionSubjects,
+    'media-generation-request': mediaGenerationRequestSubjects,
+    'media-descriptor': mediaDescriptorSubjects,
+    workspace: workspaceSubjects,
+    asset: assetSubjects,
+    capability: capabilitySubjects,
+    'prompt-reference': promptReferenceSubjects,
+})
 
-    // AI orchestration, replay streams, and media description.
-    ...aiInteractionSubjects,
-    ...mediaGenerationRequestSubjects,
-    ...mediaDescriptorSubjects,
+infoStr([`NATS policy schema=${policySchemaVersion} digest=${policyDigest}`])
 
-    // Workspace records and unified Asset authority.
-    ...workspaceSubjects,
-    ...assetSubjects,
-
-    // Capability catalog commands and generic Tool run transport.
-    ...capabilitySubjects,
-    ...promptReferenceSubjects,
-]
-
-const browserPermissionTemplates: BrowserPermissionTemplate[] = [
-    ...subscriptions.flatMap(
-        subscription =>
-            'permissions' in subscription
-                && subscription.permissions
-                ? [subscription.permissions]
-                : [],
-    ),
-    {
-        pub: { allow: ['portal.module.*.{userIdToken}.request.>'] },
-        sub: { allow: ['portal.module.*.{userIdToken}.event.>'] },
-    },
-]
-
-// Registered NATS-internal identities that the auth callout can authenticate
-// without Auth0.
-//
-// This is the API-side registry consumed by
-// `@lixpi/nats-auth-callout-service`. Keep the operational explanation in sync
-// with documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md.
-//
-// Why this lives in the API:
-// - `services/api` owns the NATS auth-callout responder on `$SYS.REQ.USER.AUTH`.
-// - NATS forwards connection attempts here, and this process returns the final
-//   NATS user JWT that decides which account and subjects the client receives.
-// - Public NKeys are verification material, not secrets, so the API only needs
-//   the public half of any registered internal identity. The matching seed stays
-//   with the service that is proving its identity.
-const serviceAuthConfigs: ServiceAuthConfig[] = []
-
-if (env.NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC) {
-    // The AI Model Registry owns the model catalog and announces each sync run.
-    // Unlike NEX it is an ordinary Lixpi service, so it authenticates with a
-    // self-issued NKey-signed JWT rather than a raw NKey challenge, and it lands
-    // in the default auth account alongside the API that subscribes to it.
-    serviceAuthConfigs.push({
-        publicKey: env.NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC,
-        // Must match the `sub` claim the registry puts in its self-issued JWT,
-        // which is NATS_AI_MODEL_REGISTRY_USER_ID in that service's environment.
-        userId: 'svc:ai-model-registry',
-        permissions: {
-            pub: {
-                allow: [
-                    // The only subject the registry publishes: run totals and
-                    // drift counts after each catalog sync.
-                    'aiModels.syncCompleted',
-                ],
-            },
-            sub: {
-                allow: ['_INBOX.>'],
-            },
-        },
-    })
-}
-
-if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
-    // NEX is a NATS-native tool, not a browser or normal API client. It connects
-    // with standard NATS NKey auth (`--nats.nkey` + `--nats.seed`), which means
-    // it sends a public NKey plus a signature over the server nonce instead of a
-    // Lixpi/Auth0 JWT in `connect_opts.auth_token`.
-    //
-    // With centralized auth_callout enabled, the static `users` section in a
-    // NATS account is not the path that authenticates this client. NATS asks the
-    // API auth callout to decide, so the API must know the NEX public key. The
-    // callout verifies the raw NKey signature, then mints a NATS user JWT for
-    // the account configured below.
-    //
-    // See documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md,
-    // especially the "NATS-native NKey variation" and the longer-term
-    // decentralized NATS JWT/operator option documented there.
-    serviceAuthConfigs.push({
-        // Public user NKey for the NEX node. The seed remains only in the NEX
-        // runtime environment. This value lets the auth callout verify that the
-        // raw NKey challenge response was signed by the real node credential.
-        publicKey: env.NATS_NEX_NODE_NKEY_PUBLIC,
-        // Stable Lixpi service identity used as the subject of the NATS user JWT
-        // returned by the auth callout. This is not an Auth0 user id.
-        userId: 'svc:nex-node',
-        // NEX must land in the dedicated NATS `NEX` account, not the default
-        // auth account. That keeps `$NEX.>` control-plane subjects and NEX feed
-        // subjects isolated from normal application traffic in `AUTH`.
-        account: 'NEX',
-        // These permissions are the complete NATS allowlist for the NEX node,
-        // its bundled native nexlet, and the workloads that the node credentials
-        // mint. Anything not listed here should be rejected by NATS.
-        permissions: {
-            pub: {
-                allow: [
-                    // NEX node/nexlet control-plane subjects: auctions,
-                    // registration, lifecycle, and feed publishing inside the
-                    // NEX account.
-                    '$NEX.>',
-                    // NEX uses NATS micro/service subjects for runtime
-                    // coordination. Keep this in the NEX account only.
-                    '$SRV.>',
-                    // Request/reply inboxes used by NEX CLI/node operations.
-                    '_INBOX.>',
-                    // JetStream API subjects. State persistence is currently
-                    // disabled for the node, but NEX and future workload
-                    // artifacts may touch KV/Object Store APIs in this account.
-                    '$JS.API.>',
-                    '$JS.lixpi.API.>',
-                    // JetStream flow-control and acknowledgement subjects used
-                    // by consumers/producers when JetStream is involved.
-                    '$JS.FC.>',
-                    '$JS.ACK.>',
-                ],
-            },
-            sub: {
-                allow: [
-                    // Subscribe to NEX control-plane and feed subjects.
-                    '$NEX.>',
-                    // Subscribe to NATS micro/service subjects used by NEX
-                    // coordination.
-                    '$SRV.>',
-                    // Receive request/reply responses.
-                    '_INBOX.>',
-                    // Allow JetStream API responses and account-scoped domain
-                    // responses if NEX starts using persisted state/artifacts.
-                    '$JS.API.>',
-                    '$JS.lixpi.API.>',
-                    // Allow JetStream flow-control and acknowledgements.
-                    '$JS.FC.>',
-                    '$JS.ACK.>',
-                ],
-            },
-        },
-    })
-} else {
-    // Local and production NEX authentication depends on this public key being
-    // present in the API environment. Without it, the NEX node can still sign
-    // the NATS challenge, but the auth callout has no registered key to verify
-    // against and must reject the connection.
-    warn('NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout')
-}
-
-// Initialize with your NATS server connection
-serviceAuthConfigs.push(...parseAdditionalServiceAuthConfigs(env.NATS_SERVICE_AUTH_REGISTRATIONS, serviceAuthConfigs))
+await NatsRegistrationClient.apply({
+    servers: env.NATS_SERVERS!.split(',').map(server => server.trim()),
+    password: env.NATS_REGISTRATION_PASSWORD!,
+    registration: env.NATS_APPLICATION_REGISTRATION!,
+})
 
 const apiNatsService = await NATS_Service.init({
     servers: env.NATS_SERVERS,
     name: 'api-server',
-    user: 'regular_user',
-    pass: env.NATS_REGULAR_USER_PASSWORD,
+    nkeySeed: env.NATS_API_NKEY_SEED,
+    initialConnectMaxAttempts: 20,
+    userId: 'svc:api',
     // Replication factor for JetStream stores/object-stores. Defaults to 3 (one
     // copy per cluster node) so a single node hiccup can't lose the only copy.
     ...(env.NATS_STREAM_REPLICAS ? { streamReplicas: Number(env.NATS_STREAM_REPLICAS) } : {}),
@@ -268,28 +125,6 @@ const apiNatsService = await NATS_Service.init({
 
 await startAssetMaintenanceWorker(apiNatsService)
 new CapabilityRunEventRelay(apiNatsService).start()
-
-await startNatsAuthCalloutService({
-    natsService: apiNatsService,
-    browserPermissionTemplates,
-    nKeyIssuerSeed: env.NATS_AUTH_NKEY_ISSUER_SEED,
-    xKeyIssuerSeed: env.NATS_AUTH_XKEY_ISSUER_SEED,
-    jwtAudience: env.AUTH0_API_IDENTIFIER,
-    jwtIssuer: env.MOCK_AUTH0 === 'true' ? `http://${env.MOCK_AUTH0_DOMAIN}/` : `${env.AUTH0_DOMAIN}/`,
-    jwtAlgorithms: ['RS256'],
-    jwksUri: env.MOCK_AUTH0 === 'true' ? env.MOCK_AUTH0_JWKS_URI : `${env.AUTH0_DOMAIN}/.well-known/jwks.json`,
-    natsAuthAccount: env.NATS_AUTH_ACCOUNT,
-    // Service registrations are passed into the generic auth-callout package so
-    // the package stays reusable. The auth package knows how to verify Auth0
-    // JWTs, self-issued service JWTs, and raw NATS NKey challenge responses; it
-    // does not hardcode that NEX exists. This API startup file decides which
-    // internal service identities are active for this deployment.
-    //
-    // See documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md for the
-    // full service-auth model, including why raw NKey NEX auth is the short-term
-    // fix and decentralized NATS JWT/operator auth is the larger future option.
-    serviceAuthConfigs,
-})
 
 // Authorize provider requests and record measured usage over the internal NATS port.
 // These service requests carry no browser token and bypass the JWT middleware.

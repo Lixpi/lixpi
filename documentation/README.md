@@ -22,6 +22,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [Implementation Plans](development-workflow/research-and-development/WRITING-IMPLEMENTATION-PLANS.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
 | [Spike Reports](development-workflow/research-and-development/SPIKE-REPORT-GUIDELINES.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
 | [TypeScript Linting and Formatting](../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
+| [Go Testing and Tooling](testing/Go/TESTING-GUIDE.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
@@ -48,11 +49,15 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | Authoritative context, Capability preflight, selected reasoning/media axes, media strategies, lineage, settlement, cancellation, and cleanup |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Data Storage](platform/DATA-STORAGE.md) | Asset/Blob tables, typed references, scope projections, organization Object Store layout, deletion/repair, and revision-2 portability |
-| [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
+| [Authentication](platform/AUTHENTICATION.md) | Embedded Go admission, shared permission contracts, API request authorization, service identities, LocalAuth0 |
+| [NATS Service](../services/nats/README.md) | Embedded broker architecture, peer admission, runtime configuration, certificates, health, maintenance commands and Docker development |
+| [Caddy Certificate Service](../services/caddy/README.md) | Embedded certificate issuance, local CA trust, public renewal, durable ACME state and serving-secret publication |
+| [NATS Subject Registry](../packages/lixpi/nats-subject-registry/README.md) | Subject ownership, endpoint permissions, service allowlists, subscription creation, validation, and release identity |
+| [Dependency and Format Versions](platform/DEPENDENCY-VERSIONS.md) | Image, runtime, library, package, and schema versions, their declaration paths, and update procedure |
 | [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | Provider request authorization, measured usage, and provider tariff metadata |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
-| [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | Three-node ECS EC2 NATS cluster, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |
+| [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | ECS EC2 broker scaling, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |
 | [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — AI-models sync, file conversion/frame extraction, the NEX account and credentials, local and AWS deployment |
 | [Scaling & Operations](platform/deployment/SCALING-AND-OPERATIONS.md) | Scaling profile, capacity ceilings, failure modes, environments, observability |
 

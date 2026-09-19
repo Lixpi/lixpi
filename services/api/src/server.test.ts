@@ -86,9 +86,6 @@ const mocks = vi.hoisted(() => {
         stopDetached: vi.fn(),
     }
 
-    const startNatsAuthCalloutService = vi.fn(async () => undefined)
-    const parseAdditionalServiceAuthConfigs = vi.fn(() => [])
-
     const assetRoutes = {}
     const workspaceExportRoutes = {}
     const capabilityRoutes = {}
@@ -140,6 +137,7 @@ const mocks = vi.hoisted(() => {
         createServer,
         natsInstance,
         natsInit,
+        registrationApply: vi.fn(async () => undefined),
         natsGetInstance,
         jwtAuthMiddleware,
         userSubjects,
@@ -156,8 +154,6 @@ const mocks = vi.hoisted(() => {
         setPromptReferenceModuleCatalog,
         capabilityModuleCatalog,
         capabilityDispatcher,
-        startNatsAuthCalloutService,
-        parseAdditionalServiceAuthConfigs,
         assetRoutes,
         workspaceExportRoutes,
         capabilityRoutes,
@@ -228,14 +224,9 @@ vi.mock('@lixpi/nats-service', () => ({
         getInstance: mocks.natsGetInstance,
     },
 }))
+vi.mock('@lixpi/nats-service/registration', () => ({ NatsRegistrationClient: { apply: mocks.registrationApply } }))
 
-vi.mock('@lixpi/nats-auth-callout-service', () => ({
-    startNatsAuthCalloutService: mocks.startNatsAuthCalloutService,
-}))
-
-vi.mock('@lixpi/nats-auth-callout-service/service-registrations', () => ({
-    parseAdditionalServiceAuthConfigs: mocks.parseAdditionalServiceAuthConfigs,
-}))
+vi.mock('./NATS/create-nats-subscriptions.ts', () => ({ composeApiSubscriptions: (groups: Record<string, unknown[]>) => Object.values(groups).flat() }))
 
 vi.mock('./NATS/middleware/nats-auth-middleware.ts', () => ({
     jwtAuthMiddleware: mocks.jwtAuthMiddleware,
@@ -312,14 +303,15 @@ const routeForPath = (path: string) => mocks.appUseCalls.find((call) => call.arg
 const resetServerEnv = (overrides: Record<string, string | undefined>): void => {
     process.env.ENVIRONMENT = 'local'
     process.env.NATS_SERVERS = 'nats://localhost:4222'
-    process.env.NATS_REGULAR_USER_PASSWORD = 'regular-password'
+    process.env.NATS_APPLICATION_REGISTRATION = 'signed-registration'
+    process.env.NATS_REGISTRATION_PASSWORD = 'bootstrap-password'
+    process.env.NATS_API_NKEY_SEED = 'synthetic-api-seed'
     process.env.ORIGIN_HOST_URL = 'https://api.example.test'
     process.env.MOCK_AUTH0 = 'false'
     process.env.AUTH0_DOMAIN = 'https://auth.example.test'
     process.env.AUTH0_API_IDENTIFIER = 'auth-audience'
-    process.env.NATS_AUTH_NKEY_ISSUER_SEED = 'nats-auth-nkey-seed'
-    process.env.NATS_AUTH_XKEY_ISSUER_SEED = 'nats-auth-xkey-seed'
-    process.env.NATS_AUTH_ACCOUNT = 'AUTH'
+    delete process.env.NATS_AUTH_NKEY_ISSUER_SEED
+    delete process.env.NATS_AUTH_XKEY_ISSUER_SEED
 
     Object.keys(overrides).forEach((key) => {
         const value = overrides[key]
@@ -347,11 +339,10 @@ const resetMockState = (): void => {
     mocks.cookieParser.mockClear()
     mocks.createServer.mockClear()
     mocks.natsInit.mockClear()
+    mocks.registrationApply.mockReset().mockResolvedValue(undefined)
     mocks.natsGetInstance.mockClear()
     mocks.natsInstance.drain.mockClear()
     mocks.natsInstance.request.mockClear()
-    mocks.startNatsAuthCalloutService.mockClear()
-    mocks.parseAdditionalServiceAuthConfigs.mockClear()
     mocks.createLlmModule.mockClear()
     mocks.setLlmModule.mockClear()
     mocks.setPromptReferenceModuleCatalog.mockClear()
@@ -413,11 +404,18 @@ describe('services/api server startup', () => {
         await loadServer()
 
         expect(mocks.natsInit).toHaveBeenCalledTimes(1)
+        expect(mocks.registrationApply).toHaveBeenCalledWith({
+            servers: ['nats://localhost:4222'],
+            password: 'bootstrap-password',
+            registration: 'signed-registration',
+        })
+        expect(mocks.registrationApply.mock.invocationCallOrder[0]).toBeLessThan(mocks.natsInit.mock.invocationCallOrder[0])
         expect(mocks.natsInit.mock.calls[0]?.[0]).toMatchObject({
             servers: 'nats://localhost:4222',
             name: 'api-server',
-            user: 'regular_user',
-            pass: 'regular-password',
+            nkeySeed: 'synthetic-api-seed',
+            userId: 'svc:api',
+            initialConnectMaxAttempts: 20,
             middleware: [mocks.jwtAuthMiddleware],
             subscriptions: expectedSubscriptionOrder,
         })
@@ -425,33 +423,13 @@ describe('services/api server startup', () => {
         expect(mocks.startAssetMaintenanceWorker).toHaveBeenCalledTimes(1)
         expect(mocks.startAssetMaintenanceWorker.mock.calls[0]?.[0]).toBe(mocks.natsInstance)
 
-        expect(mocks.startNatsAuthCalloutService).toHaveBeenCalledTimes(1)
-        expect(mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]).toMatchObject({
-            serviceAuthConfigs: [],
-            jwtAudience: 'auth-audience',
-            jwtIssuer: 'https://auth.example.test/',
-            jwksUri: 'https://auth.example.test/.well-known/jwks.json',
-            natsAuthAccount: 'AUTH',
-        })
-        expect(mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]).toMatchObject({
-            natsService: mocks.natsInstance,
-            browserPermissionTemplates: [{
-                pub: { allow: ['portal.module.*.{userIdToken}.request.>'] },
-                sub: { allow: ['portal.module.*.{userIdToken}.event.>'] },
-            }],
-            nKeyIssuerSeed: 'nats-auth-nkey-seed',
-            xKeyIssuerSeed: 'nats-auth-xkey-seed',
-        })
+        expect(mocks.natsInit.mock.calls[0]?.[0]).not.toHaveProperty('persistence')
         expect(mocks.createLlmModule).toHaveBeenCalledWith({
             natsService: mocks.natsInstance,
             providerUsage: expect.anything(),
         })
         expect(mocks.getLlmModule()?.seedCapabilities).toHaveBeenCalledTimes(1)
         expect(mocks.setPromptReferenceModuleCatalog).toHaveBeenCalledWith(mocks.capabilityModuleCatalog)
-
-        expect(mocks.warn).toHaveBeenCalledWith(
-            'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
-        )
 
         expect(mocks.app.use).toHaveBeenCalledTimes(9)
         expect(mocks.expressJson).toHaveBeenCalledWith({ limit: '100mb' })
@@ -544,25 +522,18 @@ describe('services/api server startup', () => {
         processExitSpy.mockRestore()
     })
 
-    it('registers configured NEX service auth identity when the public key is set', async () => {
+    it('starts as a service client without broker signing secrets or a NEX registration', async () => {
         resetServerEnv({
-            NATS_NEX_NODE_NKEY_PUBLIC: 'NEX_PUBLIC_KEY',
+            NATS_NEX_NODE_NKEY_PUBLIC: undefined,
             MOCK_AUTH0: 'false',
         })
 
         await loadServer()
 
-        expect(mocks.warn).not.toHaveBeenCalledWith(
-            'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
-        )
-
-        expect(mocks.startNatsAuthCalloutService).toHaveBeenCalledTimes(1)
-        const authCalloutArgs = mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]
-        expect(authCalloutArgs.serviceAuthConfigs).toHaveLength(1)
-        expect(authCalloutArgs.serviceAuthConfigs[0]).toMatchObject({
-            publicKey: 'NEX_PUBLIC_KEY',
-            userId: 'svc:nex-node',
-            account: 'NEX',
-        })
+        expect(mocks.natsInit).toHaveBeenCalledWith(expect.objectContaining({
+            nkeySeed: 'synthetic-api-seed',
+            userId: 'svc:api',
+        }))
+        expect(mocks.natsInit.mock.calls[0]?.[0]).not.toHaveProperty('persistence')
     })
 })

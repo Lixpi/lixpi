@@ -23,6 +23,9 @@ export type ServiceDiscoverySidecarArgs = {
     // Route53 configuration for public IP registration
     route53HostedZoneId: pulumi.Input<string>
     natsRecordName: string // e.g., "nats.shelby-dev.lixpi.dev"
+    taskFamily: string
+    discoveryService: aws.servicediscovery.Service
+    admissionSecretArn: pulumi.Input<string>
 
     // ECS cluster to monitor
     ecsCluster: {
@@ -110,11 +113,21 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
     const lambdaPolicy = new aws.iam.Policy(
         `${functionName}-policy`,
         {
-            policy: pulumi.all([route53HostedZoneId]).apply(
-                ([hostedZoneId]: [string]) =>
+            policy: pulumi.all([route53HostedZoneId, args.discoveryService.arn, args.admissionSecretArn]).apply(
+                ([hostedZoneId, discoveryArn, admissionSecretArn]) =>
                     JSON.stringify({
                         Version: '2012-10-17',
                         Statement: [
+                            {
+                                Effect: 'Allow',
+                                Action: ['secretsmanager:GetSecretValue'],
+                                Resource: admissionSecretArn,
+                            },
+                            {
+                                Effect: 'Allow',
+                                Action: ['servicediscovery:ListInstances', 'servicediscovery:RegisterInstance', 'servicediscovery:DeregisterInstance'],
+                                Resource: discoveryArn,
+                            },
                             {
                                 Effect: 'Allow',
                                 Action: [
@@ -212,11 +225,15 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
             role: lambdaRole.arn,
             timeout,
             memorySize,
+            reservedConcurrentExecutions: 1,
             environment: {
                 variables: {
                     ROUTE53_HOSTED_ZONE_ID: pulumi.output(route53HostedZoneId).apply((id: string) => id),
                     NATS_RECORD_NAME: natsRecordName,
                     ECS_CLUSTER_ARN: ecsCluster.arn,
+                    NATS_TASK_FAMILY: args.taskFamily,
+                    NATS_DISCOVERY_SERVICE_ID: args.discoveryService.id,
+                    NATS_ADMISSION_SECRET_ARN: args.admissionSecretArn,
                 },
             },
             vpcConfig: {
@@ -256,6 +273,30 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
                         },
                     }),
             ),
+        },
+    )
+
+    // Repair missed or delayed health transitions without trusting event ordering.
+    const reconciliationSchedule = new aws.cloudwatch.EventRule(
+        `${functionName}-reconcile`,
+        {
+            scheduleExpression: 'rate(1 minute)',
+        },
+    )
+    new aws.lambda.Permission(
+        `${functionName}-reconcile-permission`,
+        {
+            action: 'lambda:InvokeFunction',
+            function: lambdaFunction.name,
+            principal: 'events.amazonaws.com',
+            sourceArn: reconciliationSchedule.arn,
+        },
+    )
+    new aws.cloudwatch.EventTarget(
+        `${functionName}-reconcile-target`,
+        {
+            rule: reconciliationSchedule.name,
+            arn: lambdaFunction.arn,
         },
     )
 

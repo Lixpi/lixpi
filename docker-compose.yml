@@ -1,6 +1,18 @@
 include:
     - docker-compose.typescript-test-runner.yml
     - docker-compose.typescript-quality-runner.yml
+    - docker-compose.go-test-runner.yml
+    - docker-compose.go-quality-runner.yml
+
+x-nats-auth-environment: &nats-auth-environment
+    ENVIRONMENT: ${ENVIRONMENT}
+    NATS_AUTH_NKEY_ISSUER_SEED: ${NATS_AUTH_NKEY_ISSUER_SEED}
+    NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
+    NATS_REGISTRATION_AUTHORITIES: ${NATS_REGISTRATION_AUTHORITIES}
+    NATS_REGISTRATION_PASSWORD: ${NATS_REGISTRATION_PASSWORD}
+    NATS_REGISTRATION_REPLICAS: "3"
+    GOMEMLIMIT: 768MiB
+    NATS_PERSIST_SERVER_NAME: "true"
 
 services:
 
@@ -118,11 +130,11 @@ services:
 
     lixpi-caddy:
         container_name: lixpi-caddy
-        profiles: ["deploy"]
+        profiles: ["deploy", "main"]
         image: lixpi/caddy-cert-manager
         build:
-            dockerfile: Dockerfile
-            context: infrastructure/pulumi/src/resources/certificate-manager
+            dockerfile: services/caddy/Dockerfile
+            context: .
         environment:
             # Local development mode
             CADDY_LOCAL_MODE: "true"
@@ -162,34 +174,33 @@ services:
         profiles: ["main"]
         image: lixpi/nats
         build:
-            dockerfile: Dockerfile
-            context: services/nats
-        # depends_on:
-            # lixpi-caddy:
-            #     condition: service_completed_successfully
+            dockerfile: services/nats/Dockerfile
+            context: .
+        stop_grace_period: 120s
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
         ports:
             - 4222:4222
             - 8222:8222
             - 9222:443    # websockets port (host:container)
         environment:
+            <<: *nats-auth-environment
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
             NATS_SERVER_NAME: Lixpi-NATS-1  # Explicit server name for each instance
             NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
             NATS_TRACE_MODE: ${NATS_TRACE_MODE}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
-            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
-            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
-            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
-            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
-            USE_REAL_CERTIFICATES: "true"
-            CERT_STORAGE_TYPE: "local"
-            CERT_LOCAL_PATH: "/opt/nats/certs"
+            NATS_CERT_FILE: "/opt/nats/certs/localhost.crt"
+            NATS_KEY_FILE: "/opt/nats/certs/localhost.key"
+            NATS_CA_FILE: "/opt/nats/certs/ca.crt"
             # Domain name for WebSocket origins
             DOMAIN_NAME: ${DOMAIN_NAME}
         volumes:
@@ -202,7 +213,7 @@ services:
         networks:
             - nats
         healthcheck:
-            test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+            test: ["CMD", "/usr/local/bin/lixpi-nats", "health", "ready"]
             interval: 5s
             timeout: 5s
             retries: 5
@@ -214,30 +225,29 @@ services:
         image: lixpi/nats-2
         pull_policy: never
         build:
-            dockerfile: Dockerfile
-            context: services/nats
-        # depends_on:
-            # lixpi-caddy:
-            #     condition: service_completed_successfully
+            dockerfile: services/nats/Dockerfile
+            context: .
+        stop_grace_period: 120s
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
         environment:
+            <<: *nats-auth-environment
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
             NATS_SERVER_NAME: Lixpi-NATS-2  # Explicit server name for each instance
             NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
             NATS_TRACE_MODE: ${NATS_TRACE_MODE}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
-            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
-            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
-            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
-            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
-            USE_REAL_CERTIFICATES: "true"
-            CERT_STORAGE_TYPE: "local"
-            CERT_LOCAL_PATH: "/opt/nats/certs"
+            NATS_CERT_FILE: "/opt/nats/certs/localhost.crt"
+            NATS_KEY_FILE: "/opt/nats/certs/localhost.key"
+            NATS_CA_FILE: "/opt/nats/certs/ca.crt"
             # Domain name for WebSocket origins
             DOMAIN_NAME: ${DOMAIN_NAME}
         volumes:
@@ -250,7 +260,7 @@ services:
         networks:
             - nats
         healthcheck:
-            test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+            test: ["CMD", "/usr/local/bin/lixpi-nats", "health", "ready"]
             interval: 5s
             timeout: 5s
             retries: 5
@@ -262,30 +272,29 @@ services:
         image: lixpi/nats-3
         pull_policy: never
         build:
-            dockerfile: Dockerfile
-            context: services/nats
-        # depends_on:
-            # lixpi-caddy:
-            #     condition: service_completed_successfully
+            dockerfile: services/nats/Dockerfile
+            context: .
+        stop_grace_period: 120s
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
         environment:
+            <<: *nats-auth-environment
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
             NATS_SERVER_NAME: Lixpi-NATS-3  # Explicit server name for each instance
             NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
             NATS_TRACE_MODE: ${NATS_TRACE_MODE}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
-            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
-            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
-            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
-            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
-            USE_REAL_CERTIFICATES: "true"
-            CERT_STORAGE_TYPE: "local"
-            CERT_LOCAL_PATH: "/opt/nats/certs"
+            NATS_CERT_FILE: "/opt/nats/certs/localhost.crt"
+            NATS_KEY_FILE: "/opt/nats/certs/localhost.key"
+            NATS_CA_FILE: "/opt/nats/certs/ca.crt"
             # Domain name for WebSocket origins
             DOMAIN_NAME: ${DOMAIN_NAME}
         volumes:
@@ -298,7 +307,7 @@ services:
         networks:
             - nats
         healthcheck:
-            test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+            test: ["CMD", "/usr/local/bin/lixpi-nats", "health", "ready"]
             interval: 5s
             timeout: 5s
             retries: 5
@@ -343,10 +352,8 @@ services:
             NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
             NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
-            # AUTH-account regular_user password — the file-conversion workload
-            # connects with this (not the NEX node creds) so it can read/write the
-            # workspace Object Store buckets that live in the AUTH account.
-            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_FILE_CONVERSION_NKEY_SEED: ${NATS_FILE_CONVERSION_NKEY_SEED}
+            NATS_CHARACTER_FIDELITY_NKEY_SEED: ${NATS_CHARACTER_FIDELITY_NKEY_SEED}
             NATS_JS_DOMAIN: lixpi
             NEX_NAMESPACE: system
             NEX_NODE_NAME: lixpi-nex-1
@@ -409,9 +416,6 @@ services:
                 condition: service_healthy
                 restart: true
             lixpi-dynamodb:
-                condition: service_healthy
-                restart: true
-            lixpi-api:
                 condition: service_healthy
                 restart: true
 
@@ -576,16 +580,11 @@ services:
 
             # NATS config
             NATS_SERVERS: ${NATS_SERVERS}
-            NATS_AUTH_ACCOUNT: ${NATS_AUTH_ACCOUNT}
-            NATS_AUTH_NKEY_ISSUER_SEED: ${NATS_AUTH_NKEY_ISSUER_SEED}
-            NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
-            NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
-            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
-            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
-            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
+            NATS_API_NKEY_SEED: ${NATS_API_NKEY_SEED}
+            NATS_APPLICATION_REGISTRATION: ${NATS_APPLICATION_REGISTRATION}
+            NATS_REGISTRATION_PASSWORD: ${NATS_REGISTRATION_PASSWORD}
 
             # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
-            NATS_SERVICE_AUTH_REGISTRATIONS: ${NATS_SERVICE_AUTH_REGISTRATIONS:-[]}
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
@@ -729,9 +728,9 @@ services:
             NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
             NATS_TRACE_MODE: ${NATS_TRACE_MODE}
             NATS_SERVERS: ${NATS_SERVERS}
-            NATS_AUTH_ACCOUNT: ${NATS_AUTH_ACCOUNT}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
-            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
+            NATS_BACKUP_NKEY_PUBLIC: ${NATS_BACKUP_NKEY_PUBLIC}
             NATS_AUTH_NKEY_ISSUER_SEED: ${NATS_AUTH_NKEY_ISSUER_SEED}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
@@ -746,6 +745,9 @@ services:
 
             # App host addresses
             NATS_SERVICE_AUTH_REGISTRATIONS: ${NATS_SERVICE_AUTH_REGISTRATIONS:-[]}
+            NATS_REGISTRATION_AUTHORITIES: ${NATS_REGISTRATION_AUTHORITIES}
+            NATS_REGISTRATION_PASSWORD: ${NATS_REGISTRATION_PASSWORD}
+            NATS_APPLICATION_REGISTRATION: ${NATS_APPLICATION_REGISTRATION}
             USER_PORTAL_ARTIFACT_MANAGEMENT: ${USER_PORTAL_ARTIFACT_MANAGEMENT:-infrastructure}
             ORIGIN_HOST_URL: ${ORIGIN_HOST_URL}
             API_HOST_URL: ${API_HOST_URL}
@@ -782,6 +784,15 @@ services:
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
             VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
+            NATS_API_NKEY_SEED: ${NATS_API_NKEY_SEED}
+            NATS_API_NKEY_PUBLIC: ${NATS_API_NKEY_PUBLIC}
+            NATS_FILE_CONVERSION_NKEY_SEED: ${NATS_FILE_CONVERSION_NKEY_SEED}
+            NATS_FILE_CONVERSION_NKEY_PUBLIC: ${NATS_FILE_CONVERSION_NKEY_PUBLIC}
+            NATS_CHARACTER_FIDELITY_NKEY_SEED: ${NATS_CHARACTER_FIDELITY_NKEY_SEED}
+            NATS_CHARACTER_FIDELITY_NKEY_PUBLIC: ${NATS_CHARACTER_FIDELITY_NKEY_PUBLIC}
+            NATS_BACKUP_NKEY_SEED: ${NATS_BACKUP_NKEY_SEED}
+            NATS_OPERATOR_NKEY_SEED: ${NATS_OPERATOR_NKEY_SEED}
+            NATS_OPERATOR_NKEY_PUBLIC: ${NATS_OPERATOR_NKEY_PUBLIC}
 
         volumes:
             # AWS SSO credentials

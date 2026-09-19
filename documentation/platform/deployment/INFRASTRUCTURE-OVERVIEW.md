@@ -17,12 +17,12 @@ A handful of building blocks recur throughout the deployment. Understanding them
 |---------|------------|
 | **Pulumi** | Infrastructure-as-Code tool. Lixpi uses the Pulumi **TypeScript** SDK to describe every AWS resource (VPC, ECS, DynamoDB, CloudFront, Route53, Lambda, IAM, ACM, CloudMap). The Pulumi program itself runs inside a Docker container so developers don't need Pulumi installed locally. |
 | **Stack** | A named Pulumi environment (for example `shelby-dev` or `production`). Each stack has its own state and its own AWS resources. One stack = one full copy of Lixpi. |
-| **ECS on Fargate** | AWS's serverless container runtime. Every Lixpi backend service runs as a Fargate task; there are no EC2 instances to manage. |
+| **ECS compute** | Application services, auth responders and scheduled backups use Fargate. NATS starts with three small EC2 hosts and configurable scaling bounds; retained EBS preserves native JetStream data across task replacement. |
 | **CloudMap** | AWS service discovery. NATS servers use a **private** CloudMap namespace to find each other inside the VPC, and a Route53 **public** DNS record (managed by a small Lambda sidecar) so browsers can reach them over the internet. |
 | **CloudFront + S3** | Each browser SPA is built into its own S3 bucket and served through its own global CloudFront distribution. The main UI uses the stack domain; the user portal uses `user-portal.<domain>`. |
 
 {% callout type="note" %}
-**NATS auth callout.** Instead of storing NATS user credentials, the `api` service acts as a live authorization service: NATS asks the API "can this JWT connect?", the API answers, and NATS enforces the answer. This page only names the mechanism — the conceptual model lives in [Authentication](../AUTHENTICATION.md), and the AWS-specific wiring lives in [NATS Cluster](./NATS-CLUSTER.md).
+**NATS auth callout.** Each Go broker embeds connection admission. Its dispatcher verifies browser and registered service credentials locally, with bounded peer retries on operational failure, and NATS enforces the returned permissions. The API verifies application requests separately. This page only names the mechanism — the conceptual model lives in [Authentication](../AUTHENTICATION.md), and the AWS-specific wiring lives in [NATS Cluster](./NATS-CLUSTER.md).
 {% /callout %}
 
 ## High-Level AWS Topology
@@ -39,7 +39,7 @@ flowchart TB
         ACM["ACM<br/>(TLS for CloudFront)"]
     end
 
-    subgraph VPC["VPC — 10.0.0.0/16 — 2 AZs"]
+    subgraph VPC["VPC: 10.0.0.0/16, 3 AZs"]
         subgraph Public["Public Subnets"]
             NATS1["NATS node 1<br/>ECS EC2 + EBS"]
             NATS2["NATS node 2<br/>ECS EC2 + EBS"]
@@ -91,7 +91,7 @@ flowchart TB
     NATS2 -.->|register| CM
     NATS3 -.->|register| CM
 
-    API -->|auth callout| NATS1
+    Admission[Embedded admission in each broker] <-->|encrypted auth callout| NATS1
     API -->|pub/sub| NATS1
     API --> DDB
     API -->|verify JWT| Auth0
@@ -110,9 +110,9 @@ flowchart TB
 |-----------|--------------|---------|
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
 | `web-ui-user-portal` | S3 + CloudFront | Independent account-management SPA served from `user-portal.<domain>` |
-| `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, vendor SDK egress) |
+| `api` | ECS/Fargate (private subnets) | CRUD, request authorization, DynamoDB access, AND in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, vendor SDK egress) |
 | `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](./NEX-EXECUTION-ENGINE.md) |
-| `nats` | ECS EC2 daemon service (3 public-subnet instances, one encrypted EBS volume each) | Message bus, three-replica JetStream, and Blob Object Store; clients connect directly |
+| `nats` | ECS EC2 daemon service (initially 3 public-subnet instances, one encrypted EBS volume each) | Message bus, native JetStream event streams and work queues, and permanent organization Blob Object Stores |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
 | `DynamoDB` | On-demand application tables | Application data, with streams on selected tables |
@@ -237,7 +237,7 @@ The explicit `dependsOn` relationship worth highlighting:
 
 ## Network Layout
 
-[`network.ts`](../../../infrastructure/pulumi/src/resources/network.ts) builds a classic two-AZ VPC:
+[`network.ts`](../../../infrastructure/pulumi/src/resources/network.ts) builds a three-zone VPC:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -254,21 +254,30 @@ flowchart LR
         PRIV2["Private Subnet<br/>10.0.3.0/24"]
     end
 
+    subgraph AZ3["Availability Zone 3"]
+        PUB3["Public Subnet<br/>10.0.4.0/24"]
+        PRIV3["Private Subnet<br/>10.0.5.0/24"]
+    end
+
     NAT["NAT Gateway<br/>(in AZ1 public)"]
 
     IGW --> PUB1
     IGW --> PUB2
+    IGW --> PUB3
     PUB1 --> NAT
     NAT --> PRIV1
     NAT --> PRIV2
+    NAT --> PRIV3
 ```
 
 | Subnet | CIDR | What runs there |
 |--------|------|-----------------|
 | Public AZ1 | `10.0.0.0/24` | NATS EC2 instances, NAT Gateway |
 | Public AZ2 | `10.0.1.0/24` | NATS EC2 instances |
+| Public AZ3 | `10.0.4.0/24` | NATS EC2 instances |
 | Private AZ1 | `10.0.2.0/24` | api, Lambdas |
 | Private AZ2 | `10.0.3.0/24` | api, Lambdas |
+| Private AZ3 | `10.0.5.0/24` | api, Lambdas |
 
 **Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket Secure. Each NATS EC2 host has a routable public IP that the discovery sidecar can publish to Route53. The daemon task uses host networking and stores JetStream data on the host's mounted EBS volume.
 
@@ -403,6 +412,7 @@ sequenceDiagram
     participant CF as CloudFront
     participant R53 as Route53
     participant NATS as NATS (ECS EC2 + EBS)
+    participant Admission as Embedded Go admission
     participant API as api + LLM workflow (Fargate)
     participant DDB as DynamoDB
     participant AI as AI Provider
@@ -423,10 +433,10 @@ sequenceDiagram
         deactivate R53
         Browser->>NATS: WSS :443 with JWT
         activate NATS
-        NATS->>API: Auth callout over $SYS.REQ.USER.AUTH
-        activate API
-        API-->>NATS: Signed permissions
-        deactivate API
+        NATS->>Admission: Encrypted signed callout request
+        activate Admission
+        Admission-->>NATS: Encrypted signed permissions
+        deactivate Admission
         NATS-->>Browser: Connected
     end
 

@@ -9,8 +9,7 @@
 #
 # "shared" covers packages/lixpi/*, mounted file-by-file under
 # /usr/src/service/shared, tied together by packages/lixpi/pnpm-workspace.yaml
-# so workspace:* deps between shared packages (e.g. nats-auth-callout-service
-# -> auth-service) resolve. This script walks the subdirectories (one or two
+# so workspace:* dependencies resolve. This script walks the subdirectories (one or two
 # levels deep, since some packages nest their TS sources under a "ts/"
 # subfolder) and runs whichever ones define a "test:run" script in their own
 # package.json.
@@ -102,11 +101,19 @@ run_shared() {
 }
 
 case "$domain" in
+    infrastructure)
+        mkdir -p /usr/src/nats-infrastructure/packages/lixpi
+        cp -R /usr/src/infrastructure-source /usr/src/nats-infrastructure/infrastructure
+        cp -R /usr/src/service/shared/constants /usr/src/service/shared/debug-tools /usr/src/nats-infrastructure/packages/lixpi/
+        (cd /usr/src/nats-infrastructure/infrastructure/pulumi && pnpm install && pnpm exec vitest run "$@")
+        ;;
     init-config)
-        mkdir -p /usr/src/service /usr/src/packages/lixpi/debug-tools/ts
+        mkdir -p /usr/src/service
         cp -R /usr/src/init-config-source /usr/src/service/init-config
-        cp /usr/src/service/shared/debug-tools/ts/package.json /usr/src/service/shared/debug-tools/ts/debug-tools.ts /usr/src/packages/lixpi/debug-tools/ts/
-        (cd /usr/src/packages/lixpi/debug-tools/ts && pnpm install --prod)
+        mkdir -p /usr/src/service/init-config/packages/lixpi/nats-subject-registry
+        cp -R /usr/src/service/shared/constants /usr/src/service/shared/debug-tools /usr/src/service/init-config/packages/lixpi/
+        cp /usr/src/service/shared/nats-subject-registry/package.json /usr/src/service/init-config/packages/lixpi/nats-subject-registry/
+        cp -R /usr/src/service/shared/nats-subject-registry/src /usr/src/service/init-config/packages/lixpi/nats-subject-registry/
         run_domain init-config "$@"
         ;;
     api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site)
@@ -124,7 +131,7 @@ case "$domain" in
         run_shared
         ;;
     *)
-        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site|init-config|shared|all} [vitest args]" >&2
+        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|docs-site|init-config|infrastructure|shared|all} [vitest args]" >&2
         exit 1
         ;;
 esac

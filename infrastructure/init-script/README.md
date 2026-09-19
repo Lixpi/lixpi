@@ -10,6 +10,12 @@ An active field offers **Use existing value** or **Override value**. Explicitly 
 
 NATS key pairs and passwords are reused unless their replacement is selected. Missing pairs are generated; an existing seed with a missing public key derives that public key without rotating the seed. Selected AWS SSO edits merge into the matching `.aws/config` profile and session while retaining unrelated profiles. Cancelling before saving leaves the files unchanged.
 
+Every save also prepares the signed NATS registration from the resulting service keys, browser authentication settings and application permissions. This applies to new configurations, complete replacements, partial updates and non-interactive creation. A partial save adds missing registration settings even when the NATS group is skipped. It reuses the registration signing key and password, preserves unchanged manifest versions, and increments the version when declarations change. Unrelated assignments keep their original text.
+
+To update an existing configuration, run `init-config`, choose **Edit existing**, select its file and choose **Partial update**. Keep the values you want to retain and confirm the save. If only application permission code changed, you can skip every group; the save still derives the registration from the application code included in the setup image. Both launchers build that image before opening the wizard. API startup submits the saved registration automatically before opening its ordinary NATS connection.
+
+The template includes EC2 broker sizing and scaling bounds. `NATS_MIN_NODES`, `NATS_MAX_NODES` and `NATS_DESIRED_NODES` default to three; raising the maximum enables additional hosts under load. `NATS_EC2_INSTANCE_TYPE` defaults to `t3.small`. Existing clusters use the staged AZ-tag rollout described in the [NATS cluster README](../pulumi/src/resources/NATS-cluster/README.md) before changing `NATS_JETSTREAM_UNIQUE_TAG` to `az:`. `NATS_OPERATIONAL_ALERT_EMAIL` optionally subscribes an address to scaling alerts; AWS requires email confirmation. These deployment variables are literal template defaults and remain editable directly; partial wizard edits preserve their existing values.
+
 ## What It Does
 
 This script runs inside a Docker container and:
@@ -26,11 +32,13 @@ This script runs inside a Docker container and:
 2. **Generates NATS keys** using `@nats-io/nkeys`:
    - `createAccount()` → `NATS_AUTH_NKEY_*` (seeds start with `SA`)
    - `createCurve()` → `NATS_AUTH_XKEY_*` (seeds start with `SX`)
-   - `createUser()` → `NATS_LLM_SERVICE_NKEY_*` (seeds start with `SU`)
+   - `createUser()` produces distinct `SU` seeds and public keys for API, file conversion, character fidelity, backup, operator, and NEX. The existing LLM key configuration remains available for compatibility.
 
-3. **Creates secure passwords** for NATS system and regular users
+3. **Creates secure passwords** for the NATS system user and restricted callout bootstrap user (`NATS_CALLOUT_PASSWORD`). The issuer and XKey seeds belong to the embedded broker/auth runtime in `services/nats`; application clients receive their own service seed.
 
-4. **Writes configuration files**:
+4. **Signs the NATS registration** using the application permission declarations and the resulting environment settings. It saves the approved payload for API startup and the public trust configuration for brokers. The signing seed stays in deployment configuration, outside serving containers.
+
+5. **Writes configuration files**:
    - `.env.<name>-<environment>` in project root
    - `.aws/config` (optional)
 
@@ -43,7 +51,7 @@ This script runs inside a Docker container and:
 Open Terminal in the project folder and run:
 
 ```bash
-docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup . && docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
+./init-config.sh
 ```
 
 #### Windows CMD
@@ -51,7 +59,7 @@ docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup . && docker
 Open Command Prompt in the project folder and run:
 
 ```cmd
-docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup . && docker run -it --rm -v "%cd%:/workspace" lixpi/setup
+init-config.bat
 ```
 
 #### Windows PowerShell
@@ -59,7 +67,7 @@ docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup . && docker
 Open PowerShell in the project folder and run:
 
 ```powershell
-docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup .; docker run -it --rm -v "${PWD}:/workspace" lixpi/setup
+.\init-config.bat
 ```
 
 ### Non-Interactive Mode (CI/Automation)
@@ -97,10 +105,21 @@ Complete environment configuration including:
 - SST/Pulumi configuration
 - AWS SSO settings
 - AWS deployment settings (Route53, CloudWatch)
-- NATS servers, keys, and passwords
+- NATS servers, keys, passwords and signed application registration
 - Auth0 configuration
 - API keys
 - Provider request authorization (`METRICS_ENABLED=false` by default)
+
+The wizard maintains these registration settings on save:
+
+| Setting | Recipient |
+|---|---|
+| `NATS_REGISTRATION_AUTHORITY_SEED` | Deployment tooling only; keep this private signing key out of serving containers |
+| `NATS_REGISTRATION_AUTHORITIES` | Brokers; public authority key, owner and allowed accounts |
+| `NATS_REGISTRATION_PASSWORD` | Brokers and application initializer |
+| `NATS_APPLICATION_REGISTRATION` | API startup; signed payload without the private authority key |
+
+Keep the authority seed and latest signed manifest with deployment secrets so a complete registry loss can be recovered. NATS persists accepted registrations in native JetStream KV, and ordinary restarts reuse them.
 
 ### `.aws/config` (Optional)
 
@@ -116,7 +135,7 @@ When you select **local** environment:
 
 ## Technical Details
 
-- **Runtime**: Node.js 24 with stable native TypeScript type stripping
+- **Runtime**: Node.js 24 with `--experimental-transform-types` for the workspace's TypeScript enums
 - **Prompts**: `@clack/prompts` for beautiful interactive CLI
 - **Key Generation**: `@nats-io/nkeys` for cryptographic key pairs
 - **No host dependencies**: Everything runs inside Docker

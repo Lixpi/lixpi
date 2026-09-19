@@ -48,21 +48,21 @@ const loadResponder = async () => {
 beforeEach(() => {
     vi.resetAllMocks()
     initMock.mockResolvedValue({ close: closeMock })
-    process.env.NATS_SERVERS = 'nats://127.0.0.1:4222'
-    process.env.NATS_REGULAR_USER_PASSWORD = 'password'
+    vi.stubEnv('NATS_SERVERS', 'nats://127.0.0.1:4222')
+    vi.stubEnv('NATS_FILE_CONVERSION_NKEY_SEED', 'synthetic-file-conversion-seed')
     process.removeAllListeners('SIGINT')
     process.removeAllListeners('SIGTERM')
 })
 
 afterEach(() => {
+    vi.unstubAllEnvs()
     process.removeAllListeners('SIGINT')
     process.removeAllListeners('SIGTERM')
 })
 
 describe('file-conversion index responder', () => {
-    it('aborts with process.exit when required env vars are missing', async () => {
-        process.env.NATS_SERVERS = ''
-        process.env.NATS_REGULAR_USER_PASSWORD = ''
+    it.each(['NATS_SERVERS', 'NATS_FILE_CONVERSION_NKEY_SEED'])('aborts with process.exit when %s is missing', async name => {
+        vi.stubEnv(name, undefined)
         const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
             throw new Error('exit-called')
         })
@@ -70,10 +70,23 @@ describe('file-conversion index responder', () => {
         await expect(loadResponder()).rejects.toThrow('exit-called')
         expect(initMock).not.toHaveBeenCalled()
         expect(errMock).toHaveBeenCalledWith(
-            'file-conversion: NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required; exiting',
+            'file-conversion: NATS_SERVERS and NATS_FILE_CONVERSION_NKEY_SEED are required; exiting',
         )
 
         exitSpy.mockRestore()
+    })
+
+    it('connects with its service NKey seed and identity', async () => {
+        await loadResponder()
+
+        expect(initMock).toHaveBeenCalledOnce()
+        expect(initMock).toHaveBeenCalledWith({
+            servers: 'nats://127.0.0.1:4222',
+            name: 'nex-file-conversion',
+            nkeySeed: 'synthetic-file-conversion-seed',
+            userId: 'svc:file-conversion',
+            subscriptions: expect.any(Array),
+        })
     })
 
     it('registers the rendition-generation handler and delegates requests', async () => {

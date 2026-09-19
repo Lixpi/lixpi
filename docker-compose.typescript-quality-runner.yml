@@ -39,6 +39,8 @@ services:
             - ./services/typescript-quality-runner/fixtures:/usr/src/repository/services/typescript-quality-runner/fixtures:ro,cached
             - ./services/typescript-quality-runner/src:/usr/src/repository/services/typescript-quality-runner/src:ro,cached
 
+            - ./infrastructure/init-script/setup-env.test.ts:/usr/src/repository/infrastructure/init-script/setup-env.test.ts:cached
+
             # Application and library source. Package manifests are not mounted
             # into this writable tree, so dependency artifacts cannot leak.
             - ./services/web-ui/index.html:/usr/src/repository/services/web-ui/index.html:cached
@@ -59,6 +61,7 @@ services:
             - ./documentation/site/assets:/usr/src/repository/documentation/site/assets:cached
             - ./infrastructure/init-script/setup-env.ts:/usr/src/repository/infrastructure/init-script/setup-env.ts:cached
             - ./infrastructure/pulumi/src:/usr/src/repository/infrastructure/pulumi/src:cached
+            - ./infrastructure/pulumi/vitest.config.ts:/usr/src/repository/infrastructure/pulumi/vitest.config.ts:cached
             - ./random-useful-things:/usr/src/repository/random-useful-things:cached
             - ./packages/lixpi/auth-service/src:/usr/src/repository/packages/lixpi/auth-service/src:cached
             - ./packages/lixpi/capability-system/src:/usr/src/repository/packages/lixpi/capability-system/src:cached
@@ -70,6 +73,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/repository/packages/lixpi/constants/ts/asset-types.ts:cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/repository/packages/lixpi/constants/ts/aws-resources.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/repository/packages/lixpi/constants/ts/index.ts:cached
+            - ./packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/repository/packages/lixpi/constants/ts/nats-subject-path.test.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-layout-settings.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-progress.ts:cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/repository/packages/lixpi/constants/ts/types.ts:cached
@@ -77,8 +81,11 @@ services:
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/repository/packages/lixpi/debug-tools/ts/debug-tools.ts:cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/repository/packages/lixpi/dynamodb-service/src:cached
             - ./packages/lixpi/usage-reporter/src:/usr/src/repository/packages/lixpi/usage-reporter/src:cached
-            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/repository/packages/lixpi/nats-auth-callout-service/src:cached
+            - ./packages/lixpi/nats-subject-registry/src:/usr/src/repository/packages/lixpi/nats-subject-registry/src:cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/repository/packages/lixpi/nats-service/ts/nats-service.ts:cached
+            - ./packages/lixpi/nats-service/ts/nats-service.test.ts:/usr/src/repository/packages/lixpi/nats-service/ts/nats-service.test.ts:cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/repository/packages/lixpi/nats-service/ts/registration.ts:cached
+            - ./packages/lixpi/nats-service/ts/registration.test.ts:/usr/src/repository/packages/lixpi/nats-service/ts/registration.test.ts:cached
             - ./packages/lixpi/prosemirror/src:/usr/src/repository/packages/lixpi/prosemirror/src:cached
             - ./packages/lixpi/test-utils/src:/usr/src/repository/packages/lixpi/test-utils/src:cached
             - ./packages/lixpi/ui-kit/src:/usr/src/repository/packages/lixpi/ui-kit/src:cached

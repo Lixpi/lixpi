@@ -701,6 +701,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
             {
                 ...definition,
                 billingMode: 'PAY_PER_REQUEST',
+                ...(!opts?.provider ? { pointInTimeRecovery: {
+                    enabled: true,
+                    recoveryPeriodInDays: 35,
+                } } : {}),
                 ...(enableDeletionProtection ? { deletionProtectionEnabled: true } : {}),
                 ...(enableStreams
                     ? {
@@ -736,6 +740,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
                         {
                             ...definition,
                             billingMode: 'PAY_PER_REQUEST',
+                            pointInTimeRecovery: {
+                                enabled: true,
+                                recoveryPeriodInDays: 35,
+                            },
                             deletionProtectionEnabled: enableDeletionProtection && legacyStorageRemovalStage === 'retain',
                             streamEnabled: true,
                             streamViewType: 'NEW_AND_OLD_IMAGES',

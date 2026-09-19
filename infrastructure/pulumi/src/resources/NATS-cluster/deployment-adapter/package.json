@@ -1,0 +1,11 @@
+{
+    "name": "lixpi-nats-aws-deployment-adapter",
+    "private": true,
+    "type": "module",
+    "dependencies": {
+        "@aws-sdk/client-cloudwatch": "*",
+        "@aws-sdk/client-s3": "*",
+        "@aws-sdk/client-secrets-manager": "*",
+        "@aws-sdk/lib-storage": "*"
+    }
+}

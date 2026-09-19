@@ -1,8 +1,9 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import {
     info,
     warn,
 } from '@lixpi/debug-tools'
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import { getNatsSubjectPath } from '@lixpi/constants'
 
 import Workspace from '../../models/workspace.ts'
 import AssetModel from '../../models/asset.ts'
@@ -10,31 +11,14 @@ import Organization from '../../models/organization.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 
-const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
-
-export const workspaceSubjects = [
+export const workspaceSubjects = createNatsSubscriptions(
+    'workspace',
     {
-        subject: WORKSPACE_SUBJECTS.GET_WORKSPACE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.GET_WORKSPACE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => await Workspace.getWorkspace({
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.GET_WORKSPACE)]: async (data: any) => await Workspace.getWorkspace({
             userId: data.user.userId,
             workspaceId: data.workspaceId,
         }),
-    },
-    {
-        subject: WORKSPACE_SUBJECTS.CREATE_WORKSPACE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.CREATE_WORKSPACE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.CREATE_WORKSPACE)]: async (data: any) => {
             const organizations = await Organization.getUserOrganizations({ userId: data.user.userId })
 
             if (
@@ -57,29 +41,11 @@ export const workspaceSubjects = [
                 },
             })
         },
-    },
-    {
-        subject: WORKSPACE_SUBJECTS.GET_USER_WORKSPACES,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.GET_USER_WORKSPACES] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) =>
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.GET_USER_WORKSPACES)]: async (data: any) =>
             data.user.userId
                 ? await Workspace.getUserWorkspaces({ userId: data.user.userId })
                 : { error: 'UNAUTHORIZED' },
-    },
-    {
-        subject: WORKSPACE_SUBJECTS.UPDATE_WORKSPACE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.UPDATE_WORKSPACE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_WORKSPACE)]: async (data: any) => {
             const workspace = await Workspace.getWorkspace({
                 userId: data.user.userId,
                 workspaceId: data.workspaceId,
@@ -113,16 +79,7 @@ export const workspaceSubjects = [
                 workspaceId: data.workspaceId,
             }
         },
-    },
-    {
-        subject: WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE)]: async (data: any) => {
             const workspace = await Workspace.getWorkspace({
                 userId: data.user.userId,
                 workspaceId: data.workspaceId,
@@ -148,16 +105,7 @@ export const workspaceSubjects = [
                 persistViewport: data.persistViewport === true,
             })
         },
-    },
-    {
-        subject: WORKSPACE_SUBJECTS.DELETE_WORKSPACE,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.DELETE_WORKSPACE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any) => {
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.DELETE_WORKSPACE)]: async (data: any) => {
             const userId = data.user.userId as string
             const workspaceId = data.workspaceId as string
             const workspace = await Workspace.getWorkspace({
@@ -199,4 +147,4 @@ export const workspaceSubjects = [
             }
         },
     },
-]
+)

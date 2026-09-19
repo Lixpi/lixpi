@@ -9,14 +9,6 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
     data,
     msg,
 ) => {
-    // The NATS connection-auth handler decrypts this protocol request and verifies
-    // its credentials itself. It has no application-level { token } envelope.
-    if (msg.subject === '$SYS.REQ.USER.AUTH')
-        return {
-            data,
-            msg,
-        }
-
     const token = data?.token
 
     if (

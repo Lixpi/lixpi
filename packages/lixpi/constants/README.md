@@ -2,7 +2,13 @@
 
 Shared runtime contracts for TypeScript services and the browser.
 
+`nats-subjects.json` owns subject names, wire values, portal templates, and NATS protocol permission patterns. `getNatsSubjectPath(subjects => subjects.ORGANIZATION_SUBJECTS.GET_MEMBERSHIP)` returns the typed identifier path `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` from that same tree. Contract declarations and handler maps use this helper instead of copying identifier strings. The selector preserves the chosen constant alias even when two names share a wire subject.
+
 `getNatsUserSubjectToken(userId)` encodes UTF-8 bytes as hex for a single NATS subject token. `getNatsUserInboxPrefix(userId)` builds `_INBOX.<token>` and rejects an empty identity. The browser connection and server-issued permissions must use the same prefix. `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` names the service-only self-membership responder.
+
+`PROTOCOL_SUBJECTS.JETSTREAM` also declares the server evacuation, membership removal and metadata leader-transfer subjects used by infrastructure. Pulumi injects those constants into the isolated scaling Lambda; it does not maintain its own subject-name table. `PROTOCOL_SUBJECTS.SCALING_PROBE` identifies the empty placement probe used to confirm a retiring node is excluded from new assignments.
+
+Broker callout, peer coordination and registration subjects belong to `services/nats/internal/policy`. Application constants do not define the broker's internal protocol. The application subject registry signs its own grants for runtime registration.
 
 Canvas parenting uses parent-relative positions. The engine resolves world bounds and connector extents without changing persisted node geometry.
 

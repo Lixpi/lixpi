@@ -1,21 +1,15 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import {
     type NatsSubjectSubscription,
 } from '@lixpi/nats-service'
-import { NATS_SUBJECTS } from '@lixpi/constants'
-const { USER_SUBJECTS } = NATS_SUBJECTS
+import { getNatsSubjectPath } from '@lixpi/constants'
 
 import User from '../../models/user.ts'
 
-export const userSubjects: NatsSubjectSubscription[] = [
+export const userSubjects: NatsSubjectSubscription[] = createNatsSubscriptions(
+    'user',
     {
-        subject: USER_SUBJECTS.GET_USER,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [USER_SUBJECTS.GET_USER] },
-            sub: { allow: [] },
-        },
-        handler: async (data, msg) => {
+        [getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.GET_USER)]: async (data, msg) => {
             const userId = data.user.userId
 
             if (!userId) {
@@ -24,6 +18,6 @@ export const userSubjects: NatsSubjectSubscription[] = [
             }
 
             return await User.get(userId)
-        },
+        }
     },
-]
+)

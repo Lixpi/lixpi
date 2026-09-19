@@ -24,6 +24,8 @@ export type EcsEc2ClusterInfrastructureArgs = {
     maxCapacity?: number
     desiredCapacity?: number
     dataVolumeSizeGiB?: number
+    cpuTargetPercent?: number
+    instanceWarmupSeconds?: number
 
     // Tags
     tags?: { [key: string]: string }
@@ -35,11 +37,13 @@ export const createEcsEc2Cluster = async (args: EcsEc2ClusterInfrastructureArgs)
         publicSubnets,
         privateSubnets,
         clusterName = 'EcsCluster',
-        instanceType = 't3.micro',
-        minCapacity = 1,
-        maxCapacity = 1,
-        desiredCapacity = 1,
+        instanceType = 't3.small',
+        minCapacity = 3,
+        maxCapacity = 3,
+        desiredCapacity = 3,
         dataVolumeSizeGiB = 150,
+        cpuTargetPercent = 60,
+        instanceWarmupSeconds = 300,
         tags = {},
     } = args
 
@@ -51,8 +55,47 @@ export const createEcsEc2Cluster = async (args: EcsEc2ClusterInfrastructureArgs)
     )
         throw new Error('VPC and subnets must be provided to create ECS EC2 infrastructure')
 
-    if (privateSubnets.length < 2)
-        throw new Error('At least two private subnets should be provided for high availability')
+    if (
+        publicSubnets.length < 3
+        || privateSubnets.length < 3
+    )
+        throw new Error('NATS requires subnets in three Availability Zones')
+
+    if (
+        ![minCapacity, maxCapacity, desiredCapacity].every(Number.isInteger)
+        || minCapacity < 3
+        || maxCapacity < minCapacity
+        || desiredCapacity < minCapacity
+        || desiredCapacity > maxCapacity
+    )
+        throw new Error('NATS capacity must satisfy 3 <= minimum <= desired <= maximum')
+
+    if (
+        !Number.isFinite(cpuTargetPercent)
+        || cpuTargetPercent <= 0
+        || cpuTargetPercent >= 100
+    )
+        throw new Error('NATS CPU target must be between 0 and 100 percent')
+
+    if (
+        !Number.isInteger(instanceWarmupSeconds)
+        || instanceWarmupSeconds < 60
+    )
+        throw new Error('NATS instance warmup must be at least 60 seconds')
+
+    const instance = await aws.ec2.getInstanceType({ instanceType })
+
+    if (
+        instance.memorySize < 2048
+        || !instance.supportedArchitectures.includes('x86_64')
+    )
+        throw new Error('NATS requires an x86_64 instance with at least 2 GiB memory')
+
+    if (
+        !Number.isInteger(dataVolumeSizeGiB)
+        || dataVolumeSizeGiB < 150
+    )
+        throw new Error('NATS requires at least 150 GiB EBS for its 100 GiB store and recovery headroom')
 
     // Format resource names
     const formattedClusterName = formatStageResourceName(
@@ -155,16 +198,6 @@ export const createEcsEc2Cluster = async (args: EcsEc2ClusterInfrastructureArgs)
         {
             vpcId: vpc.id,
             description: 'Security group for ECS EC2 instances',
-            ingress: [
-                // Allow all traffic from within the security group
-                {
-                    protocol: '-1', // All protocols
-                    fromPort: 0,
-                    toPort: 0,
-                    self: true,
-                    description: 'Allow all traffic within security group',
-                },
-            ],
             egress: [
                 // Allow all outbound traffic
                 {
@@ -197,34 +230,24 @@ export const createEcsEc2Cluster = async (args: EcsEc2ClusterInfrastructureArgs)
     // ==========================================
     // 4. Find latest ECS-optimized AMI
     // ==========================================
-    const ecsOptimizedAmi = await aws.ec2.getAmi({
-        mostRecent: true,
-        owners: ['amazon'],
-        filters: [
-            {
-                name: 'name',
-                values: ['amzn2-ami-ecs-hvm-*-x86_64-ebs'],
-            },
-        ],
+    const ecsOptimizedAmi = await aws.ssm.getParameter({
+        name: '/aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id',
     })
 
     // ==========================================
     // 5. Create Launch Template
     // ==========================================
 
-    // User data script to join ECS cluster
-    // const userData = pulumi.interpolate`
-    //     #!/bin/bash
-    //     echo "ECS_CLUSTER=${cluster.name}" >> /etc/ecs/ecs.config
-    //     echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
-    //     echo "ECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]" >> /etc/ecs/ecs.config
-    // `
-
     const userData = pulumi.interpolate`
 #!/bin/bash
+set -euo pipefail
 echo "ECS_CLUSTER=${cluster.name}" >> /etc/ecs/ecs.config
+echo 'ECS_RESERVED_MEMORY=512' >> /etc/ecs/ecs.config
 echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
 echo 'ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]' >> /etc/ecs/ecs.config
+mkdir -p /etc/systemd/system/ecs.service.d
+printf '%s\\n' '[Unit]' 'RequiresMountsFor=/data/jetstream' 'ConditionPathIsMountPoint=/data/jetstream' > /etc/systemd/system/ecs.service.d/jetstream.conf
+systemctl daemon-reload
 DATA_DEVICE=/dev/xvdh
 if [ ! -b "${'$'}{DATA_DEVICE}" ]; then
     DATA_DEVICE=''
@@ -242,8 +265,9 @@ mkdir -p /data/jetstream
 mountpoint -q /data/jetstream || mount "${'$'}{DATA_DEVICE}" /data/jetstream
 DATA_UUID=$(blkid -s UUID -o value "${'$'}{DATA_DEVICE}")
 grep -q "^UUID=${'$'}{DATA_UUID} " /etc/fstab \
-    || echo "UUID=${'$'}{DATA_UUID} /data/jetstream xfs defaults,nofail 0 2" >> /etc/fstab
+    || echo "UUID=${'$'}{DATA_UUID} /data/jetstream xfs defaults 0 2" >> /etc/fstab
 chmod 700 /data/jetstream
+systemctl daemon-reload
 `
 
     // Create launch template
@@ -251,8 +275,13 @@ chmod 700 /data/jetstream
         'ecsLaunchTemplate',
         {
             namePrefix: 'app-lt-',
-            imageId: ecsOptimizedAmi.id,
+            imageId: ecsOptimizedAmi.value,
             instanceType: instanceType,
+            ...(instanceType.startsWith('t3') ? { creditSpecification: { cpuCredits: 'unlimited' } } : {}),
+            metadataOptions: {
+                httpTokens: 'required',
+                httpPutResponseHopLimit: 2,
+            },
             // Remove vpcSecurityGroupIds from here since we're specifying it in networkInterfaces
             iamInstanceProfile: {
                 name: instanceProfile.name,
@@ -271,6 +300,7 @@ chmod 700 /data/jetstream
                     ebs: {
                         volumeSize: 30,
                         volumeType: 'gp3',
+                        encrypted: true,
                         deleteOnTermination: true,
                     },
                 },
@@ -334,24 +364,19 @@ chmod 700 /data/jetstream
             minSize: minCapacity,
             maxSize: maxCapacity,
             desiredCapacity: desiredCapacity,
+            availabilityZoneDistribution: { capacityDistributionStrategy: 'balanced-only' },
             defaultCooldown: 300,
+            defaultInstanceWarmup: instanceWarmupSeconds,
             healthCheckType: 'EC2',
             healthCheckGracePeriod: 300,
-            // Enable instance protection from scale-in (Required for ECS Capacity Provider with ManagedTerminationProtection)
+            // Only the evacuation controller may terminate a broker after its replicas move.
             protectFromScaleIn: true,
             launchTemplate: {
                 id: launchTemplate.id,
                 version: '$Latest',
             },
-            // Force instance refresh when launch template changes
-            instanceRefresh: {
-                strategy: 'Rolling',
-                preferences: {
-                    minHealthyPercentage: 50,
-                    instanceWarmup: 300,
-                },
-                triggers: ['tag'], // Trigger refresh on tag changes
-            },
+            // Host replacement requires a replica-recovery gate, not a timed ASG refresh.
+            suspendedProcesses: ['AZRebalance', 'ReplaceUnhealthy'],
             terminationPolicies: ['OldestInstance', 'Default'],
             tags: [
                 ...Object.entries(resourceTags).map(
@@ -368,6 +393,20 @@ chmod 700 /data/jetstream
                 },
             ],
         },
+        { ignoreChanges: ['desiredCapacity'] },
+    )
+
+    const cpuScalingPolicy = new aws.autoscaling.Policy(
+        'nats-host-cpu-scaling',
+        {
+            autoscalingGroupName: autoScalingGroup.name,
+            policyType: 'TargetTrackingScaling',
+            targetTrackingConfiguration: {
+                predefinedMetricSpecification: { predefinedMetricType: 'ASGAverageCPUUtilization' },
+                targetValue: cpuTargetPercent,
+                disableScaleIn: true,
+            },
+        },
     )
 
     // ==========================================
@@ -380,13 +419,13 @@ chmod 700 /data/jetstream
             autoScalingGroupProvider: {
                 autoScalingGroupArn: autoScalingGroup.arn,
                 managedScaling: {
-                    status: 'ENABLED',
+                    status: 'DISABLED',
                     targetCapacity: 70,
                     minimumScalingStepSize: 1,
                     maximumScalingStepSize: 2,
                     instanceWarmupPeriod: 300,
                 },
-                managedTerminationProtection: 'ENABLED',
+                managedTerminationProtection: 'DISABLED',
             },
             tags: resourceTags,
         },
@@ -431,6 +470,7 @@ chmod 700 /data/jetstream
         ecsSecurityGroup,
         launchTemplate,
         autoScalingGroup,
+        cpuScalingPolicy,
         capacityProvider,
         logGroup,
 

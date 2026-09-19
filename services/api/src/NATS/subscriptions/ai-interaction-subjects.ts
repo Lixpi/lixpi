@@ -1,3 +1,4 @@
+import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import { createHash } from 'node:crypto'
 
 import chalk from 'chalk'
@@ -24,6 +25,7 @@ import {
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror'
 import {
+    getNatsSubjectPath,
     getAiInteractionCanonicalResponseSubject,
     getAiInteractionResponseSubject,
     getMediaGenerationUserEventSubject,
@@ -976,22 +978,10 @@ const mergePromptReferenceMediaCandidates = ({
     })
 }
 
-export const aiInteractionSubjects = [
+export const aiInteractionSubjects = createNatsSubscriptions(
+    'ai-interaction',
     {
-        subject: AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE,
-        type: 'subscribe',
-        queue: 'aiInteraction',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE] },
-            sub: {
-                allow: [
-                    `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.{userIdToken}.>`,
-                    `${AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.STATUS}.{userIdToken}.>`,
-                ],
-            },
-        },
-        handler: async (data: any, _msg: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE)]: async (data: any, _msg: any) => {
             const {
                 user: { userId },
                 aiReasoningModels,
@@ -2285,18 +2275,7 @@ export const aiInteractionSubjects = [
                 rejectSend(error instanceof Error ? error.message : String(error))
             }
         },
-    },
-
-    {
-        subject: AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
-        type: 'reply',
-        queue: 'aiInteraction',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME] },
-            sub: { allow: [] },
-        },
-        handler: async (data: PipelineResumePayload, _msg: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME)]: async (data: PipelineResumePayload, _msg: any) => {
             const { workspaceId } = data
             const userId = data.user.userId
 
@@ -2382,19 +2361,7 @@ export const aiInteractionSubjects = [
                 events: result.events.filter(event => event.streamSequence > localStreamSeq),
             }
         },
-    },
-
-    // Stop AI message streaming
-    {
-        subject: AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE,
-        type: 'reply',
-        queue: 'aiInteraction',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE] },
-            sub: { allow: [] },
-        },
-        handler: async (data: any, _msg: any) => {
+        [getNatsSubjectPath(subjects => subjects.AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE)]: async (data: any, _msg: any) => {
             const {
                 workspaceId,
                 conversationAssetId,
@@ -2528,9 +2495,9 @@ export const aiInteractionSubjects = [
 
                 return { error: error instanceof Error ? error.message : String(error) }
             }
-        },
+        }
     },
-]
+)
 
 export const resumeAiInteractionMediaGenerationRequest = async ({
     request,

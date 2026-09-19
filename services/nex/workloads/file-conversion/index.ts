@@ -7,15 +7,11 @@
 // Jobs read content-addressed organization Blobs and return immutable rendition
 // hashes; this workload never writes DynamoDB or workspace storage.
 //
-// Connection: the Object Store buckets live in the NATS `AUTH` account, so this
-// workload connects to NATS as `AUTH`'s `regular_user` (same identity the API
-// server uses) rather than the NEX-account creds the native nexlet mints — that
-// keeps the conversion traffic and Object Store access entirely within AUTH with
-// no cross-account export/import. The NEX node only supervises the process.
+// The workload has its own service NKey and remains in the AUTH account.
 //
 // Env reaches this process via the Nexfile start_request.environment that
 // services/nex/entrypoint.sh injects (the native nexlet does NOT inherit the
-// container env): NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required.
+// container env): NATS_SERVERS and NATS_FILE_CONVERSION_NKEY_SEED are required.
 
 import process from 'process'
 
@@ -36,13 +32,13 @@ import { generateAssetRenditions } from './asset-renditions.ts'
 const { BLOB_PROCESSING_SUBJECTS } = NATS_SUBJECTS
 
 const servers = process.env.NATS_SERVERS
-const pass = process.env.NATS_REGULAR_USER_PASSWORD
+const nkeySeed = process.env.NATS_FILE_CONVERSION_NKEY_SEED
 
 if (
     !servers
-    || !pass
+    || !nkeySeed
 ) {
-    err('file-conversion: NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required; exiting')
+    err('file-conversion: NATS_SERVERS and NATS_FILE_CONVERSION_NKEY_SEED are required; exiting')
     process.exit(1)
 }
 
@@ -94,8 +90,8 @@ const fileConvertSubjects = [
 const service = await NatsService.init({
     servers,
     name: 'nex-file-conversion',
-    user: 'regular_user',
-    pass,
+    nkeySeed,
+    userId: 'svc:file-conversion',
     subscriptions: fileConvertSubjects,
 })
 

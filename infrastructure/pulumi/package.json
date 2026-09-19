@@ -30,5 +30,16 @@
         "ora": "*",
         "yargs": "*"
     },
+    "devDependencies": {
+        "@aws-sdk/client-cloudwatch": "*",
+        "@aws-sdk/client-s3": "*",
+        "@aws-sdk/lib-storage": "*",
+        "@aws-sdk/client-secrets-manager": "^3.0.0",
+        "vitest": "*",
+        "@aws-sdk/client-route-53": "*",
+        "@aws-sdk/client-ecs": "*",
+        "@aws-sdk/client-ec2": "*",
+        "@aws-sdk/client-servicediscovery": "*"
+    },
     "packageManager": "pnpm@12.3.4"
 }

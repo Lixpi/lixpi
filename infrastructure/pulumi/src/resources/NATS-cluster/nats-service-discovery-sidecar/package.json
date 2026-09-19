@@ -8,9 +8,11 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.0.0",
     "@aws-sdk/client-route-53": "^3.0.0",
     "@aws-sdk/client-ecs": "^3.0.0",
-    "@aws-sdk/client-ec2": "^3.0.0"
+    "@aws-sdk/client-ec2": "^3.0.0",
+    "@aws-sdk/client-servicediscovery": "^3.0.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.0",

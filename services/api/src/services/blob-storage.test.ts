@@ -25,6 +25,7 @@ vi.mock('@lixpi/nats-service', () => ({
 
 import {
     deleteContentAddressedBlob,
+    ensureOrganizationAssetStorage,
     getBlobObjectKey,
     putContentAddressedBlob,
 } from './blob-storage.ts'
@@ -41,6 +42,19 @@ describe('Content-addressed blob storage', () => {
             putObject: mocks.putObject,
         })
         mocks.getObjectStore.mockResolvedValue({})
+    })
+
+    it('creates the organization bucket in native Object Store when it is missing', async () => {
+        mocks.getObjectStore.mockRejectedValueOnce(new Error('bucket not found'))
+        mocks.createObjectStore.mockResolvedValue({})
+
+        await ensureOrganizationAssetStorage('organization-1')
+
+        expect(mocks.getObjectStore).toHaveBeenCalledWith('blobs-organization-1-files')
+        expect(mocks.createObjectStore).toHaveBeenCalledWith(
+            'blobs-organization-1-files',
+            { description: 'Content-addressed Asset and Capability Blobs for organization-1' },
+        )
     })
 
     it('replaces an Object Store tombstone with the requested content', async () => {

@@ -214,13 +214,13 @@ graph TB
 | **web-ui** | TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction. Vanilla TypeScript DOM components with Nano Stores for state |
 | **web-ui-user-portal** | TypeScript | Account-management SPA at `user-portal.<domain>` with Gentelella UI backed by the shared browser auth, routing, and user Nano Stores |
 | **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — Asset/Blob authority, JWT auth, DynamoDB persistence, pipeline events, Asset-document steps, generation and provenance |
-| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay/Asset-step streams, organization content-addressed Blob Object Stores |
+| **nats** | Go (initially 3 nodes) | Embedded broker/auth, pub/sub, request/reply, JetStream replay and work queues, organization Blob Object Stores and NEX control state |
 | **nex** | Node.js / TypeScript | NATS NEX workloads — AI-models sync and heavy file conversion/frame extraction |
 | **localauth0** | Rust (vendored `primait/localauth0`) | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 
 ### Key Architecture Decisions
 
-**NATS-native**: The system uses NATS for auth, messaging, organization Blob Object Stores, live events, replay logs, and Asset-document step streams. The browser connects over WebSocket. The API remains the Asset/Blob authority and converts provider output into durable pipeline/provenance and document events.
+**NATS-native storage and messaging**: The browser connects to NATS over WebSocket for commands and live events. Permanent organization Blob bytes use NATS Object Store; replay logs, document steps and maintenance queues use JetStream. Asset/Blob metadata and domain authority remain in DynamoDB through the API. [NATS Cluster](platform/deployment/NATS-CLUSTER.md) explains replication, retained storage and snapshot recovery.
 
 **Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. The whole UI is vanilla TypeScript DOM built with the `html` helper in `@lixpi/ui-primitives/dom`, and component state lives in Nano Stores under `src/stores/`. This insulates the canvas from framework churn.
 
@@ -395,7 +395,7 @@ graph LR
     AC -->|signed service JWT| API
 ```
 
-**NATS Auth Callout** intercepts every NATS connection attempt. It decrypts the request, verifies the token via `@lixpi/auth-service`, builds permissions, and returns a signed JWT to NATS. Backend services run with scoped service permissions; browser clients receive user-scoped permissions.
+**NATS Auth Callout** runs inside each Go broker. It validates and decrypts signed broker requests, verifies browser JWTs and registered service credentials, resolves generated shared permissions, and returns encrypted signed responses. Bounded local workers use compatible peers on operational failure within the original connection deadline. Backend services run with scoped service permissions; browser clients receive user-scoped permissions.
 
 **LocalAuth0** provides zero-config offline development. It generates RS256 keypairs, issues JWTs matching production Auth0's OAuth flows, and persists state in a Docker volume. No Auth0 account needed, no internet required.
 
@@ -410,7 +410,7 @@ Shared packages keep service contracts in sync:
 | `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by API and NATS Auth Callout |
-| `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
+| `@lixpi/nats-subject-registry` | Explicit active endpoint declarations and browser transport policies shared by API and auth |
 | Canvas Engine | Native viewport input, graph/port geometry and connector paths |
 
 ---

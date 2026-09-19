@@ -4,7 +4,7 @@ import path from 'node:path'
 const PACKAGE_NAMES = ['canvas-engine', 'canvas-components', 'canvas-components-lixpi-specific', 'ui-primitives', 'ui-kit', 'ui-kit-gentelella']
 // Services that own their documentation. A service's pages live beside the code
 // they describe, and the central tree links to them rather than holding a copy.
-const SERVICE_NAMES = ['ai-model-registry']
+const SERVICE_NAMES = ['ai-model-registry', 'nats', 'caddy']
 const EXCLUDED = new Set(['node_modules', '.git', 'dist'])
 const external = href => /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href) || href.startsWith('//')
 const posix = value => value.split(path.sep).join('/')

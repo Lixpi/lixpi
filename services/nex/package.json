@@ -27,6 +27,8 @@
         "type-fest": "*"
     },
     "devDependencies": {
+        "@nats-io/jetstream": "*",
+        "@nats-io/obj": "*",
         "@lixpi/test-utils": "workspace:*",
         "vitest": "latest",
         "@types/node": "*"

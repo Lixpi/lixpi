@@ -1,0 +1,16 @@
+{
+    "name": "@lixpi/nats-subject-registry",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/contracts.ts",
+        "./types": "./src/types.ts",
+        "./policy": "./src/policy.ts",
+        "./service-permissions": "./src/service-permissions.ts",
+        "./registration": "./src/registration.ts"
+    },
+    "scripts": { "test:run": "vitest run" },
+    "dependencies": { "@lixpi/constants": "workspace:*", "@nats-io/nkeys": "*" },
+    "devDependencies": { "vitest": "*" }
+}

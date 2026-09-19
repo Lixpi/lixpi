@@ -75,7 +75,7 @@ The [site source registry](site/source-registry.mjs) records authored source pat
 
 ## Service Documentation
 
-A service that owns a body of documentation keeps it in `services/<service>/documentation/`, beside the code it describes. The AI Model Registry is the one that does today: its contract and its maintenance guide live in `services/ai-model-registry/documentation/`, and the service README introduces them.
+A service that owns a body of documentation keeps it in `services/<service>/documentation/`, beside the code it describes. Its README explains the service's responsibilities and links to those manuals. The [AI Model Registry](../services/ai-model-registry/README.md) keeps its catalog contract and maintenance guide there; [NATS](../services/nats/README.md) keeps its broker architecture, configuration and operations guides there.
 
 The central tree links to those pages instead of holding a copy. A domain page, the docs index, or a navigation table gets one line pointing at the service page; nothing is duplicated, and no routing-only file is added to carry the link. Register the service in `SERVICE_NAMES` in the site source registry so its README and documentation directory render with everything else.
 

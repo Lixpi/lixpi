@@ -1,0 +1,9 @@
+# Optional override for tests against disposable production-image brokers.
+# Combine with docker-compose.go-test-runner.yml after creating the proof network.
+networks:
+    default:
+        external: true
+        name: lixpi-nats-embedded-proof
+    nats:
+        external: true
+        name: lixpi-nats-embedded-proof

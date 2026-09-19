@@ -122,6 +122,39 @@
 		"UPDATE_ORGANIZATION_TAG": "organization.updateTag",
 		"DELETE_ORGANIZATION_TAG": "organization.deleteTag"
 	},
+	"PORTAL_MODULE_SUBJECTS": {
+		"USER_REQUESTS": "portal.module.*.{userIdToken}.request.>",
+		"USER_EVENTS": "portal.module.*.{userIdToken}.event.>"
+	},
+	"PROTOCOL_SUBJECTS": {
+		"INBOX": "_INBOX.>",
+		"OBJECT_STORE": "$O.>",
+		"NEX": "$NEX.>",
+		"SERVICE": "$SRV.>",
+		"SCALING_PROBE": "_NATS_SCALE_PROBE.*",
+		"JETSTREAM": {
+			"API": "$JS.API.>",
+			"DOMAIN_API": "$JS.lixpi.API.>",
+			"ACK": "$JS.ACK.>",
+			"FLOW_CONTROL": "$JS.FC.>",
+			"INFO": "$JS.API.INFO",
+			"STREAM_LIST": "$JS.API.STREAM.LIST",
+			"STREAM_NAMES": "$JS.API.STREAM.NAMES",
+			"STREAM_INFO": "$JS.API.STREAM.INFO.*",
+			"STREAM_CREATE": "$JS.API.STREAM.CREATE.*",
+			"STREAM_DELETE": "$JS.API.STREAM.DELETE.*",
+			"SERVER_EVACUATE": "$JS.API.SERVER.EVACUATE",
+			"SERVER_REMOVE": "$JS.API.SERVER.REMOVE",
+			"META_LEADER_STEPDOWN": "$JS.API.META.LEADER.STEPDOWN",
+			"STREAM_SNAPSHOT": "$JS.API.STREAM.SNAPSHOT.*",
+			"STREAM_RESTORE": "$JS.API.STREAM.RESTORE.*",
+			"STREAM_MESSAGE_GET": "$JS.API.STREAM.MSG.GET.>",
+			"CONSUMER": "$JS.API.CONSUMER.>",
+			"DIRECT_GET": "$JS.API.DIRECT.GET.>",
+			"SNAPSHOT_ACK": "$JS.SNAPSHOT.ACK.>",
+			"SNAPSHOT_RESTORE": "$JS.SNAPSHOT.RESTORE.>"
+		}
+	},
 	"METRICS_SUBJECTS": {
 		"PROVIDER_REQUEST_AUTHORIZE": "metrics.provider.request.authorize",
 		"PROVIDER_USAGE_RECORD": "metrics.provider.usage.record"

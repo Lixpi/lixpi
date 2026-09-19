@@ -29,7 +29,7 @@
         "@lixpi/dynamodb-service": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
-        "@lixpi/nats-auth-callout-service": "workspace:*",
+        "@lixpi/nats-subject-registry": "workspace:*",
         "@lixpi/prosemirror": "workspace:*",
         "@lixpi/usage-reporter": "workspace:*",
         "@lixpi/markdown-stream-parser": "latest",
@@ -58,6 +58,8 @@
         "sharp": "*"
     },
     "devDependencies": {
+        "@nats-io/nkeys": "*",
+        "@nats-io/transport-node": "*",
         "@lixpi/test-utils": "workspace:*",
         "vitest": "latest",
         "nodemon": "latest",

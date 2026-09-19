@@ -8,6 +8,7 @@ import { createNetworkInfrastructure } from './resources/network.ts'
 import { createEcsCluster } from './resources/ECS-cluster.ts'
 import { createEcsEc2Cluster } from './resources/ECS-EC2-cluster.ts'
 import { createNatsClusterService } from './resources/NATS-cluster/NATS-cluster.ts'
+import { createNatsCredentialSecret } from './resources/NATS-cluster/credentials.ts'
 import { createMainApiService } from './resources/main-api-service.ts'
 import { createNexNodeService } from './resources/nex-node/nex-node.ts'
 import { createAiModelRegistryService } from './resources/ai-model-registry/ai-model-registry-service.ts'
@@ -45,13 +46,9 @@ const {
 
     DYNAMODB_ENDPOINT,
 
-    NATS_SERVERS,
-    NATS_AUTH_ACCOUNT,
     NATS_SYS_USER_PASSWORD,
-    NATS_REGULAR_USER_PASSWORD,
     NATS_NEX_NODE_NKEY_PUBLIC,
     NATS_NEX_NODE_NKEY_SEED,
-    NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC,
     NATS_AI_MODEL_REGISTRY_NKEY_SEED,
     NATS_AI_MODEL_REGISTRY_USER_ID,
     NATS_AUTH_NKEY_ISSUER_SEED,
@@ -226,10 +223,12 @@ export const createInfrastructure = async () => {
         publicSubnets: networkInfrastructure.publicSubnets,
         privateSubnets: networkInfrastructure.privateSubnets,
         clusterName: 'NATS-ECS-Cluster',
-        instanceType: process.env.NATS_EC2_INSTANCE_TYPE ?? 'm6i.large',
-        minCapacity: 3,
-        maxCapacity: 3,
-        desiredCapacity: 3,
+        instanceType: process.env.NATS_EC2_INSTANCE_TYPE ?? 't3.small',
+        minCapacity: Number(process.env.NATS_MIN_NODES ?? 3),
+        maxCapacity: Number(process.env.NATS_MAX_NODES ?? 3),
+        desiredCapacity: Number(process.env.NATS_DESIRED_NODES ?? process.env.NATS_MIN_NODES ?? 3),
+        cpuTargetPercent: Number(process.env.NATS_SCALE_OUT_CPU_PERCENT ?? 60),
+        instanceWarmupSeconds: Number(process.env.NATS_INSTANCE_WARMUP_SECONDS ?? 300),
         dataVolumeSizeGiB: Number(process.env.NATS_EBS_VOLUME_SIZE_GIB ?? 150),
         tags: {
             Environment: ENVIRONMENT!,
@@ -241,22 +240,6 @@ export const createInfrastructure = async () => {
     // Create NATS domain for certificate management - USE MANAGEABLE DOMAIN
     // The client connects to nats.cloudmap.shelby-dev.lixpi.dev, but we generate cert for controllable domain
     const natsDomain = `nats.${DOMAIN_NAME}` // nats.shelby-dev.lixpi.dev (manageable via Route53)
-
-    // Create placeholder DNS record for NATS domain BEFORE certificate generation
-    // This allows DNS-01 challenge to succeed since the domain will exist in DNS
-    // Note: Using a valid public IP (8.8.8.8) as placeholder instead of localhost
-    // Idempotent placeholder record (safe overwrite if already present)
-    const natsPlaceholderRecord = new aws.route53.Record(
-        `nats-placeholder-record`,
-        {
-            name: natsDomain,
-            zoneId: hostedZoneId,
-            type: 'A',
-            allowOverwrite: true,
-            records: ['8.8.8.8'],
-            ttl: 60,
-        },
-    )
 
     // Create Lambda-based Caddy certificate manager for NATS TLS certificates
     // Note: DNS record created above ensures domain exists for certificate validation
@@ -276,8 +259,8 @@ export const createInfrastructure = async () => {
         functionName: 'nats-cert-manager',
         timeout: 900, // 15 minutes for certificate generation
         memorySize: 1024,
-        dockerBuildContext: '/usr/src/service/infrastructure/pulumi/src/resources/certificate-manager',
-        dockerfilePath: '/usr/src/service/infrastructure/pulumi/src/resources/certificate-manager/Dockerfile',
+        dockerBuildContext: '/usr/src/service',
+        dockerfilePath: '/usr/src/service/services/caddy/Dockerfile',
         environment: {
             // Any additional environment variables for Lambda
         },
@@ -297,6 +280,13 @@ export const createInfrastructure = async () => {
     )
 
     // Create NATS cluster service - CRITICAL: Must wait for certificates to be generated first
+    const natsAuthName = formatStageResourceName(
+        'nats-auth',
+        ORG_NAME!,
+        STAGE!,
+    ).toLowerCase()
+    const calloutSecret = createNatsCredentialSecret(`${natsAuthName}-bootstrap`, process.env.NATS_CALLOUT_PASSWORD)
+    const backupSecret = createNatsCredentialSecret(`${natsAuthName}-backup`, process.env.NATS_BACKUP_NKEY_SEED)
     const natsClusterService = await createNatsClusterService({
         cloudMapNamespace,
         cloudMapNamespaceName,
@@ -308,6 +298,8 @@ export const createInfrastructure = async () => {
             name: natsEcsCluster.outputs.clusterName,
         },
         capacityProviderName: natsEcsCluster.outputs.capacityProviderName,
+        autoScalingGroup: natsEcsCluster.autoScalingGroup,
+        scaleInCpuPercent: Number(process.env.NATS_SCALE_IN_CPU_PERCENT ?? 30),
         ec2SecurityGroup: natsEcsCluster.ecsSecurityGroup,
         vpc: networkInfrastructure.vpc,
         publicSubnets: networkInfrastructure.publicSubnets,
@@ -320,19 +312,14 @@ export const createInfrastructure = async () => {
         clientPort: 4222, // 4222: client connections
         httpManagementPort: 8222, // 8222: HTTP management/info
         clusterRoutingPort: 6222, // 6222: cluster routing
-        cpu: 256,
-        memory: 512, // Changed from 256 to 512 - valid Fargate combination
-        minCount: 3,
-        maxCount: 3,
-        desiredCount: 3,
+        cpu: 1024,
+        memory: 1024,
         environment: {
             NATS_CLUSTER_NAME: 'Lixpi-NATS',
             NATS_SERVER_NAME_BASE: 'Lixpi-NATS',
             NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
-            NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             NATS_AUTH_NKEY_ISSUER_PUBLIC: NATS_AUTH_NKEY_ISSUER_PUBLIC!,
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
-            NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_SAME_ORIGIN: NATS_SAME_ORIGIN!,
             NATS_ALLOWED_ORIGINS: DEPLOY_TO_AWS
                 ? includeWebClientOrigins(NATS_ALLOWED_ORIGINS, DOMAIN_NAME!)
@@ -340,15 +327,26 @@ export const createInfrastructure = async () => {
             NATS_DEBUG_MODE: NATS_DEBUG_MODE!,
             NATS_TRACE_MODE: NATS_TRACE_MODE!,
         },
+        calloutSecretArn: calloutSecret,
+        authEnvironment: {
+            ENVIRONMENT: ENVIRONMENT!,
+            NATS_REGISTRATION_AUTHORITIES: process.env.NATS_REGISTRATION_AUTHORITIES!,
+            NATS_REGISTRATION_REPLICAS: '3',
+        },
+        authSecretArns: {
+            NATS_AUTH_NKEY_ISSUER_SEED: createNatsCredentialSecret(`${natsAuthName}-issuer`, NATS_AUTH_NKEY_ISSUER_SEED),
+            NATS_AUTH_XKEY_ISSUER_SEED: createNatsCredentialSecret(`${natsAuthName}-curve`, NATS_AUTH_XKEY_ISSUER_SEED),
+            NATS_REGISTRATION_PASSWORD: createNatsCredentialSecret(`${natsAuthName}-registration-bootstrap`, process.env.NATS_REGISTRATION_PASSWORD),
+        },
+        backupSecretArn: backupSecret,
         // Add certificate configuration
         certificateHelper: natsCertHelper,
-        dockerBuildContext: '/usr/src/service/services/nats',
+        dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/nats/Dockerfile',
         // CRITICAL: NATS cluster CANNOT start until certificates are generated
         dependencies: [caddyCertManager.initialCertificateGeneration],
     })
 
-    // Deploy main API service on ECS infrastructure
     const mainApiService = await createMainApiService({
         ecsCluster: {
             id: ecsCluster.outputs.clusterId,
@@ -399,17 +397,10 @@ export const createInfrastructure = async () => {
             ORG_NAME: ORG_NAME!,
             ENVIRONMENT: ENVIRONMENT!,
 
-            NATS_SERVERS: NATS_SERVERS!,
-            NATS_AUTH_ACCOUNT: NATS_AUTH_ACCOUNT!,
-            NATS_AUTH_NKEY_ISSUER_SEED: NATS_AUTH_NKEY_ISSUER_SEED!,
-            NATS_AUTH_NKEY_ISSUER_PUBLIC: NATS_AUTH_NKEY_ISSUER_PUBLIC!,
-            NATS_AUTH_XKEY_ISSUER_SEED: NATS_AUTH_XKEY_ISSUER_SEED!,
-            NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
-            NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
-            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC ?? '',
-            NATS_SERVICE_AUTH_REGISTRATIONS: process.env.NATS_SERVICE_AUTH_REGISTRATIONS ?? '[]',
-            NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
-            NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
+            NATS_SERVERS: natsClusterService.outputs.natsUrl,
+            NATS_API_NKEY_SEED: process.env.NATS_API_NKEY_SEED!,
+            NATS_APPLICATION_REGISTRATION: process.env.NATS_APPLICATION_REGISTRATION!,
+            NATS_REGISTRATION_PASSWORD: process.env.NATS_REGISTRATION_PASSWORD!,
             ORIGIN_HOST_URL: ORIGIN_HOST_URL!,
             API_HOST_URL: API_HOST_URL!,
             AUTH0_DOMAIN: AUTH0_DOMAIN!,
@@ -436,10 +427,7 @@ export const createInfrastructure = async () => {
     })
 
     // Deploy the NATS NEX execution-engine node (internal, single instance).
-    // Connects to the cluster over the internal CloudMap URL — the Go nex client
-    // needs a plain nats:// endpoint
-    // (the :4222 client port is not TLS), so we pass natsUrl, NOT the tls://
-    // NATS_SERVERS env the JS API client tolerates.
+    // The internal CloudMap URL uses the configured plain TCP listener on 4222.
     const nexNodeService = await createNexNodeService({
         ecsCluster: {
             id: ecsCluster.outputs.clusterId,
@@ -461,6 +449,8 @@ export const createInfrastructure = async () => {
             NATS_SERVERS: natsClusterService.outputs.natsUrl, // internal plain nats:// CloudMap URL
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_NEX_NODE_NKEY_SEED: NATS_NEX_NODE_NKEY_SEED!,
+            NATS_FILE_CONVERSION_NKEY_SEED: process.env.NATS_FILE_CONVERSION_NKEY_SEED!,
+            NATS_CHARACTER_FIDELITY_NKEY_SEED: process.env.NATS_CHARACTER_FIDELITY_NKEY_SEED!,
             NATS_JS_DOMAIN: 'lixpi',
             NEX_NAMESPACE: 'system',
             NEX_NODE_NAME: 'lixpi-nex',

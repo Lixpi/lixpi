@@ -139,7 +139,7 @@ run_shared() {
         constants/ts \
         debug-tools/ts \
         dynamodb-service \
-        nats-auth-callout-service \
+        nats-subject-registry \
         nats-service/ts \
         prosemirror \
         test-utils \
@@ -243,7 +243,7 @@ run_all() {
         packages/lixpi/constants/ts \
         packages/lixpi/debug-tools/ts \
         packages/lixpi/dynamodb-service \
-        packages/lixpi/nats-auth-callout-service \
+        packages/lixpi/nats-subject-registry \
         packages/lixpi/nats-service/ts \
         packages/lixpi/prosemirror \
         packages/lixpi/test-utils \
@@ -262,12 +262,18 @@ cd "$repository_dir"
 # that root. The self-test remains a separate explicit action from normal validation.
 domain="${1:-}"
 if [ -z "$domain" ]; then
-    echo "Usage: run-quality.sh {web-ui|web-ui-user-portal|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner|shared|all|self-test} [package] [validate|fix|lint|lint-fix|format|validate-formatting]" >&2
+    echo "Usage: run-quality.sh {web-ui|web-ui-user-portal|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner|shared|all|self-test|files} [package] [validate|fix|lint|lint-fix|format|validate-formatting] [file paths]" >&2
     exit 1
 fi
 shift
 
 case "$domain" in
+    files)
+        action="${1:-fix}"
+        shift
+        [ "$#" -gt 0 ] || { echo 'files requires repository paths' >&2; exit 1; }
+        run_action "$action" '[]' "$@"
+        ;;
     shared)
         run_shared "$@"
         ;;

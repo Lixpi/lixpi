@@ -1,0 +1,4 @@
+packages:
+    - packages/lixpi/debug-tools/ts
+    - packages/lixpi/constants/ts
+    - packages/lixpi/nats-subject-registry

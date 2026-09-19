@@ -142,6 +142,8 @@ Thrown request/reply handler failures are transported as `{ error: message }` fo
 
 `onReconnect(listener)` (`on_reconnect` in Python) returns a function that removes the listener. Listeners run after configured subscriptions are initialized on a recovered connection, including replacement of a closed connection. Dynamic subscriptions must be rebound by their owner when the underlying connection is replaced. Module pages use this hook to rebind their subscriptions and refetch authoritative state; they remove the listener during teardown. Python listeners may be asynchronous.
 
+The embedded Go broker uses `nats.go` and an in-process connection for callout dispatch. This TypeScript lifecycle serves application clients; application JWT middleware is separate from connection admission.
+
 ### JetStream Object Store (TypeScript)
 
 ```typescript
@@ -181,6 +183,8 @@ await natsService.deleteObjectStore('my-bucket')
 ```
 
 ### JetStream Streams
+
+Stream reads, writes, consumer acknowledgements and purges operate on native JetStream. Object operations use native NATS Object Store, including permanent organization Blob buckets. The TypeScript batch helpers use a finite native fetch so they return after the requested batch or expiry.
 
 Both packages expose equivalent wrappers over their NATS clients for durable replay logs such as ProseMirror document steps and chat pipeline events. Python uses the same method names in `snake_case` and the same option keys in `snake_case`; compatibility aliases are accepted for the TypeScript option keys where they cross a generic dictionary boundary.
 
@@ -334,16 +338,30 @@ await nats_service.delete_object("my-bucket", "hello.txt")
 await nats_service.delete_object_store("my-bucket")
 ```
 
+## Initializing signed registrations
+
+`NatsRegistrationClient` from `@lixpi/nats-service/registration` delivers a deployment-approved manifest before the ordinary application connection opens:
+
+```typescript
+await NatsRegistrationClient.apply({
+    servers: process.env.NATS_SERVERS!.split(','),
+    password: process.env.NATS_REGISTRATION_PASSWORD!,
+    registration: process.env.NATS_APPLICATION_REGISTRATION!,
+})
+```
+
+The client connects with a restricted bootstrap identity, retries bounded revision conflicts and closes that connection after the broker acknowledges the committed registration. It cannot sign or modify grants. The authority signing seed stays with deployment tooling. Call `NatsService.init()` afterwards with the service's own seed and registered ID. Lixpi's API initializes the complete application manifest; workers then use their ordinary credentials. See the [broker registration protocol](../../../services/nats/documentation/CONFIGURATION.md#registration-protocol).
+
 ## Self-Issued JWT Authentication
 
-Self-issued JWT authentication with NKeys is optional. No current service uses this path in the default deployment because the LLM workflow runs inside `services/api`; the pattern is preserved for future internal services such as a split-out `llm-workers` process.
+API, conversion, fidelity, and optional registry clients use self-issued NKey JWTs. The embedded Go admission worker verifies them against registered public keys without contacting Auth0. This credential option generates a token for admission; it does not renew an established session.
 
 ### How it works:
 
 1. Service has an NKey seed (secret key)
 2. On connection, service generates a JWT signed with its NKey
 3. JWT includes service identity (e.g., `svc:llm-workers`)
-4. NATS server validates the JWT using the service's public key
+4. The embedded Go admission worker validates the JWT using the service's public key and returns the scoped NATS user JWT
 
 ### TypeScript Example:
 
@@ -447,4 +465,4 @@ Once a connection has been established, every later failure goes through the rec
 
 See the respective service implementations for real-world usage:
 - TypeScript: `services/api/src/NATS/`
-- Future internal-service auth pattern: `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`
+- Internal-service auth pattern: `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`

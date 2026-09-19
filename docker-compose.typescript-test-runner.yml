@@ -40,6 +40,7 @@ services:
             # store alone only avoids re-downloading, not re-linking.
             npm_config_store_dir: /pnpm-store
         volumes:
+            - ./infrastructure:/usr/src/infrastructure-source:ro,cached
             - ./infrastructure/init-script:/usr/src/init-config-source:ro,cached
             - ./services/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
             - typescript-test-runner-pnpm-store:/pnpm-store
@@ -51,6 +52,8 @@ services:
             - ./documentation/site/source-registry.test.ts:/usr/src/service/docs-site/source-registry.test.ts:ro,cached
             - ./documentation/site/markdoc:/usr/src/service/docs-site/markdoc:ro,cached
             - typescript-test-runner-node-modules-docs-site:/usr/src/service/docs-site/node_modules
+
+
 
             # --- api domain (bind-mounts services/api's own files — same
             #     package.json/pnpm-workspace.yaml/vitest.config.ts the
@@ -92,9 +95,14 @@ services:
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/api/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/api/packages/lixpi/dynamodb-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/api/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/api/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/api/packages/lixpi/nats-service/ts/package.json:ro,cached
-            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/package.json:ro,cached
-            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/src:ro,cached
+            - ./packages/lixpi/nats-subject-registry/package.json:/usr/src/service/api/packages/lixpi/nats-subject-registry/package.json:ro,cached
+            - ./packages/lixpi/nats-subject-registry/src:/usr/src/service/api/packages/lixpi/nats-subject-registry/src:ro,cached
+            - ./packages/lixpi/nats-subject-registry/package.json:/usr/src/service/shared/nats-subject-registry/package.json:ro,cached
+            - ./packages/lixpi/nats-subject-registry/src:/usr/src/service/shared/nats-subject-registry/src:cached
+            - typescript-test-runner-node-modules-api-nats-subject-registry:/usr/src/service/api/packages/lixpi/nats-subject-registry/node_modules
+            - typescript-test-runner-node-modules-shared-nats-subject-registry:/usr/src/service/shared/nats-subject-registry/node_modules
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/api/packages/lixpi/prosemirror/package.json:ro,cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/api/packages/lixpi/prosemirror/src:ro,cached
             - ./packages/lixpi/test-utils/package.json:/usr/src/service/api/packages/lixpi/test-utils/package.json:ro,cached
@@ -116,7 +124,6 @@ services:
             - typescript-test-runner-node-modules-api-debug-tools-ts:/usr/src/service/api/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-api-dynamodb-service:/usr/src/service/api/packages/lixpi/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-api-nats-service-ts:/usr/src/service/api/packages/lixpi/nats-service/ts/node_modules
-            - typescript-test-runner-node-modules-api-nats-auth-callout-service:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/node_modules
             - typescript-test-runner-node-modules-api-prosemirror:/usr/src/service/api/packages/lixpi/prosemirror/node_modules
             - typescript-test-runner-node-modules-api-test-utils:/usr/src/service/api/packages/lixpi/test-utils/node_modules
             - typescript-test-runner-node-modules-api-usage-reporter:/usr/src/service/api/packages/lixpi/usage-reporter/node_modules
@@ -154,6 +161,7 @@ services:
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui/packages/lixpi/prosemirror/package.json:ro,cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/web-ui/packages/lixpi/prosemirror/src:ro,cached
@@ -205,6 +213,7 @@ services:
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/src:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/src:ro,cached
@@ -248,6 +257,7 @@ services:
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/ai-model-registry/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/ai-model-registry/packages/lixpi/dynamodb-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/package.json:/usr/src/service/ai-model-registry/packages/lixpi/ui-kit-gentelella/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/src:/usr/src/service/ai-model-registry/packages/lixpi/ui-kit-gentelella/src:ro,cached
@@ -291,6 +301,7 @@ services:
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/nex/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/nex/packages/lixpi/dynamodb-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/nex/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/test-utils/package.json:/usr/src/service/nex/packages/lixpi/test-utils/package.json:ro,cached
             - ./packages/lixpi/test-utils/src:/usr/src/service/nex/packages/lixpi/test-utils/src:ro,cached
@@ -337,6 +348,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.test.ts:/usr/src/service/shared/constants/ts/asset-types.test.ts:cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/shared/constants/ts/asset-types.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
+            - ./packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/service/shared/constants/ts/nats-subject-path.test.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-progress.test.ts:/usr/src/service/shared/constants/ts/media-generation-progress.test.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/shared/constants/ts/media-generation-progress.ts:cached
@@ -349,11 +361,11 @@ services:
             - ./packages/lixpi/debug-tools/ts/debug-tools.test.ts:/usr/src/service/shared/debug-tools/ts/debug-tools.test.ts:cached
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/shared/dynamodb-service/package.json:cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/shared/dynamodb-service/src:cached
-            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/shared/nats-auth-callout-service/package.json:cached
-            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/shared/nats-auth-callout-service/src:cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/shared/nats-service/ts/nats-service.ts:cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/shared/nats-service/ts/package.json:cached
             - ./packages/lixpi/nats-service/ts/nats-service.test.ts:/usr/src/service/shared/nats-service/ts/nats-service.test.ts:cached
+            - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/shared/nats-service/ts/registration.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/registration.test.ts:/usr/src/service/shared/nats-service/ts/registration.test.ts:ro,cached
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/shared/prosemirror/package.json:cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/shared/prosemirror/src:cached
             - ./packages/lixpi/ui-kit/package.json:/usr/src/service/shared/ui-kit/package.json:cached
@@ -388,7 +400,6 @@ services:
             - typescript-test-runner-node-modules-shared-constants:/usr/src/service/shared/constants/node_modules
             - typescript-test-runner-node-modules-shared-debug-tools-ts:/usr/src/service/shared/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-shared-dynamodb-service:/usr/src/service/shared/dynamodb-service/node_modules
-            - typescript-test-runner-node-modules-shared-nats-auth-callout-service:/usr/src/service/shared/nats-auth-callout-service/node_modules
             - typescript-test-runner-node-modules-shared-nats-service-ts:/usr/src/service/shared/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-shared-prosemirror:/usr/src/service/shared/prosemirror/node_modules
             - typescript-test-runner-node-modules-shared-test-utils:/usr/src/service/shared/test-utils/node_modules
@@ -403,6 +414,8 @@ services:
         working_dir: /usr/src/service
 
 volumes:
+    typescript-test-runner-node-modules-api-nats-subject-registry:
+    typescript-test-runner-node-modules-shared-nats-subject-registry:
     typescript-test-runner-node-modules-docs-site:
     typescript-test-runner-pnpm-store: # Shared pnpm content store for ephemeral test-runner containers
 
@@ -424,7 +437,6 @@ volumes:
     typescript-test-runner-node-modules-api-debug-tools-ts:
     typescript-test-runner-node-modules-api-dynamodb-service:
     typescript-test-runner-node-modules-api-nats-service-ts:
-    typescript-test-runner-node-modules-api-nats-auth-callout-service:
     typescript-test-runner-node-modules-api-prosemirror:
     typescript-test-runner-node-modules-api-test-utils:
     typescript-test-runner-node-modules-web-ui:
@@ -475,7 +487,6 @@ volumes:
     typescript-test-runner-node-modules-shared-constants:
     typescript-test-runner-node-modules-shared-debug-tools-ts:
     typescript-test-runner-node-modules-shared-dynamodb-service:
-    typescript-test-runner-node-modules-shared-nats-auth-callout-service:
     typescript-test-runner-node-modules-shared-nats-service-ts:
     typescript-test-runner-node-modules-shared-prosemirror:
     typescript-test-runner-node-modules-shared-test-utils:

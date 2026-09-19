@@ -1,0 +1,24 @@
+services:
+    # One-shot containers use generated names, just like the TypeScript runner.
+    lixpi-go-test-runner:
+        profiles: ["dev"]
+        image: lixpi/go-test-runner
+        build:
+            context: ./services/go-test-runner
+        volumes:
+            - ./services/go-test-runner/run-tests.sh:/usr/src/runner/run-tests.sh:ro,cached
+            - ./services/nats/go.mod:/usr/src/manifests/nats/go.mod:ro,cached
+            - ./services/nats/go.sum:/usr/src/manifests/nats/go.sum:ro,cached
+            - ./services/nats/cmd:/usr/src/service/nats/cmd:ro,cached
+            - ./services/nats/internal:/usr/src/service/nats/internal:ro,cached
+            - ./services/nats/nats-server.conf:/usr/src/service/nats/nats-server.conf:ro,cached
+            - ./services/caddy/go.mod:/usr/src/manifests/caddy/go.mod:ro,cached
+            - ./services/caddy/go.sum:/usr/src/manifests/caddy/go.sum:ro,cached
+            - ./services/caddy/cmd:/usr/src/service/caddy/cmd:ro,cached
+            - ./services/caddy/internal:/usr/src/service/caddy/internal:ro,cached
+            - go-test-runner-module-cache:/go-module-cache
+            - go-test-runner-build-cache:/go-build-cache
+
+volumes:
+    go-test-runner-module-cache:
+    go-test-runner-build-cache:
