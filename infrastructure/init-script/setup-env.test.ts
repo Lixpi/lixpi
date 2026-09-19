@@ -114,6 +114,9 @@ describe('shared grouped wizard', () => {
         'NATS_LLM_SERVICE_NKEY_PUBLIC=Ullm',
         'NATS_NEX_NODE_NKEY_SEED=SUnex',
         'NATS_NEX_NODE_NKEY_PUBLIC=Unex',
+        'NATS_AI_MODEL_REGISTRY_NKEY_SEED=SUregistry',
+        'NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC=Uregistry',
+        'NATS_AI_MODEL_REGISTRY_USER_ID=svc:ai-model-registry',
         'NATS_SYS_USER_PASSWORD=keep-system-password',
         'NATS_CALLOUT_PASSWORD=keep-callout-password',
         ...['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'BACKUP', 'OPERATOR'].flatMap(name => [
@@ -227,7 +230,7 @@ describe('shared grouped wizard', () => {
             vi.mocked(registrationEnvironment).mockImplementation(actual.registrationEnvironment)
             const updates = new EnvFileUpdates(fixture)
 
-            for (const name of ['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'BACKUP', 'OPERATOR', 'NEX_NODE']) {
+            for (const name of ['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'BACKUP', 'OPERATOR', 'NEX_NODE', 'AI_MODEL_REGISTRY']) {
                 const key = nkeys.createUser()
                 updates.setValue(`NATS_${name}_NKEY_SEED`, new TextDecoder().decode(key.getSeed()))
                 updates.setValue(`NATS_${name}_NKEY_PUBLIC`, key.getPublicKey())
@@ -564,6 +567,39 @@ describe('shared grouped wizard', () => {
         expect(rendered.get('NATS_AUTH_XKEY_ISSUER_SEED')).toBe('SXexisting')
     })
 
+    it('rotates the AI Model Registry user pair on its own', async () => {
+        groups.add('NATS Configuration')
+        selects.set('NATS_AI_MODEL_REGISTRY_NKEY_SEED', 'override')
+        const config = await collect()
+        const rendered = new EnvFileUpdates(config.edits!.render(config)).getValues()
+        expect(nkeys.createUser).toHaveBeenCalledTimes(1)
+        expect(nkeys.createAccount).not.toHaveBeenCalled()
+        expect(nkeys.createCurve).not.toHaveBeenCalled()
+        const seed = rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_SEED')
+        expect(seed).toMatch(/^SU/)
+        const pair = nkeys.fromSeed(new TextEncoder().encode(seed))
+        expect(pair.getPublicKey()).toBe(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC'))
+        pair.clear()
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_USER_ID')).toBe('svc:ai-model-registry')
+        expect(rendered.get('NATS_NEX_NODE_NKEY_SEED')).toBe('SUnex')
+        expect(rendered.get('NATS_LLM_SERVICE_NKEY_SEED')).toBe('SUllm')
+    })
+
+    it('derives the AI Model Registry public key from its existing seed', async () => {
+        const key = nkeys.createUser()
+        const seed = new TextDecoder().decode(key.getSeed())
+        const publicKey = key.getPublicKey()
+        key.clear()
+        vi.mocked(nkeys.createUser).mockClear()
+        original = fixture.replace('SUregistry', seed).replace('NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC=Uregistry\n', '')
+        groups.add('NATS Configuration')
+        const config = await collect()
+        const rendered = new EnvFileUpdates(config.edits!.render(config)).getValues()
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_SEED')).toBe(seed)
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC')).toBe(publicKey)
+        assertNoKeysGenerated()
+    })
+
     it('generates a missing public key from the existing seed without rotating the seed', async () => {
         const key = nkeys.createAccount()
         const seed = new TextDecoder().decode(key.getSeed())
@@ -628,7 +664,7 @@ describe('shared grouped wizard', () => {
         expect(prompts.text).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Hosted Zone DNS Role ARN (optional)' }))
         expect(nkeys.createAccount).toHaveBeenCalledTimes(1)
         expect(nkeys.createCurve).toHaveBeenCalledTimes(1)
-        expect(nkeys.createUser).toHaveBeenCalledTimes(7)
+        expect(nkeys.createUser).toHaveBeenCalledTimes(8)
     })
 
     it('preserves kept AWS fields including comments and spacing', async () => {

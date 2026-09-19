@@ -32,7 +32,7 @@ This script runs inside a Docker container and:
 2. **Generates NATS keys** using `@nats-io/nkeys`:
    - `createAccount()` → `NATS_AUTH_NKEY_*` (seeds start with `SA`)
    - `createCurve()` → `NATS_AUTH_XKEY_*` (seeds start with `SX`)
-   - `createUser()` produces distinct `SU` seeds and public keys for API, file conversion, character fidelity, backup, operator, and NEX. The existing LLM key configuration remains available for compatibility.
+   - `createUser()` produces distinct `SU` seeds and public keys for API, file conversion, character fidelity, backup, operator, NEX, and the AI Model Registry. The existing LLM key configuration remains available for compatibility.
 
 3. **Creates secure passwords** for the NATS system user and restricted callout bootstrap user (`NATS_CALLOUT_PASSWORD`). The issuer and XKey seeds belong to the embedded broker/auth runtime in `services/nats`; application clients receive their own service seed.
 
