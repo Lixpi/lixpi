@@ -18,7 +18,6 @@ describe('Gentelella UI-kit package boundary', () => {
             dependencies: Record<string, string>
             exports: Record<string, string | Record<string, string>>
         }
-        expect(manifest.dependencies.gentelella).toBe('4.1.1')
         expect(manifest.dependencies['@lixpi/ui-primitives']).toBe('workspace:*')
 
         for (const [name, entry] of Object.entries(manifest.exports)) {

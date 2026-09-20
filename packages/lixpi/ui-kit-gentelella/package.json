@@ -52,6 +52,7 @@
         "./runtime/details": "./src/runtime/details.ts",
         "./runtime/file-manager": "./src/runtime/file-manager.ts",
         "./runtime/form-controls": "./src/runtime/form-controls.ts",
+        "./runtime/highlight": "./src/runtime/highlight.ts",
         "./runtime/inbox": "./src/runtime/inbox.ts",
         "./runtime/kanban": "./src/runtime/kanban.ts",
         "./runtime/markup": "./src/runtime/markup.ts",
@@ -62,6 +63,7 @@
         "./runtime/product-mockups": "./src/runtime/product-mockups.ts",
         "./runtime/settings": "./src/runtime/settings.ts",
         "./runtime/shell": "./src/runtime/shell.ts",
+        "./runtime/shell-config": "./src/runtime/shell-config.ts",
         "./runtime/shell-render": "./src/runtime/shell-render.ts",
         "./runtime/tables": "./src/runtime/tables.ts",
         "./runtime/toast": "./src/runtime/toast.ts",
@@ -104,6 +106,11 @@
             "sass": "./styles/pages.scss",
             "style": "./styles/pages.scss",
             "default": "./styles/pages.scss"
+        },
+        "./styles/rtl": {
+            "sass": "./styles/rtl.scss",
+            "style": "./styles/rtl.scss",
+            "default": "./styles/rtl.scss"
         },
         "./styles/theme": {
             "sass": "./styles/theme.scss",
