@@ -51,7 +51,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [NATS Service](../services/nats/README.md) | Embedded broker architecture, peer admission, runtime configuration, certificates, health, maintenance commands and Docker development |
 | [Caddy Certificate Service](../services/caddy/README.md) | Embedded certificate issuance, local CA trust, public renewal, durable ACME state and serving-secret publication |
 | [NATS Subject Registry](../packages/lixpi/nats-subject-registry/README.md) | Subject ownership, endpoint permissions, service allowlists, subscription creation, validation, and release identity |
-| [Dependency and Format Versions](platform/DEPENDENCY-VERSIONS.md) | Image, runtime, library, package, and schema versions, their declaration paths, and update procedure |
+| [Dependency Version Registry](../versions-registry/README.md) | Central versions, generated native declarations, release discovery, and update commands |
 | [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | Provider request authorization, measured usage, and provider tariff metadata |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |

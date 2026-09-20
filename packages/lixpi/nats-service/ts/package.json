@@ -18,16 +18,16 @@
         "test:run": "vitest run"
     },
     "devDependencies": {
-        "vitest": "*"
+        "vitest": "5.0.1"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
-        "@nats-io/jetstream": "*",
-        "@nats-io/nats-core": "*",
-        "@nats-io/nkeys": "*",
-        "@nats-io/obj": "*",
-        "@nats-io/transport-node": "*",
-        "chalk": "*"
+        "@nats-io/jetstream": "3.4.0",
+        "@nats-io/nats-core": "3.4.0",
+        "@nats-io/nkeys": "2.0.3",
+        "@nats-io/obj": "3.4.0",
+        "@nats-io/transport-node": "3.4.0",
+        "chalk": "6.0.0"
     }
 }

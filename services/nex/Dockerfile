@@ -1,27 +1,29 @@
 # NATS NEX execution-engine node image.
 #
-# Mirrors services/api: a node:24-alpine base so the workload can run TypeScript
+# Mirrors services/api: the shared Alpine Node base so the workload can run TypeScript
 # via `node --experimental-transform-types` (exactly how the API container runs
-# TS), plus the pinned `nex` binary that turns this container into a NEX node
-# running the bundled native nexlet. The workload's @lixpi/* + provider-SDK deps
+# TS), plus a `nex` binary built from the selected upstream release. The binary
+# turns this container into a NEX node running the bundled native nexlet. The
+# workload's @lixpi/* + provider-SDK deps
 # are installed from the pnpm workspace, just like the API.
-#
-# `nex` is a static Go binary published per-arch on GitHub releases. libc6-compat
-# is installed as a safety net in case a release links against glibc on musl.
 
-ARG NODE_VERSION=24
-ARG NEX_VERSION=0.4.1
+ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.1-bookworm
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
+ARG NEX_VERSION=0.5.0
+ARG PNPM_VERSION=12.5.1
 
-FROM node:${NODE_VERSION}-alpine
-
-# ARGs are reset after FROM — re-declare the ones used in this stage.
+FROM --platform=$BUILDPLATFORM ${GO_BOOKWORM_IMAGE_REFERENCE} AS nex-build
 ARG NEX_VERSION
-# BuildKit injects TARGETARCH (amd64 | arm64); it matches the nex release asset
-# suffixes (nex_<ver>_linux_amd64 / _arm64). Defaults to amd64 when unset.
+ARG TARGETOS
 ARG TARGETARCH
+RUN git clone --branch "${NEX_VERSION}" --depth 1 https://github.com/synadia-io/nex.git /usr/src/nex && \
+    cd /usr/src/nex/cmd/nex && \
+    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -trimpath -o /out/nex .
 
-# curl: release download + healthchecks. ca-certificates: TLS to GitHub/AWS.
-# libc6-compat: lets the prebuilt Go binary run on musl Alpine.
+FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
+ARG PNPM_VERSION
+
+# curl supports healthchecks. ca-certificates provides TLS roots for AWS.
 #
 # Heavy media tooling for the file-conversion workload (moved off services/api,
 # which must do NO heavy processing):
@@ -37,17 +39,12 @@ ARG TARGETARCH
 # Character fidelity uses onnxruntime-web's WASM backend rather than a native
 # musl binding. Its pinned YuNet/SFace artifacts are copied with workloads and
 # verified by SHA-256 before a session is created.
-RUN apk add --update --no-cache curl ca-certificates libc6-compat ffmpeg libreoffice poppler-utils libheif-tools rsync
+RUN apk add --update --no-cache curl ca-certificates ffmpeg libreoffice poppler-utils libheif-tools rsync
 
 # pnpm installs the workload's node_modules (mirrors services/api).
-RUN npm install -g pnpm@12.3.4
+RUN npm install -g "pnpm@${PNPM_VERSION}"
 
-# Install the pinned nex binary for the build's target architecture.
-RUN set -eux; \
-    arch="${TARGETARCH:-amd64}"; \
-    curl -fsSL -o /usr/local/bin/nex \
-        "https://github.com/synadia-io/nex/releases/download/${NEX_VERSION}/nex_${NEX_VERSION}_linux_${arch}"; \
-    chmod +x /usr/local/bin/nex
+COPY --from=nex-build /out/nex /usr/local/bin/nex
 
 WORKDIR /usr/src/service
 

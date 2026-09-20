@@ -1,5 +1,7 @@
 # UI Primitives
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 [Gradients](docs/GRADIENTS.md) covers shared color and rendering utilities. [Color analysis](docs/COLOR-ANALYSIS.md) explains the numeric analysis workflow and its limits.
 
 `@lixpi/ui-primitives` supplies shared DOM templates, SVG utilities, gradients, easing functions and Sass transition helpers. It has no dependency on UI-kit, canvas packages, application settings or services. Icon artwork, concrete icon definitions and SVG textures belong to [UI-kit](../ui-kit/README.md).

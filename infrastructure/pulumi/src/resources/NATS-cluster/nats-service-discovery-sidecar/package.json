@@ -8,16 +8,16 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.0.0",
-    "@aws-sdk/client-route-53": "^3.0.0",
-    "@aws-sdk/client-ecs": "^3.0.0",
-    "@aws-sdk/client-ec2": "^3.0.0",
-    "@aws-sdk/client-servicediscovery": "^3.0.0"
+    "@aws-sdk/client-secrets-manager": "3.1136.0",
+    "@aws-sdk/client-route-53": "3.1136.0",
+    "@aws-sdk/client-ecs": "3.1136.0",
+    "@aws-sdk/client-ec2": "3.1136.0",
+    "@aws-sdk/client-servicediscovery": "3.1136.0"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.0",
-    "@types/node": "^24.0.0",
-    "typescript": "^5.0.0"
+    "@types/aws-lambda": "8.10.163",
+    "@types/node": "26.6.2",
+    "typescript": "7.0.2"
   },
   "keywords": [
     "aws",

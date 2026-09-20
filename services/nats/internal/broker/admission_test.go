@@ -298,7 +298,7 @@ func TestSelectedRemoteWorkerStallRetriesAnotherPeer(t *testing.T) {
 	cluster := startAdmissionCluster(t, 3)
 	cluster.workers[0].SetHealthy(false)
 	cluster.evaluators[1].mode.Store(3)
-	hold := &jwt.AuthorizationRequestClaims{AuthorizationRequest: jwt.AuthorizationRequest{ConnectOptions: jwt.ConnectOptions{Token: "hold"}}}
+	hold := &jwt.AuthorizationRequestClaims{ConnectOptions: jwt.ConnectOptions{Token: "hold"}}
 	go func() { _, _ = cluster.workers[2].Evaluate(t.Context(), hold) }()
 	waitFor(t, func() bool { return cluster.workers[2].InFlight() == 1 })
 	time.Sleep(300 * time.Millisecond)
@@ -381,7 +381,7 @@ func TestSelectedRemoteProcessFailureRetriesOriginalConnection(t *testing.T) {
 	cluster.workers[3].SetHealthy(false)
 	cluster.evaluators[1].failProcess = cluster.servers[1].Shutdown
 	cluster.evaluators[1].mode.Store(4)
-	hold := &jwt.AuthorizationRequestClaims{AuthorizationRequest: jwt.AuthorizationRequest{ConnectOptions: jwt.ConnectOptions{Token: "hold"}}}
+	hold := &jwt.AuthorizationRequestClaims{ConnectOptions: jwt.ConnectOptions{Token: "hold"}}
 	go func() { _, _ = cluster.workers[2].Evaluate(t.Context(), hold) }()
 	waitFor(t, func() bool { return cluster.workers[2].InFlight() == 1 })
 	time.Sleep(300 * time.Millisecond)

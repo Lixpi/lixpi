@@ -1,5 +1,7 @@
 # Lixpi Canvas Components
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 [Workspace composition](docs/WORKSPACE.md) covers the canvas host, node types, interactions, media, persistence and disposal. Reusable rendering contracts are documented in [Canvas Engine](../canvas-engine/README.md) and [Canvas Components](../canvas-components/README.md).
 
 `@lixpi/canvas-components-lixpi-specific` adapts the reusable canvas packages to Lixpi's workspace, Asset and generation contracts.

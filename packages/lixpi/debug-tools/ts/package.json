@@ -8,9 +8,9 @@
         "test:run": "vitest run"
     },
     "devDependencies": {
-        "vitest": "*"
+        "vitest": "5.0.1"
     },
     "dependencies": {
-        "chalk": "*"
+        "chalk": "6.0.0"
     }
 }

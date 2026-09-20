@@ -1,5 +1,7 @@
 # NATS subject registry
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 This package declares Lixpi endpoint metadata and subject permissions, and prepares signed runtime registrations from deployment configuration. API subscription creation uses the same declarations. The package does not run handlers, verify connecting clients or contact the broker.
 
 Domain declarations live in `src/subjects/`. `src/contracts.ts` assembles and validates the selected groups, `src/types.ts` defines their shared shape, and `src/service-permissions.ts` declares service allowlists. Keep the assembly and permission machinery separate from the subject declaration files.

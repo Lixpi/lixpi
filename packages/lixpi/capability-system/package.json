@@ -14,16 +14,16 @@
         "./frontend": "./src/frontend/index.ts"
     },
     "devDependencies": {
-        "vitest": "*"
+        "vitest": "5.0.1"
     },
     "dependencies": {
         "@lixpi/constants": "file:../constants/ts",
         "@lixpi/debug-tools": "file:../debug-tools/ts",
         "@lixpi/ui-primitives": "workspace:*",
-        "prosemirror-model": "*",
-        "prosemirror-state": "*",
-        "prosemirror-view": "*",
-        "sharp": "*",
-        "uuid": "*"
+        "prosemirror-model": "1.25.11",
+        "prosemirror-state": "1.4.4",
+        "prosemirror-view": "1.42.4",
+        "sharp": "0.35.4",
+        "uuid": "14.0.2"
     }
 }

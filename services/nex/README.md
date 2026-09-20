@@ -17,7 +17,7 @@ The model catalog is not here. [`services/ai-model-registry`](../ai-model-regist
 
 ## How it works
 
-The image (`Dockerfile`) is a `node:24-alpine` base + the pinned static `nex` binary. On start, [`entrypoint.sh`](./entrypoint.sh):
+The image uses an Alpine Node.js base and builds a static `nex` binary from the selected upstream release tag. [The version registry](../../versions-registry/README.md) supplies the base image, NATS Execution Engine, pnpm, and npm dependency versions. On start, [`entrypoint.sh`](./entrypoint.sh):
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from the pnpm workspace (mirrors `services/api`).
 2. `nex node up` connects with the NEX nkey; the embedded broker's auth worker verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.

@@ -11,13 +11,13 @@
         ".": "./src/index.ts"
     },
     "dependencies": {
-        "@auth0/auth0-spa-js": "*",
+        "@auth0/auth0-spa-js": "2.27.0",
         "@lixpi/constants": "workspace:*",
         "@lixpi/ui-primitives": "workspace:*",
         "@lixpi/web-client-service-factory": "workspace:*"
     },
     "devDependencies": {
-        "happy-dom": "*",
-        "vitest": "*"
+        "happy-dom": "20.14.5",
+        "vitest": "5.0.1"
     }
 }

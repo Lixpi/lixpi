@@ -1,7 +1,11 @@
-FROM node:24-alpine
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
+ARG PNPM_VERSION=12.5.1
+
+FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
+ARG PNPM_VERSION
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@12.3.4 --activate
+RUN corepack enable && corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
 WORKDIR /app
 

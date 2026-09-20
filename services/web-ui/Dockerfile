@@ -1,14 +1,15 @@
-# Set Node.js version
-ARG NODE_VERSION=24
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
+ARG PNPM_VERSION=12.5.1
 
 # Stage 1: Build
-FROM node:${NODE_VERSION}-alpine AS builder
+FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE} AS builder
+ARG PNPM_VERSION
 
 # Install necessary build tools for building native dependencies
 # RUN apk add --update --no-cache python3 make g++ cmake
 
 # Install pnpm globally
-RUN npm install -g pnpm@12.3.4
+RUN npm install -g "pnpm@${PNPM_VERSION}"
 
 # Set the working directory
 WORKDIR /usr/src/service
@@ -38,13 +39,14 @@ RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 
 
 # Stage 2: Runtime
-FROM node:${NODE_VERSION}-alpine
+FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
+ARG PNPM_VERSION
 
 # Install necessary packages
 RUN apk add --update --no-cache curl rsync
 
 # Install pnpm globally (in the runtime stage)
-RUN npm install -g pnpm@12.3.4
+RUN npm install -g "pnpm@${PNPM_VERSION}"
 
 # Set the working directory
 WORKDIR /usr/src/service

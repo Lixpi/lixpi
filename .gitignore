@@ -50,3 +50,6 @@ ca.crt
 
 # Local temporary files
 temp/
+
+# Dependency update plan, regenerated from publisher metadata
+versions-registry/reports/update-plan.json

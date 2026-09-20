@@ -1,0 +1,19 @@
+name: lixpi-versions-registry
+
+services:
+    versions-registry:
+        image: node:24.21.0-alpine
+        working_dir: /workspace
+        volumes:
+            - .:/workspace
+        network_mode: none
+        entrypoint: ["node", "/workspace/versions-registry/src/sync/command.ts"]
+        command: ["check"]
+    versions-registry-update:
+        extends:
+            service: versions-registry
+        network_mode: bridge
+        environment:
+            GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+        entrypoint: ["node", "/workspace/versions-registry/src/update/command.ts"]
+        command: []

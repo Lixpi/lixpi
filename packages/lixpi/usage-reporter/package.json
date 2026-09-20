@@ -11,12 +11,12 @@
         ".": "./src/index.ts"
     },
     "devDependencies": {
-        "@types/node": "*",
-        "vitest": "*"
+        "@types/node": "26.6.2",
+        "vitest": "5.0.1"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
-        "chalk": "*"
+        "chalk": "6.0.0"
     }
 }

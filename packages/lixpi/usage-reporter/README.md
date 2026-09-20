@@ -1,5 +1,7 @@
 # @lixpi/usage-reporter
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 Provider request authorization, upper-bound usage estimates, measured provider usage, and helpers for inference-provider tariff metadata.
 
 The API calls `ProviderUsageClient.authorizeRequest()` before provider transport and `recordUsage()` after completion. Disabled integration authorizes requests and discards records without network calls. Enabled integration uses the paired NATS responder's neutral authorization and acknowledgement contracts.

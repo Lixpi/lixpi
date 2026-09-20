@@ -123,10 +123,10 @@
     },
     "dependencies": {
         "@lixpi/ui-primitives": "workspace:*",
-        "gentelella": "4.1.1"
+        "gentelella": "4.2.0"
     },
     "devDependencies": {
-        "happy-dom": "*",
-        "vitest": "*"
+        "happy-dom": "20.14.5",
+        "vitest": "5.0.1"
     }
 }

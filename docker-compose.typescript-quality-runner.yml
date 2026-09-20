@@ -43,6 +43,7 @@ services:
 
             # Application and library source. Package manifests are not mounted
             # into this writable tree, so dependency artifacts cannot leak.
+            - ./versions-registry/src:/usr/src/repository/versions-registry/src:cached
             - ./services/web-ui/index.html:/usr/src/repository/services/web-ui/index.html:cached
             - ./services/web-ui/src:/usr/src/repository/services/web-ui/src:cached
             - ./services/web-ui/vite.config.ts:/usr/src/repository/services/web-ui/vite.config.ts:cached

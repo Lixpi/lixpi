@@ -18,9 +18,9 @@
         "test:run": "vitest run"
     },
     "devDependencies": {
-        "vitest": "*"
+        "vitest": "5.0.1"
     },
     "dependencies": {
-        "type-fest": "*"
+        "type-fest": "5.10.0"
     }
 }

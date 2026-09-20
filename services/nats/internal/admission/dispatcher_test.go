@@ -102,8 +102,8 @@ func TestCoordinatorRejectsStaleAndUnboundWorkerReplies(t *testing.T) {
 
 			for index, node := range []string{"first", "second"} {
 				d.peers[node] = peer{
-					membership: membership{Node: node, Instance: identifier(), Digest: "policy", Capacity: 2, InFlight: index, Available: true},
-					received:   time.Now(),
+					Node: node, Instance: identifier(), Digest: "policy", Capacity: 2, InFlight: index, Available: true,
+					received: time.Now(),
 				}
 
 				_, err := connection.Subscribe(p.Subjects.Protocol.Auth.Worker+"."+node, func(message *nats.Msg) {

@@ -1,0 +1,25 @@
+{
+    "containerImages": {
+        "NODE_JS_ALPINE_IMAGE_REFERENCE": "node",
+        "AWS_LAMBDA_NODE_JS_IMAGE_REFERENCE": "public.ecr.aws/lambda/nodejs",
+        "GO_BOOKWORM_IMAGE_REFERENCE": "golang",
+        "GOLANGCI_LINT_IMAGE_REFERENCE": "golangci/golangci-lint",
+        "PULUMI_IMAGE_REFERENCE": "pulumi/pulumi",
+        "ALPINE_IMAGE_REFERENCE": "alpine",
+        "LOCAL_AUTH0_IMAGE_REFERENCE": "public.ecr.aws/primaassicurazioni/localauth0",
+        "NATS_IO_NATS_BOX_IMAGE_REFERENCE": "natsio/nats-box"
+    },
+    "typescript": {
+        "NODE_VERSION": "node",
+        "PNPM_VERSION": "pnpm",
+        "TYPESCRIPT_VERSION": "npmPackages.typescript"
+    },
+    "tools": {
+        "FNM_VERSION": "fnm",
+        "NEX_VERSION": "nex"
+    },
+    "go": {
+        "GOPLS_VERSION": "tools.gopls",
+        "DLV_VERSION": "tools.dlv"
+    }
+}

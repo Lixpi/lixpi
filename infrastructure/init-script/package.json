@@ -8,13 +8,13 @@
         "setup": "node --experimental-transform-types setup-env.ts"
     },
     "dependencies": {
-        "@clack/prompts": "*",
+        "@clack/prompts": "1.8.1",
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/nats-subject-registry": "workspace:*",
-        "@nats-io/nkeys": "*",
-        "chalk": "*"
+        "@nats-io/nkeys": "2.0.3",
+        "chalk": "6.0.0"
     },
     "devDependencies": {
-        "vitest": "*"
+        "vitest": "5.0.1"
     }
 }

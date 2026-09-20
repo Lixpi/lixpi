@@ -1,8 +1,10 @@
-ARG NODE_VERSION=24
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
+ARG PNPM_VERSION=12.5.1
 
-FROM node:${NODE_VERSION}-alpine
+FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
+ARG PNPM_VERSION
 
-RUN npm install -g pnpm@12.3.4
+RUN npm install -g "pnpm@${PNPM_VERSION}"
 
 WORKDIR /usr/src/quality-runner
 

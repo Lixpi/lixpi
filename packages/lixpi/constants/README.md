@@ -1,5 +1,7 @@
 # Lixpi Constants
 
+TypeScript dependency declarations are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before reinstalling dependencies.
+
 Shared runtime contracts for TypeScript services and the browser.
 
 `nats-subjects.json` owns subject names, wire values, portal templates, and NATS protocol permission patterns. `getNatsSubjectPath(subjects => subjects.ORGANIZATION_SUBJECTS.GET_MEMBERSHIP)` returns the typed identifier path `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` from that same tree. Contract declarations and handler maps use this helper instead of copying identifier strings. The selector preserves the chosen constant alias even when two names share a wire subject.

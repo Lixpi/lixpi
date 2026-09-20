@@ -1,5 +1,7 @@
 # UI Kit
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 [Video controls](docs/VIDEO-PLAYER-CONTROLS.md) covers native media integration, scrubbing and accessibility. Other component guides stay beside their implementations.
 
 Shared DOM templates come from `@lixpi/ui-primitives/dom`. Shared Sass transition helpers come from `@lixpi/ui-primitives/styles/transitions`; UI-kit does not keep private copies of either.

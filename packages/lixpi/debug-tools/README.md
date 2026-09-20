@@ -1,5 +1,7 @@
 # Debug Tools
 
+TypeScript dependency declarations are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before reinstalling dependencies.
+
 Shared debug utilities for Lixpi services providing colored console output.
 
 ## Structure

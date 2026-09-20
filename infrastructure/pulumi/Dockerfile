@@ -1,8 +1,13 @@
-# Use the official Pulumi image as the base
-FROM pulumi/pulumi:latest
+ARG PULUMI_IMAGE_REFERENCE=pulumi/pulumi:3.263.0
+ARG NODE_VERSION=24.21.0
+ARG FNM_VERSION=1.39.0
+ARG PNPM_VERSION=12.5.1
 
-# Set Node.js version
-ARG NODE_VERSION=24.20.0
+# Use the official Pulumi image as the base
+FROM ${PULUMI_IMAGE_REFERENCE}
+ARG NODE_VERSION
+ARG FNM_VERSION
+ARG PNPM_VERSION
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -17,21 +22,21 @@ SHELL ["/bin/bash", "-c"]
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 
 # Install fnm (Fast Node Manager)
-RUN curl -fsSL https://fnm.vercel.app/install | bash
+RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --release "v${FNM_VERSION}"
 
 # Set up fnm in the shell
 ENV PATH="/root/.local/share/fnm:$PATH"
 
 # Install and use Node.js
 RUN eval "$(fnm env)" && \
-    fnm install $NODE_VERSION && \
-    fnm default $NODE_VERSION && \
-    fnm use $NODE_VERSION
+    fnm install "${NODE_VERSION}" && \
+    fnm default "${NODE_VERSION}" && \
+    fnm use "${NODE_VERSION}"
 
 # Activate the repository's pnpm version in the Node installation managed by fnm.
 RUN eval "$(fnm env)" && \
     corepack enable && \
-    corepack prepare pnpm@12.3.4 --activate
+    corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
 # Add fnm initialization to .bashrc to ensure it's available in all bash sessions
 RUN echo 'eval "$(fnm env)"' >> ~/.bashrc

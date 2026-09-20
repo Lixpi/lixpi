@@ -1,5 +1,8 @@
-FROM golangci/golangci-lint:v2.13.2@sha256:ba07dffad130794ae79ebaa0056809d18c0168f3f846480ffd3eb6c04578b83d AS lint
-FROM golang:1.26.8-bookworm@sha256:9fdc884aacc3bec89b20ffc69f4bb369c78210e3e4f600387b5128b12c199f81
+ARG GOLANGCI_LINT_IMAGE_REFERENCE=golangci/golangci-lint:v2.13.2
+ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.1-bookworm
+
+FROM ${GOLANGCI_LINT_IMAGE_REFERENCE} AS lint
+FROM ${GO_BOOKWORM_IMAGE_REFERENCE}
 
 COPY --from=lint /usr/bin/golangci-lint /usr/local/bin/golangci-lint
 COPY source-conventions.go /usr/src/runner/source-conventions.go

@@ -1,5 +1,7 @@
 # Canvas Engine
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 [Rendering and lifecycle](docs/RENDERING-ENGINE.md), [connections](docs/EDGES-AND-CONNECTIONS.md), [collisions](docs/COLLISION-RESOLUTION.md), [media resources](docs/IMAGE-RENDERING-PERFORMANCE.md), and [viewport input](docs/VIEWPORT-INPUT.md) document the engine. [Engine-only example](examples/engine-only.ts) uses public exports.
 
 `@lixpi/canvas-engine` supplies generic scene geometry, collisions, layout, connectors and browser rendering. Component data is opaque to the engine. It does not depend on Lixpi Assets, generation requests, application stores or the constants package.
