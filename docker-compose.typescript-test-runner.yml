@@ -45,11 +45,13 @@ services:
             - ./services/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
             - typescript-test-runner-pnpm-store:/pnpm-store
 
-            # --- api domain (bind-mounts services/api's own files — same
-            #     package.json/pnpm-workspace.yaml/vitest.config.ts the
-            #     lixpi-api container uses, no separate copies) ---
+            # pnpm may rewrite workspace manifests with dependency build
+            # decisions. Stage each source manifest outside its workspace so
+            # the runner can copy it into disposable container storage.
+
+            # --- api domain ---
             - ./services/api/package.json:/usr/src/service/api/package.json:cached
-            - ./services/api/pnpm-workspace.yaml:/usr/src/service/api/pnpm-workspace.yaml:cached
+            - ./services/api/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/api/pnpm-workspace.yaml:ro,cached
             - ./services/api/vitest.config.ts:/usr/src/service/api/vitest.config.ts:cached
             - ./services/api/src:/usr/src/service/api/src:cached
             - ./services/api/config:/usr/src/service/api/config:cached
@@ -118,11 +120,9 @@ services:
             - typescript-test-runner-node-modules-api-test-utils:/usr/src/service/api/packages/lixpi/test-utils/node_modules
             - typescript-test-runner-node-modules-api-usage-reporter:/usr/src/service/api/packages/lixpi/usage-reporter/node_modules
 
-            # --- web-ui domain (bind-mounts services/web-ui's own files — same
-            #     package.json/pnpm-workspace.yaml/vitest.config.ts the
-            #     lixpi-web-ui container uses, no separate copies) ---
+            # --- web-ui domain ---
             - ./services/web-ui/package.json:/usr/src/service/web-ui/package.json:cached
-            - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/web-ui/pnpm-workspace.yaml:cached
+            - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/web-ui/pnpm-workspace.yaml:ro,cached
             - ./services/web-ui/vitest.config.ts:/usr/src/service/web-ui/vitest.config.ts:cached
             - ./services/web-ui/tsconfig.json:/usr/src/service/web-ui/tsconfig.json:ro,cached
             - ./services/web-ui/src:/usr/src/service/web-ui/src:cached
@@ -185,7 +185,7 @@ services:
 
             # --- web-ui-user-portal domain ---
             - ./services/web-ui-user-portal/package.json:/usr/src/service/web-ui-user-portal/package.json:cached
-            - ./services/web-ui-user-portal/pnpm-workspace.yaml:/usr/src/service/web-ui-user-portal/pnpm-workspace.yaml:cached
+            - ./services/web-ui-user-portal/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/web-ui-user-portal/pnpm-workspace.yaml:ro,cached
             - ./services/web-ui-user-portal/index.html:/usr/src/service/web-ui-user-portal/index.html:cached
             - ./services/web-ui-user-portal/vitest.config.ts:/usr/src/service/web-ui-user-portal/vitest.config.ts:cached
             - ./services/web-ui-user-portal/tsconfig.json:/usr/src/service/web-ui-user-portal/tsconfig.json:ro,cached
@@ -229,7 +229,7 @@ services:
 
             # --- ai-model-registry domain ---
             - ./services/ai-model-registry/package.json:/usr/src/service/ai-model-registry/package.json:cached
-            - ./services/ai-model-registry/pnpm-workspace.yaml:/usr/src/service/ai-model-registry/pnpm-workspace.yaml:cached
+            - ./services/ai-model-registry/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/ai-model-registry/pnpm-workspace.yaml:ro,cached
             - ./services/ai-model-registry/vitest.config.ts:/usr/src/service/ai-model-registry/vitest.config.ts:cached
             - ./services/ai-model-registry/src/client:/usr/src/service/ai-model-registry/src/client:cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/ai-model-registry/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
@@ -273,7 +273,7 @@ services:
             #     vitest.config.ts that services/nex didn't have before —
             #     nex ran bare `vitest run` with no config file) ---
             - ./services/nex/package.json:/usr/src/service/nex/package.json:cached
-            - ./services/nex/pnpm-workspace.yaml:/usr/src/service/nex/pnpm-workspace.yaml:cached
+            - ./services/nex/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/nex/pnpm-workspace.yaml:ro,cached
             - ./services/nex/vitest.config.ts:/usr/src/service/nex/vitest.config.ts:cached
             - ./services/nex/workloads:/usr/src/service/nex/workloads:cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/nex/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
