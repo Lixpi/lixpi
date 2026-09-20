@@ -4,19 +4,19 @@
     "version": "0.0.0",
     "type": "module",
     "devDependencies": {
-        "@lixpi/debug-tools": "*",
-        "@oxlint/plugins": "*",
-        "@stylistic/eslint-plugin": "*",
-        "dprint": "*",
-        "dprint-plugin-malva": "*",
-        "eslint-plugin-prefer-arrow-functions": "*",
-        "oxfmt": "*",
-        "oxlint": "*",
-        "oxc-parser": "*",
-        "parse5": "*",
-        "postcss-scss": "*",
-        "postcss-value-parser": "*",
-        "stylelint": "*",
-        "stylelint-scss": "*"
+        "@lixpi/debug-tools": "0.0.1",
+        "@oxlint/plugins": "1.83.0",
+        "@stylistic/eslint-plugin": "5.10.0",
+        "dprint": "0.57.4",
+        "dprint-plugin-malva": "0.16.0",
+        "eslint-plugin-prefer-arrow-functions": "3.10.2",
+        "oxfmt": "0.68.0",
+        "oxlint": "1.83.0",
+        "oxc-parser": "0.150.0",
+        "parse5": "8.0.1",
+        "postcss-scss": "4.0.9",
+        "postcss-value-parser": "4.2.0",
+        "stylelint": "17.15.0",
+        "stylelint-scss": "7.3.0"
     }
 }

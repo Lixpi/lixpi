@@ -102,7 +102,7 @@ func TestServiceJWTAndNKeyVerification(t *testing.T) {
 			token := testToken(t, map[string]string{"typ": "JWT", "alg": test.algorithm}, claims, key.Sign)
 			identity, err := v.Evaluate(
 				t.Context(),
-				&jwt.AuthorizationRequestClaims{AuthorizationRequest: jwt.AuthorizationRequest{ConnectOptions: jwt.ConnectOptions{Token: token}}},
+				&jwt.AuthorizationRequestClaims{ConnectOptions: jwt.ConnectOptions{Token: token}},
 			)
 
 			if test.denied {
@@ -127,10 +127,8 @@ func TestServiceJWTAndNKeyVerification(t *testing.T) {
 	}
 
 	request := &jwt.AuthorizationRequestClaims{
-		AuthorizationRequest: jwt.AuthorizationRequest{
-			ClientInformation: jwt.ClientInformation{Nonce: nonce},
-			ConnectOptions:    jwt.ConnectOptions{Nkey: public, SignedNonce: base64.RawURLEncoding.EncodeToString(signature)},
-		},
+		ClientInformation: jwt.ClientInformation{Nonce: nonce},
+		ConnectOptions:    jwt.ConnectOptions{Nkey: public, SignedNonce: base64.RawURLEncoding.EncodeToString(signature)},
 	}
 
 	if _, err := v.Evaluate(t.Context(), request); err != nil {
@@ -202,7 +200,7 @@ func TestBrowserJWKSCacheRotationAndOutage(t *testing.T) {
 			},
 		)
 
-		return &jwt.AuthorizationRequestClaims{AuthorizationRequest: jwt.AuthorizationRequest{ConnectOptions: jwt.ConnectOptions{Token: token}}}
+		return &jwt.AuthorizationRequestClaims{ConnectOptions: jwt.ConnectOptions{Token: token}}
 	}
 	request := create("first", v.Audience, v.Issuer, "RS256")
 	var pending sync.WaitGroup

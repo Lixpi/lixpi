@@ -5,6 +5,8 @@ Themes for CodeMirror 6
 
 Themes for [CodeMirror 6](https://codemirror.net/).
 
+Dependency versions in this theme workspace and its package manifests are generated from [the repository version registry](../../../../../../../versions-registry/README.md). Edit the central JavaScript entries and synchronize the manifests before installing.
+
 ## Available themes
 
 - [Basic Light]($src/components/proseMirror/themes/cm6-themes/packages/basic-light)
@@ -35,4 +37,3 @@ let editor = new EditorView({
 ```
 
 Read [the CodeMirror documentation](https://codemirror.net/6/examples/styling/) for more detail about themes.
-

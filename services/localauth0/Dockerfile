@@ -1,12 +1,15 @@
+ARG ALPINE_IMAGE_REFERENCE=alpine:3.24.2
+ARG LOCAL_AUTH0_IMAGE_REFERENCE=public.ecr.aws/primaassicurazioni/localauth0:0.9.1
+
 # Stage 1: Prepare scripts with Alpine
-FROM alpine:3.19 AS builder
+FROM ${ALPINE_IMAGE_REFERENCE} AS builder
 
 # Copy and prepare scripts
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Stage 2: Final image
-FROM public.ecr.aws/primaassicurazioni/localauth0:0.8.3
+FROM ${LOCAL_AUTH0_IMAGE_REFERENCE}
 
 # Copy minimal shell utilities from Alpine
 COPY --from=builder /bin/sh /bin/sh

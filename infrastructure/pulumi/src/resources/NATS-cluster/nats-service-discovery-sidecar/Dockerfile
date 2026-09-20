@@ -1,11 +1,15 @@
-FROM public.ecr.aws/lambda/nodejs:24
+ARG AWS_LAMBDA_NODE_JS_IMAGE_REFERENCE=public.ecr.aws/lambda/nodejs:24
+ARG TYPESCRIPT_VERSION=7.0.2
+
+FROM ${AWS_LAMBDA_NODE_JS_IMAGE_REFERENCE}
+ARG TYPESCRIPT_VERSION
 
 # Copy package.json
 COPY package.json ./
 
 # Install dependencies (use npm for simplicity in Lambda containers)
 RUN npm install --omit=dev
-RUN npm install typescript
+RUN npm install "typescript@${TYPESCRIPT_VERSION}"
 
 # Copy TypeScript configuration
 COPY tsconfig.json ./

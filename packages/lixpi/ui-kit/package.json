@@ -98,16 +98,16 @@
         }
     },
     "dependencies": {
-        "d3-ease": "*",
-        "d3-selection": "*",
-        "d3-transition": "*",
+        "d3-ease": "3.0.1",
+        "d3-selection": "3.0.0",
+        "d3-transition": "3.0.1",
         "@lixpi/ui-primitives": "workspace:*"
     },
     "devDependencies": {
         "@lixpi/test-utils": "workspace:*",
-        "@types/d3-selection": "*",
-        "@types/d3-transition": "*",
-        "happy-dom": "*",
-        "vitest": "*"
+        "@types/d3-selection": "3.0.12",
+        "@types/d3-transition": "3.0.9",
+        "happy-dom": "20.14.5",
+        "vitest": "5.0.1"
     }
 }

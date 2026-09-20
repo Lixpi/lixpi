@@ -21,7 +21,7 @@ Every invocation runs `pnpm install` before the test command, but this is normal
 
 If the cache is corrupt or keeps a stale workspace link after a dependency rename or removal, wipe it with `./services/typescript-test-runner/nuke-cache.sh`. The next run performs a clean install. Routine dependency changes do not need this because each invocation reconciles `node_modules` against the lockfile.
 
-Each service is bind-mounted with its own `package.json`, `pnpm-workspace.yaml`, and `vitest.config.ts`. The runner does not duplicate service configuration. Shared packages use `packages/lixpi/pnpm-workspace.yaml` so `workspace:*` dependencies resolve.
+Each service uses its own `package.json`, `pnpm-workspace.yaml`, and `vitest.config.ts`. The workspace manifest is mounted read-only in a staging directory and copied into the disposable workspace before `pnpm install`, so pnpm can record dependency build decisions without trying to replace a bind mount. The runner does not duplicate service configuration. Shared packages use the same copy-before-install pattern with `packages/lixpi/pnpm-workspace.yaml` so `workspace:*` dependencies resolve.
 
 Use the same command for every configured service. The optional test path is relative to that service:
 

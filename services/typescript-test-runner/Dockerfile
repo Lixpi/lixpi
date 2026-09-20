@@ -6,11 +6,13 @@
 # docker-compose.yml) as its own isolated pnpm workspace root under
 # /usr/src/service/<domain>, so this image ships no dependencies of its own —
 # run-tests.sh installs each domain's deps on demand before running vitest.
-ARG NODE_VERSION=24
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
+ARG PNPM_VERSION=12.5.1
 
-FROM node:${NODE_VERSION}-alpine
+FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
+ARG PNPM_VERSION
 
-RUN npm install -g pnpm@12.3.4
+RUN npm install -g "pnpm@${PNPM_VERSION}"
 
 WORKDIR /usr/src/service
 

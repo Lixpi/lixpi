@@ -1,5 +1,7 @@
 # Gentelella UI Kit
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 `@lixpi/ui-kit-gentelella` is the reusable boundary around the [Gentelella](https://github.com/ColorlibHQ/gentelella) admin theme. It exposes the complete v4 Sass theme, typed runtime modules, stable class contracts, and framework-free DOM components built with `@lixpi/ui-primitives/dom`.
 
 Applications depend on this package instead of importing `gentelella` directly. That keeps the upstream dependency, markup contracts, and upgrade work in one place.
@@ -39,7 +41,7 @@ Buttons attach their spinner only while `setBusy(true)` is active and remove it 
 - `class-names` exposes the stable theme class contract and class-name builders for dynamic markup that does not need a component instance.
 - `runtime/*` re-exports each Gentelella v4 runtime module. The package supplies explicit types for the upstream product image and mockup modules, which Gentelella ships without declarations. Consumers import one module at a time so unrelated browser initializers do not enter their bundle.
 - `styles/theme` compiles the complete Gentelella v4 Sass theme.
-- `styles/tokens`, `styles/layout`, `styles/components`, `styles/forms`, `styles/widgets`, `styles/pages`, `styles/datatable`, `styles/auth`, and `styles/apps` expose the upstream Sass modules separately. Each focused entrypoint loads the design tokens it needs, so applications can mix modules without importing the complete theme.
+- `styles/tokens`, `styles/layout`, `styles/components`, `styles/forms`, `styles/widgets`, `styles/pages`, `styles/rtl`, `styles/datatable`, `styles/auth`, and `styles/apps` expose the upstream Sass modules separately. Each focused entrypoint loads the design tokens it needs, so applications can mix modules without importing the complete theme.
 - `styles/application-shell` adds the package-owned layout rules used by `createGentelellaApplicationShell()`.
 
 Do not import Gentelella's root JavaScript entrypoint from this package. The root entrypoint initializes document-wide behavior as a side effect. Use the focused runtime facades instead.

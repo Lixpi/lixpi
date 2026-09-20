@@ -86,6 +86,24 @@ Run the startup script and select an environment when prompted:
 start.bat
 ```
 
+## Dependency versions
+
+Inspect a dependency update and its complete upstream release information before applying it:
+
+```bash
+docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
+docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
+```
+
+The selector can name one dependency, several dependencies, a dependency group, or `all`. The update command can cross major versions and synchronizes the committed native declarations after applying a reviewed release. To select an exact version manually, edit the type-specific JSON catalog under `versions-registry/`, then run:
+
+```bash
+docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
+docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+```
+
+These commands run inside standalone Node containers without installing dependencies or starting application services. The check is read-only. Native Dockerfiles, package manifests, Go modules, and CI workflows remain usable by their ordinary tools. See [Dependency Version Registry](../../versions-registry/README.md) for selectors, release-note sources, generated reports, catalog ownership, and failure behavior.
+
 ## Build and run individual services
 
 ### Web UI

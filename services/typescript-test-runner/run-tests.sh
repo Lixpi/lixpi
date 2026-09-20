@@ -1,11 +1,10 @@
 #!/bin/sh
 # Universal entrypoint for lixpi-typescript-test-runner.
 #
-# api / web-ui / web-ui-user-portal / ai-model-registry / nex are bind-mounted from their own service directories
-# (docker compose.typescript-test-runner.yml, included from the root
-# docker compose.yml) — each is fully self-contained, with its own
-# package.json, pnpm-workspace.yaml, and vitest.config.ts, identical to what
-# ships in its app container. No config is duplicated here.
+# api / web-ui / web-ui-user-portal / ai-model-registry / nex use their own
+# package.json, pnpm-workspace.yaml, and vitest.config.ts. The workspace
+# manifest is staged outside the workspace and copied into disposable
+# container storage because pnpm may rewrite it during install.
 #
 # "shared" covers packages/lixpi/*, mounted file-by-file under
 # /usr/src/service/shared, tied together by packages/lixpi/pnpm-workspace.yaml
@@ -50,6 +49,10 @@ domain="$1"
 run_domain() {
     dir="$1"
     shift
+    workspace_manifest_source="/usr/src/service/workspace-manifests/$dir/pnpm-workspace.yaml"
+    if [ -f "$workspace_manifest_source" ]; then
+        cp "$workspace_manifest_source" "/usr/src/service/$dir/pnpm-workspace.yaml"
+    fi
     echo "==> [$dir] pnpm install"
     (cd "/usr/src/service/$dir" && pnpm install)
     echo "==> [$dir] vitest run $*"

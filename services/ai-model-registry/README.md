@@ -1,5 +1,7 @@
 # AI Model Registry
 
+The [version registry](../../versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
+
 The AI Model Registry owns the models Lixpi ships and the generation parameters they accept, which values the code sends, and which settings appear in the model configuration matrix. It is both a browser tool for reviewing parameter decisions and the service that builds the model catalog and writes it to the `AI_MODELS_LIST` DynamoDB table the API reads.
 
 The registry is an internal engineering service. It does not ship to users, but its data and the production model/provider code form one contract. Read [AI Model Registry](documentation/AI-MODEL-REGISTRY.md) before changing models, provider request fields, configuration controls, pricing, compatibility, or registry data. Read [Maintaining the Registry](documentation/MAINTAINING-THE-CATALOG.md) before a provider documentation refresh.

@@ -1,5 +1,7 @@
 # Web Client Service Factory
 
+Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+
 `@lixpi/web-client-service-factory` supplies the common runtime for Lixpi's framework-free browser applications. It owns application mounting and teardown, routing, route-driven view replacement, concrete Nano Store creation, shared Vite configuration, and the base Sass document surface.
 
 The package has no authentication, user, NATS, API-client, or product-service dependency. An application supplies an optional typed dependency lifecycle, and the factory passes the resulting dependency object to its resources, root view, and service hooks.

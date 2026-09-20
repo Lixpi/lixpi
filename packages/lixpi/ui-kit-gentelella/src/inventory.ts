@@ -157,6 +157,7 @@ export const GENTELELLA_STYLE_MODULES = [
     'forms',
     'layout',
     'pages',
+    'rtl',
     'tokens',
     'widgets',
 ] as const

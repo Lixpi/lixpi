@@ -19,7 +19,7 @@ services:
     lixpi-dynamodb:
         container_name: lixpi-dynamodb
         profiles: ["main", "deploy"]
-        image: amazon/dynamodb-local:latest
+        image: amazon/dynamodb-local:3.3.1
         user: "0:0"  # run as root so the volume is writable
         command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data", "-cors", "*", "-delayTransientStatuses"]
         ports:
@@ -38,7 +38,7 @@ services:
     lixpi-dynamodb-admin:
         container_name: lixpi-dynamodb-admin
         profiles: ["dev"]
-        image: aaronshaf/dynamodb-admin
+        image: aaronshaf/dynamodb-admin:5.3.4
         environment:
             DYNAMO_ENDPOINT: http://lixpi-dynamodb:8000
             AWS_REGION: us-east-1
@@ -316,7 +316,7 @@ services:
     lixpi-nats-cli:
         container_name: lixpi-nats-cli
         profiles: ["dev"]
-        image: synadia/nats-box:latest
+        image: natsio/nats-box:0.19.7
         command: >
             -c "sleep infinity"
         stop_signal: SIGTERM

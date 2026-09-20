@@ -21,13 +21,13 @@
         "@lixpi/web-client-service-factory": "workspace:*"
     },
     "devDependencies": {
-        "@vitest/ui": "*",
-        "happy-dom": "*",
-        "http-server": "*",
-        "sass": "*",
-        "typescript": "*",
-        "vite": "^6",
-        "vitest": "*"
+        "@vitest/ui": "5.0.1",
+        "happy-dom": "20.14.5",
+        "http-server": "14.1.1",
+        "sass": "1.104.1",
+        "typescript": "7.0.2",
+        "vite": "8.3.0",
+        "vitest": "5.0.1"
     },
-    "packageManager": "pnpm@12.3.4"
+    "packageManager": "pnpm@12.5.1"
 }

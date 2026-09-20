@@ -15,23 +15,23 @@
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
-        "@nats-io/nats-core": "*",
-        "@nats-io/transport-node": "*",
-        "openai": "*",
-        "onnxruntime-web": "*",
-        "@anthropic-ai/sdk": "*",
-        "@aws-sdk/client-bedrock": "*",
-        "@aws-sdk/credential-providers": "*",
-        "@google/genai": "*",
-        "sharp": "*",
-        "type-fest": "*"
+        "@nats-io/nats-core": "3.4.0",
+        "@nats-io/transport-node": "3.4.0",
+        "openai": "7.20.0",
+        "onnxruntime-web": "1.30.0",
+        "@anthropic-ai/sdk": "0.127.0",
+        "@aws-sdk/client-bedrock": "3.1136.0",
+        "@aws-sdk/credential-providers": "3.1136.0",
+        "@google/genai": "2.23.0",
+        "sharp": "0.35.4",
+        "type-fest": "5.10.0"
     },
     "devDependencies": {
-        "@nats-io/jetstream": "*",
-        "@nats-io/obj": "*",
+        "@nats-io/jetstream": "3.4.0",
+        "@nats-io/obj": "3.4.0",
         "@lixpi/test-utils": "workspace:*",
-        "vitest": "latest",
-        "@types/node": "*"
+        "vitest": "5.0.1",
+        "@types/node": "26.6.2"
     },
-    "packageManager": "pnpm@12.3.4"
+    "packageManager": "pnpm@12.5.1"
 }

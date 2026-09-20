@@ -114,6 +114,8 @@ An animated placeholder appears immediately when generation starts; up to three 
 
 ## Tech Stack
 
+Dependency versions are authored in [`versions-registry/`](versions-registry/) and synchronized into native Dockerfiles, package manifests, Go modules, and CI declarations. See [Dependency Version Registry](versions-registry/README.md) for the Docker-only update commands and ownership rules.
+
 - **LangGraph** — AI workflow orchestration
 - **NATS / NATS JetStream** — messaging backbone for the entire system (end-to-end communication and object storage)
 - **Canvas Engine, PixiJS, D3** — infinite canvas UI

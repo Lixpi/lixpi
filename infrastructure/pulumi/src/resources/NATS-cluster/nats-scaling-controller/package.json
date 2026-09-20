@@ -3,15 +3,15 @@
     "version": "1.0.0",
     "type": "module",
     "devDependencies": {
-        "typescript": "^5.9.3",
-        "@types/node": "^24.0.0"
+        "typescript": "7.0.2",
+        "@types/node": "26.6.2"
     },
     "dependencies": {
-        "@aws-sdk/client-auto-scaling": "^3.0.0",
-        "@aws-sdk/client-ec2": "^3.0.0",
-        "@aws-sdk/client-cloudwatch": "^3.0.0",
-        "@aws-sdk/client-ssm": "^3.0.0",
-        "@aws-sdk/client-secrets-manager": "^3.0.0",
+        "@aws-sdk/client-auto-scaling": "3.1136.0",
+        "@aws-sdk/client-ec2": "3.1136.0",
+        "@aws-sdk/client-cloudwatch": "3.1136.0",
+        "@aws-sdk/client-ssm": "3.1136.0",
+        "@aws-sdk/client-secrets-manager": "3.1136.0",
         "@nats-io/nats-core": "3.4.0",
         "@nats-io/transport-node": "3.4.0"
     }

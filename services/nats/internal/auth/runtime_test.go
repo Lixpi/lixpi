@@ -54,7 +54,7 @@ func TestRuntimeBrowserUsesPinnedRegistration(t *testing.T) {
 			return rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 		},
 	)
-	request := &jwt.AuthorizationRequestClaims{AuthorizationRequest: jwt.AuthorizationRequest{ConnectOptions: jwt.ConnectOptions{Token: token}}}
+	request := &jwt.AuthorizationRequestClaims{ConnectOptions: jwt.ConnectOptions{Token: token}}
 	verifier := &RuntimeVerifier{}
 	pinned := policy.WithSnapshot(t.Context(), snapshot)
 

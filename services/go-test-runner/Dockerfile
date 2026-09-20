@@ -1,5 +1,8 @@
-FROM natsio/nats-box@sha256:ffce8bd103383f179f8c7f11cf645726acf5d17280706c530c3b342dbe16334c AS snapshot-cli
-FROM golang:1.26.8-bookworm@sha256:9fdc884aacc3bec89b20ffc69f4bb369c78210e3e4f600387b5128b12c199f81
+ARG NATS_IO_NATS_BOX_IMAGE_REFERENCE=natsio/nats-box:0.19.7
+ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.1-bookworm
+
+FROM ${NATS_IO_NATS_BOX_IMAGE_REFERENCE} AS snapshot-cli
+FROM ${GO_BOOKWORM_IMAGE_REFERENCE}
 
 COPY --from=snapshot-cli /usr/local/bin/nats /usr/local/bin/nats
 

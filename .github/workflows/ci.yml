@@ -18,6 +18,16 @@ env:
     COMPOSE_ANSI: never
 
 jobs:
+    versions-registry:
+        name: Dependency versions / Registry consistency
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v7.0.1
+
+            - name: Check generated dependency declarations
+              run: docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+
     # -------------------------------------------------------------------------
     # TypeScript
     # -------------------------------------------------------------------------
@@ -42,6 +52,8 @@ jobs:
                       command: ai-model-registry validate
                     - name: quality-runner
                       command: quality-runner validate
+                    - name: versions-registry
+                      command: files validate versions-registry/src
                     - name: shared
                       command: shared validate
                     - name: infrastructure
@@ -50,7 +62,7 @@ jobs:
                       command: random-useful-things validate
         steps:
             - name: Check out repository
-              uses: actions/checkout@v7
+              uses: actions/checkout@v7.0.1
 
             - name: Build TypeScript quality runner
               run: docker compose -f docker-compose.typescript-quality-runner.yml --profile dev build lixpi-typescript-quality-runner
@@ -87,7 +99,7 @@ jobs:
             VITE_NATS_SERVER: ws://localhost:9222
         steps:
             - name: Check out repository
-              uses: actions/checkout@v7
+              uses: actions/checkout@v7.0.1
 
             - name: Build TypeScript test runner
               run: docker compose -f docker-compose.typescript-test-runner.yml --profile dev build lixpi-typescript-test-runner
@@ -107,7 +119,7 @@ jobs:
                 service: [nats, caddy]
         steps:
             - name: Check out repository
-              uses: actions/checkout@v7
+              uses: actions/checkout@v7.0.1
 
             - name: Build Go quality runner
               run: docker compose -f docker-compose.go-quality-runner.yml --profile dev build lixpi-go-quality-runner
@@ -124,7 +136,7 @@ jobs:
                 service: [nats, caddy]
         steps:
             - name: Check out repository
-              uses: actions/checkout@v7
+              uses: actions/checkout@v7.0.1
 
             - name: Build Go test runner
               run: docker compose -f docker-compose.go-test-runner.yml --profile dev build lixpi-go-test-runner
@@ -141,7 +153,7 @@ jobs:
                 service: [nats, caddy]
         steps:
             - name: Check out repository
-              uses: actions/checkout@v7
+              uses: actions/checkout@v7.0.1
 
             - name: Build production image
               run: docker build -f services/${{ matrix.service }}/Dockerfile --target embedded-runtime -t lixpi/${{ matrix.service }}-embedded .
@@ -153,6 +165,7 @@ jobs:
         name: Required CI gate
         if: ${{ always() }}
         needs:
+            - versions-registry
             - typescript-quality
             - typescript-tests
             - go-quality
@@ -162,12 +175,14 @@ jobs:
         steps:
             - name: Require TypeScript and Go checks
               env:
+                  VERSIONS_REGISTRY_RESULT: ${{ needs.versions-registry.result }}
                   TYPESCRIPT_QUALITY_RESULT: ${{ needs.typescript-quality.result }}
                   TYPESCRIPT_TEST_RESULT: ${{ needs.typescript-tests.result }}
                   GO_QUALITY_RESULT: ${{ needs.go-quality.result }}
                   GO_TEST_RESULT: ${{ needs.go-tests.result }}
                   GO_BUILD_RESULT: ${{ needs.go-build.result }}
               run: |
+                  test "$VERSIONS_REGISTRY_RESULT" = "success"
                   test "$TYPESCRIPT_QUALITY_RESULT" = "success"
                   test "$TYPESCRIPT_TEST_RESULT" = "success"
                   test "$GO_QUALITY_RESULT" = "success"
