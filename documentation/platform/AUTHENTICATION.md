@@ -69,7 +69,7 @@ The application registry exposes schema 3 and a diagnostic digest. The broker co
 
 ## Additional service registrations
 
-Add deployment-owned identities to `NATS_SERVICE_AUTH_REGISTRATIONS` in the environment file. Each entry declares `userId`, `publicKey`, `account` and explicit publish/subscribe permissions. Saving that file through the normal [init-config partial-update flow](../../infrastructure/init-script/README.md) derives and signs the complete manifest. API startup submits it automatically. This setting is input to application deployment tooling; it is not passed to the broker.
+Add deployment-owned identities to `NATS_SERVICE_AUTH_REGISTRATIONS` in the environment file. Each entry declares `userId`, `publicKey`, `account` and explicit publish/subscribe permissions. Saving that file through the normal [init-config partial-update flow](../../dev-tools/config-utils/README.md) derives and signs the complete manifest. API startup submits it automatically. This setting is input to application deployment tooling; it is not passed to the broker.
 
 A separate application may use its own authority, owner and allowed accounts. Its initializer submits its signed manifest through the same restricted registration client. The authority signature approves the grant, so possession of a service seed or bootstrap password does not permit self-assigned access. The generic validator accepts valid NATS wildcard patterns and rejects missing permission directions unless they explicitly deny all.
 

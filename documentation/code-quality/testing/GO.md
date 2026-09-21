@@ -29,7 +29,7 @@ The root Compose file includes both runners. Using their standalone Compose file
 
 After editing imports or dependency versions, reconcile `go.mod` and `go.sum` inside the quality container. The `dependencies` action copies manifests into its disposable module root, runs `go mod tidy`, and copies just those two files back. Normal tests and lint use readonly module resolution.
 
-The normal [init-config create/update flow](../../../infrastructure/init-script/README.md) signs application permissions when it saves the environment file. The Go image contains no generated application permission artifact.
+The normal [init-config create/update flow](../../../dev-tools/config-utils/README.md) signs application permissions when it saves the environment file. The Go image contains no generated application permission artifact.
 
 ```bash
 docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats dependencies
@@ -37,7 +37,7 @@ docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --
 docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats validate
 ```
 
-`fix` runs the AST-based source convention fixes, `gofumpt`, `goimports`, `golines`, and `golangci-lint run --fix`; it is required during implementation. The linter mirrors the compatible TypeScript conventions for modern APIs, explicit command output, structured logging, control-flow spacing, and `//` comments. An assignment stays attached to a following validation `if` when its condition reads an assigned value. Go syntax that has no TypeScript equivalent stays under the Go formatter and compiler. `validate` checks formatting and lint without editing source. A formatting diff exits nonzero before lint runs. [The version registry](../../../versions-registry/README.md) supplies the tools and base image versions generated into the runner Dockerfiles.
+`fix` runs the AST-based source convention fixes, `gofumpt`, `goimports`, `golines`, and `golangci-lint run --fix`; it is required during implementation. The linter mirrors the compatible TypeScript conventions for modern APIs, explicit command output, structured logging, control-flow spacing, and `//` comments. An assignment stays attached to a following validation `if` when its condition reads an assigned value. Go syntax that has no TypeScript equivalent stays under the Go formatter and compiler. `validate` checks formatting and lint without editing source. A formatting diff exits nonzero before lint runs. [The version registry](../../../dev-tools/versions-registry/README.md) supplies the tools and base image versions generated into the runner Dockerfiles.
 
 For module-source inspection or an additional compiler command, override the test runner entrypoint with `--entrypoint sh`. Keep source read-only and outputs under `/tmp` or the existing Docker cache paths. Production and development image targets are built with `docker build -f services/nats/Dockerfile --target embedded-runtime -t lixpi/nats-embedded .` and the same command with `--target development -t lixpi/nats-development`. Tool inventory runs inside the development image using `docker run --rm --entrypoint sh lixpi/nats-development -c 'go version && gopls version && dlv version && golangci-lint version'`.
 

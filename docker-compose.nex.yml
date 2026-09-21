@@ -1,0 +1,102 @@
+services:
+
+    lixpi-nex-1:
+        container_name: lixpi-nex-1
+        profiles: ["main"]
+        image: lixpi/nex
+        build:
+            dockerfile: services/nex/Dockerfile
+            context: .
+        environment:
+            # Force color output in the terminal, required for chalk.js to work
+            FORCE_COLOR: 1
+
+            # Pulumi/app config also consumed by the workload
+            ORG_NAME: ${ORG_NAME}
+            STAGE: ${STAGE}
+            ENVIRONMENT: ${ENVIRONMENT}
+
+            # AWS credentials, used only for local development
+            AWS_REGION: ${AWS_REGION}
+            AWS_PROFILE: ${AWS_PROFILE}
+
+            # DynamoDB config (the workload writes the AI_MODELS_LIST table)
+            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT}
+
+            # NEX node -> NATS connection. The client port (4222) is plain nats://
+            # locally (no TLS on 4222), so the Go nex client must use nats:// URLs.
+            NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
+            NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
+            NATS_FILE_CONVERSION_NKEY_SEED: ${NATS_FILE_CONVERSION_NKEY_SEED}
+            NATS_CHARACTER_FIDELITY_NKEY_SEED: ${NATS_CHARACTER_FIDELITY_NKEY_SEED}
+            NATS_JS_DOMAIN: lixpi
+            NEX_NAMESPACE: system
+            NEX_NODE_NAME: lixpi-nex-1
+
+            # nex stores its resource/config dir under $XDG_CONFIG_HOME/nex; point
+            # it at the persistent volume so it survives container restarts.
+            XDG_CONFIG_HOME: /data
+
+            # AI provider keys used by the models-sync workload
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE:-false}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
+            STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            # BytePlus ModelArk (Seedance) — forwarded for parity with the API/entrypoint key
+            # set (entrypoint.sh relays ARK_API_KEY to the nexlet). The models-sync workload
+            # injects Seedance statically and makes no BytePlus call, so this is future-proofing.
+            ARK_API_KEY: ${ARK_API_KEY:-}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
+
+        volumes:
+            - aws-config:/root/.aws:cached    # AWS SSO credentials
+            - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
+            - caddy-certs:/opt/nex/certs:ro    # Cluster CA (only needed when 4222 uses TLS, e.g. AWS)
+            - nex-1-data:/data                 # Persistent nex resource/config dir across restarts
+            - nex-workloads:/opt/nex/private-workloads:ro # Private repos place native workload binaries here
+            - ./services/nex/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
+
+            # Host packages, mounted READ-ONLY and outside the pnpm workspace root. The
+            # copy the service actually uses lives in the container's writable layer at
+            # /usr/src/service/packages/lixpi and is rsynced from here every second, so
+            # host edits reach a running service without a restart and pnpm can write
+            # each package's node_modules without ever touching the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
+
+        networks:
+            - nats
+
+        working_dir: /usr/src/service
+        stop_signal: SIGTERM
+        healthcheck:
+            test: ["CMD-SHELL", "pidof nex >/dev/null 2>&1 || exit 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            lixpi-nats-1:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-2:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-3:
+                condition: service_healthy
+                restart: true
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+
+volumes:
+    nex-1-data:    # Persistent nex resource/config dir for the NEX node
+    nex-workloads: # Shared native workload binary volume for private repos
+        name: lixpi-nex-workloads

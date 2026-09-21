@@ -4,10 +4,9 @@
 # documentation/development-workflow/SKILL-EXECUTION-GUIDE.md. The whole skills/ tree is bind-mounted at /skills
 # (docker-compose.lixpi-utils.yml), so a script edit applies on the next run with no rebuild.
 #
-# The image deliberately ships no skill dependencies of its own. Skill scripts stick to the Node
-# standard library; a skill that genuinely needs a package installs it into its own directory rather
-# than baking it into this image, which keeps one skill's dependencies out of every other skill's
-# runtime.
+# The shared setup UI reuses the dependency manifest from dev-tools/config-utils so it renders
+# with the same Clack and Chalk components as init-config. Skill scripts still ship their own
+# dependencies instead of adding them to this image.
 #
 # Node 24 runs TypeScript directly through native type stripping, so skill scripts are .ts files with
 # no tsconfig, no tsc, and no build step. Type annotations are erased at load; they are never checked.
@@ -21,6 +20,17 @@ ARG PNPM_VERSION
 # and forwards signals so a Ctrl-C on a long fetch actually stops the script instead of detaching it.
 RUN apk add --no-cache ca-certificates tini \
     && npm install -g "pnpm@${PNPM_VERSION}"
+
+WORKDIR /opt/lixpi-utils
+
+# Reuse the environment setup package as the shared terminal-UI runtime. The skill installer source
+# is bind-mounted by Compose, so UI edits apply immediately while dependency changes require a rebuild.
+COPY packages/lixpi/debug-tools/ts ./packages/lixpi/debug-tools/ts
+COPY packages/lixpi/constants ./packages/lixpi/constants
+COPY packages/lixpi/nats-subject-registry ./packages/lixpi/nats-subject-registry
+COPY dev-tools/config-utils/pnpm-workspace.yaml ./
+COPY dev-tools/config-utils/package.json ./
+RUN pnpm install --prod
 
 WORKDIR /skills
 

@@ -3,10 +3,10 @@ services:
         profiles: ["dev"]
         image: lixpi/go-quality-runner
         build:
-            context: ./services/go-quality-runner
+            context: ./dev-tools/go-quality-runner
         volumes:
-            - ./services/go-quality-runner/run-quality.sh:/usr/src/runner/run-quality.sh:ro,cached
-            - ./services/go-quality-runner/golangci.yml:/usr/src/runner/golangci.yml:ro,cached
+            - ./dev-tools/go-quality-runner/run-quality.sh:/usr/src/runner/run-quality.sh:ro,cached
+            - ./dev-tools/go-quality-runner/golangci.yml:/usr/src/runner/golangci.yml:ro,cached
             - ./services/nats/go.mod:/usr/src/manifests/nats/go.mod:cached
             - ./services/nats/go.sum:/usr/src/manifests/nats/go.sum:cached
             - ./services/nats/cmd:/usr/src/service/nats/cmd:cached

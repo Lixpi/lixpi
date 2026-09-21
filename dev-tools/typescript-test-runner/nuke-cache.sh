@@ -12,7 +12,7 @@
 # run, cache and all.
 #
 # How to use:
-#   ./services/typescript-test-runner/nuke-cache.sh
+#   ./dev-tools/typescript-test-runner/nuke-cache.sh
 
 set -e
 

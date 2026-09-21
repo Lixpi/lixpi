@@ -1,6 +1,6 @@
 # @lixpi/usage-reporter
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 Provider request authorization, upper-bound usage estimates, measured provider usage, and helpers for inference-provider tariff metadata.
 

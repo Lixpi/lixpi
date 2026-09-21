@@ -17,7 +17,7 @@ The source separates three jobs. `shared` reads registry data and repository fil
 
 The update command resolves and reviews every selected dependency before it builds prospective data. Actual apply refuses changed dependencies whose release review is `unavailable`. It creates the native-file plan before writing the catalogs, so an unregistered or unsupported native declaration fails the command before an authoritative catalog change.
 
-Both commands are plain Node entry points. [`docker-compose.versions-registry.yml`](../../docker-compose.versions-registry.yml) supplies the repository mount, Node image, working directory, network policy, optional GitHub token, and entrypoint. The offline service has no network. The update service has network access because publisher resolution requires it.
+Both commands are plain Node entry points. [`docker-compose.versions-registry.yml`](../../../docker-compose.versions-registry.yml) supplies the repository mount, Node image, working directory, network policy, optional GitHub token, and entrypoint. The offline service has no network. The update service has network access because publisher resolution requires it.
 
 ## Repository and catalog access
 

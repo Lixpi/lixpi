@@ -19,7 +19,7 @@ services:
     lixpi-utils:
         image: lixpi/utils
         build:
-            dockerfile: services/lixpi-utils/Dockerfile
+            dockerfile: dev-tools/lixpi-utils/Dockerfile
             context: .
         init: false    # tini is the image's entrypoint already.
         volumes:
@@ -29,7 +29,7 @@ services:
             - ./skills:/skills:cached
 
             # Bind-mounted, not baked in, so entrypoint edits need no rebuild.
-            - ./services/lixpi-utils/run-skill.sh:/usr/local/bin/run-skill.sh:ro,cached
+            - ./dev-tools/lixpi-utils/run-skill.sh:/usr/local/bin/run-skill.sh:ro,cached
 
             # Shared pnpm store, for the rare skill that needs a dependency.
             # pnpm's store does its own locking, so concurrent one-shot
@@ -44,6 +44,25 @@ services:
             HTTPS_PROXY: ${HTTPS_PROXY:-}
             NO_PROXY: ${NO_PROXY:-}
         working_dir: /skills
+
+    # Interactive skill selection uses the same Clack prompt stack as init-config. The UI writes to
+    # stderr and returns its machine-readable selection through stdout, which setup-skills.sh applies
+    # on the host. The container never accesses user home directories or another project's Git data.
+    setup-skills:
+        image: lixpi/utils
+        init: false
+        volumes:
+            - ./skills:/skills:ro,cached
+            - ./dev-tools/config-utils/setup-skills.ts:/opt/lixpi-utils/setup-skills.ts:ro,cached
+        environment:
+            FORCE_COLOR: 1
+        working_dir: /opt/lixpi-utils
+        entrypoint:
+            - /sbin/tini
+            - --
+            - node
+            - --experimental-transform-types
+            - setup-skills.ts
 
 volumes:
     lixpi-utils-pnpm-store:

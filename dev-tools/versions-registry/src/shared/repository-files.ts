@@ -41,7 +41,7 @@ export class RepositoryFiles {
         ),
         '../..',
     )
-    readonly repositoryRoot = resolve(this.registryRoot, '..')
+    readonly repositoryRoot = resolve(this.registryRoot, '../..')
 
     private absoluteFrom(
         root: string,

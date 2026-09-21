@@ -7,7 +7,7 @@ description: Which inputs each NATS command needs, why the credentials differ, a
 
 The inputs depend on the command. A serving broker needs authentication configuration, its data volume and TLS files. A backup client needs a NATS address, its own identity and a snapshot directory. It does not need the broker's issuer keys or TLS installation directory. A restore client uses a separate operator identity because it creates stream state in the target account.
 
-For `serve`, [serve.go](../cmd/lixpi-nats/serve.go) reads the environment and prepares identity and certificate paths before parsing [nats-server.conf](../nats-server.conf). The configuration file defines listeners, accounts, JetStream and clustering. The Go runtime then attaches auth callout, placement tags and its TLS callback. [Docker Compose](../../../docker-compose.yml) and [the Pulumi NATS resource](../../../infrastructure/pulumi/src/resources/NATS-cluster/NATS-cluster.ts) supply the values for their environments.
+For `serve`, [serve.go](../cmd/lixpi-nats/serve.go) reads the environment and prepares identity and certificate paths before parsing [nats-server.conf](../nats-server.conf). The configuration file defines listeners, accounts, JetStream and clustering. The Go runtime then attaches auth callout, placement tags and its TLS callback. [The NATS Docker Compose partial](../../../docker-compose.nats.yml) and [the Pulumi NATS resource](../../../infrastructure/pulumi/src/resources/NATS-cluster/NATS-cluster.ts) supply the values for their environments.
 
 The tables below describe the executable's inputs. If you change one of those inputs in code, update the Compose and deployment callers too; editing this reference alone does not configure a running container.
 

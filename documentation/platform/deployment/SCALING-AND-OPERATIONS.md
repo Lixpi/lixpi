@@ -69,7 +69,7 @@ If a stack needs to handle higher real-world load, the steps in order of impact 
 
 ## Environments and Stacks
 
-Every developer and environment has its own full AWS copy — there are no shared environments. A stack is bootstrapped by the init-script ([`infrastructure/init-script/`](../../../infrastructure/init-script/)) which:
+Every developer and environment has its own full AWS copy — there are no shared environments. A stack is bootstrapped by the config utility ([`dev-tools/config-utils/`](../../../dev-tools/config-utils/)) which:
 
 1. Prompts for a name and environment type (`local`, `dev`, `production`).
 2. Generates fresh NATS NKeys + XKeys + passwords using `@nats-io/nkeys`.
@@ -83,7 +83,7 @@ From there the top-level scripts (`start.sh`, `init-infrastructure.sh`) pick up 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-    Dev["Developer"] -->|init-infrastructure.sh| Init[init-script Docker]
+    Dev["Developer"] -->|init-infrastructure.sh| Init[config-utils Docker]
     Init -->|writes| ENV[".env.{name}-{env}"]
     Dev -->|pulumi preview| Pulumi[Pulumi Docker]
     Pulumi -->|reads| ENV

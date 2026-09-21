@@ -31,7 +31,7 @@ Each prefix has a `_NKEY_SEED` held by its client and a `_NKEY_PUBLIC` included 
 
 ## Add a deployment-owned service
 
-Generate a user NKey pair using the Dockerized environment setup or an approved containerized NKey tool. Keep the seed in the client's deployment secrets. Supply the public half and a unique service ID to `NATS_SERVICE_AUTH_REGISTRATIONS` in deployment configuration, then save the environment through [init-config's normal partial-update flow](../../infrastructure/init-script/README.md). That save prepares the signed manifest for API startup.
+Generate a user NKey pair using the Dockerized environment setup or an approved containerized NKey tool. Keep the seed in the client's deployment secrets. Supply the public half and a unique service ID to `NATS_SERVICE_AUTH_REGISTRATIONS` in deployment configuration, then save the environment through [init-config's normal partial-update flow](../../dev-tools/config-utils/README.md). That save prepares the signed manifest for API startup.
 
 A registration declares its application account and complete publish/subscribe grants. Deployment configures the authority's permitted accounts; the broker creates them at startup. SYS, CALLOUT and REGISTRATION cannot be application targets. A separate application's initializer can submit its own signed manifest using a separately configured authority.
 

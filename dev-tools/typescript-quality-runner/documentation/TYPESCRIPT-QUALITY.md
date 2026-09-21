@@ -9,7 +9,7 @@ The `lixpi-typescript-quality-runner` container owns TypeScript, HTML, Sass, and
 
 Never run `node`, `npm`, `npx`, `pnpm`, `pnpx`, `dprint`, Oxlint, Stylelint, TypeScript files, package scripts, linters, or formatters on the host. Run every TypeScript and stylesheet quality command through Docker Compose from the repository root.
 
-Direct quality-runner dependency versions are generated from the root [version registry](../../../versions-registry/README.md). Each invocation installs those selections with `pnpm install --no-lockfile` inside the isolated tool workspace. The pnpm store and every `node_modules` directory are named Docker volumes; the runner never creates a lockfile, package store, or `node_modules` directory in the host checkout. Rebuild the base image when its Dockerfile changes:
+Direct quality-runner dependency versions are generated from the [version registry](../../../dev-tools/versions-registry/README.md). Each invocation installs those selections with `pnpm install --no-lockfile` inside the isolated tool workspace. The pnpm store and every `node_modules` directory are named Docker volumes; the runner never creates a lockfile, package store, or `node_modules` directory in the host checkout. Rebuild the base image when its Dockerfile changes:
 
 ```bash
 docker compose --profile dev --profile main build --no-cache lixpi-typescript-quality-runner

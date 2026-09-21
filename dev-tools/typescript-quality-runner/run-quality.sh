@@ -189,7 +189,7 @@ run_domain() {
             run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/ai-model-registry","targetDirectory":"services/ai-model-registry/src/client"}]' services/ai-model-registry/src services/ai-model-registry/vite.config.ts services/ai-model-registry/vitest.config.ts
             ;;
         infrastructure)
-            run_action "$action" '[]' infrastructure/init-script/setup-env.ts infrastructure/pulumi/src
+            run_action "$action" '[]' dev-tools/config-utils/setup-env.ts dev-tools/config-utils/setup-skills.ts infrastructure/pulumi/src
             ;;
         random-useful-things)
             run_action "$action" '[]' random-useful-things
@@ -226,7 +226,8 @@ run_all() {
         services/ai-model-registry/src \
         services/ai-model-registry/vite.config.ts \
         services/ai-model-registry/vitest.config.ts \
-        infrastructure/init-script/setup-env.ts \
+        dev-tools/config-utils/setup-env.ts \
+        dev-tools/config-utils/setup-skills.ts \
         infrastructure/pulumi/src \
         random-useful-things \
         "$tool_dir/src" \

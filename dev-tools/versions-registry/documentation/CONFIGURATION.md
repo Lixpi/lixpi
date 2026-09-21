@@ -124,7 +124,7 @@ Changing a publisher or repository mapping belongs in those source modules, not 
 
 ## Command containers
 
-[`docker-compose.versions-registry.yml`](../../docker-compose.versions-registry.yml) defines two services:
+[`docker-compose.versions-registry.yml`](../../../docker-compose.versions-registry.yml) defines two services:
 
 | Service | Network | Entrypoint | Purpose |
 |---|---|---|---|

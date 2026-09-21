@@ -2,6 +2,8 @@
 
 Interactive setup wizard for creating or updating `.env` configuration files for Lixpi development. `init-config.sh` and `init-config.bat` launch the same Dockerized wizard.
 
+The directory also contains `setup-skills.ts`, which uses the same Clack and Chalk prompt stack for the project skill installer. [`setup-skills.sh`](../../setup-skills.sh) runs that UI through the `lixpi-utils` image, captures the confirmed selection from stdout, and applies the selected links on the host.
+
 The first prompt offers **Generate new** or **Edit existing**. Editing lists the available `.env.*` files in the project root, then asks whether to override the selected file completely or make partial updates. Complete replacement writes to the selected filename. Generating a new configuration asks for the developer name and environment; a matching filename triggers the same update choice before any further settings or credential generation.
 
 A complete override runs the configuration wizard with fresh values and NATS credentials. Partial editing uses the same wizard and asks whether to edit each group. Skipping a group preserves its values and shows no child prompts. Within a selected group, the existing conditional flow applies: local DynamoDB skips the custom endpoint, LocalAuth0 skips real Auth0 credentials, disabled AWS setup skips its fields, and Bedrock skips direct provider keys.
@@ -14,7 +16,7 @@ Every save also prepares the signed NATS registration from the resulting service
 
 To update an existing configuration, run `init-config`, choose **Edit existing**, select its file and choose **Partial update**. Keep the values you want to retain and confirm the save. If only application permission code changed, you can skip every group; the save still derives the registration from the application code included in the setup image. Both launchers build that image before opening the wizard. API startup submits the saved registration automatically before opening its ordinary NATS connection.
 
-The template includes EC2 broker sizing and scaling bounds. `NATS_MIN_NODES`, `NATS_MAX_NODES` and `NATS_DESIRED_NODES` default to three; raising the maximum enables additional hosts under load. `NATS_EC2_INSTANCE_TYPE` defaults to `t3.small`. Existing clusters use the staged AZ-tag rollout described in the [NATS cluster README](../pulumi/src/resources/NATS-cluster/README.md) before changing `NATS_JETSTREAM_UNIQUE_TAG` to `az:`. `NATS_OPERATIONAL_ALERT_EMAIL` optionally subscribes an address to scaling alerts; AWS requires email confirmation. These deployment variables are literal template defaults and remain editable directly; partial wizard edits preserve their existing values.
+The template includes EC2 broker sizing and scaling bounds. `NATS_MIN_NODES`, `NATS_MAX_NODES` and `NATS_DESIRED_NODES` default to three; raising the maximum enables additional hosts under load. `NATS_EC2_INSTANCE_TYPE` defaults to `t3.small`. Existing clusters use the staged AZ-tag rollout described in the [NATS cluster README](../../infrastructure/pulumi/src/resources/NATS-cluster/README.md) before changing `NATS_JETSTREAM_UNIQUE_TAG` to `az:`. `NATS_OPERATIONAL_ALERT_EMAIL` optionally subscribes an address to scaling alerts; AWS requires email confirmation. These deployment variables are literal template defaults and remain editable directly; partial wizard edits preserve their existing values.
 
 ## What It Does
 

@@ -19,7 +19,7 @@ The commands below assume `.env` is already symlinked via `./set-env.sh` (see th
 
 Every invocation runs `pnpm install` before the test command, but this is normally fast, not a full reinstall: a shared `typescript-test-runner-pnpm-store` volume caches downloaded package content, and a `typescript-test-runner-node-modules-*` volume per workspace directory (domain root plus each bind-mounted `packages/lixpi/*` member) persists the linked `node_modules` output across runs, so `pnpm install` is normally an incremental no-op ("Already up to date") rather than a from-scratch install. Both volume groups are declared in `docker-compose.typescript-test-runner.yml`.
 
-If the cache is corrupt or keeps a stale workspace link after a dependency rename or removal, wipe it with `./services/typescript-test-runner/nuke-cache.sh`. The next run performs a clean install. Routine dependency changes do not need this because each invocation reconciles `node_modules` against the lockfile.
+If the cache is corrupt or keeps a stale workspace link after a dependency rename or removal, wipe it with `./dev-tools/typescript-test-runner/nuke-cache.sh`. The next run performs a clean install. Routine dependency changes do not need this because each invocation reconciles `node_modules` against the lockfile.
 
 Each service uses its own `package.json`, `pnpm-workspace.yaml`, and `vitest.config.ts`. The workspace manifest is mounted read-only in a staging directory and copied into the disposable workspace before `pnpm install`, so pnpm can record dependency build decisions without trying to replace a bind mount. The runner does not duplicate service configuration. Shared packages use the same copy-before-install pattern with `packages/lixpi/pnpm-workspace.yaml` so `workspace:*` dependencies resolve.
 
@@ -29,7 +29,7 @@ Use the same command for every configured service. The optional test path is rel
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
 ```
 
-The domain dispatcher in `services/typescript-test-runner/run-tests.sh` lists the available domains. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `init-config` separately.
+The domain dispatcher in `dev-tools/typescript-test-runner/run-tests.sh` lists the available domains. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `init-config` separately.
 
 The `nex` domain includes `workloads/nats-admission.runtime.test.ts`. Its opt-in application-cluster checks require NATS and LocalAuth0; set `LIXPI_NATS_AUTH_RUNTIME_TEST=true` and mount the selected local environment file read-only at `/run/nats-test.env`. They create and remove a unique Object Store bucket. `shared nats-subject-registry` verifies endpoint permission boundaries, user-scoped events, queues and declaration validation. Isolated Go admission tests are covered in [Go Testing and Tooling](GO.md).
 

@@ -1,0 +1,170 @@
+x-nats-auth-environment: &nats-auth-environment
+    ENVIRONMENT: ${ENVIRONMENT}
+    NATS_AUTH_NKEY_ISSUER_SEED: ${NATS_AUTH_NKEY_ISSUER_SEED}
+    NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
+    NATS_REGISTRATION_AUTHORITIES: ${NATS_REGISTRATION_AUTHORITIES}
+    NATS_REGISTRATION_PASSWORD: ${NATS_REGISTRATION_PASSWORD}
+    NATS_REGISTRATION_REPLICAS: "3"
+    GOMEMLIMIT: 768MiB
+    NATS_PERSIST_SERVER_NAME: "true"
+
+services:
+
+    lixpi-nats-1:
+        container_name: lixpi-nats-1
+        profiles: ["main"]
+        image: lixpi/nats
+        build:
+            dockerfile: services/nats/Dockerfile
+            context: .
+        stop_grace_period: 120s
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
+        ports:
+            - 4222:4222
+            - 8222:8222
+            - 9222:443    # websockets port (host:container)
+        environment:
+            <<: *nats-auth-environment
+            # NATS config
+            NATS_CLUSTER_NAME: Lixpi-NATS
+            NATS_SERVER_NAME: Lixpi-NATS-1  # Explicit server name for each instance
+            NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
+            NATS_TRACE_MODE: ${NATS_TRACE_MODE}
+            NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
+            NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
+            NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
+            NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
+            # Certificate management (always required for TLS)
+            NATS_CERT_FILE: "/opt/nats/certs/localhost.crt"
+            NATS_KEY_FILE: "/opt/nats/certs/localhost.key"
+            NATS_CA_FILE: "/opt/nats/certs/ca.crt"
+            # Domain name for WebSocket origins
+            DOMAIN_NAME: ${DOMAIN_NAME}
+        volumes:
+            - caddy-certs:/opt/nats/certs:ro  # Read-only certificates from Caddy
+            - nats-1-data:/data                # Persistent JetStream storage
+        command: [
+            "--config", "/opt/nats/nats-server.conf",
+            "--routes", "nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-1:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-2:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-3:6222"
+        ]
+        networks:
+            - nats
+        healthcheck:
+            test: ["CMD", "/usr/local/bin/lixpi-nats", "health", "ready"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
+
+    lixpi-nats-2:
+        container_name: lixpi-nats-2
+        profiles: ["main"]
+        image: lixpi/nats-2
+        pull_policy: never
+        build:
+            dockerfile: services/nats/Dockerfile
+            context: .
+        stop_grace_period: 120s
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
+        environment:
+            <<: *nats-auth-environment
+            # NATS config
+            NATS_CLUSTER_NAME: Lixpi-NATS
+            NATS_SERVER_NAME: Lixpi-NATS-2  # Explicit server name for each instance
+            NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
+            NATS_TRACE_MODE: ${NATS_TRACE_MODE}
+            NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
+            NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
+            NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
+            NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
+            # Certificate management (always required for TLS)
+            NATS_CERT_FILE: "/opt/nats/certs/localhost.crt"
+            NATS_KEY_FILE: "/opt/nats/certs/localhost.key"
+            NATS_CA_FILE: "/opt/nats/certs/ca.crt"
+            # Domain name for WebSocket origins
+            DOMAIN_NAME: ${DOMAIN_NAME}
+        volumes:
+            - caddy-certs:/opt/nats/certs:ro  # Read-only certificates from Caddy
+            - nats-2-data:/data                # Persistent JetStream storage
+        command: [
+            "--config", "/opt/nats/nats-server.conf",
+            "--routes", "nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-1:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-2:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-3:6222"
+        ]
+        networks:
+            - nats
+        healthcheck:
+            test: ["CMD", "/usr/local/bin/lixpi-nats", "health", "ready"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
+
+    lixpi-nats-3:
+        container_name: lixpi-nats-3
+        profiles: ["main"]
+        image: lixpi/nats-3
+        pull_policy: never
+        build:
+            dockerfile: services/nats/Dockerfile
+            context: .
+        stop_grace_period: 120s
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
+        environment:
+            <<: *nats-auth-environment
+            # NATS config
+            NATS_CLUSTER_NAME: Lixpi-NATS
+            NATS_SERVER_NAME: Lixpi-NATS-3  # Explicit server name for each instance
+            NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
+            NATS_TRACE_MODE: ${NATS_TRACE_MODE}
+            NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
+            NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
+            NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
+            NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
+            # Certificate management (always required for TLS)
+            NATS_CERT_FILE: "/opt/nats/certs/localhost.crt"
+            NATS_KEY_FILE: "/opt/nats/certs/localhost.key"
+            NATS_CA_FILE: "/opt/nats/certs/ca.crt"
+            # Domain name for WebSocket origins
+            DOMAIN_NAME: ${DOMAIN_NAME}
+        volumes:
+            - caddy-certs:/opt/nats/certs:ro  # Read-only certificates from Caddy
+            - nats-3-data:/data                # Persistent JetStream storage
+        command: [
+            "--config", "/opt/nats/nats-server.conf",
+            "--routes", "nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-1:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-2:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-3:6222"
+        ]
+        networks:
+            - nats
+        healthcheck:
+            test: ["CMD", "/usr/local/bin/lixpi-nats", "health", "ready"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
+
+    lixpi-nats-cli:
+        container_name: lixpi-nats-cli
+        profiles: ["dev"]
+        image: natsio/nats-box:0.19.7
+        command: >
+            -c "sleep infinity"
+        stop_signal: SIGTERM
+        networks:
+            - nats
+
+volumes:
+    nats-1-data:   # Persistent JetStream storage for NATS node 1
+    nats-2-data:   # Persistent JetStream storage for NATS node 2
+    nats-3-data:   # Persistent JetStream storage for NATS node 3

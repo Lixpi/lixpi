@@ -1,6 +1,6 @@
 # Lixpi Constants
 
-TypeScript dependency declarations are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before reinstalling dependencies.
+TypeScript dependency declarations are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before reinstalling dependencies.
 
 Shared runtime contracts for TypeScript services and the browser.
 

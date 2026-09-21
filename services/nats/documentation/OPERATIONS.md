@@ -24,7 +24,7 @@ This command starts the configured application cluster and its certificate depen
 
 ## Applying registration changes
 
-The normal [init-config wizard](../../../infrastructure/init-script/README.md) derives and signs the application manifest whenever it saves a new configuration or a partial update. For an existing environment, choose **Edit existing** and **Partial update**; keep existing credentials unless you intend to replace them. After changing endpoint permission code, a partial save with every group skipped still prepares the updated declaration. API startup submits it automatically. The private registration authority seed stays in deployment configuration, outside the API and broker containers.
+The normal [init-config wizard](../../../dev-tools/config-utils/README.md) derives and signs the application manifest whenever it saves a new configuration or a partial update. For an existing environment, choose **Edit existing** and **Partial update**; keep existing credentials unless you intend to replace them. After changing endpoint permission code, a partial save with every group skipped still prepares the updated declaration. API startup submits it automatically. The private registration authority seed stays in deployment configuration, outside the API and broker containers.
 
 The broker accepts a repeated identical manifest without changing its revision. A changed declaration requires a higher application version and an atomic registry revision match. An older API replica cannot replace a newer declaration with its startup payload. Give replicas the same approved manifest during rollout; a replica carrying an obsolete manifest fails startup.
 

@@ -22,7 +22,7 @@ Prohibited, without exception:
 - Adding a skill script that expects a host toolchain rather than this container.
 - Pasting a skill script's body into another interpreter to sidestep the container.
 
-If a skill needs something the container doesn't have, add it to `services/lixpi-utils/Dockerfile` and rebuild. Do not work around it locally.
+If a skill needs something the container doesn't have, add it to `dev-tools/lixpi-utils/Dockerfile` and rebuild. Do not work around it locally.
 
 ## Running a skill script
 
@@ -62,7 +62,7 @@ Editing a skill script or `run-skill.sh` needs no rebuild. Both are bind-mounted
 | Network | Outbound HTTPS, with `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` passed through from the host if set. |
 | Signals | `tini` is PID 1, so Ctrl-C stops a long-running script instead of detaching it. |
 
-The image ships no skill dependencies of its own. A skill that genuinely needs a package installs it into its own directory against the shared `lixpi-utils-pnpm-store` volume, which keeps one skill's dependencies out of every other skill's runtime. Prefer the Node standard library: every skill in the tree today needs nothing else.
+The image includes the Clack and Chalk packages used by the Dockerized `setup-skills.sh` prompt UI. Those packages live under the utility setup runtime and are not a dependency surface for skill scripts. A skill that genuinely needs a package installs it into its own directory against the shared `lixpi-utils-pnpm-store` volume, which keeps one skill's dependencies out of every other skill's runtime. Prefer the Node standard library: every skill in the tree today needs nothing else.
 
 ## Adding a script to a skill
 

@@ -26,6 +26,8 @@ The installer is interactive and takes no arguments. It first asks for the insta
 
 The harness page supports multiple selections. Move with the arrow keys, toggle Codex, Claude Code, Cursor, or GitHub Copilot with Space, then press Enter. The skill page uses the same controls and shows `All skills` beside every individual skill, so you can choose all skills or a subset in one step.
 
+The prompt UI runs inside the `lixpi-utils` container and uses the same Clack components as `init-config.sh`. It renders through stderr and returns the confirmed selection through stdout. The host launcher validates that value and creates the selected links. The container does not mount the user's home directory or the selected project's Git metadata.
+
 | Harness | Global directory | Project directory |
 |---------|------------------|-------------------|
 | Codex | `~/.agents/skills/` | `.agents/skills/` |
@@ -47,7 +49,7 @@ Agents must not run project setup, package scripts, build scripts, docs builds, 
 
 If the Dockerized command is not documented or the required container is unavailable, agents stop and ask instead of falling back to a host command.
 
-TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only commands in [`TYPESCRIPT-QUALITY.md`](../../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md). Agents select the affected service or shared package instead of scanning unrelated workspaces. They must not invoke Oxfmt, dprint, Oxlint, Stylelint, TypeScript source, Node, or a package manager on the host.
+TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only commands in [`TYPESCRIPT-QUALITY.md`](../../dev-tools/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md). Agents select the affected service or shared package instead of scanning unrelated workspaces. They must not invoke Oxfmt, dprint, Oxlint, Stylelint, TypeScript source, Node, or a package manager on the host.
 
 ## Adding Or Updating A Skill
 

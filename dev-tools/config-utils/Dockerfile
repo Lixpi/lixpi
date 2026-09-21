@@ -13,13 +13,13 @@ WORKDIR /app
 COPY packages/lixpi/debug-tools/ts ./packages/lixpi/debug-tools/ts
 COPY packages/lixpi/constants ./packages/lixpi/constants
 COPY packages/lixpi/nats-subject-registry ./packages/lixpi/nats-subject-registry
-COPY infrastructure/init-script/pnpm-workspace.yaml ./
-COPY infrastructure/init-script/package.json ./
+COPY dev-tools/config-utils/pnpm-workspace.yaml ./
+COPY dev-tools/config-utils/package.json ./
 RUN pnpm install --prod
 
 # Copy source files
-COPY infrastructure/init-script/setup-env.ts ./
-COPY infrastructure/init-script/templates ./templates
+COPY dev-tools/config-utils/setup-env.ts ./
+COPY dev-tools/config-utils/templates ./templates
 
 # Set environment for colored output
 ENV FORCE_COLOR=1

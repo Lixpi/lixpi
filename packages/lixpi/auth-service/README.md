@@ -1,6 +1,6 @@
 # @lixpi/auth-service
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 Unified authentication library for JWT and NKey token verification. Provides a single source of truth for token validation across all Lixpi services.
 

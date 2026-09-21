@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
 #
-# Installs this repository's canonical skills for agent discovery.
-#
-# Run without arguments in an interactive terminal:
-#   ./setup-skills.sh
-#
-# The installer asks for the installation scope, target harnesses, and skills.
-# Generated discovery links are local configuration and are not tracked by this
-# repository. Windows needs Developer Mode or an elevated shell to create
-# symbolic links.
+# Opens the Dockerized skill installer UI, then applies its selection on the host.
 
 set -euo pipefail
 
 LIXPI_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 SKILLS_ROOT="${LIXPI_ROOT}/skills"
+COMPOSE_FILE="${LIXPI_ROOT}/docker-compose.lixpi-utils.yml"
 
 HARNESS_NAMES=(
     "Codex"
@@ -36,47 +29,35 @@ GLOBAL_HARNESS_SKILL_DIRS=(
     "${HOME}/.copilot/skills"
 )
 
-CHECKBOX_RESULT_INDICES=()
-CURSOR_HIDDEN=0
+TERMINAL_STATE=""
 
-hide_cursor() {
-    if [[ "${CURSOR_HIDDEN}" -eq 0 ]]; then
-        printf '\033[?25l'
-        CURSOR_HIDDEN=1
+cleanup() {
+    if [[ -n "${TERMINAL_STATE}" ]]; then
+        stty "${TERMINAL_STATE}" 2>/dev/null || true
+        TERMINAL_STATE=""
     fi
 }
 
-restore_cursor() {
-    if [[ "${CURSOR_HIDDEN}" -eq 1 ]]; then
-        printf '\033[?25h'
-        CURSOR_HIDDEN=0
-    fi
-}
-
-fail() {
-    restore_cursor
-    printf 'Error: %s\n' "$1" >&2
-    exit 1
-}
-
-handle_interrupt() {
-    restore_cursor
-    printf '\nInstallation cancelled.\n' >&2
+handle_signal() {
+    trap - EXIT
+    cleanup
     exit 130
 }
 
-trap restore_cursor EXIT
-trap handle_interrupt INT TERM
+fail() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
 
 resolve_repository() {
     local supplied_path="$1"
     local repository_root
 
-    [[ -n "${supplied_path}" ]] || fail "No repository path was provided."
-    [[ -d "${supplied_path}" ]] || fail "Not a directory: ${supplied_path}"
+    [[ -n "${supplied_path}" ]] || return 1
+    [[ -d "${supplied_path}" ]] || return 1
 
     repository_root="$(git -C "${supplied_path}" rev-parse --show-toplevel 2>/dev/null)" \
-        || fail "Not inside a Git repository: ${supplied_path}"
+        || return 1
     (CDPATH= cd -- "${repository_root}" && pwd -P)
 }
 
@@ -136,135 +117,6 @@ add_local_git_exclude() {
     fi
 }
 
-checkbox_menu() {
-    local title="$1"
-    local has_all_option="$2"
-    shift 2
-
-    local options=("$@")
-    local selected=()
-    local option_count="${#options[@]}"
-    local current_index=0
-    local line_count=$((option_count + 3))
-    local message=""
-    local key
-    local key_rest
-    local index
-    local selected_count
-    local all_selected
-    local next_value
-
-    CHECKBOX_RESULT_INDICES=()
-
-    index=0
-    while [[ "${index}" -lt "${option_count}" ]]; do
-        selected+=(0)
-        index=$((index + 1))
-    done
-
-    hide_cursor
-
-    while true; do
-        printf '%s\n' "${title}"
-        printf 'Use Up/Down to move, Space to toggle, and Enter to continue.\n'
-
-        index=0
-        while [[ "${index}" -lt "${option_count}" ]]; do
-            if [[ "${index}" -eq "${current_index}" ]]; then
-                printf '> '
-            else
-                printf '  '
-            fi
-
-            if [[ "${selected[${index}]}" -eq 1 ]]; then
-                printf '[x] %s\n' "${options[${index}]}"
-            else
-                printf '[ ] %s\n' "${options[${index}]}"
-            fi
-            index=$((index + 1))
-        done
-
-        printf '%s\n' "${message:- }"
-        message=""
-
-        key=""
-        IFS= read -rsn1 key || fail "Unable to read an interactive selection."
-        if [[ "${key}" == $'\033' ]]; then
-            key_rest=""
-            IFS= read -rsn2 key_rest || true
-            key="${key}${key_rest}"
-        fi
-
-        printf '\033[%sA\033[J' "${line_count}"
-
-        case "${key}" in
-            $'\033[A'|k)
-                if [[ "${current_index}" -eq 0 ]]; then
-                    current_index=$((option_count - 1))
-                else
-                    current_index=$((current_index - 1))
-                fi
-                ;;
-            $'\033[B'|j)
-                current_index=$(((current_index + 1) % option_count))
-                ;;
-            ' ')
-                if [[ "${has_all_option}" -eq 1 && "${current_index}" -eq 0 ]]; then
-                    if [[ "${selected[0]}" -eq 1 ]]; then
-                        next_value=0
-                    else
-                        next_value=1
-                    fi
-
-                    index=0
-                    while [[ "${index}" -lt "${option_count}" ]]; do
-                        selected[${index}]="${next_value}"
-                        index=$((index + 1))
-                    done
-                else
-                    if [[ "${selected[${current_index}]}" -eq 1 ]]; then
-                        selected[${current_index}]=0
-                    else
-                        selected[${current_index}]=1
-                    fi
-
-                    if [[ "${has_all_option}" -eq 1 ]]; then
-                        all_selected=1
-                        index=1
-                        while [[ "${index}" -lt "${option_count}" ]]; do
-                            if [[ "${selected[${index}]}" -ne 1 ]]; then
-                                all_selected=0
-                                break
-                            fi
-                            index=$((index + 1))
-                        done
-                        selected[0]="${all_selected}"
-                    fi
-                fi
-                ;;
-            '')
-                selected_count=0
-                index=0
-                while [[ "${index}" -lt "${option_count}" ]]; do
-                    if [[ "${selected[${index}]}" -eq 1 ]]; then
-                        CHECKBOX_RESULT_INDICES+=("${index}")
-                        selected_count=$((selected_count + 1))
-                    fi
-                    index=$((index + 1))
-                done
-
-                if [[ "${selected_count}" -gt 0 ]]; then
-                    restore_cursor
-                    return 0
-                fi
-
-                CHECKBOX_RESULT_INDICES=()
-                message="Select at least one option."
-                ;;
-        esac
-    done
-}
-
 harness_directory_for() {
     local harness_index="$1"
 
@@ -275,64 +127,75 @@ harness_directory_for() {
     fi
 }
 
+trap cleanup EXIT
+trap handle_signal INT TERM HUP
+
 [[ "$#" -eq 0 ]] || fail "This installer is interactive and does not accept arguments."
 [[ -t 0 && -t 1 ]] || fail "Run this installer in an interactive terminal."
 [[ -d "${SKILLS_ROOT}" ]] || fail "No canonical skills directory exists at ${SKILLS_ROOT}."
+[[ -f "${COMPOSE_FILE}" ]] || fail "Missing Docker Compose file: ${COMPOSE_FILE}."
 
-SKILL_DIRECTORIES=()
-SKILL_NAMES=()
-while IFS= read -r skill_directory; do
-    [[ -f "${skill_directory}/SKILL.md" ]] || fail "Skill directory has no SKILL.md: ${skill_directory}"
-    SKILL_DIRECTORIES+=("$(CDPATH= cd -- "${skill_directory}" && pwd -P)")
-    SKILL_NAMES+=("${skill_directory##*/}")
-done < <(find "${SKILLS_ROOT}" -mindepth 1 -maxdepth 1 -type d -print | LC_ALL=C sort)
-
-[[ "${#SKILL_DIRECTORIES[@]}" -gt 0 ]] || fail "No skills were found under ${SKILLS_ROOT}."
+docker compose -f "${COMPOSE_FILE}" build lixpi-utils
+TERMINAL_STATE="$(stty -g)"
+stty -icanon -echo min 1 time 0
+SELECTION_PLAN="$(
+    docker compose -f "${COMPOSE_FILE}" run --rm --no-deps -i -T \
+        -e "LIXPI_HOST_ROOT=${LIXPI_ROOT}" \
+        setup-skills < /dev/tty
+)"
+stty "${TERMINAL_STATE}"
+TERMINAL_STATE=""
 
 INSTALL_SCOPE=""
-while [[ -z "${INSTALL_SCOPE}" ]]; do
-    printf 'Install skills globally or for a specific project? [G/p] (default: global): '
-    scope_answer=""
-    IFS= read -r scope_answer || fail "Unable to read the installation scope."
+PROJECT_ROOT=""
+SELECTED_HARNESS_INDICES=()
+SELECTED_SKILL_DIRECTORIES=()
 
-    case "${scope_answer}" in
-        ''|g|G|global|Global|GLOBAL)
-            INSTALL_SCOPE="global"
+while IFS='=' read -r plan_key plan_value; do
+    case "${plan_key}" in
+        SCOPE)
+            [[ -z "${INSTALL_SCOPE}" ]] || fail "The installation plan contains more than one scope."
+            INSTALL_SCOPE="${plan_value}"
             ;;
-        p|P|project|Project|PROJECT)
-            INSTALL_SCOPE="project"
+        PROJECT_PATH)
+            PROJECT_ROOT="${plan_value}"
+            ;;
+        HARNESS)
+            case "${plan_value}" in
+                0|1|2|3) SELECTED_HARNESS_INDICES+=("${plan_value}") ;;
+                *) fail "The installation plan contains an unknown harness: ${plan_value}." ;;
+            esac
+            ;;
+        SKILL)
+            [[ "${plan_value}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] \
+                || fail "The installation plan contains an invalid skill name: ${plan_value}."
+            skill_directory="${SKILLS_ROOT}/${plan_value}"
+            [[ -d "${skill_directory}" && -f "${skill_directory}/SKILL.md" ]] \
+                || fail "The selected skill does not exist: ${plan_value}."
+            SELECTED_SKILL_DIRECTORIES+=("$(CDPATH= cd -- "${skill_directory}" && pwd -P)")
+            ;;
+        '')
             ;;
         *)
-            printf 'Enter G for global or P for a specific project.\n'
+            fail "The installation plan contains an unknown field: ${plan_key}."
             ;;
     esac
-done
+done <<< "${SELECTION_PLAN}"
 
-PROJECT_ROOT=""
-if [[ "${INSTALL_SCOPE}" == "project" ]]; then
-    printf 'Project path [%s]: ' "${LIXPI_ROOT}"
-    project_path=""
-    IFS= read -r project_path || fail "Unable to read the project path."
-    [[ -n "${project_path}" ]] || project_path="${LIXPI_ROOT}"
-    PROJECT_ROOT="$(resolve_repository "${project_path}")"
-fi
+case "${INSTALL_SCOPE}" in
+    global)
+        [[ -z "${PROJECT_ROOT}" ]] || fail "A global installation plan cannot contain a project path."
+        ;;
+    project)
+        PROJECT_ROOT="$(resolve_repository "${PROJECT_ROOT}")" \
+            || fail "The selected project path is not inside a Git repository."
+        ;;
+    *)
+        fail "The installation plan does not contain a valid scope."
+        ;;
+esac
 
-checkbox_menu "Select harnesses" 0 "${HARNESS_NAMES[@]}"
-SELECTED_HARNESS_INDICES=("${CHECKBOX_RESULT_INDICES[@]}")
-
-SKILL_OPTIONS=("All skills")
-for skill_name in "${SKILL_NAMES[@]}"; do
-    SKILL_OPTIONS+=("${skill_name}")
-done
-
-checkbox_menu "Select all skills or choose individual skills" 1 "${SKILL_OPTIONS[@]}"
-SELECTED_SKILL_DIRECTORIES=()
-for selected_index in "${CHECKBOX_RESULT_INDICES[@]}"; do
-    if [[ "${selected_index}" -gt 0 ]]; then
-        SELECTED_SKILL_DIRECTORIES+=("${SKILL_DIRECTORIES[$((selected_index - 1))]}")
-    fi
-done
-
+[[ "${#SELECTED_HARNESS_INDICES[@]}" -gt 0 ]] || fail "No harnesses were selected."
 [[ "${#SELECTED_SKILL_DIRECTORIES[@]}" -gt 0 ]] || fail "No skills were selected."
 
 HAS_CONFLICTS=0
@@ -362,7 +225,8 @@ for harness_index in "${SELECTED_HARNESS_INDICES[@]}"; do
     done
 done
 
-[[ "${HAS_CONFLICTS}" -eq 0 ]] || fail "No files were changed. Resolve the conflicts above and run the setup again."
+[[ "${HAS_CONFLICTS}" -eq 0 ]] \
+    || fail "No files were changed. Resolve the conflicts above and run the setup again."
 
 CREATED_LINKS=0
 EXISTING_LINKS=0

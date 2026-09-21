@@ -1,7 +1,7 @@
 
 # API
 
-The [version registry](../../versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
+The [version registry](../../dev-tools/versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
 
 Organization Blob bytes live in native NATS Object Store buckets named `blobs-<organization>-files`. Document steps, pipeline events, Capability run events and maintenance jobs use native JetStream streams and consumers. The API uses `@lixpi/nats-service` directly for object reads/writes, event publication and replay. Domain metadata remains in DynamoDB. See [Data Storage](../../documentation/platform/DATA-STORAGE.md) for the data model and [NATS Cluster](../../documentation/platform/deployment/NATS-CLUSTER.md) for replication, retained volumes, snapshots and recovery.
 

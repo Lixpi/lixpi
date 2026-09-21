@@ -5,7 +5,7 @@ description: Docker commands for release review, apply, exact selections, drift 
 
 # Dependency Version Registry Operations
 
-Run every registry command from the repository root through [`docker-compose.versions-registry.yml`](../../docker-compose.versions-registry.yml). The offline service checks or synchronizes committed declarations. The update service contacts publishers and requires a release review before it changes a selected release.
+Run every registry command from the repository root through [`docker-compose.versions-registry.yml`](../../../docker-compose.versions-registry.yml). The offline service checks or synchronizes committed declarations. The update service contacts publishers and requires a release review before it changes a selected release.
 
 [Configuration](CONFIGURATION.md) defines catalogs, selectors, references, and container inputs. [Architecture](ARCHITECTURE.md) explains what each command does before it writes.
 
@@ -82,7 +82,7 @@ Check the code and deployment surfaces that use the dependency. Common examples 
 - peer dependency and package-manager requirements;
 - provider SDK request shapes, parameters, model compatibility, and generated types.
 
-If an SDK update changes AI provider requests, defaults, parameters, compatibility, or model handling, follow the [AI Model Registry contract](../../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) in the same implementation iteration. A dependency version change does not override that code/data synchronization requirement.
+If an SDK update changes AI provider requests, defaults, parameters, compatibility, or model handling, follow the [AI Model Registry contract](../../../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) in the same implementation iteration. A dependency version change does not override that code/data synchronization requirement.
 
 Update the affected repository code before actual apply when the release review identifies a migration. The update command synchronizes version declarations; it does not rewrite application APIs for a new dependency major.
 
@@ -137,7 +137,7 @@ After registration, run `sync` and `check`. Discovery automatically includes a n
 
 Changing `go.mod` selections can require Go to recompute minimal-version selection and `go.sum`. The registry cannot calculate that graph because its standalone Node container does not run Go tooling.
 
-Use the appropriate Dockerized module-maintenance command from [Go Testing and Tooling](../../documentation/code-quality/testing/GO.md). If Go raises or adds a requirement in `go.mod`, update the corresponding `go.modules` selection and run registry synchronization again. `go.sum` remains native checksum metadata and does not become a version catalog.
+Use the appropriate Dockerized module-maintenance command from [Go Testing and Tooling](../../../documentation/code-quality/testing/GO.md). If Go raises or adds a requirement in `go.mod`, update the corresponding `go.modules` selection and run registry synchronization again. `go.sum` remains native checksum metadata and does not become a version catalog.
 
 ## Check repository drift
 
