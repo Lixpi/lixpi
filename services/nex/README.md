@@ -44,7 +44,7 @@ Credential ownership matters:
 - `NATS_NEX_NODE_NKEY_PUBLIC` is used here as the public half of the native NATS NKey credential and in `services/nats` as verification material for auth callout.
 - The NATS server config also lists the NEX public key so the server advertises the nonce required by native NKey auth. That static entry is not the final authorization decision; the embedded worker verifies the raw NKey challenge response and NATS enforces the returned `NEX` account user JWT.
 
-Each workload receives its own seed through the entrypoint's start-request environment. Character fidelity uses `svc:character-fidelity` in AUTH with object-read grants. Compose waits for embedded broker admission readiness, so node authentication does not depend on API health. The `nex` test domain includes opt-in application admission and workload checks; commands and required environment are in the [TypeScript testing guide](../../documentation/testing/TypeScript/TESTING-GUIDE.md).
+Each workload receives its own seed through the entrypoint's start-request environment. Character fidelity uses `svc:character-fidelity` in AUTH with object-read grants. Compose waits for embedded broker admission readiness, so node authentication does not depend on API health. The `nex` test domain includes opt-in application admission and workload checks; commands and required environment are in the [TypeScript testing guide](../../documentation/code-quality/testing/TYPESCRIPT.md).
 
 ## Operate
 

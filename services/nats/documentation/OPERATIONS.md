@@ -20,7 +20,7 @@ docker compose --profile main up -d --build lixpi-nats lixpi-nats-2 lixpi-nats-3
 docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health ready
 ```
 
-This command starts the configured application cluster and its certificate dependency. For development tests, use the synthetic isolated setup in [Go Testing and Tooling](../../../documentation/testing/Go/TESTING-GUIDE.md), which has its own credentials and volumes. API and NEX wait for broker admission readiness. NATS can start without the API, DynamoDB or a successful JWKS fetch, so those dependencies do not form a startup cycle.
+This command starts the configured application cluster and its certificate dependency. For development tests, use the synthetic isolated setup in [Go Testing and Tooling](../../../documentation/code-quality/testing/GO.md), which has its own credentials and volumes. API and NEX wait for broker admission readiness. NATS can start without the API, DynamoDB or a successful JWKS fetch, so those dependencies do not form a startup cycle.
 
 ## Applying registration changes
 
@@ -213,4 +213,4 @@ Before redirecting application clients, verify object payloads, stream/consumer 
 | Backup fails after writing files | `COMPLETE` and `LATEST`, scratch/snapshot space, file permissions and stream inventory changes |
 | Fenced node remains after restart | The persistent marker is intentional until the controller safely cancels retirement or completes evacuation |
 
-For development verification, use [Docker Go tests](../../../documentation/testing/Go/TESTING-GUIDE.md). The suite exercises worker stalls and loss, stale replies, provider outages, certificate rollback, continuing-writer backups and live scale-in. Hardware sizing still requires concurrent broker and auth load on the intended deployment hardware.
+For development verification, use [Docker Go tests](../../../documentation/code-quality/testing/GO.md). The suite exercises worker stalls and loss, stale replies, provider outages, certificate rollback, continuing-writer backups and live scale-in. Hardware sizing still requires concurrent broker and auth load on the intended deployment hardware.

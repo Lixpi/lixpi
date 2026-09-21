@@ -239,7 +239,7 @@ const transitionHelpersRule = (primary: boolean) => (root: Root, result: Postcss
 transitionHelpersRule.ruleName = transitionRuleName
 transitionHelpersRule.messages = transitionMessages
 transitionHelpersRule.meta = {
-    url: 'documentation/coding-style-guides/SASS-AND-CSS.md#transitions',
+    url: 'documentation/code-quality/coding-style/SASS-AND-CSS.md#transitions',
 }
 
 // Newlines are structural when a block comment becomes several `//` comments, so only
@@ -360,7 +360,7 @@ noBlockCommentsRule.ruleName = blockCommentRuleName
 noBlockCommentsRule.messages = blockCommentMessages
 noBlockCommentsRule.meta = {
     fixable: true,
-    url: 'documentation/coding-style-guides/SASS-AND-CSS.md',
+    url: 'documentation/code-quality/coding-style/SASS-AND-CSS.md',
 }
 
 // Export plugin factories instead of a complete config so the runner can merge these

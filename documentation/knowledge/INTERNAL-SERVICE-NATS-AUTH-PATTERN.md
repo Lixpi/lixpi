@@ -64,7 +64,7 @@ The NEX node uses its own native seed. Conversion and fidelity workloads receive
 
 Use `nats --nkey <seed-file>` with a restrictive temporary file, remove it on exit, and keep seeds out of arguments and logs. Backup uses `NATS_BACKUP_NKEY_SEED`; restore and API debug tools use `NATS_OPERATOR_NKEY_SEED`. Backup can snapshot streams but cannot restore or delete them. Operator permissions include the restore upload subjects.
 
-The deployed Go image provides `lixpi-nats backup` and `lixpi-nats restore <snapshot-id>` with seeds held in memory. The [cluster guide](../platform/deployment/NATS-CLUSTER.md) describes inventory and recovery checks; the [Go guide](../testing/Go/TESTING-GUIDE.md) documents isolated native-client and snapshot tests.
+The deployed Go image provides `lixpi-nats backup` and `lixpi-nats restore <snapshot-id>` with seeds held in memory. The [cluster guide](../platform/deployment/NATS-CLUSTER.md) describes inventory and recovery checks; the [Go guide](../code-quality/testing/GO.md) documents isolated native-client and snapshot tests.
 
 ## Availability and rotation
 

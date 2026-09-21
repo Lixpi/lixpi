@@ -2071,7 +2071,7 @@ export type CapabilityRunEventStreamPayload = {
 // segment types. Once that version is released, delete these definitions and import the types
 // directly from @lixpi/markdown-stream-parser instead.
 //
-// See documentation/conventions/MARKDOWN-RENDERING.md.
+// See documentation/ai-chat/MARKDOWN-RENDERING.md.
 export type MarkdownParsedSegment = {
     segment: string
     styles: string[]

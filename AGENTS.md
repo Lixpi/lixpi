@@ -4,6 +4,8 @@
 
 At the start of every agent turn, before writing any human-facing text, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
 
+The skill is stored at `skills/talk-like-a-human/SKILL.md`. Run `./setup-skills.sh` after cloning so the active harness can discover the skills managed under `skills/`.
+
 If the skill cannot be resolved or read, stop immediately. Do not continue the task and do not produce any substantive response. The only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
 
 ## Architecture
@@ -28,13 +30,13 @@ Every concrete Capability MUST be self-contained under `packages/lixpi/capabilit
 
 Consuming services MUST NOT implement capability-specific runtime logic or import a concrete capability strategy. A service may only supply infrastructure through package-owned typed ports, register the module definition in its composition root, and install module-published strategies through `CapabilityModuleCatalog`. Generic Capability infrastructure MUST NOT import a concrete module. See [Tools and Skills](documentation/library/TOOLS-AND-SKILLS.md) and the nearby [`@lixpi/capability-system` README](packages/lixpi/capability-system/README.md) before changing Capability code.
 
-## Code Style
+## Code Quality
 
-At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.
+At the start of every implementation iteration, resolve and read the [`code-quality` skill](skills/code-quality/SKILL.md). It selects the coding style and testing guides that apply to the files being changed. Its TypeScript rules bind every TypeScript file in the monorepo, not only web UI code, and its testing rules apply before an agent decides whether any test writing or execution is allowed.
 
 ## AI Model Registry
 
-Before changing or reviewing an AI provider model, model ID, model list, parameter, request payload, configuration control, default, option, compatibility rule, price, capability, SDK surface, or related documentation, resolve and read the `ai-model-registry` skill. Its authoritative contract is [`services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md`](services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md).
+Before changing or reviewing an AI provider model, model ID, model list, parameter, request payload, configuration control, default, option, compatibility rule, price, capability, SDK surface, or related documentation, read and follow [`services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md`](services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md).
 
 Registry data and production code MUST stay synchronized in the same implementation iteration. A code change requires the matching registry update, and a registry change requires the matching model-sync, provider, matrix, UI, test, and documentation review.
 
@@ -56,7 +58,7 @@ Start at the documentation index, then read [Maintaining Documentation](document
 
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
 - Agents MUST NOT write tests or run tests unless the user explicitly asks for tests in the current thread. Static review and non-test hygiene checks are allowed, but test files and test commands are user-gated.
-- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. If the user explicitly asks to run web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/testing/TypeScript/TESTING-GUIDE.md`.
+- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. If the user explicitly asks to run web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/code-quality/testing/TYPESCRIPT.md`.
 - Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review unless the user explicitly asks for permitted automated test commands.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.

@@ -1,0 +1,49 @@
+---
+# Shared utility container for skill scripts.
+#
+# Any skill under skills/ that has to execute code executes it here. The host
+# has no Node or pnpm toolchain to run these against, and per-skill containers
+# would multiply images for no gain, so all skills share this one runner.
+# See documentation/development-workflow/SKILL-EXECUTION-GUIDE.md for the rule and the commands.
+#
+# Its own Compose project, so a skill run never touches the application stack's
+# containers and never reports them as orphans.
+name: lixpi-utils
+
+services:
+
+    # No container_name: this service is invoked via `docker compose run --rm`
+    # (never `up`/`exec`) so Compose creates a fresh, uniquely-named container
+    # per invocation — always reflects the current compose config, and
+    # concurrent invocations never collide on a fixed name.
+    lixpi-utils:
+        image: lixpi/utils
+        build:
+            dockerfile: services/lixpi-utils/Dockerfile
+            context: .
+        init: false    # tini is the image's entrypoint already.
+        volumes:
+            # The whole skills tree, writable: a skill script may legitimately
+            # write its output next to itself (a fetched doc, a cache) and the
+            # user expects that file on the host afterwards.
+            - ./skills:/skills:cached
+
+            # Bind-mounted, not baked in, so entrypoint edits need no rebuild.
+            - ./services/lixpi-utils/run-skill.sh:/usr/local/bin/run-skill.sh:ro,cached
+
+            # Shared pnpm store, for the rare skill that needs a dependency.
+            # pnpm's store does its own locking, so concurrent one-shot
+            # containers can safely share it.
+            - lixpi-utils-pnpm-store:/pnpm-store
+        environment:
+            npm_config_store_dir: /pnpm-store
+
+            # Skill scripts reach the public internet (docs.byteplus.com and
+            # similar). Honour a proxy if the host sets one; harmless if unset.
+            HTTP_PROXY: ${HTTP_PROXY:-}
+            HTTPS_PROXY: ${HTTPS_PROXY:-}
+            NO_PROXY: ${NO_PROXY:-}
+        working_dir: /skills
+
+volumes:
+    lixpi-utils-pnpm-store:

@@ -1,78 +1,66 @@
 # Agent Skill Organization
 
-This document defines how Lixpi exposes project guidance to coding agents without copying policy into tool-specific configuration files.
+This document defines how Lixpi keeps project guidance available to coding agents without copying policy across tool-specific files.
 
 ## Design
 
-Most authoritative Lixpi guidance lives under `documentation/`. Cross-workspace guidance may live in the umbrella repository when it applies to Lixpi and its sibling projects. A harness skill is a short discovery alias: its frontmatter states when the guidance applies, and its body points to the authoritative file. A prohibition that must be known before tool selection may be named in the skill description so discovery cannot hide it.
+Every installable skill lives under `skills/` in this repository. A skill may contain its own rules or scripts, or it may point to an authoritative document elsewhere in the repository. Its frontmatter states when the guidance applies, and its body tells the agent what to read or run.
 
-The project maintains matching aliases in these native harness locations as needed:
-
-- `.github/skills/<name>/SKILL.md` for GitHub Copilot.
-- `.claude/skills/<name>/SKILL.md` for Claude Code.
-- `.cursor/skills/<name>/SKILL.md` for Cursor.
-- `.agents/skills/<name>/SKILL.md` for Codex.
-
-Some harnesses also recognize compatibility directories. Matching aliases intentionally have identical names, descriptions, and pointer bodies, so discovery order is not behaviorally significant when a tool scans more than one location.
+[`setup-skills.sh`](../../setup-skills.sh) installs the tool-specific discovery links needed by the supported agents. Those generated locations are local configuration. Git ignores them, and the repository does not track their contents.
 
 ## Required Human-Facing Interaction Skill
 
-The canonical `talk-like-a-human` skill lives in the umbrella repository at `skills/talk-like-a-human/SKILL.md`. Every agent must resolve and read `$talk-like-a-human` through the active harness's skill discovery at the start of every turn before writing human-facing text. The rule covers answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies to every interaction, not only documentation work.
-
-Lixpi exposes `talk-like-a-human` through matching pointer aliases in `.github/skills/`, `.claude/skills/`, `.cursor/skills/`, and `.agents/skills/`. The aliases do not copy the writing rules. They locate the umbrella repository without using developer-specific absolute paths, then point the harness to the canonical skill.
+The canonical `talk-like-a-human` skill lives at [`skills/talk-like-a-human/SKILL.md`](../../skills/talk-like-a-human/SKILL.md). Every agent must resolve and read `$talk-like-a-human` through the active harness's skill discovery at the start of every turn before writing human-facing text. The rule covers answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies to every interaction, not only documentation work.
 
 If the canonical skill cannot be resolved or read, the agent must stop immediately. It must not continue the task or produce a substantive response. Its only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
+
+## Installing Skills
+
+Run the installer after cloning this repository:
+
+```bash
+./setup-skills.sh
+```
+
+The installer is interactive and takes no arguments. It first asks for the installation scope. Global installation is the default; project installation asks for one Git checkout, defaulting to this repository.
+
+The harness page supports multiple selections. Move with the arrow keys, toggle Codex, Claude Code, Cursor, or GitHub Copilot with Space, then press Enter. The skill page uses the same controls and shows `All skills` beside every individual skill, so you can choose all skills or a subset in one step.
+
+| Harness | Global directory | Project directory |
+|---------|------------------|-------------------|
+| Codex | `~/.agents/skills/` | `.agents/skills/` |
+| Claude Code | `~/.claude/skills/` | `.claude/skills/` |
+| Cursor | `~/.cursor/skills/` | `.cursor/skills/` |
+| GitHub Copilot | `~/.copilot/skills/` | `.github/skills/` |
+
+Existing links to the same canonical skill are kept. Conflicting files or links stop installation before anything changes. Project installation adds generated links to that checkout's local Git exclude file. Global links live in the selected harness user directories and point back to the canonical skills in this checkout.
+
+## Skills That Execute Code
+
+Anything under `skills/` that executes code runs inside the `lixpi-utils` container, never on the host. [`SKILL-EXECUTION-GUIDE.md`](SKILL-EXECUTION-GUIDE.md) contains the rule, the exact `docker compose` commands, and the process for adding a script to a skill.
 
 ## Command Execution Rule
 
 Agents must not run `npm`, `npx`, `pnpm`, or `pnpx` on the host. Agents must not install project dependencies or tooling on the host by any package manager.
 
-Agents must not run project setup, package scripts, build scripts, docs builds, linters, formatters, test runners, framework CLIs, or repo scripts on the host. All project setup and all script execution must happen inside the appropriate Docker container, such as `docker exec <container> pnpm ...`, when the task's other permission and testing gates allow that command.
+Agents must not run project setup, package scripts, build scripts, docs builds, linters, formatters, test runners, framework CLIs, or repository scripts on the host. All project setup and script execution must happen inside the appropriate Docker container, such as `docker exec <container> pnpm ...`, when the task's other permission and testing gates allow that command.
 
 If the Dockerized command is not documented or the required container is unavailable, agents stop and ask instead of falling back to a host command.
 
 TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only commands in [`TYPESCRIPT-QUALITY.md`](../../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md). Agents select the affected service or shared package instead of scanning unrelated workspaces. They must not invoke Oxfmt, dprint, Oxlint, Stylelint, TypeScript source, Node, or a package manager on the host.
 
-## Required AI Model Registry Skill
+## Adding Or Updating A Skill
 
-Lixpi exposes `ai-model-registry` through matching aliases in `.github/skills/`, `.claude/skills/`, `.cursor/skills/`, and `.agents/skills/`. Its description covers changes to provider models, parameters, request payloads, configuration controls, defaults, options, compatibility, pricing, SDK surfaces, and registry documentation, so each harness loads the rule when either production code or registry data can drift.
+1. Create or update the canonical skill at `skills/<name>/SKILL.md`.
+2. Keep shared routing and constraints in `SKILL.md`. Put substantial mode-specific procedures in the skill's `references/` directory and link them from `SKILL.md`.
+3. Give the skill a description that names the work and task signals that should load it.
+4. Run `./setup-skills.sh`, choose the installation scope and harnesses, then select the updated skill or `All skills`.
 
-The aliases point to [`AI-MODEL-REGISTRY.md`](../../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md). That document requires registry data and production code to change together and requires registry reads, writes, validation, and provider-document fetches to run inside Docker. The non-negotiable synchronization and container-boundary rules are repeated in `AGENTS.md` and `CLAUDE.md` so they are available before task-specific skill selection.
-
-## Why Aliases, Not Copied Instructions
-
-- A single documentation source prevents policy drift.
-- Short skill bodies preserve on-demand context loading.
-- Native paths avoid depending on a harness supporting another product's compatibility path.
-- Adding a skill does not require editing a central catalog that can become stale.
-
-## Adding Or Updating Shared Guidance
-
-For guidance that should be available in GitHub Copilot, Claude Code, and Cursor:
-
-1. Create or update its authoritative document under `documentation/`.
-2. Create the same skill directory name under `.github/skills/`, `.claude/skills/`, and `.cursor/skills/`.
-3. Use identical YAML `name` and `description` values in all three aliases. The description must say both what the skill covers and the task signals that should load it.
-4. Keep each `SKILL.md` body to a direct instruction to read and follow the documentation source of truth.
-5. Do not add the skill to a manually maintained "available skills" table. The harness discovers new skill directories and uses their descriptions.
-
-When the guidance must also be discovered by Codex, add the same alias under `.agents/skills/`. State repository-wide non-negotiable tool restrictions in `AGENTS.md` as well as the authoritative documentation.
-
-For harness-specific behavior, keep the alias and its source of truth in the location appropriate to that harness unless the guidance is deliberately promoted to shared project documentation.
+Do not copy a skill into tool-specific directories or add it to a manually maintained inventory. The root `skills/` directory and the installer define what is available.
 
 ## Documentation Roots
 
-Reusable project guidance belongs in the most relevant documentation area, such as `documentation/coding-style-guides/`, `documentation/documentation-style-guides/`, `documentation/testing/`, or `documentation/development-workflow/`. Cross-workspace guidance that deliberately applies to more than one repository may live in the umbrella repository, as `talk-like-a-human` does. Browse the native skills directories to see which guidance is currently exposed to each harness; this document deliberately does not maintain a general skill inventory.
-
-## Basis For This Layout
-
-This layout follows the tools' documented Agent Skills behavior:
-
-- GitHub Copilot supports repository skills in `.github/skills`, `.agents/skills`, and `.claude/skills`, and loads relevant skill content progressively.
-- Claude Code uses project skills in `.claude/skills` and selects them using their description.
-- Cursor supports Agent Skills through its native `.cursor/skills` project path.
-
-Because the common behavior is description-based discovery followed by on-demand loading of `SKILL.md`, the aliases should describe triggers clearly and defer durable detail to documentation.
+Cross-cutting project guidance belongs in the most relevant documentation area, such as `documentation/code-quality/`, `documentation/development-workflow/`, or the documentation beside the service or package it governs. Guidance loaded only for a specific skill belongs in that skill package, with substantial conditional material under `references/`.
 
 ## References
 

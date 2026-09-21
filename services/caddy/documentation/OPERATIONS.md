@@ -59,6 +59,6 @@ Start an investigation with the manager's `CERTIFICATE_MAINTENANCE_COMPLETE` or 
 
 ## Verification
 
-The shared [Go Testing and Tooling guide](../../../documentation/testing/Go/TESTING-GUIDE.md) contains build, dependency, race-test and linter commands. The `caddy` suite uses generated certificates, a real embedded internal CA and fake AWS clients. It covers local exports and reuse, trust and key checks, renewal windows, ARI, archive recovery, failed state operations, unchanged secret publication and metric names.
+The shared [Go Testing and Tooling guide](../../../documentation/code-quality/testing/GO.md) contains build, dependency, race-test and linter commands. The `caddy` suite uses generated certificates, a real embedded internal CA and fake AWS clients. It covers local exports and reuse, trust and key checks, renewal windows, ARI, archive recovery, failed state operations, unchanged secret publication and metric names.
 
 The infrastructure suite uses Pulumi mocks to verify serialization, scheduling, retention and alarms. NATS certificate tests cover live broker rotation. These checks do not issue a public certificate or modify Route53. Actual ACME issuance, deployed IAM permissions and SNS delivery must be checked in the target account through its deployment process.

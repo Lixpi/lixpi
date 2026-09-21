@@ -32,7 +32,7 @@ The [environment setup container](../../../infrastructure/init-script/README.md)
 
 After changing a subject grant, regenerate the signed declaration and restart the API with it. An endpoint handler change alone does not update broker permissions. Keep the manifest with the matching application release; old replicas cannot overwrite a newer registration. The [runtime registration protocol](../../../services/nats/documentation/CONFIGURATION.md#registration-protocol) also accepts independently signed declarations for other applications.
 
-Tests assert public/private access, event-only grants, user-scoped events, queue metadata, portal extensions, constant-derived IDs, and invalid declarations directly. Run the package through the [shared Docker test runner](../../../documentation/testing/TypeScript/TESTING-GUIDE.md):
+Tests assert public/private access, event-only grants, user-scoped events, queue metadata, portal extensions, constant-derived IDs, and invalid declarations directly. Run the package through the [shared Docker test runner](../../../documentation/code-quality/testing/TYPESCRIPT.md):
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared nats-subject-registry

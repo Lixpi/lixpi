@@ -144,7 +144,3 @@ Work is incomplete if any of these are true:
 - A skipped or unsupported parameter still reaches the provider request.
 - A provider request change is missing from the registry description, compatibility, state, or usage block.
 - Registry access or provider-document fetching relies on a host HTTP/JSON tool.
-
-## Agent discovery
-
-The repository publishes an `ai-model-registry` skill in `.agents/skills`, `.claude/skills`, `.cursor/skills`, and `.github/skills`. Each alias points here, so Codex, Claude Code, Cursor, and GitHub Copilot discover the same synchronization rule without copied policy.

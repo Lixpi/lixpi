@@ -200,6 +200,6 @@ GitHub release bodies are used only when every matching release in the range con
 
 ## Native dependency metadata
 
-The registry selects declared direct and indirect requirements that appear in supported native files. Native ecosystem metadata still has its own job. Go's minimal version selection can raise requirements, and `go.sum` stores checksums for the resolved graph. After changing Go requirements, run the permitted module-maintenance command from the [Go Testing and Tooling guide](../../documentation/testing/Go/TESTING-GUIDE.md), then synchronize again if Go changed a declared requirement.
+The registry selects declared direct and indirect requirements that appear in supported native files. Native ecosystem metadata still has its own job. Go's minimal version selection can raise requirements, and `go.sum` stores checksums for the resolved graph. After changing Go requirements, run the permitted module-maintenance command from the [Go Testing and Tooling guide](../../documentation/code-quality/testing/GO.md), then synchronize again if Go changed a declared requirement.
 
 The registry does not replace lockfile resolution, compiler compatibility checks, image builds, or application migrations. Release review gives the agent the evidence needed to make those changes before apply; the relevant service or package workflow verifies them afterward when the thread authorizes that verification.

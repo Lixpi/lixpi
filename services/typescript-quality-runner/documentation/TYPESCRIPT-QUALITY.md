@@ -154,7 +154,7 @@ export type {
 
 ## Sass and CSS Rules
 
-dprint's Malva plugin formats first-party `.scss` and `.css` files with four spaces and the repository's shared formatting settings. Stylelint parses both formats through `postcss-scss` and enforces these parts of [`SASS-AND-CSS.md`](../../../documentation/coding-style-guides/SASS-AND-CSS.md):
+dprint's Malva plugin formats first-party `.scss` and `.css` files with four spaces and the repository's shared formatting settings. Stylelint parses both formats through `postcss-scss` and enforces these parts of [`SASS-AND-CSS.md`](../../../documentation/code-quality/coding-style/SASS-AND-CSS.md):
 
 - Lixpi-owned classes use flat kebab-case names. BEM `__` and `--` punctuation, underscores, camelCase, and PascalCase are rejected. Explicit external contracts are exempt without weakening the application-class pattern: ProseMirror's classes, and CodeMirror's `cm-` set, which a stylesheet can only match because the editor renders those names itself.
 - CSS custom properties use kebab-case.

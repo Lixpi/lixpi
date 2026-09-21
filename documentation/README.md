@@ -17,10 +17,10 @@ These docs are maintained as Markdown and read directly in GitHub or an editor. 
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, Capability ownership boundaries, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
-| [Implementation Plans](development-workflow/research-and-development/WRITING-IMPLEMENTATION-PLANS.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
-| [Spike Reports](development-workflow/research-and-development/SPIKE-REPORT-GUIDELINES.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
+| [Implementation Plans](../skills/implementation-plans/references/writing-implementation-plans.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
+| [Spike Reports](../skills/implementation-plans/references/spike-report-guidelines.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
 | [TypeScript Linting and Formatting](../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
-| [Go Testing and Tooling](testing/Go/TESTING-GUIDE.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
+| [Go Testing and Tooling](code-quality/testing/GO.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
@@ -32,10 +32,19 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 2. Use this index for the main product and platform entry points.
 3. Search the documentation tree for the complete current file list.
 4. Search by the concept you are changing, then read nearby pages before editing.
-5. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
-6. For any code change, read [`Coding Style Guide Selection`](coding-style-guides/USING-CODING-STYLE-GUIDES.md). [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) is mandatory for every TypeScript file in the repository; [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) is additionally mandatory for `services/web-ui` UI work.
+5. At the start of every implementation iteration, resolve and read the [`code-quality` skill](../skills/code-quality/SKILL.md). It selects the coding style and testing guides that match the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
+
+## Repository directories
+
+| Directory | Contents |
+|-----------|----------|
+| `services/` | Application services, including the TypeScript web UI and API plus the Go NATS and Caddy services |
+| `packages/lixpi/` | Shared TypeScript libraries, contracts, UI packages, and constants |
+| `infrastructure/` | Pulumi infrastructure and environment initialization code |
+| `documentation/` | Product, architecture, platform, code-quality, and development workflow documentation |
+| `documentation/memory/` | Active implementation plans, spike reports, and task continuity files |
 
 ## Platform
 
@@ -83,6 +92,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 | [Workspace Composer & Generated Output Details](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | Conversation Assets, detached streaming authority, the canvas composer, and the persisted unified generated-output details panel |
 | [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Prompt reference atoms, composer context chips, authorization, and explicit-only media candidate routing |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
+| [Markdown Rendering](ai-chat/MARKDOWN-RENDERING.md) | The one-parser rule and the editable and non-editable rendering paths |
 
 ## Media Generation
 
@@ -115,13 +125,14 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
+| [Agent Skill Organization](development-workflow/AGENT-SKILLS.md) | Managing and installing the project skills under `skills/` |
+| [Skill Execution Guide](development-workflow/SKILL-EXECUTION-GUIDE.md) | Running a skill script inside the `lixpi-utils` container, and adding a script to a skill |
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
 | [TypeScript Linting and Formatting](../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
-| [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
-| [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |
-| [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules — mandatory for all TypeScript in the repo |
-| [UI Components Coding Style](coding-style-guides/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas chrome, component ownership, layout, and event rules |
-| [Markdown Rendering](conventions/MARKDOWN-RENDERING.md) | The one-parser rule and the two renderers |
+| [Code Quality Skill](../skills/code-quality/SKILL.md) | Selects the coding style and testing guides for an implementation iteration and enforces the test permission gate |
+| [Go Coding Style](code-quality/coding-style/GO.md) | Repository-wide Go package structure, service boundaries, APIs, startup, errors, logging, data access, concurrency, and tooling rules |
+| [TypeScript Coding Style](code-quality/coding-style/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules; mandatory for all TypeScript in the repo |
+| [UI Components Coding Style](code-quality/coding-style/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas chrome, component ownership, layout, and event rules |
 | [API-Owned Media Lineage Planning](knowledge/API-OWNED-MEDIA-LINEAGE-PLANNING.md) | API/browser ownership boundary for media branch topology, lineage plans, marker provenance, and canvas application |
 | [Rendering Architecture for a Media-Heavy Canvas](knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md) | Why the DOM/PIXI split; what the leading canvases use |
 | [Why Model Combinations Produce Different Styles](knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md) | Model chaining and visual signatures |

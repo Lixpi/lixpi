@@ -137,7 +137,7 @@ After registration, run `sync` and `check`. Discovery automatically includes a n
 
 Changing `go.mod` selections can require Go to recompute minimal-version selection and `go.sum`. The registry cannot calculate that graph because its standalone Node container does not run Go tooling.
 
-Use the appropriate Dockerized module-maintenance command from [Go Testing and Tooling](../../documentation/testing/Go/TESTING-GUIDE.md). If Go raises or adds a requirement in `go.mod`, update the corresponding `go.modules` selection and run registry synchronization again. `go.sum` remains native checksum metadata and does not become a version catalog.
+Use the appropriate Dockerized module-maintenance command from [Go Testing and Tooling](../../documentation/code-quality/testing/GO.md). If Go raises or adds a requirement in `go.mod`, update the corresponding `go.modules` selection and run registry synchronization again. `go.sum` remains native checksum metadata and does not become a version catalog.
 
 ## Check repository drift
 

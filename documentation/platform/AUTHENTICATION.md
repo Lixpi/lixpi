@@ -85,4 +85,4 @@ Input credentials and broker request time claims are validated at admission. The
 
 LocalAuth0 issues real RS256 JWTs and exposes JWKS, exercising the production verifier path without an Auth0 account. Its keys, user record, custom claims, and permissions persist in the `localauth0-data` volume. The default test user is `test@local.dev` (`local|test-user-001`). Mock authentication is restricted to `ENVIRONMENT=local`.
 
-See the [LocalAuth0 guide](../../services/localauth0/README.md), [broker operations](../../infrastructure/pulumi/src/resources/NATS-cluster/README.md), and [Go verification guide](../testing/Go/TESTING-GUIDE.md).
+See the [LocalAuth0 guide](../../services/localauth0/README.md), [broker operations](../../infrastructure/pulumi/src/resources/NATS-cluster/README.md), and [Go verification guide](../code-quality/testing/GO.md).
