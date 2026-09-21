@@ -1,8 +1,10 @@
 package broker
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lixpi/lixpi/services/nats/internal/policy"
@@ -19,7 +21,7 @@ type RegistrationConfig struct {
 
 func ConfigureRegistration(options *server.Options, config RegistrationConfig, internalPassword string) error {
 	if err := config.Trust.Validate(); err != nil {
-		return err
+		return fmt.Errorf("validate registration trust: %w", err)
 	}
 
 	if config.Password == "" || internalPassword == "" || config.Replicas < 1 || config.Replicas > 5 {
@@ -36,12 +38,12 @@ func ConfigureRegistration(options *server.Options, config RegistrationConfig, i
 
 	encoded, err := json.Marshal(map[string]any{"accounts": accounts})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode registration accounts: %w", err)
 	}
 
 	generated := &server.Options{}
 	if err := generated.ProcessConfigString(string(encoded)); err != nil {
-		return err
+		return fmt.Errorf("parse generated registration accounts: %w", err)
 	}
 
 	var registry *server.Account
@@ -80,7 +82,7 @@ func ConfigureRegistration(options *server.Options, config RegistrationConfig, i
 	return nil
 }
 
-func (r *Runtime) startRegistry() error {
+func (r *Runtime) startRegistry(ctx context.Context) error {
 	if r.config.Registration == nil {
 		return nil
 	}
@@ -93,33 +95,33 @@ func (r *Runtime) startRegistry() error {
 		nats.Timeout(time.Second),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect registration store: %w", err)
 	}
 
 	js, err := connection.JetStream(nats.MaxWait(2 * time.Second))
 	if err != nil {
 		connection.Close()
 
-		return err
+		return fmt.Errorf("open registration JetStream context: %w", err)
 	}
 
 	store := &policy.Store{JS: js, Trust: r.config.Registration.Trust, Replicas: r.config.Registration.Replicas}
-	if _, err := store.Subscribe(connection); err != nil {
+	if _, err := store.Subscribe(ctx, connection); err != nil {
 		connection.Close()
 
-		return err
+		return fmt.Errorf("subscribe registration store: %w", err)
 	}
 
 	if err := connection.FlushTimeout(time.Second); err != nil {
 		connection.Close()
 
-		return err
+		return fmt.Errorf("flush registration subscriptions: %w", err)
 	}
 
 	if err := connection.LastError(); err != nil {
 		connection.Close()
 
-		return err
+		return fmt.Errorf("check registration connection: %w", err)
 	}
 
 	r.registryConnection = connection

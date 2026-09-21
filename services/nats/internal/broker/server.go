@@ -2,6 +2,7 @@ package broker
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
@@ -11,7 +12,7 @@ import (
 func Start(options *server.Options) (*server.Server, error) {
 	broker, err := server.NewServer(options)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create embedded broker: %w", err)
 	}
 
 	if !options.NoLog {

@@ -82,13 +82,15 @@ func (r *Runtime) HealthHandler() http.Handler {
 			values["busy"] = d.Counters.Busy.Load()
 		}
 
-		_ = json.NewEncoder(w).Encode(values)
+		if err := json.NewEncoder(w).Encode(values); err != nil {
+			slog.Error("health metrics response failed", "error", err)
+		}
 	}))
 
 	return mux
 }
 
-func (r *Runtime) startHealth() error {
+func (r *Runtime) startHealth(ctx context.Context) error {
 	start := func(listener net.Listener, handler http.Handler) *http.Server {
 		srv := &http.Server{
 			Handler:           handler,
@@ -100,7 +102,7 @@ func (r *Runtime) startHealth() error {
 		}
 		go func() {
 			if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				slog.Error("runtime control listener failed")
+				slog.Error("runtime control listener failed", "error", err)
 				r.Server.Shutdown()
 			}
 		}()
@@ -109,9 +111,9 @@ func (r *Runtime) startHealth() error {
 	}
 
 	if r.config.HealthAddress != "" {
-		listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", r.config.HealthAddress)
+		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", r.config.HealthAddress)
 		if err != nil {
-			return err
+			return fmt.Errorf("listen for broker health on %q: %w", r.config.HealthAddress, err)
 		}
 
 		r.health = start(listener, r.HealthHandler())
@@ -119,7 +121,7 @@ func (r *Runtime) startHealth() error {
 
 	if r.config.ControlSocket != "" {
 		if err := os.MkdirAll(filepath.Dir(r.config.ControlSocket), 0o700); err != nil {
-			return err
+			return fmt.Errorf("create control socket directory: %w", err)
 		}
 
 		if info, err := os.Lstat(r.config.ControlSocket); err == nil {
@@ -128,21 +130,24 @@ func (r *Runtime) startHealth() error {
 			}
 
 			if err := os.Remove(r.config.ControlSocket); err != nil {
-				return err
+				return fmt.Errorf("remove stale control socket: %w", err)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
+			return fmt.Errorf("inspect control socket: %w", err)
 		}
 
-		listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", r.config.ControlSocket)
+		listener, err := (&net.ListenConfig{}).Listen(ctx, "unix", r.config.ControlSocket)
 		if err != nil {
-			return err
+			return fmt.Errorf("listen on control socket %q: %w", r.config.ControlSocket, err)
 		}
 
 		if err := os.Chmod(r.config.ControlSocket, 0o600); err != nil {
-			_ = listener.Close()
+			closeErr := listener.Close()
+			if closeErr != nil {
+				closeErr = fmt.Errorf("close control socket listener: %w", closeErr)
+			}
 
-			return err
+			return errors.Join(fmt.Errorf("set control socket permissions: %w", err), closeErr)
 		}
 
 		mux := http.NewServeMux()

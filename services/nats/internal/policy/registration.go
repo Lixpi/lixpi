@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"regexp"
@@ -87,7 +88,7 @@ func Decode(data []byte, value any) error {
 	d.DisallowUnknownFields()
 
 	if err := d.Decode(value); err != nil {
-		return err
+		return fmt.Errorf("decode registration: %w", err)
 	}
 
 	if err := d.Decode(new(any)); !errors.Is(err, io.EOF) {
@@ -140,7 +141,7 @@ func (t Trust) Verify(signed SignedRegistration) (*Manifest, error) {
 
 	var m Manifest
 	if err := Decode(signed.Payload, &m); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode registration manifest: %w", err)
 	}
 
 	if m.Schema != 1 || m.Owner != authority.Owner || m.Version == 0 || m.Version > 9007199254740991 {
@@ -153,7 +154,7 @@ func (t Trust) Verify(signed SignedRegistration) (*Manifest, error) {
 		}
 
 		if err := validatePermissions(s.Permissions, false); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validate permissions for service %q: %w", s.UserID, err)
 		}
 	}
 
@@ -175,7 +176,7 @@ func (t Trust) Verify(signed SignedRegistration) (*Manifest, error) {
 			}
 
 			if err := validatePermissions(grant, true); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("validate browser permission template for issuer %q: %w", b.Issuer, err)
 			}
 		}
 	}
@@ -235,7 +236,7 @@ func (t Trust) Compile(registrations []SignedRegistration) (*Snapshot, error) {
 	for _, signed := range registrations {
 		m, err := t.Verify(signed)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("verify registration from issuer %q: %w", signed.Issuer, err)
 		}
 
 		if owners[m.Owner] {
@@ -264,7 +265,7 @@ func (t Trust) Compile(registrations []SignedRegistration) (*Snapshot, error) {
 
 	encoded, err := json.Marshal(registrations)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode registration snapshot: %w", err)
 	}
 
 	digest := sha256.Sum256(encoded)

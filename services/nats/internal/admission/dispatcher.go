@@ -3,6 +3,7 @@ package admission
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -59,7 +60,7 @@ type Dispatcher struct {
 	Counters      Counters
 }
 
-func Start(settings Settings) (*Dispatcher, error) {
+func Start(ctx context.Context, settings Settings) (*Dispatcher, error) {
 	if settings.Node == "" || settings.Digest == "" || settings.Policy == nil || settings.Protocol == nil || settings.Worker == nil ||
 		settings.Connection == nil ||
 		settings.MaxConcurrent < 1 ||
@@ -73,11 +74,16 @@ func Start(settings Settings) (*Dispatcher, error) {
 		return nil, errors.New("invalid admission settings")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	instance, err := identifier()
+	if err != nil {
+		return nil, fmt.Errorf("create admission dispatcher identifier: %w", err)
+	}
+
+	ownedCtx, cancel := context.WithCancel(ctx)
 	d := &Dispatcher{
 		settings: settings,
-		instance: identifier(),
-		ctx:      ctx,
+		instance: instance,
+		ctx:      ownedCtx,
 		cancel:   cancel,
 		slots:    make(chan struct{}, settings.MaxConcurrent),
 		rpcSlots: make(chan struct{}, settings.Worker.Capacity()),
@@ -102,7 +108,7 @@ func Start(settings Settings) (*Dispatcher, error) {
 			d.closeSubscriptions()
 			cancel()
 
-			return nil, err
+			return nil, fmt.Errorf("subscribe to admission subject %q: %w", binding.subject, err)
 		}
 
 		if err := sub.SetPendingLimits(settings.MaxConcurrent*2, 2*1024*1024); err != nil {
@@ -110,7 +116,7 @@ func Start(settings Settings) (*Dispatcher, error) {
 			d.closeSubscriptions()
 			cancel()
 
-			return nil, err
+			return nil, fmt.Errorf("set admission subscription limits for %q: %w", binding.subject, err)
 		}
 
 		d.subscriptions = append(d.subscriptions, sub)
@@ -120,14 +126,14 @@ func Start(settings Settings) (*Dispatcher, error) {
 		d.closeSubscriptions()
 		cancel()
 
-		return nil, err
+		return nil, fmt.Errorf("flush admission subscriptions: %w", err)
 	}
 
 	if err := settings.Connection.LastError(); err != nil {
 		d.closeSubscriptions()
 		cancel()
 
-		return nil, err
+		return nil, fmt.Errorf("check admission connection: %w", err)
 	}
 
 	d.advertise(false)
@@ -140,17 +146,17 @@ func Start(settings Settings) (*Dispatcher, error) {
 		d.closeSubscriptions()
 		cancel()
 
-		return nil, err
+		return nil, fmt.Errorf("sign admission discovery: %w", err)
 	}
 
 	if err := settings.Connection.Publish(protocol.Discover, discover); err != nil {
 		d.closeSubscriptions()
 		cancel()
 
-		return nil, err
+		return nil, fmt.Errorf("publish admission discovery: %w", err)
 	}
 
-	go d.supervise()
+	go d.supervise(ownedCtx)
 
 	return d, nil
 }
@@ -175,7 +181,7 @@ func (d *Dispatcher) Stop(ctx context.Context) error {
 	select {
 	case <-d.loopDone:
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("stop admission supervisor: %w", ctx.Err())
 	}
 
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -184,7 +190,7 @@ func (d *Dispatcher) Stop(ctx context.Context) error {
 	for len(d.slots) > 0 || len(d.rpcSlots) > 0 {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("drain admission work: %w", ctx.Err())
 		case <-ticker.C:
 		}
 	}
@@ -304,6 +310,14 @@ func (d *Dispatcher) coordinate(message *nats.Msg) []byte {
 		d.Counters.Remote.Add(1)
 		attemptCtx, stop := context.WithTimeout(ctx, settings.AttemptTimeout)
 		attemptDeadline, _ := attemptCtx.Deadline()
+
+		attempt, err := identifier()
+		if err != nil {
+			stop()
+
+			break
+		}
+
 		work := workRequest{
 			Revision: revision,
 			Kind:     "evaluate",
@@ -315,7 +329,7 @@ func (d *Dispatcher) coordinate(message *nats.Msg) []byte {
 				message.Data,
 				xkey,
 			),
-			Attempt:    identifier(),
+			Attempt:    attempt,
 			Deadline:   attemptDeadline.UnixNano(),
 			ServerXKey: xkey,
 			Encrypted:  message.Data,

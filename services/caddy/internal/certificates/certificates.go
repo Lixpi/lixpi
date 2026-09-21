@@ -73,26 +73,26 @@ func Read(root, domain string, roots *x509.CertPool, now time.Time) (Candidate, 
 func readCandidate(path, domain string, roots *x509.CertPool, now time.Time) (Candidate, error) {
 	certificate, err := os.ReadFile(path)
 	if err != nil {
-		return Candidate{}, err
+		return Candidate{}, fmt.Errorf("read certificate file %q: %w", path, err)
 	}
 
 	base := strings.TrimSuffix(path, ".crt")
 
 	key, err := os.ReadFile(base + ".key")
 	if err != nil {
-		return Candidate{}, err
+		return Candidate{}, fmt.Errorf("read certificate key %q: %w", base+".key", err)
 	}
 
 	pair := Pair{Certificate: string(certificate), PrivateKey: string(key)}
 
 	leaf, err := Validate(pair, domain, roots, now)
 	if err != nil {
-		return Candidate{}, err
+		return Candidate{}, fmt.Errorf("validate certificate file %q: %w", path, err)
 	}
 
 	renewAt, err := renewalTime(base + ".json")
 	if err != nil {
-		return Candidate{}, err
+		return Candidate{}, fmt.Errorf("read certificate renewal metadata %q: %w", base+".json", err)
 	}
 
 	return Candidate{Pair: pair, Leaf: leaf, RenewAt: renewAt}, nil
@@ -106,7 +106,7 @@ func Validate(pair Pair, domain string, roots *x509.CertPool, now time.Time) (*x
 
 	leaf, err := x509.ParseCertificate(keyPair.Certificate[0])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse leaf certificate for %s: %w", domain, err)
 	}
 
 	intermediates := x509.NewCertPool()
@@ -114,7 +114,7 @@ func Validate(pair Pair, domain string, roots *x509.CertPool, now time.Time) (*x
 	for _, der := range keyPair.Certificate[1:] {
 		cert, err := x509.ParseCertificate(der)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse intermediate certificate for %s: %w", domain, err)
 		}
 
 		intermediates.AddCert(cert)
@@ -138,7 +138,7 @@ func renewalTime(path string) (time.Time, error) {
 	}
 
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, fmt.Errorf("read renewal metadata: %w", err)
 	}
 
 	var metadata struct {
@@ -166,7 +166,7 @@ func renewalTime(path string) (time.Time, error) {
 func LocalRoots(root string) (*x509.CertPool, []byte, error) {
 	data, err := os.ReadFile(filepath.Join(root, "pki", "authorities", "local", "root.crt"))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("read local CA certificate: %w", err)
 	}
 
 	block, _ := pem.Decode(data)
@@ -185,12 +185,12 @@ func LocalRoots(root string) (*x509.CertPool, []byte, error) {
 func ExportLocal(root string, now time.Time) error {
 	roots, ca, err := LocalRoots(root)
 	if err != nil {
-		return err
+		return fmt.Errorf("load local CA roots: %w", err)
 	}
 
 	candidate, err := Read(root, "localhost", roots, now)
 	if err != nil {
-		return err
+		return fmt.Errorf("read local serving certificate: %w", err)
 	}
 
 	for _, file := range []struct {
@@ -202,12 +202,13 @@ func ExportLocal(root string, now time.Time) error {
 		{"localhost.crt", []byte(candidate.Certificate), 0o644},
 		{"localhost.key", []byte(candidate.PrivateKey), 0o600},
 	} {
-		if err := os.WriteFile(filepath.Join(root, file.name), file.data, file.mode); err != nil {
-			return err
+		path := filepath.Join(root, file.name)
+		if err := os.WriteFile(path, file.data, file.mode); err != nil {
+			return fmt.Errorf("write local certificate file %q: %w", path, err)
 		}
 
-		if err := os.Chmod(filepath.Join(root, file.name), file.mode); err != nil {
-			return err
+		if err := os.Chmod(path, file.mode); err != nil {
+			return fmt.Errorf("set local certificate permissions on %q: %w", path, err)
 		}
 	}
 

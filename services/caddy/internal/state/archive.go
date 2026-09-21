@@ -27,17 +27,25 @@ func Restore(directory string, data []byte) (result error) {
 
 	zipped, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return err
+		return fmt.Errorf("open Caddy state archive: %w", err)
 	}
 
-	defer func() { result = errors.Join(result, zipped.Close()) }()
+	defer func() {
+		if err := zipped.Close(); err != nil {
+			result = errors.Join(result, fmt.Errorf("close Caddy state archive: %w", err))
+		}
+	}()
 
 	root, err := os.OpenRoot(directory)
 	if err != nil {
-		return err
+		return fmt.Errorf("open Caddy state directory: %w", err)
 	}
 
-	defer func() { result = errors.Join(result, root.Close()) }()
+	defer func() {
+		if err := root.Close(); err != nil {
+			result = errors.Join(result, fmt.Errorf("close Caddy state directory: %w", err))
+		}
+	}()
 	reader := tar.NewReader(zipped)
 	var expanded int64
 
@@ -50,11 +58,15 @@ func Restore(directory string, data []byte) (result error) {
 				return errors.New("expanded caddy state exceeds size limit")
 			}
 
-			return err
+			if err != nil {
+				return fmt.Errorf("read Caddy archive trailer: %w", err)
+			}
+
+			return nil
 		}
 
 		if err != nil {
-			return err
+			return fmt.Errorf("read Caddy archive entry: %w", err)
 		}
 
 		name := filepath.Clean(header.Name)
@@ -75,20 +87,29 @@ func Restore(directory string, data []byte) (result error) {
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := root.MkdirAll(name, 0o700); err != nil {
-				return err
+				return fmt.Errorf("create restored Caddy directory %q: %w", name, err)
 			}
 		case tar.TypeReg:
 			if err := root.MkdirAll(filepath.Dir(name), 0o700); err != nil {
-				return err
+				return fmt.Errorf("create parent directory for restored Caddy file %q: %w", name, err)
 			}
 
 			file, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 			if err != nil {
-				return err
+				return fmt.Errorf("create restored Caddy file %q: %w", name, err)
 			}
 
 			_, copyErr := io.Copy(file, reader)
-			if err := errors.Join(copyErr, file.Close()); err != nil {
+			if copyErr != nil {
+				copyErr = fmt.Errorf("restore Caddy file %q: %w", name, copyErr)
+			}
+
+			closeErr := file.Close()
+			if closeErr != nil {
+				closeErr = fmt.Errorf("close restored Caddy file %q: %w", name, closeErr)
+			}
+
+			if err := errors.Join(copyErr, closeErr); err != nil {
 				return err
 			}
 		default:
@@ -105,7 +126,7 @@ func Snapshot(directory string) ([]byte, error) {
 
 	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			return fmt.Errorf("walk Caddy state at %q: %w", path, walkErr)
 		}
 
 		if path == filepath.Join(directory, "locks") && entry.IsDir() {
@@ -114,7 +135,7 @@ func Snapshot(directory string) ([]byte, error) {
 
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return fmt.Errorf("read Caddy state file info for %q: %w", path, err)
 		}
 
 		if !info.IsDir() && !info.Mode().IsRegular() {
@@ -128,16 +149,16 @@ func Snapshot(directory string) ([]byte, error) {
 
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
-			return err
+			return fmt.Errorf("create Caddy archive header for %q: %w", path, err)
 		}
 
 		header.Name, err = filepath.Rel(directory, path)
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve Caddy archive path for %q: %w", path, err)
 		}
 
 		if err := writer.WriteHeader(header); err != nil {
-			return err
+			return fmt.Errorf("write Caddy archive header for %q: %w", path, err)
 		}
 
 		if info.IsDir() {
@@ -146,14 +167,36 @@ func Snapshot(directory string) ([]byte, error) {
 
 		file, err := os.Open(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("open Caddy state file %q: %w", path, err)
 		}
 
 		_, copyErr := io.Copy(writer, file)
+		if copyErr != nil {
+			copyErr = fmt.Errorf("archive Caddy state file %q: %w", path, copyErr)
+		}
 
-		return errors.Join(copyErr, file.Close())
+		closeErr := file.Close()
+		if closeErr != nil {
+			closeErr = fmt.Errorf("close Caddy state file %q: %w", path, closeErr)
+		}
+
+		return errors.Join(copyErr, closeErr)
 	})
-	if err := errors.Join(err, writer.Close(), zipped.Close()); err != nil {
+	if err != nil {
+		err = fmt.Errorf("walk Caddy state directory: %w", err)
+	}
+
+	writerCloseErr := writer.Close()
+	if writerCloseErr != nil {
+		writerCloseErr = fmt.Errorf("close Caddy state archive writer: %w", writerCloseErr)
+	}
+
+	zippedCloseErr := zipped.Close()
+	if zippedCloseErr != nil {
+		zippedCloseErr = fmt.Errorf("close compressed Caddy state archive: %w", zippedCloseErr)
+	}
+
+	if err := errors.Join(err, writerCloseErr, zippedCloseErr); err != nil {
 		return nil, err
 	}
 

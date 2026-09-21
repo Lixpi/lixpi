@@ -32,7 +32,7 @@ type Snapshots struct {
 func (s *Snapshots) request(ctx context.Context, subject string, value, target any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode JetStream request for %q: %w", subject, err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -40,20 +40,24 @@ func (s *Snapshots) request(ctx context.Context, subject string, value, target a
 
 	message, err := s.Connection.RequestWithContext(ctx, subject, data)
 	if err != nil {
-		return err
+		return fmt.Errorf("request JetStream operation %q: %w", subject, err)
 	}
 
 	var response server.ApiResponse
 
 	if err := json.Unmarshal(message.Data, &response); err != nil {
-		return err
+		return fmt.Errorf("decode JetStream response envelope for %q: %w", subject, err)
 	}
 
 	if err := response.ToError(); err != nil {
-		return err
+		return fmt.Errorf("JetStream operation %q failed: %w", subject, err)
 	}
 
-	return json.Unmarshal(message.Data, target)
+	if err := json.Unmarshal(message.Data, target); err != nil {
+		return fmt.Errorf("decode JetStream response for %q: %w", subject, err)
+	}
+
+	return nil
 }
 
 func (s *Snapshots) List(ctx context.Context) ([]string, error) {
@@ -63,7 +67,7 @@ func (s *Snapshots) List(ctx context.Context) ([]string, error) {
 		var response server.JSApiStreamListResponse
 
 		if err := s.request(ctx, s.Subjects.StreamList, map[string]int{"offset": offset}, &response); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list streams at offset %d: %w", offset, err)
 		}
 
 		for _, stream := range response.Streams {
@@ -89,7 +93,7 @@ func (s *Snapshots) List(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-func (s *Snapshots) Capture(ctx context.Context, name string, destination io.Writer) (*Snapshot, error) {
+func (s *Snapshots) Capture(ctx context.Context, name string, destination io.Writer) (snapshot *Snapshot, result error) {
 	if !streamName.MatchString(name) {
 		return nil, errors.New("unsafe stream name")
 	}
@@ -98,17 +102,21 @@ func (s *Snapshots) Capture(ctx context.Context, name string, destination io.Wri
 
 	sub, err := s.Connection.SubscribeSync(inbox)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("subscribe to snapshot delivery for stream %q: %w", name, err)
 	}
 
-	defer func() { _ = sub.Unsubscribe() }()
+	defer func() {
+		if err := sub.Unsubscribe(); err != nil {
+			result = errors.Join(result, fmt.Errorf("unsubscribe snapshot delivery for stream %q: %w", name, err))
+		}
+	}()
 
 	if err := sub.SetPendingLimits(128, 8*1024*1024); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set snapshot delivery limits for stream %q: %w", name, err)
 	}
 
 	if err := s.Connection.FlushTimeout(time.Second); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("flush snapshot delivery subscription for stream %q: %w", name, err)
 	}
 
 	var response server.JSApiStreamSnapshotResponse
@@ -119,7 +127,7 @@ func (s *Snapshots) Capture(ctx context.Context, name string, destination io.Wri
 		server.JSApiStreamSnapshotRequest{DeliverSubject: inbox, ChunkSize: 128 * 1024, WindowSize: 1024 * 1024, CheckMsgs: true},
 		&response,
 	); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start snapshot for stream %q: %w", name, err)
 	}
 
 	if response.Config == nil || response.State == nil || response.Config.Name != name {
@@ -132,7 +140,7 @@ func (s *Snapshots) Capture(ctx context.Context, name string, destination io.Wri
 		cancel()
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("receive snapshot chunk for stream %q: %w", name, err)
 		}
 
 		if status := message.Header.Get("Status"); status != "" && status != "204" {
@@ -144,12 +152,12 @@ func (s *Snapshots) Capture(ctx context.Context, name string, destination io.Wri
 		}
 
 		if _, err := destination.Write(message.Data); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("write snapshot chunk for stream %q: %w", name, err)
 		}
 
 		if message.Reply != "" {
 			if err := message.Respond(nil); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("acknowledge snapshot chunk for stream %q: %w", name, err)
 			}
 		}
 	}
@@ -170,7 +178,7 @@ func (s *Snapshots) Restore(ctx context.Context, snapshot Snapshot, source io.Re
 		server.JSApiStreamRestoreRequest{Config: snapshot.Config, State: snapshot.State},
 		&response,
 	); err != nil {
-		return err
+		return fmt.Errorf("start restore for stream %q: %w", snapshot.Config.Name, err)
 	}
 
 	if response.DeliverSubject == "" {
@@ -182,7 +190,7 @@ func (s *Snapshots) Restore(ctx context.Context, snapshot Snapshot, source io.Re
 	for {
 		count, err := source.Read(chunk)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return err
+			return fmt.Errorf("read restore chunk for stream %q: %w", snapshot.Config.Name, err)
 		}
 
 		if count > 0 {
@@ -191,7 +199,7 @@ func (s *Snapshots) Restore(ctx context.Context, snapshot Snapshot, source io.Re
 			cancel()
 
 			if sendErr != nil {
-				return sendErr
+				return fmt.Errorf("send restore chunk for stream %q: %w", snapshot.Config.Name, sendErr)
 			}
 
 			if len(ack.Data) > 0 || ack.Header.Get("Status") != "" {
@@ -209,23 +217,23 @@ func (s *Snapshots) Restore(ctx context.Context, snapshot Snapshot, source io.Re
 
 	message, err := s.Connection.RequestWithContext(completionCtx, response.DeliverSubject, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("finish restore for stream %q: %w", snapshot.Config.Name, err)
 	}
 
 	var completion server.ApiResponse
 
 	if err := json.Unmarshal(message.Data, &completion); err != nil {
-		return err
+		return fmt.Errorf("decode restore completion for stream %q: %w", snapshot.Config.Name, err)
 	}
 
 	if err := completion.ToError(); err != nil {
-		return err
+		return fmt.Errorf("restore stream %q failed: %w", snapshot.Config.Name, err)
 	}
 
 	var actual server.JSApiStreamInfoResponse
 
 	if err := s.request(ctx, strings.ReplaceAll(s.Subjects.StreamInfo, "*", snapshot.Config.Name), nil, &actual); err != nil {
-		return err
+		return fmt.Errorf("read restored stream %q: %w", snapshot.Config.Name, err)
 	}
 
 	if actual.StreamInfo == nil {

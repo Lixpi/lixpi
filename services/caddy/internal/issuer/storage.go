@@ -2,6 +2,7 @@ package issuer
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"sync"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/caddyserver/certmagic"
 )
 
+//nolint:gochecknoinits // Caddy discovers storage modules through process-wide static registration.
 func init() {
 	caddy.RegisterModule(&fileStorage{})
 }
@@ -52,7 +54,11 @@ func (s *frozenStorage) Store(ctx context.Context, key string, value []byte) err
 		return fs.ErrClosed
 	}
 
-	return s.FileStorage.Store(ctx, key, value)
+	if err := s.FileStorage.Store(ctx, key, value); err != nil {
+		return fmt.Errorf("store Caddy file %q: %w", key, err)
+	}
+
+	return nil
 }
 
 func (s *frozenStorage) Delete(ctx context.Context, key string) error {
@@ -63,7 +69,11 @@ func (s *frozenStorage) Delete(ctx context.Context, key string) error {
 		return fs.ErrClosed
 	}
 
-	return s.FileStorage.Delete(ctx, key)
+	if err := s.FileStorage.Delete(ctx, key); err != nil {
+		return fmt.Errorf("delete Caddy file %q: %w", key, err)
+	}
+
+	return nil
 }
 
 func (s *frozenStorage) freeze() {

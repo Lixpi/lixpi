@@ -33,14 +33,14 @@ func health(ctx context.Context, args []string) error {
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:3020/"+mode, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("create health probe request: %w", err)
 	}
 
 	request.Header.Set("Authorization", "Bearer "+os.Getenv("NATS_CALLOUT_PASSWORD"))
 
 	response, err := (&http.Client{Timeout: 2 * time.Second}).Do(request)
 	if err != nil {
-		return errors.New("health probe unavailable")
+		return fmt.Errorf("perform health probe: %w", err)
 	}
 
 	defer func() { _ = response.Body.Close() }()
@@ -66,12 +66,12 @@ func fence(ctx context.Context, args []string) error {
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://runtime/fence/"+args[0], nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("create fence request: %w", err)
 	}
 
 	response, err := (&http.Client{Transport: transport, Timeout: 5 * time.Second}).Do(request)
 	if err != nil {
-		return err
+		return fmt.Errorf("perform fence request: %w", err)
 	}
 
 	defer func() { _ = response.Body.Close() }()
@@ -83,7 +83,7 @@ func fence(ctx context.Context, args []string) error {
 	return nil
 }
 
-func recovery(ctx context.Context, operation string, args []string) error {
+func recovery(ctx context.Context, operation string, args []string) (result error) {
 	if (operation == "backup" && len(args) != 0) || len(args) > 1 {
 		return errors.New("restore accepts an optional snapshot id; backup takes no arguments")
 	}
@@ -113,7 +113,7 @@ func recovery(ctx context.Context, operation string, args []string) error {
 
 	p, err := policy.Transport()
 	if err != nil {
-		return err
+		return fmt.Errorf("load maintenance transport policy: %w", err)
 	}
 
 	connection, err := nats.Connect(
@@ -124,20 +124,24 @@ func recovery(ctx context.Context, operation string, args []string) error {
 		nats.Timeout(2*time.Second),
 	)
 	if err != nil {
-		return errors.New("maintenance NATS connection failed")
+		return fmt.Errorf("connect maintenance NATS client: %w", err)
 	}
 	defer connection.Close()
 
 	store, err := maintenance.OpenDirectoryStore(os.Getenv("NATS_SNAPSHOT_DIR"))
 	if err != nil {
-		return err
+		return fmt.Errorf("open snapshot directory: %w", err)
 	}
 
-	defer func() { _ = store.Root.Close() }()
+	defer func() {
+		if err := store.Root.Close(); err != nil {
+			result = errors.Join(result, fmt.Errorf("close snapshot directory: %w", err))
+		}
+	}()
 	scratch := envDefault("NATS_BACKUP_SCRATCH", "/tmp")
 
 	if err := os.MkdirAll(scratch, 0o700); err != nil {
-		return err
+		return fmt.Errorf("create backup scratch directory: %w", err)
 	}
 
 	backup := maintenance.Backup{
@@ -153,16 +157,20 @@ func recovery(ctx context.Context, operation string, args []string) error {
 			id = args[0]
 		}
 
-		return backup.Restore(ctx, id)
+		if err := backup.Restore(ctx, id); err != nil {
+			return fmt.Errorf("restore broker snapshot %q: %w", id, err)
+		}
+
+		return nil
 	}
 
 	id, err := backup.Capture(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("capture broker snapshot: %w", err)
 	}
 
 	if _, err := fmt.Fprintf(os.Stdout, "NATS_BACKUP_COMPLETE %s\n", id); err != nil {
-		return err
+		return fmt.Errorf("write backup completion: %w", err)
 	}
 
 	return nil

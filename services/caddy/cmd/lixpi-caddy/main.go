@@ -53,9 +53,13 @@ func run(ctx context.Context, args []string) error {
 
 	if command == "version" {
 		version, _ := caddy.Version()
-		_, err := fmt.Fprintln(os.Stdout, "lixpi-caddy", version)
 
-		return err
+		_, err := fmt.Fprintln(os.Stdout, "lixpi-caddy", version)
+		if err != nil {
+			return fmt.Errorf("write Caddy version: %w", err)
+		}
+
+		return nil
 	}
 
 	if command != "" && command != "local" && command != "maintain" {
@@ -97,7 +101,7 @@ func execute(ctx context.Context, settings settings) error {
 	engine := issuer.Engine{Email: settings.email, Region: settings.region, HostedZoneID: settings.zone, Local: settings.local}
 	if settings.local {
 		if err := os.MkdirAll(settings.directory, 0o700); err != nil {
-			return err
+			return fmt.Errorf("create local certificate directory: %w", err)
 		}
 
 		localCtx, cancel := context.WithTimeout(ctx, settings.timeout)
@@ -106,12 +110,12 @@ func execute(ctx context.Context, settings settings) error {
 		err := engine.Maintain(localCtx, settings.directory, settings.domains, func() error {
 			roots, _, err := certificates.LocalRoots(settings.directory)
 			if err != nil {
-				return err
+				return fmt.Errorf("load local certificate roots: %w", err)
 			}
 
 			candidate, err := certificates.Read(settings.directory, "localhost", roots, time.Now())
 			if err != nil {
-				return err
+				return fmt.Errorf("read local certificate: %w", err)
 			}
 
 			if !candidate.Ready(time.Now()) {
@@ -121,11 +125,11 @@ func execute(ctx context.Context, settings settings) error {
 			return nil
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("maintain local certificate: %w", err)
 		}
 
 		if err := certificates.ExportLocal(settings.directory, time.Now()); err != nil {
-			return err
+			return fmt.Errorf("export local certificate: %w", err)
 		}
 
 		slog.Info("local certificate ready", "event", "LOCAL_CERTIFICATE_READY")
@@ -135,7 +139,7 @@ func execute(ctx context.Context, settings settings) error {
 
 	awsConfig, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("load AWS configuration: %w", err)
 	}
 
 	manager := maintenance.Manager{
@@ -146,7 +150,7 @@ func execute(ctx context.Context, settings settings) error {
 		Issuer: engine, Domains: settings.domains, Timeout: settings.timeout,
 	}
 	if err := manager.Run(ctx); err != nil {
-		return err
+		return fmt.Errorf("run certificate maintenance: %w", err)
 	}
 
 	slog.Info("certificate maintenance complete", "event", "CERTIFICATE_MAINTENANCE_COMPLETE")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -41,11 +42,11 @@ func run(ctx context.Context, args []string) error {
 	check := flags.Bool("t", false, "validate configuration without starting")
 
 	if err := flags.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("parse serve flags: %w", err)
 	}
 
 	if flags.NArg() != 0 {
-		return fmt.Errorf("unexpected serve arguments")
+		return errors.New("unexpected serve arguments")
 	}
 
 	return serve(ctx, *config, *routes, *check)

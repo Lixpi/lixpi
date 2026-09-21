@@ -52,7 +52,7 @@ func (e *faultEvaluator) Evaluate(ctx context.Context, request *jwt.Authorizatio
 
 	permissions, err := e.policy.BrowserPermissions("verified-user")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve test browser permissions: %w", err)
 	}
 
 	return &auth.Identity{Name: "verified-user", Account: "AUTH", Permissions: permissions}, nil
@@ -172,13 +172,13 @@ func startAdmissionCluster(t *testing.T, count int, configure ...func(int, *admi
 			apply(i, &settings)
 		}
 
-		dispatcher, err := admission.Start(settings)
+		dispatcher, err := admission.Start(t.Context(), settings)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		t.Cleanup(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
 			_ = dispatcher.Stop(ctx)
 		})

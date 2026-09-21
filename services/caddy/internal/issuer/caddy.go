@@ -75,14 +75,18 @@ func (e Engine) Configuration(root string, domains []string) *caddy.Config {
 // The caller reserves time after its deadline to persist state even on failure.
 func (e Engine) Maintain(ctx context.Context, root string, domains []string, ready func() error) (result error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("start certificate maintenance: %w", err)
 	}
 
 	if err := caddy.Run(e.Configuration(root, domains)); err != nil {
 		return fmt.Errorf("start embedded Caddy: %w", err)
 	}
 
-	defer func() { result = errors.Join(result, caddy.Stop()) }()
+	defer func() {
+		if err := caddy.Stop(); err != nil {
+			result = errors.Join(result, fmt.Errorf("stop embedded Caddy: %w", err))
+		}
+	}()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 

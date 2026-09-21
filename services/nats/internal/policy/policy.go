@@ -3,6 +3,7 @@ package policy
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -56,7 +57,12 @@ func Transport() (*Policy, error) {
 func UserToken(identity string) string { return hex.EncodeToString([]byte(identity)) }
 
 func (p *Policy) BrowserPermissions(identity string) (jwt.Permissions, error) {
-	return Expand(p.Browser, identity)
+	permissions, err := Expand(p.Browser, identity)
+	if err != nil {
+		return jwt.Permissions{}, fmt.Errorf("expand browser permissions: %w", err)
+	}
+
+	return permissions, nil
 }
 
 func Expand(templates []jwt.Permissions, identity string) (jwt.Permissions, error) {
@@ -97,7 +103,7 @@ func Expand(templates []jwt.Permissions, identity string) (jwt.Permissions, erro
 			{&result.Sub.Deny, template.Sub.Deny},
 		} {
 			if err := resolve(grant.target, grant.source); err != nil {
-				return jwt.Permissions{}, err
+				return jwt.Permissions{}, fmt.Errorf("resolve permission template: %w", err)
 			}
 		}
 	}

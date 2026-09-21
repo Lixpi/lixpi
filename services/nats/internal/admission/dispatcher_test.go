@@ -102,7 +102,7 @@ func TestCoordinatorRejectsStaleAndUnboundWorkerReplies(t *testing.T) {
 
 			for index, node := range []string{"first", "second"} {
 				d.peers[node] = peer{
-					Node: node, Instance: identifier(), Digest: "policy", Capacity: 2, InFlight: index, Available: true,
+					Node: node, Instance: testIdentifier(t), Digest: "policy", Capacity: 2, InFlight: index, Available: true,
 					received: time.Now(),
 				}
 
@@ -132,11 +132,11 @@ func TestCoordinatorRejectsStaleAndUnboundWorkerReplies(t *testing.T) {
 						case "node":
 							result.Node = "different-node"
 						case "instance":
-							result.Instance = identifier()
+							result.Instance = testIdentifier(t)
 						case "correlation":
 							result.Correlation = "previous-admission"
 						case "attempt":
-							result.Attempt = identifier()
+							result.Attempt = testIdentifier(t)
 						case "deny":
 							result.Status = "deny"
 						case "late":

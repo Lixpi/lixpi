@@ -3,6 +3,7 @@ package maintenance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -64,11 +65,11 @@ func TestMaintenanceRestoresStateAndSkipsFreshIssuance(t *testing.T) {
 			testcert.Write(t, root, "nats.example.test", pair, "{}")
 
 			if err := os.MkdirAll(filepath.Join(root, "acme"), 0o700); err != nil {
-				return err
+				return fmt.Errorf("create ACME state directory: %w", err)
 			}
 
 			if err := os.WriteFile(filepath.Join(root, "acme", "account.json"), []byte("account"), 0o600); err != nil {
-				return err
+				return fmt.Errorf("write ACME account: %w", err)
 			}
 
 			return ready()

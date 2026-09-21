@@ -125,7 +125,7 @@ func runtimeFixture(t *testing.T, evaluator auth.Evaluator, certificates *mainte
 		}
 	}
 
-	r, err := StartRuntime(RuntimeConfig{
+	r, err := StartRuntime(t.Context(), RuntimeConfig{
 		Options:      options,
 		Password:     "bootstrap",
 		Identity:     maintenance.NodeIdentity{Name: "runtime", Zone: "zone-a"},
@@ -147,7 +147,13 @@ func runtimeFixture(t *testing.T, evaluator auth.Evaluator, certificates *mainte
 		t.Fatal(err)
 	}
 
-	t.Cleanup(func() { r.Server.Shutdown(); r.close() })
+	t.Cleanup(func() {
+		r.Server.Shutdown()
+
+		if err := r.close(t.Context()); err != nil {
+			t.Error(err)
+		}
+	})
 	waitFor(t, r.Ready)
 
 	return r

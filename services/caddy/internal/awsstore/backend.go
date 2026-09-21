@@ -64,14 +64,18 @@ func (b Backend) Load(ctx context.Context) (data []byte, exists bool, resultErr 
 	}
 
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("get Caddy state: %w", err)
 	}
 
-	defer func() { resultErr = errors.Join(resultErr, result.Body.Close()) }()
+	defer func() {
+		if err := result.Body.Close(); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close Caddy state response: %w", err))
+		}
+	}()
 
 	data, err = io.ReadAll(io.LimitReader(result.Body, state.MaxArchiveBytes+1))
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("read Caddy state: %w", err)
 	}
 
 	if len(data) > state.MaxArchiveBytes {
@@ -86,8 +90,11 @@ func (b Backend) Save(ctx context.Context, data []byte) error {
 		Bucket: aws.String(b.Bucket), Key: aws.String(state.Key), Body: bytes.NewReader(data),
 		ContentType: aws.String("application/gzip"), ServerSideEncryption: s3types.ServerSideEncryptionAes256,
 	})
+	if err != nil {
+		return fmt.Errorf("save Caddy state: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (b Backend) Publish(ctx context.Context, domain string, pair certificates.Pair) error {
@@ -98,7 +105,7 @@ func (b Backend) Publish(ctx context.Context, domain string, pair certificates.P
 	for versions.HasMorePages() {
 		page, err := versions.NextPage(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("list certificate secret versions: %w", err)
 		}
 
 		for _, version := range page.Versions {
@@ -113,7 +120,7 @@ func (b Backend) Publish(ctx context.Context, domain string, pair certificates.P
 			SecretId: aws.String(name), VersionStage: aws.String("AWSCURRENT"),
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("read current certificate secret: %w", err)
 		}
 
 		var published certificates.Pair
@@ -128,7 +135,7 @@ func (b Backend) Publish(ctx context.Context, domain string, pair certificates.P
 
 	data, err := json.Marshal(pair)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal certificate secret: %w", err)
 	}
 
 	// Let the SDK generate a token for this write and reuse it across retries.
@@ -136,12 +143,16 @@ func (b Backend) Publish(ctx context.Context, domain string, pair certificates.P
 	_, err = b.Secrets.PutSecretValue(ctx, &secretsmanager.PutSecretValueInput{
 		SecretId: aws.String(name), SecretString: aws.String(string(data)),
 	})
+	if err != nil {
+		return fmt.Errorf("publish certificate secret: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (b Backend) Metrics(ctx context.Context, seconds float64) error {
 	dimensions := []cloudwatchtypes.Dimension{{Name: aws.String("Manager"), Value: aws.String(b.Manager)}}
+
 	_, err := b.Monitoring.PutMetricData(ctx, &cloudwatch.PutMetricDataInput{
 		Namespace: aws.String("Lixpi/Certificates"),
 		MetricData: []cloudwatchtypes.MetricDatum{
@@ -159,6 +170,9 @@ func (b Backend) Metrics(ctx context.Context, seconds float64) error {
 			},
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("publish certificate metrics: %w", err)
+	}
 
-	return err
+	return nil
 }

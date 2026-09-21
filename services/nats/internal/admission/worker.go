@@ -3,6 +3,7 @@ package admission
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/lixpi/lixpi/services/nats/internal/auth"
@@ -39,7 +40,7 @@ func (w *Worker) Evaluate(ctx context.Context, request *jwt.AuthorizationRequest
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start credential evaluation: %w", err)
 	}
 
 	select {
@@ -62,12 +63,16 @@ func (w *Worker) Evaluate(ctx context.Context, request *jwt.AuthorizationRequest
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("wait for credential evaluation: %w", ctx.Err())
 	case result := <-completed:
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("finish credential evaluation: %w", err)
 		}
 
-		return result.identity, result.err
+		if result.err != nil {
+			return result.identity, fmt.Errorf("evaluate credentials: %w", result.err)
+		}
+
+		return result.identity, nil
 	}
 }
