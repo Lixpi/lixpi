@@ -195,7 +195,7 @@ Browser templates use `{subjectToken}` for a hex-encoded UTF-8 subject, or `{sub
 
 Registry updates affect new connections. They do not reauthorize or disconnect established sessions. For immediate revocation, an operator must also disconnect the affected clients. Restarts retain registrations in native JetStream storage. A full data loss requires submitting the latest deployment-signed manifests again; application-account backups do not contain this separate registry account.
 
-[Configuration](CONFIGURATION.md) documents the wire fields and bootstrap settings. [Environment setup](../../../infrastructure/init-script/README.md) explains signing and refreshing Lixpi declarations.
+[Configuration](CONFIGURATION.md) documents the wire fields and bootstrap settings. [Environment setup](../../../dev-tools/config-utils/README.md) explains signing and refreshing Lixpi declarations.
 
 ## Capacity and peer selection
 

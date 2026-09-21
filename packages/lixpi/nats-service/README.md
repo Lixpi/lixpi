@@ -1,6 +1,6 @@
 # Lixpi NATS Service
 
-TypeScript dependency declarations are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before reinstalling dependencies.
+TypeScript dependency declarations are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before reinstalling dependencies.
 
 Shared NATS client implementations for Lixpi services. The TypeScript package is used by the live app; the Python package is preserved for legacy tooling and future internal-service splits.
 

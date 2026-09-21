@@ -53,7 +53,7 @@ jobs:
                     - name: quality-runner
                       command: quality-runner validate
                     - name: versions-registry
-                      command: files validate versions-registry/src
+                      command: files validate dev-tools/versions-registry/src
                     - name: shared
                       command: shared validate
                     - name: infrastructure

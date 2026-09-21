@@ -1,6 +1,6 @@
 # UI Primitives
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 [Gradients](docs/GRADIENTS.md) covers shared color and rendering utilities. [Color analysis](docs/COLOR-ANALYSIS.md) explains the numeric analysis workflow and its limits.
 

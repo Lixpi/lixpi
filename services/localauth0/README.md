@@ -1,6 +1,6 @@
 # LocalAuth0 Mock Service
 
-The upstream image tag comes from [the version registry](../../versions-registry/README.md). Synchronize its central value before rebuilding the local mock image.
+The upstream image tag comes from [the version registry](../../dev-tools/versions-registry/README.md). Synchronize its central value before rebuilding the local mock image.
 
 LocalAuth0 is a zero-configuration Auth0 mock service for local development, enabling the Lixpi application to run completely offline without requiring an Auth0 account.
 

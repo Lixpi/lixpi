@@ -1,6 +1,6 @@
 # AI Model Registry
 
-The [version registry](../../versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
+The [version registry](../../dev-tools/versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
 
 The AI Model Registry owns the models Lixpi ships and the generation parameters they accept, which values the code sends, and which settings appear in the model configuration matrix. It is both a browser tool for reviewing parameter decisions and the service that builds the model catalog and writes it to the `AI_MODELS_LIST` DynamoDB table the API reads.
 
@@ -262,4 +262,4 @@ The API does not create, rename, or delete parameter identities. Do not bypass t
 
 A registry change is incomplete until the matching model sync profile, provider adapter, configuration matrix, UI control, tests, and developer documentation agree with it. A code change is incomplete until the registry records the same models, defaults, options, compatibility, exposure decision, and usage path.
 
-The auto-discovered `ai-model-registry` skill enforces this contract for Codex, Claude Code, Cursor, and GitHub Copilot. The authoritative workflow is [AI Model Registry](documentation/AI-MODEL-REGISTRY.md).
+The authoritative workflow is [AI Model Registry](documentation/AI-MODEL-REGISTRY.md). `AGENTS.md` requires agents to read it before changing or reviewing provider models, parameters, request payloads, configuration controls, compatibility, pricing, SDK surfaces, registry data, or the related documentation.

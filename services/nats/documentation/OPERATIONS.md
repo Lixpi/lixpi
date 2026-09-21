@@ -20,11 +20,11 @@ docker compose --profile main up -d --build lixpi-nats lixpi-nats-2 lixpi-nats-3
 docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health ready
 ```
 
-This command starts the configured application cluster and its certificate dependency. For development tests, use the synthetic isolated setup in [Go Testing and Tooling](../../../documentation/testing/Go/TESTING-GUIDE.md), which has its own credentials and volumes. API and NEX wait for broker admission readiness. NATS can start without the API, DynamoDB or a successful JWKS fetch, so those dependencies do not form a startup cycle.
+This command starts the configured application cluster and its certificate dependency. For development tests, use the synthetic isolated setup in [Go Testing and Tooling](../../../documentation/code-quality/testing/GO.md), which has its own credentials and volumes. API and NEX wait for broker admission readiness. NATS can start without the API, DynamoDB or a successful JWKS fetch, so those dependencies do not form a startup cycle.
 
 ## Applying registration changes
 
-The normal [init-config wizard](../../../infrastructure/init-script/README.md) derives and signs the application manifest whenever it saves a new configuration or a partial update. For an existing environment, choose **Edit existing** and **Partial update**; keep existing credentials unless you intend to replace them. After changing endpoint permission code, a partial save with every group skipped still prepares the updated declaration. API startup submits it automatically. The private registration authority seed stays in deployment configuration, outside the API and broker containers.
+The normal [init-config wizard](../../../dev-tools/config-utils/README.md) derives and signs the application manifest whenever it saves a new configuration or a partial update. For an existing environment, choose **Edit existing** and **Partial update**; keep existing credentials unless you intend to replace them. After changing endpoint permission code, a partial save with every group skipped still prepares the updated declaration. API startup submits it automatically. The private registration authority seed stays in deployment configuration, outside the API and broker containers.
 
 The broker accepts a repeated identical manifest without changing its revision. A changed declaration requires a higher application version and an atomic registry revision match. An older API replica cannot replace a newer declaration with its startup payload. Give replicas the same approved manifest during rollout; a replica carrying an obsolete manifest fails startup.
 
@@ -213,4 +213,4 @@ Before redirecting application clients, verify object payloads, stream/consumer 
 | Backup fails after writing files | `COMPLETE` and `LATEST`, scratch/snapshot space, file permissions and stream inventory changes |
 | Fenced node remains after restart | The persistent marker is intentional until the controller safely cancels retirement or completes evacuation |
 
-For development verification, use [Docker Go tests](../../../documentation/testing/Go/TESTING-GUIDE.md). The suite exercises worker stalls and loss, stale replies, provider outages, certificate rollback, continuing-writer backups and live scale-in. Hardware sizing still requires concurrent broker and auth load on the intended deployment hardware.
+For development verification, use [Docker Go tests](../../../documentation/code-quality/testing/GO.md). The suite exercises worker stalls and loss, stale replies, provider outages, certificate rollback, continuing-writer backups and live scale-in. Hardware sizing still requires concurrent broker and auth load on the intended deployment hardware.

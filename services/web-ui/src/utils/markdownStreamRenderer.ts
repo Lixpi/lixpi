@@ -11,7 +11,7 @@ import { html } from '@lixpi/ui-primitives/dom'
 // markdown in ProseMirror is handled by the aiChatThreadPlugin (StreamingInserter); every
 // other place that shows markdown — extraction tab, Media Library, future surfaces — MUST
 // use this class (or renderMarkdownStatic). Never hand-roll markdown→HTML and never render
-// raw markdown as plain text. See documentation/conventions/MARKDOWN-RENDERING.md.
+// raw markdown as plain text. See documentation/ai-chat/MARKDOWN-RENDERING.md.
 //
 // The emitted token shape (MarkdownStreamToken) lives in @lixpi/constants — type ∈
 // 'paragraph' | 'header' | 'code' and styles ⊆ 'bold' | 'italic' | 'strikethrough' | 'code'.

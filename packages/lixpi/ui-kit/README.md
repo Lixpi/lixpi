@@ -1,6 +1,6 @@
 # UI Kit
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 [Video controls](docs/VIDEO-PLAYER-CONTROLS.md) covers native media integration, scrubbing and accessibility. Other component guides stay beside their implementations.
 

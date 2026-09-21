@@ -226,10 +226,10 @@ graph LR
 | `AiInteractionService` | Subscribes to its per-user live receive subject, calls `CHAT_PIPELINE_RESUME` to authorize/activate relay and replay, dedupes by `pipelineEventId`, and forwards side-effect event families to `SegmentsReceiver`. |
 | `aiChatThreadPlugin` | Owns chat NodeViews, request construction, receiving decorations, and media/canvas callback surfaces. Text document mutations come from the authority service. |
 
-The markdown-to-ProseMirror assembly rules are covered in [Markdown Rendering](../conventions/MARKDOWN-RENDERING.md).
+The markdown-to-ProseMirror assembly rules are covered in [Markdown Rendering](../ai-chat/MARKDOWN-RENDERING.md).
 
 ## Related Pages
 
 - [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md) - the workflow nodes that emit every event above, plus the stream-lifecycle reasoning.
 - [System Architecture](./SYSTEM-ARCHITECTURE.md) — NATS as the communication backbone and how the browser connects over WebSocket.
-- [Markdown Rendering](../conventions/MARKDOWN-RENDERING.md) - how streamed markdown becomes ProseMirror content.
+- [Markdown Rendering](../ai-chat/MARKDOWN-RENDERING.md) - how streamed markdown becomes ProseMirror content.

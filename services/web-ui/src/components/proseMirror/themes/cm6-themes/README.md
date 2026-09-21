@@ -5,7 +5,7 @@ Themes for CodeMirror 6
 
 Themes for [CodeMirror 6](https://codemirror.net/).
 
-Dependency versions in this theme workspace and its package manifests are generated from [the repository version registry](../../../../../../../versions-registry/README.md). Edit the central JavaScript entries and synchronize the manifests before installing.
+Dependency versions in this theme workspace and its package manifests are generated from [the repository version registry](../../../../../../../dev-tools/versions-registry/README.md). Edit the central JavaScript entries and synchronize the manifests before installing.
 
 ## Available themes
 

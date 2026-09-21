@@ -36,11 +36,11 @@ Run the interactive setup wizard to generate your `.env` file:
 init-config.bat
 ```
 
-For CI/automation (non-interactive), see [`infrastructure/init-script/README.md`](../../infrastructure/init-script/README.md).
+For CI/automation (non-interactive), see [`dev-tools/config-utils/README.md`](../../dev-tools/config-utils/README.md).
 
 ### 2. Point Docker Compose at your environment file
 
-The wizard above writes `.env.<stage-name>` (e.g. `.env.shelby-local`), not a plain `.env` — and Docker Compose only auto-loads a file literally named `.env`. Without one, every `docker compose` command in this repo needs `--env-file .env.<stage-name>` typed out explicitly, or every variable in `docker-compose.yml` comes back unset with a wall of `variable is not set` warnings.
+The wizard above writes `.env.<stage-name>` (e.g. `.env.shelby-local`), not a plain `.env` — and Docker Compose only auto-loads a file literally named `.env`. Without one, every `docker compose` command in this repo needs `--env-file .env.<stage-name>` typed out explicitly, or variables across the root Compose file and its included partials come back unset with a wall of `variable is not set` warnings.
 
 Run the picker once to symlink `.env` to your chosen file — after that, every command below works with no `--env-file` flag needed:
 
@@ -95,14 +95,14 @@ docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T ver
 docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
 ```
 
-The selector can name one dependency, several dependencies, a dependency group, or `all`. The update command can cross major versions and synchronizes the committed native declarations after applying a reviewed release. To select an exact version manually, edit the type-specific JSON catalog under `versions-registry/`, then run:
+The selector can name one dependency, several dependencies, a dependency group, or `all`. The update command can cross major versions and synchronizes the committed native declarations after applying a reviewed release. To select an exact version manually, edit the type-specific JSON catalog under `dev-tools/versions-registry/`, then run:
 
 ```bash
 docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
 docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
 ```
 
-These commands run inside standalone Node containers without installing dependencies or starting application services. The check is read-only. Native Dockerfiles, package manifests, Go modules, and CI workflows remain usable by their ordinary tools. See [Dependency Version Registry](../../versions-registry/README.md) for selectors, release-note sources, generated reports, catalog ownership, and failure behavior.
+These commands run inside standalone Node containers without installing dependencies or starting application services. The check is read-only. Native Dockerfiles, package manifests, Go modules, and CI workflows remain usable by their ordinary tools. See [Dependency Version Registry](../../dev-tools/versions-registry/README.md) for selectors, release-note sources, generated reports, catalog ownership, and failure behavior.
 
 ## Build and run individual services
 

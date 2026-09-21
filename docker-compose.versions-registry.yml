@@ -7,7 +7,7 @@ services:
         volumes:
             - .:/workspace
         network_mode: none
-        entrypoint: ["node", "/workspace/versions-registry/src/sync/command.ts"]
+        entrypoint: ["node", "/workspace/dev-tools/versions-registry/src/sync/command.ts"]
         command: ["check"]
     versions-registry-update:
         extends:
@@ -15,5 +15,5 @@ services:
         network_mode: bridge
         environment:
             GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-        entrypoint: ["node", "/workspace/versions-registry/src/update/command.ts"]
+        entrypoint: ["node", "/workspace/dev-tools/versions-registry/src/update/command.ts"]
         command: []

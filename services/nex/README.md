@@ -17,7 +17,7 @@ The model catalog is not here. [`services/ai-model-registry`](../ai-model-regist
 
 ## How it works
 
-The image uses an Alpine Node.js base and builds a static `nex` binary from the selected upstream release tag. [The version registry](../../versions-registry/README.md) supplies the base image, NATS Execution Engine, pnpm, and npm dependency versions. On start, [`entrypoint.sh`](./entrypoint.sh):
+The image uses an Alpine Node.js base and builds a static `nex` binary from the selected upstream release tag. [The version registry](../../dev-tools/versions-registry/README.md) supplies the base image, NATS Execution Engine, pnpm, and npm dependency versions. On start, [`entrypoint.sh`](./entrypoint.sh):
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from the pnpm workspace (mirrors `services/api`).
 2. `nex node up` connects with the NEX nkey; the embedded broker's auth worker verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.
@@ -36,7 +36,7 @@ docker compose --profile main up -d --build lixpi-nex-1   # rebuild just this no
 docker logs -f lixpi-nex-1              # node + workload startup output
 ```
 
-Required env (supplied by `docker-compose.yml` from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
+Required env (supplied by [`docker-compose.nex.yml`](../../docker-compose.nex.yml) from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
 
 Credential ownership matters:
 
@@ -44,7 +44,7 @@ Credential ownership matters:
 - `NATS_NEX_NODE_NKEY_PUBLIC` is used here as the public half of the native NATS NKey credential and in `services/nats` as verification material for auth callout.
 - The NATS server config also lists the NEX public key so the server advertises the nonce required by native NKey auth. That static entry is not the final authorization decision; the embedded worker verifies the raw NKey challenge response and NATS enforces the returned `NEX` account user JWT.
 
-Each workload receives its own seed through the entrypoint's start-request environment. Character fidelity uses `svc:character-fidelity` in AUTH with object-read grants. Compose waits for embedded broker admission readiness, so node authentication does not depend on API health. The `nex` test domain includes opt-in application admission and workload checks; commands and required environment are in the [TypeScript testing guide](../../documentation/testing/TypeScript/TESTING-GUIDE.md).
+Each workload receives its own seed through the entrypoint's start-request environment. Character fidelity uses `svc:character-fidelity` in AUTH with object-read grants. Compose waits for embedded broker admission readiness, so node authentication does not depend on API health. The `nex` test domain includes opt-in application admission and workload checks; commands and required environment are in the [TypeScript testing guide](../../documentation/code-quality/testing/TYPESCRIPT.md).
 
 ## Operate
 

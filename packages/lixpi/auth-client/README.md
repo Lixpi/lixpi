@@ -1,6 +1,6 @@
 # Auth Client
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 `@lixpi/auth-client` contains browser authentication and current-user loading for Lixpi web clients. Each client instance owns its Auth0 or LocalAuth0 adapter, auth and user Nano Stores, authenticated session, and `users.get` request flow.
 

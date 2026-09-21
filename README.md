@@ -34,11 +34,11 @@ git clone <repository-url>
 init-config.bat
 ```
 
-For CI/automation, see [`infrastructure/init-script/README.md`](infrastructure/init-script/README.md).
+For CI/automation, see [`dev-tools/config-utils/README.md`](dev-tools/config-utils/README.md).
 
 ### 3. Point Docker Compose at your environment file
 
-`./init-config.sh` writes a `.env.<stage-name>` file (e.g. `.env.shelby-local`), not a plain `.env` — but Docker Compose only *auto-loads* a file literally named `.env`. Without one, every `docker compose`/`docker-compose` command in this repo (and there are many: `start.sh`, `rebuild-containers.sh`, the test runner, Pulumi, individual service commands in the docs) either needs `--env-file .env.<stage-name>` typed out explicitly every time, or every variable in `docker-compose.yml` comes back unset with a wall of `variable is not set` warnings.
+`./init-config.sh` writes a `.env.<stage-name>` file (e.g. `.env.shelby-local`), not a plain `.env` — but Docker Compose only *auto-loads* a file literally named `.env`. Without one, every `docker compose`/`docker-compose` command in this repo (and there are many: `start.sh`, `rebuild-containers.sh`, the test runner, Pulumi, individual service commands in the docs) either needs `--env-file .env.<stage-name>` typed out explicitly every time, or variables across the root Compose file and its included partials come back unset with a wall of `variable is not set` warnings.
 
 `./set-env.sh` fixes this once: it lists your `.env.*` files, and symlinks `.env` to whichever one you pick. After that, every command in this repo works with no extra flags — Compose finds `.env` on its own. Safe to re-run any time you want to switch which environment file is active; it only ever replaces a symlink it created itself, never a real file.
 
@@ -114,7 +114,7 @@ An animated placeholder appears immediately when generation starts; up to three 
 
 ## Tech Stack
 
-Dependency versions are authored in [`versions-registry/`](versions-registry/) and synchronized into native Dockerfiles, package manifests, Go modules, and CI declarations. See [Dependency Version Registry](versions-registry/README.md) for the Docker-only update commands and ownership rules.
+Dependency versions are authored in [`dev-tools/versions-registry/`](dev-tools/versions-registry/) and synchronized into native Dockerfiles, package manifests, Go modules, and CI declarations. See [Dependency Version Registry](dev-tools/versions-registry/README.md) for the Docker-only update commands and ownership rules.
 
 - **LangGraph** — AI workflow orchestration
 - **NATS / NATS JetStream** — messaging backbone for the entire system (end-to-end communication and object storage)
@@ -147,6 +147,7 @@ For the full architecture deep-dive — including AI chat request/response flow,
 - [System Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md) — services, NATS backbone, design decisions, scalability
 - [AI Generation Pipeline](documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, routing, streaming, usage
 - [Development Guide](documentation/platform/DEVELOPMENT.md) — building services, local auth, Pulumi
+- [Agent Skill Organization](documentation/development-workflow/AGENT-SKILLS.md) — managing and installing the project skills under `skills/`
 - [Style Extraction & Library](documentation/library/STYLE-EXTRACTION-OVERVIEW.md)
 - [Media Library](documentation/library/MEDIA-LIBRARY.md)
 - [Branch Lineage & Provenance](documentation/media-generation/BRANCH-LINEAGE.md)

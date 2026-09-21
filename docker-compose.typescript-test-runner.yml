@@ -12,7 +12,7 @@ services:
         profiles: ["dev"]
         image: lixpi/typescript-test-runner
         build:
-            dockerfile: services/typescript-test-runner/Dockerfile
+            dockerfile: dev-tools/typescript-test-runner/Dockerfile
             context: .
         environment:
             # web-ui source reads these via import.meta.env at module-eval time,
@@ -41,8 +41,8 @@ services:
             npm_config_store_dir: /pnpm-store
         volumes:
             - ./infrastructure:/usr/src/infrastructure-source:ro,cached
-            - ./infrastructure/init-script:/usr/src/init-config-source:ro,cached
-            - ./services/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
+            - ./dev-tools/config-utils:/usr/src/init-config-source:ro,cached
+            - ./dev-tools/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
             - typescript-test-runner-pnpm-store:/pnpm-store
 
             # pnpm may rewrite workspace manifests with dependency build

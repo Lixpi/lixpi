@@ -1,6 +1,6 @@
 # Canvas Components
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 [Media surfaces](docs/MEDIA.md) and [canvas effects](docs/EFFECTS.md) describe component contracts and resource ownership. [Media board example](examples/media-board.ts) mounts two independent canvases with supplied media and editor ports.
 

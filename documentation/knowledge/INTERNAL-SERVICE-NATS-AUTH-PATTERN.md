@@ -31,7 +31,7 @@ Each prefix has a `_NKEY_SEED` held by its client and a `_NKEY_PUBLIC` included 
 
 ## Add a deployment-owned service
 
-Generate a user NKey pair using the Dockerized environment setup or an approved containerized NKey tool. Keep the seed in the client's deployment secrets. Supply the public half and a unique service ID to `NATS_SERVICE_AUTH_REGISTRATIONS` in deployment configuration, then save the environment through [init-config's normal partial-update flow](../../infrastructure/init-script/README.md). That save prepares the signed manifest for API startup.
+Generate a user NKey pair using the Dockerized environment setup or an approved containerized NKey tool. Keep the seed in the client's deployment secrets. Supply the public half and a unique service ID to `NATS_SERVICE_AUTH_REGISTRATIONS` in deployment configuration, then save the environment through [init-config's normal partial-update flow](../../dev-tools/config-utils/README.md). That save prepares the signed manifest for API startup.
 
 A registration declares its application account and complete publish/subscribe grants. Deployment configures the authority's permitted accounts; the broker creates them at startup. SYS, CALLOUT and REGISTRATION cannot be application targets. A separate application's initializer can submit its own signed manifest using a separately configured authority.
 
@@ -64,7 +64,7 @@ The NEX node uses its own native seed. Conversion and fidelity workloads receive
 
 Use `nats --nkey <seed-file>` with a restrictive temporary file, remove it on exit, and keep seeds out of arguments and logs. Backup uses `NATS_BACKUP_NKEY_SEED`; restore and API debug tools use `NATS_OPERATOR_NKEY_SEED`. Backup can snapshot streams but cannot restore or delete them. Operator permissions include the restore upload subjects.
 
-The deployed Go image provides `lixpi-nats backup` and `lixpi-nats restore <snapshot-id>` with seeds held in memory. The [cluster guide](../platform/deployment/NATS-CLUSTER.md) describes inventory and recovery checks; the [Go guide](../testing/Go/TESTING-GUIDE.md) documents isolated native-client and snapshot tests.
+The deployed Go image provides `lixpi-nats backup` and `lixpi-nats restore <snapshot-id>` with seeds held in memory. The [cluster guide](../platform/deployment/NATS-CLUSTER.md) describes inventory and recovery checks; the [Go guide](../code-quality/testing/GO.md) documents isolated native-client and snapshot tests.
 
 ## Availability and rotation
 

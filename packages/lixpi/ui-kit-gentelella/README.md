@@ -1,6 +1,6 @@
 # Gentelella UI Kit
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 `@lixpi/ui-kit-gentelella` is the reusable boundary around the [Gentelella](https://github.com/ColorlibHQ/gentelella) admin theme. It exposes the complete v4 Sass theme, typed runtime modules, stable class contracts, and framework-free DOM components built with `@lixpi/ui-primitives/dom`.
 

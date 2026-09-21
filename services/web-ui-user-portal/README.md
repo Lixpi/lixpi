@@ -1,6 +1,6 @@
 # Web UI User Portal
 
-The [version registry](../../versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
+The [version registry](../../dev-tools/versions-registry/README.md) supplies Node.js, pnpm, and package versions. Edit the central values and synchronize the native declarations before rebuilding this image.
 
 `web-ui-user-portal` is the account-management SPA served from `user-portal.<domain>`. It uses authentication and user state from `@lixpi/auth-client`, the shared browser runtime and routing from `@lixpi/web-client-service-factory`, and renders its UI with `@lixpi/ui-kit-gentelella`.
 

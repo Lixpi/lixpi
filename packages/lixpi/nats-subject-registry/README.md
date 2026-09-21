@@ -1,6 +1,6 @@
 # NATS subject registry
 
-Dependency versions in `package.json` are generated from [the version registry](../../../versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
+Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
 This package declares Lixpi endpoint metadata and subject permissions, and prepares signed runtime registrations from deployment configuration. API subscription creation uses the same declarations. The package does not run handlers, verify connecting clients or contact the broker.
 
@@ -28,11 +28,11 @@ Contract assembly rejects duplicate IDs or subjects, missing permission declarat
 
 `registration.ts` binds service public keys and browser issuer settings to those permissions. It adds the application's scoped inbox templates and expresses empty permission directions as explicit deny-all grants. `registrationEnvironment()` signs the manifest with a deployment-owned account NKey. Reusing identical declarations preserves the application version; changing them increments it. An existing payload with a mismatched signature is rejected.
 
-The [environment setup container](../../../infrastructure/init-script/README.md) writes the signed manifest and trusted public authority configuration. It keeps `NATS_REGISTRATION_AUTHORITY_SEED` in deployment configuration. The API receives `NATS_APPLICATION_REGISTRATION` and `NATS_REGISTRATION_PASSWORD`, submits the approved bytes at startup, then connects using its own service credential. The broker verifies and persists registrations in protected native JetStream KV. It does not import or build this TypeScript package.
+The [environment setup container](../../../dev-tools/config-utils/README.md) writes the signed manifest and trusted public authority configuration. It keeps `NATS_REGISTRATION_AUTHORITY_SEED` in deployment configuration. The API receives `NATS_APPLICATION_REGISTRATION` and `NATS_REGISTRATION_PASSWORD`, submits the approved bytes at startup, then connects using its own service credential. The broker verifies and persists registrations in protected native JetStream KV. It does not import or build this TypeScript package.
 
 After changing a subject grant, regenerate the signed declaration and restart the API with it. An endpoint handler change alone does not update broker permissions. Keep the manifest with the matching application release; old replicas cannot overwrite a newer registration. The [runtime registration protocol](../../../services/nats/documentation/CONFIGURATION.md#registration-protocol) also accepts independently signed declarations for other applications.
 
-Tests assert public/private access, event-only grants, user-scoped events, queue metadata, portal extensions, constant-derived IDs, and invalid declarations directly. Run the package through the [shared Docker test runner](../../../documentation/testing/TypeScript/TESTING-GUIDE.md):
+Tests assert public/private access, event-only grants, user-scoped events, queue metadata, portal extensions, constant-derived IDs, and invalid declarations directly. Run the package through the [shared Docker test runner](../../../documentation/code-quality/testing/TYPESCRIPT.md):
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared nats-subject-registry
