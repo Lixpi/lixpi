@@ -4,7 +4,6 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 const SKILLS_ROOT = '/skills'
-const ALL_SKILLS_VALUE = '__all__'
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 type InstallScope = 'global' | 'project'
@@ -88,12 +87,26 @@ class SkillSetupWizard {
             }),
         )
 
+        const suggestedProjectPath = this.hostRoot
         const projectPath = scope === 'project'
             ? this.unwrap<string>(
-                await prompts.text({
-                    message: 'Which project should receive the skill links?',
-                    defaultValue: this.hostRoot,
-                    placeholder: this.hostRoot,
+                await prompts.autocomplete({
+                    message: 'Type a project path, or press Tab to use the suggestion',
+                    options() {
+                        const value = this.userInput || suggestedProjectPath
+
+                        return [{
+                            value,
+                            label: value,
+                            hint: value === suggestedProjectPath
+                                ? 'Suggested path'
+                                : undefined,
+                        }]
+                    },
+                    filter: () => true,
+                    initialValue: suggestedProjectPath,
+                    placeholder: suggestedProjectPath,
+                    completeOnTab: true,
                     validate: value => {
                         if (!value.trim())
                             return 'Enter a project path.'
@@ -121,30 +134,22 @@ class SkillSetupWizard {
             }),
         )
 
-        const skillValues = this.unwrap<string[]>(
-            await prompts.multiselect({
-                message: 'Install all skills or choose individual skills',
-                options: [
-                    {
-                        value: ALL_SKILLS_VALUE,
-                        label: 'All skills',
-                        hint: `Install all ${skillNames.length} available skills`,
-                    },
-                    ...skillNames.map(
+        const skills = this.unwrap<string[]>(
+            await prompts.groupMultiselect({
+                message: 'Which skills should be installed?',
+                options: {
+                    'All skills': skillNames.map(
                         skillName => ({
                             value: skillName,
                             label: skillName,
                         }),
                     ),
-                ],
+                },
+                selectableGroups: true,
                 required: true,
                 output: process.stderr,
             }),
         )
-
-        const skills = skillValues.includes(ALL_SKILLS_VALUE)
-            ? skillNames
-            : skillValues
 
         const plan: SelectionPlan = {
             scope,
@@ -255,4 +260,6 @@ try {
         prompts.cancel(error instanceof Error ? error.message : String(error), { output: process.stderr })
 
     process.exitCode = 1
+} finally {
+    process.stdin.destroy()
 }

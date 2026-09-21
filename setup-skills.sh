@@ -137,7 +137,7 @@ trap handle_signal INT TERM HUP
 
 docker compose -f "${COMPOSE_FILE}" build lixpi-utils
 TERMINAL_STATE="$(stty -g)"
-stty -icanon -echo min 1 time 0
+stty -icanon -echo -icrnl min 1 time 0
 SELECTION_PLAN="$(
     docker compose -f "${COMPOSE_FILE}" run --rm --no-deps -i -T \
         -e "LIXPI_HOST_ROOT=${LIXPI_ROOT}" \
