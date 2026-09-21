@@ -41,13 +41,24 @@ func peerProtocol(t *testing.T) *auth.Protocol {
 	return p
 }
 
+func testIdentifier(t *testing.T) string {
+	t.Helper()
+
+	value, err := identifier()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return value
+}
+
 func TestMembershipRejectsReplayConflictAndIncompatiblePeers(t *testing.T) {
 	d := &Dispatcher{settings: Settings{Node: "local", Digest: "policy", Protocol: peerProtocol(t)}, peers: map[string]peer{}}
 	member := membership{
 		Kind:      "membership",
 		Version:   1,
 		Node:      "peer",
-		Instance:  identifier(),
+		Instance:  testIdentifier(t),
 		Digest:    "policy",
 		Sequence:  1,
 		Capacity:  4,
@@ -95,7 +106,7 @@ func TestMembershipRejectsReplayConflictAndIncompatiblePeers(t *testing.T) {
 
 	member.Sequence++
 	member.Digest = "policy"
-	member.Instance = identifier()
+	member.Instance = testIdentifier(t)
 	deliver(member)
 
 	if _, ok := d.selectPeer(nil); ok {
@@ -118,7 +129,7 @@ func TestMembershipRejectsReplayConflictAndIncompatiblePeers(t *testing.T) {
 	}
 
 	for _, offset := range []time.Duration{-10 * time.Second, 10 * time.Second} {
-		member.Node = identifier()
+		member.Node = testIdentifier(t)
 		member.SentAt = time.Now().Add(offset).Unix()
 		deliver(member)
 

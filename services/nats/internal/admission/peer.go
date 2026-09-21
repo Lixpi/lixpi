@@ -187,14 +187,14 @@ func (d *Dispatcher) replyBusy(message *nats.Msg, work workRequest) {
 	}
 }
 
-func (d *Dispatcher) supervise() {
+func (d *Dispatcher) supervise(ctx context.Context) {
 	defer close(d.loopDone)
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
-		ctx, cancel := context.WithTimeout(d.ctx, 150*time.Millisecond)
-		message, err := d.settings.Connection.RequestWithContext(ctx, d.settings.Policy.Subjects.Protocol.Auth.Probe+"."+d.settings.Node, nil)
+		probeCtx, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
+		message, err := d.settings.Connection.RequestWithContext(probeCtx, d.settings.Policy.Subjects.Protocol.Auth.Probe+"."+d.settings.Node, nil)
 		cancel()
 		local := d.settings.Worker.Available()
 		_, remote := d.selectPeer(map[string]bool{d.settings.Node: true})
@@ -209,7 +209,7 @@ func (d *Dispatcher) supervise() {
 		d.advertise(d.stopping.Load() || d.withdrawing.Load())
 
 		select {
-		case <-d.ctx.Done():
+		case <-ctx.Done():
 			d.ready.Store(false)
 
 			return

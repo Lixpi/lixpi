@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -110,7 +111,7 @@ func (p *Protocol) Reply(request *jwt.AuthorizationRequestClaims, identity *Iden
 
 		encoded, err := user.Encode(p.Signer)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode authorized NATS user: %w", err)
 		}
 
 		response.Jwt = encoded
@@ -124,8 +125,13 @@ func (p *Protocol) Reply(request *jwt.AuthorizationRequestClaims, identity *Iden
 
 	encoded, err := response.Encode(p.Signer)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode NATS authorization response: %w", err)
 	}
 
-	return p.Curve.Seal([]byte(encoded), request.Server.XKey)
+	sealed, err := p.Curve.Seal([]byte(encoded), request.Server.XKey)
+	if err != nil {
+		return nil, fmt.Errorf("seal NATS authorization response: %w", err)
+	}
+
+	return sealed, nil
 }

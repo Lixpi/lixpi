@@ -40,7 +40,7 @@ func main() {
 	for _, root := range roots {
 		if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
-				return walkErr
+				return fmt.Errorf("walk Go source at %q: %w", path, walkErr)
 			}
 
 			if entry.IsDir() || filepath.Ext(path) != ".go" {
@@ -50,9 +50,13 @@ func main() {
 			fileIssues, err := checkFile(path, fix)
 			issues += fileIssues
 
-			return err
+			if err != nil {
+				return fmt.Errorf("check Go source file %q: %w", path, err)
+			}
+
+			return nil
 		}); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintf(os.Stderr, "check Go source root %q: %v\n", root, err)
 			failed = true
 		}
 	}
@@ -69,14 +73,14 @@ func main() {
 func checkFile(path string, fix bool) (int, error) {
 	source, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read source: %w", err)
 	}
 
 	fileSet := token.NewFileSet()
 
 	file, err := parser.ParseFile(fileSet, path, source, parser.ParseComments)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("parse source: %w", err)
 	}
 
 	issues := reportBlockComments(file, fileSet)
@@ -114,11 +118,11 @@ func checkFile(path string, fix bool) (int, error) {
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return issues, err
+		return issues, fmt.Errorf("read source permissions: %w", err)
 	}
 
 	if err := os.WriteFile(path, source, info.Mode().Perm()); err != nil {
-		return issues, err
+		return issues, fmt.Errorf("write fixed source: %w", err)
 	}
 
 	return issues, nil

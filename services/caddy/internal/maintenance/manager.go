@@ -34,10 +34,14 @@ type Manager struct {
 func (m Manager) Run(ctx context.Context) (result error) {
 	root, err := os.MkdirTemp("", "lixpi-caddy-")
 	if err != nil {
-		return err
+		return fmt.Errorf("create temporary Caddy state directory: %w", err)
 	}
 
-	defer func() { result = errors.Join(result, os.RemoveAll(root)) }()
+	defer func() {
+		if err := os.RemoveAll(root); err != nil {
+			result = errors.Join(result, fmt.Errorf("remove temporary Caddy state directory: %w", err))
+		}
+	}()
 
 	data, exists, err := m.Backend.Load(ctx)
 	if err != nil {
@@ -52,8 +56,11 @@ func (m Manager) Run(ctx context.Context) (result error) {
 
 	ready := func() error {
 		_, err := m.candidates(root)
+		if err != nil {
+			return fmt.Errorf("check certificate readiness: %w", err)
+		}
 
-		return err
+		return nil
 	}
 	if ready() != nil {
 		deadline := time.Now().Add(m.Timeout)
@@ -64,6 +71,11 @@ func (m Manager) Run(ctx context.Context) (result error) {
 		issueCtx, cancel := context.WithDeadline(ctx, deadline)
 		issueErr := m.Issuer.Maintain(issueCtx, root, m.Domains, ready)
 		cancel()
+
+		if issueErr != nil {
+			issueErr = fmt.Errorf("maintain certificates: %w", issueErr)
+		}
+
 		// A failed issuance may still have created an ACME account or refreshed ARI.
 		// Preserve that state before publishing any serving certificate.
 		archive, archiveErr := state.Snapshot(root)
@@ -75,6 +87,10 @@ func (m Manager) Run(ctx context.Context) (result error) {
 		saveErr := m.Backend.Save(persistCtx, archive)
 		persistCancel()
 
+		if saveErr != nil {
+			saveErr = fmt.Errorf("save Caddy state: %w", saveErr)
+		}
+
 		if err := errors.Join(issueErr, saveErr); err != nil {
 			return fmt.Errorf("maintain and persist Caddy state: %w", err)
 		}
@@ -82,7 +98,7 @@ func (m Manager) Run(ctx context.Context) (result error) {
 
 	candidates, err := m.candidates(root)
 	if err != nil {
-		return err
+		return fmt.Errorf("validate maintained certificates: %w", err)
 	}
 
 	minimum := time.Until(candidates[0].Leaf.NotAfter).Seconds()
@@ -94,7 +110,11 @@ func (m Manager) Run(ctx context.Context) (result error) {
 		minimum = min(minimum, time.Until(candidate.Leaf.NotAfter).Seconds())
 	}
 
-	return m.Backend.Metrics(ctx, minimum)
+	if err := m.Backend.Metrics(ctx, minimum); err != nil {
+		return fmt.Errorf("publish certificate metrics: %w", err)
+	}
+
+	return nil
 }
 
 func (m Manager) candidates(root string) ([]certificates.Candidate, error) {
@@ -108,7 +128,7 @@ func (m Manager) candidates(root string) ([]certificates.Candidate, error) {
 	for _, domain := range m.Domains {
 		candidate, err := certificates.Read(root, domain, m.Roots, now)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read certificate for %s: %w", domain, err)
 		}
 
 		if !candidate.Ready(now) {

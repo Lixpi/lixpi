@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lixpi/lixpi/services/nats/internal/auth"
@@ -62,15 +63,20 @@ type workReply struct {
 func sign(p *auth.Protocol, value any) ([]byte, error) {
 	body, err := json.Marshal(value)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode signed message body: %w", err)
 	}
 
 	signature, err := p.Signer.Sign(body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sign message body: %w", err)
 	}
 
-	return json.Marshal(signedMessage{Body: body, Signature: signature})
+	encoded, err := json.Marshal(signedMessage{Body: body, Signature: signature})
+	if err != nil {
+		return nil, fmt.Errorf("encode signed message envelope: %w", err)
+	}
+
+	return encoded, nil
 }
 
 func verify(p *auth.Protocol, data []byte, value any) error {
@@ -84,17 +90,21 @@ func verify(p *auth.Protocol, data []byte, value any) error {
 		return errors.New("invalid worker signature")
 	}
 
-	return json.Unmarshal(envelope.Body, value)
+	if err := json.Unmarshal(envelope.Body, value); err != nil {
+		return fmt.Errorf("decode signed message body: %w", err)
+	}
+
+	return nil
 }
 
-func identifier() string {
+func identifier() (string, error) {
 	var data [16]byte
 
 	if _, err := rand.Read(data[:]); err != nil {
-		panic(err)
+		return "", fmt.Errorf("read random identifier bytes: %w", err)
 	}
 
-	return hex.EncodeToString(data[:])
+	return hex.EncodeToString(data[:]), nil
 }
 
 func correlation(payload []byte, xkey string) string {

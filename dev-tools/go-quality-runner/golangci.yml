@@ -6,22 +6,49 @@ linters:
     default: standard
     enable:
         - bodyclose
+        - contextcheck
+        - errname
         - errorlint
+        - fatcontext
         - forbidigo
+        - gochecknoglobals
+        - gochecknoinits
         - gocritic
+        - gosec
+        - iface
+        - interfacebloat
+        - loggercheck
         - modernize
+        - nilerr
+        - nilnesserr
         - noctx
+        - nolintlint
+        - revive
+        - rowserrcheck
         - sloglint
+        - sqlclosecheck
         - usestdlibvars
+        - wrapcheck
         - wsl_v5
     settings:
         forbidigo:
             analyze-types: true
             forbid:
+                - pattern: ^panic$
+                  msg: Return operational failures instead of panicking.
                 - pattern: ^print(ln)?$
                   msg: Use log/slog for logging and an explicit writer for command output.
                 - pattern: ^fmt\.Print(f|ln)?$
                   msg: Use log/slog for logging and an explicit writer for command output.
+                - pattern: ^log\.(Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln|Print|Printf|Println)$
+                  msg: Use log/slog for structured logging and return failures to the caller.
+        gosec:
+            includes:
+                - G201
+                - G202
+        revive:
+            rules:
+                - name: context-as-argument
         sloglint:
             args-on-sep-lines: true
             msg-style: lowercased

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -41,7 +42,11 @@ func (f *fakeAWS) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...fu
 	data, err := io.ReadAll(input.Body)
 	f.object = data
 
-	return &s3.PutObjectOutput{}, err
+	if err != nil {
+		return nil, fmt.Errorf("read uploaded object: %w", err)
+	}
+
+	return &s3.PutObjectOutput{}, nil
 }
 
 func (f *fakeAWS) ListSecretVersionIds(

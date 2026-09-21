@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func (d *numericDate) UnmarshalJSON(data []byte) error {
 	}
 
 	if err := json.Unmarshal(data, &d.Seconds); err != nil {
-		return err
+		return fmt.Errorf("decode numeric date: %w", err)
 	}
 
 	d.Present = true
@@ -174,7 +175,7 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 
 	key, err := v.Keys.Key(ctx, header.KeyID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load browser signing key: %w", err)
 	}
 
 	digest := sha256.Sum256(message)

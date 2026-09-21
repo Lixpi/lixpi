@@ -53,7 +53,7 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 			t.Fatal(err)
 		}
 
-		r, err := StartRuntime(RuntimeConfig{
+		r, err := StartRuntime(t.Context(), RuntimeConfig{
 			Options: &server.Options{
 				Host:          "127.0.0.1",
 				Port:          -1,
@@ -84,7 +84,13 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 			t.Fatal(err)
 		}
 
-		t.Cleanup(func() { r.Server.Shutdown(); r.close() })
+		t.Cleanup(func() {
+			r.Server.Shutdown()
+
+			if err := r.close(t.Context()); err != nil {
+				t.Error(err)
+			}
+		})
 		waitFor(t, r.Ready)
 
 		return r
@@ -201,7 +207,11 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 	connection.Close()
 	bootstrap.Close()
 	r.Server.Shutdown()
-	r.close()
+
+	if err := r.close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
 	r = start()
 
 	connection, err = connect()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"path"
 	"sync"
@@ -30,7 +31,11 @@ func (m *memoryStore) Put(_ context.Context, key string, source io.Reader) error
 	data, err := io.ReadAll(source)
 	m.objects[key] = data
 
-	return err
+	if err != nil {
+		return fmt.Errorf("read stored test object: %w", err)
+	}
+
+	return nil
 }
 
 func (m *memoryStore) Get(_ context.Context, key string, target io.Writer) error {
@@ -40,8 +45,11 @@ func (m *memoryStore) Get(_ context.Context, key string, target io.Writer) error
 	}
 
 	_, err := target.Write(data)
+	if err != nil {
+		return fmt.Errorf("write loaded test object: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func snapshotServer(t *testing.T, enabled ...bool) (*Snapshots, nats.JetStreamContext) {

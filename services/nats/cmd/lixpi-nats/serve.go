@@ -28,7 +28,7 @@ import (
 func serve(ctx context.Context, config, routes string, check bool) error {
 	p, err := policy.Transport()
 	if err != nil {
-		return err
+		return fmt.Errorf("load broker transport policy: %w", err)
 	}
 
 	trust := policy.Trust{AllowHTTP: os.Getenv("ENVIRONMENT") == "local"}
@@ -53,7 +53,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	encodedTrust, err := json.Marshal(trust)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode registration trust: %w", err)
 	}
 
 	trustDigest := sha256.Sum256(append([]byte(policy.ProtocolVersion), encodedTrust...))
@@ -61,19 +61,19 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	replicas, err := strconv.Atoi(envDefault("NATS_REGISTRATION_REPLICAS", "3"))
 	if err != nil {
-		return err
+		return fmt.Errorf("parse NATS_REGISTRATION_REPLICAS: %w", err)
 	}
 
 	registration := &broker.RegistrationConfig{Trust: trust, Password: password, Replicas: replicas}
 
 	protocol, err := auth.NewProtocol(os.Getenv("NATS_AUTH_NKEY_ISSUER_SEED"), os.Getenv("NATS_AUTH_XKEY_ISSUER_SEED"))
 	if err != nil {
-		return err
+		return fmt.Errorf("create broker authentication protocol: %w", err)
 	}
 
 	xkey, err := protocol.Curve.PublicKey()
 	if err != nil {
-		return err
+		return fmt.Errorf("read callout encryption public key: %w", err)
 	}
 
 	if protocol.Issuer != os.Getenv("NATS_AUTH_NKEY_ISSUER_PUBLIC") || xkey != os.Getenv("NATS_AUTH_XKEY_ISSUER_PUBLIC") {
@@ -86,18 +86,26 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	identity, err := maintenance.Node(os.Getenv, store)
 	if err != nil {
-		return err
+		return fmt.Errorf("load broker node identity: %w", err)
 	}
 
 	root := envDefault("NATS_TLS_ROOT", "/etc/nats-tls")
 
 	minValidity, err := strconv.Atoi(envDefault("CERT_MIN_VALIDITY_SECONDS", "86400"))
-	if err != nil || minValidity < 0 {
+	if err != nil {
+		return fmt.Errorf("parse CERT_MIN_VALIDITY_SECONDS: %w", err)
+	}
+
+	if minValidity < 0 {
 		return errors.New("invalid certificate minimum validity")
 	}
 
 	refreshSeconds, err := strconv.Atoi(envDefault("CERT_REFRESH_INTERVAL_SECONDS", "60"))
-	if err != nil || refreshSeconds < 1 || refreshSeconds > 86400 {
+	if err != nil {
+		return fmt.Errorf("parse CERT_REFRESH_INTERVAL_SECONDS: %w", err)
+	}
+
+	if refreshSeconds < 1 || refreshSeconds > 86400 {
 		return errors.New("invalid certificate refresh interval")
 	}
 
@@ -112,7 +120,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 	if filename := os.Getenv("NATS_CA_FILE"); filename != "" {
 		ca, err := os.ReadFile(filename)
 		if err != nil {
-			return err
+			return fmt.Errorf("read TLS CA file %q: %w", filename, err)
 		}
 
 		certificates.Roots = x509.NewCertPool()
@@ -145,13 +153,13 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	for name, value := range defaults {
 		if err := os.Setenv(name, value); err != nil {
-			return err
+			return fmt.Errorf("set broker environment %s: %w", name, err)
 		}
 	}
 
 	options, err := server.ProcessConfigFile(config)
 	if err != nil {
-		return errors.New("invalid broker configuration")
+		return fmt.Errorf("load broker configuration %q: %w", config, err)
 	}
 
 	if options.Trace || options.TraceVerbose {
@@ -168,7 +176,11 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 	if routes != "" {
 		for address := range strings.SplitSeq(routes, ",") {
 			route, err := url.Parse(address)
-			if err != nil || route.Host == "" {
+			if err != nil {
+				return fmt.Errorf("parse cluster route %q: %w", address, err)
+			}
+
+			if route.Host == "" {
 				return errors.New("invalid cluster route")
 			}
 
@@ -178,7 +190,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	capacity, err := strconv.Atoi(envDefault("NATS_AUTH_WORKERS", "16"))
 	if err != nil {
-		return errors.New("invalid auth worker capacity")
+		return fmt.Errorf("parse NATS_AUTH_WORKERS: %w", err)
 	}
 
 	worker, err := admission.NewWorker(
@@ -186,7 +198,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 		capacity,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("create admission worker: %w", err)
 	}
 
 	settings := admission.Settings{
@@ -204,13 +216,17 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	if check {
 		if err := broker.ConfigureCallout(options, p, identity.Name, os.Getenv("NATS_CALLOUT_PASSWORD"), protocol.Issuer, xkey); err != nil {
-			return err
+			return fmt.Errorf("configure broker auth callout: %w", err)
 		}
 
-		return broker.ConfigureRegistration(options, *registration, os.Getenv("NATS_CALLOUT_PASSWORD"))
+		if err := broker.ConfigureRegistration(options, *registration, os.Getenv("NATS_CALLOUT_PASSWORD")); err != nil {
+			return fmt.Errorf("configure broker registration: %w", err)
+		}
+
+		return nil
 	}
 
-	runtime, err := broker.StartRuntime(broker.RuntimeConfig{
+	runtime, err := broker.StartRuntime(ctx, broker.RuntimeConfig{
 		Registration:        registration,
 		Options:             options,
 		Admission:           settings,
@@ -225,7 +241,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 		ControlSocket: envDefault("NATS_CONTROL_SOCKET", "/run/lixpi-nats/control.sock"),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("start broker runtime: %w", err)
 	}
 
 	slog.Info(
@@ -238,5 +254,9 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 		identity.Name,
 	)
 
-	return runtime.Run(ctx)
+	if err := runtime.Run(ctx); err != nil {
+		return fmt.Errorf("run broker runtime: %w", err)
+	}
+
+	return nil
 }

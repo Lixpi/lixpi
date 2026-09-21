@@ -49,7 +49,7 @@ type Runtime struct {
 	control            *http.Server
 }
 
-func StartRuntime(config RuntimeConfig) (*Runtime, error) {
+func StartRuntime(ctx context.Context, config RuntimeConfig) (*Runtime, error) {
 	if config.Options == nil || config.Admission.Policy == nil || config.Admission.Protocol == nil || config.Admission.Worker == nil ||
 		config.Password == "" {
 		return nil, errors.New("incomplete runtime configuration")
@@ -62,7 +62,7 @@ func StartRuntime(config RuntimeConfig) (*Runtime, error) {
 
 	xkey, err := config.Admission.Protocol.Curve.PublicKey()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read callout encryption public key: %w", err)
 	}
 
 	if err := ConfigureCallout(
@@ -73,18 +73,18 @@ func StartRuntime(config RuntimeConfig) (*Runtime, error) {
 		config.Admission.Protocol.Issuer,
 		xkey,
 	); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("configure broker auth callout: %w", err)
 	}
 
 	if config.Registration != nil {
 		if err := ConfigureRegistration(options, *config.Registration, config.Password); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("configure broker registration: %w", err)
 		}
 	}
 
 	_, err = os.Stat(filepath.Join(options.StoreDir, "scale-in-fenced"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, fmt.Errorf("read broker placement fence: %w", err)
 	}
 
 	options.Tags = config.Identity.Tags(err == nil)
@@ -100,31 +100,31 @@ func StartRuntime(config RuntimeConfig) (*Runtime, error) {
 
 	instance, err := Start(options)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start embedded broker: %w", err)
 	}
 
 	r.Server = instance
-	if err := r.startRegistry(); err != nil {
+	if err := r.startRegistry(ctx); err != nil {
 		instance.Shutdown()
 		instance.WaitForShutdown()
 
-		return nil, err
+		return nil, fmt.Errorf("start registration store: %w", err)
 	}
 
-	if err := r.startDispatcher(); err != nil {
+	if err := r.startDispatcher(ctx); err != nil {
 		instance.Shutdown()
 		instance.WaitForShutdown()
 
-		return nil, err
+		return nil, fmt.Errorf("start admission dispatcher: %w", err)
 	}
 
 	if config.Certificates != nil {
 		info, err := instance.Varz(nil)
 		if err != nil {
 			instance.Shutdown()
-			r.close()
+			closeErr := r.close(ctx)
 
-			return nil, err
+			return nil, errors.Join(fmt.Errorf("read broker listener state: %w", err), closeErr)
 		}
 
 		config.Certificates.Reload = r.reloadCertificate
@@ -134,33 +134,35 @@ func StartRuntime(config RuntimeConfig) (*Runtime, error) {
 		)
 	}
 
-	if err := r.startHealth(); err != nil {
+	if err := r.startHealth(ctx); err != nil {
 		instance.Shutdown()
-		r.close()
+		closeErr := r.close(ctx)
 
-		return nil, err
+		return nil, errors.Join(fmt.Errorf("start broker health listeners: %w", err), closeErr)
 	}
 
 	return r, nil
 }
 
-func (r *Runtime) startDispatcher() error {
+func (r *Runtime) startDispatcher(ctx context.Context) error {
 	settings := r.config.Admission
 
 	connection, err := nats.Connect("", nats.InProcessServer(r.Server), nats.UserInfo("auth_callout", r.config.Password),
 		nats.CustomInboxPrefix(settings.Policy.Subjects.Protocol.Auth.Reply+"."+settings.Node), nats.NoReconnect(), nats.Timeout(time.Second),
-		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, _ error) { slog.Error("admission subscription failed") }))
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+			slog.Error("admission subscription failed", "error", err)
+		}))
 	if err != nil {
-		return err
+		return fmt.Errorf("connect admission dispatcher: %w", err)
 	}
 
 	settings.Connection = connection
 
-	dispatcher, err := admission.Start(settings)
+	dispatcher, err := admission.Start(ctx, settings)
 	if err != nil {
 		connection.Close()
 
-		return err
+		return fmt.Errorf("start admission dispatcher: %w", err)
 	}
 
 	r.connection = connection
@@ -180,7 +182,7 @@ func (r *Runtime) Ready() bool {
 func (r *Runtime) reloadCertificate(certPath, keyPath string) error {
 	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("load replacement TLS certificate: %w", err)
 	}
 
 	if r.certificate.Load() == nil {
@@ -198,23 +200,28 @@ func (r *Runtime) Fence(enable bool) error {
 	r.reloadMu.Lock()
 	defer r.reloadMu.Unlock()
 
-	return maintenance.SetFence(r.options.StoreDir, enable, func(fenced bool) error {
+	err := maintenance.SetFence(r.options.StoreDir, enable, func(fenced bool) error {
 		next := r.options.Clone()
 		next.Tags = r.config.Identity.Tags(fenced)
 
 		if err := r.Server.ReloadOptions(next); err != nil {
-			return err
+			return fmt.Errorf("reload broker placement options: %w", err)
 		}
 
 		r.options = next
 
 		return nil
 	})
+	if err != nil {
+		return fmt.Errorf("set broker placement fence: %w", err)
+	}
+
+	return nil
 }
 
 // Run recovers dispatch infrastructure independently of worker capacity and provider availability.
-func (r *Runtime) Run(ctx context.Context) error {
-	defer r.close()
+func (r *Runtime) Run(ctx context.Context) (result error) {
+	defer func() { result = errors.Join(result, r.close(ctx)) }()
 	maintenanceCtx, cancelMaintenance := context.WithCancel(ctx)
 	var maintenanceGroup sync.WaitGroup
 
@@ -268,8 +275,11 @@ func (r *Runtime) Run(ctx context.Context) error {
 			r.dispatcher.Store(nil)
 
 			if d != nil {
-				stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				_ = d.Stop(stopCtx)
+				stopCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				if err := d.Stop(stopCtx); err != nil {
+					slog.Warn("previous admission dispatcher did not stop cleanly", "error", err)
+				}
+
 				cancel()
 			}
 
@@ -277,8 +287,8 @@ func (r *Runtime) Run(ctx context.Context) error {
 				r.connection.Close()
 			}
 
-			if err := r.startDispatcher(); err != nil {
-				slog.Error("admission dispatcher recovery failed")
+			if err := r.startDispatcher(ctx); err != nil {
+				slog.Error("admission dispatcher recovery failed", "error", err)
 			} else {
 				unhealthy = 0
 				slog.Info("admission dispatcher recovered")
@@ -302,7 +312,7 @@ func (r *Runtime) watchCertificates(ctx context.Context) {
 		cancel()
 
 		if err != nil {
-			slog.Error("certificate refresh failed; retaining installed certificate")
+			slog.Error("certificate refresh failed; retaining installed certificate", "error", err)
 		}
 
 		r.certificateHealthy.Store(err == nil)
@@ -315,9 +325,9 @@ func (r *Runtime) watchCertificates(ctx context.Context) {
 	}
 }
 
-func (r *Runtime) close() {
+func (r *Runtime) close(ctx context.Context) (result error) {
 	if !r.stopping.CompareAndSwap(false, true) {
-		return
+		return nil
 	}
 
 	d := r.dispatcher.Load()
@@ -334,15 +344,18 @@ func (r *Runtime) close() {
 	case <-drained:
 	case <-timer.C:
 		r.Server.Shutdown()
+		result = errors.New("broker drain timed out")
 	}
 
 	timer.Stop()
 	r.Server.WaitForShutdown()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 	defer cancel()
 
 	if d != nil {
-		_ = d.Stop(ctx)
+		if err := d.Stop(shutdownCtx); err != nil {
+			result = errors.Join(result, fmt.Errorf("stop admission dispatcher: %w", err))
+		}
 	}
 
 	if r.connection != nil {
@@ -354,11 +367,20 @@ func (r *Runtime) close() {
 	}
 
 	if r.health != nil {
-		_ = r.health.Shutdown(ctx)
+		if err := r.health.Shutdown(shutdownCtx); err != nil {
+			result = errors.Join(result, fmt.Errorf("stop health listener: %w", err))
+		}
 	}
 
 	if r.control != nil {
-		_ = r.control.Shutdown(ctx)
-		_ = os.Remove(r.config.ControlSocket)
+		if err := r.control.Shutdown(shutdownCtx); err != nil {
+			result = errors.Join(result, fmt.Errorf("stop control listener: %w", err))
+		}
+
+		if err := os.Remove(r.config.ControlSocket); err != nil && !errors.Is(err, os.ErrNotExist) {
+			result = errors.Join(result, fmt.Errorf("remove control socket: %w", err))
+		}
 	}
+
+	return result
 }

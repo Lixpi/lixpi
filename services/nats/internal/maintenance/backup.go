@@ -28,18 +28,22 @@ type Backup struct {
 	Scratch   string
 }
 
-func (b *Backup) Capture(ctx context.Context) (string, error) {
+func (b *Backup) Capture(ctx context.Context) (snapshotID string, result error) {
 	directory, err := os.MkdirTemp(b.Scratch, "nats-backup.")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create backup staging directory: %w", err)
 	}
 
-	defer func() { _ = os.RemoveAll(directory) }()
+	defer func() {
+		if err := os.RemoveAll(directory); err != nil {
+			result = errors.Join(result, fmt.Errorf("remove backup staging directory: %w", err))
+		}
+	}()
 	id := time.Now().UTC().Format("20060102T150405Z") + "-" + rand.Text()
 
 	names, err := b.Snapshots.List(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("list streams before backup: %w", err)
 	}
 
 	var inventory bytes.Buffer
@@ -49,40 +53,40 @@ func (b *Backup) Capture(ctx context.Context) (string, error) {
 		streamDir := filepath.Join(directory, name)
 
 		if err := os.Mkdir(streamDir, 0o700); err != nil {
-			return "", err
+			return "", fmt.Errorf("create backup directory for stream %q: %w", name, err)
 		}
 
 		archivePath := filepath.Join(streamDir, "stream.tar.s2")
 
 		file, err := os.OpenFile(archivePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("create snapshot archive for stream %q: %w", name, err)
 		}
 
 		snapshot, err := b.Snapshots.Capture(ctx, name, file)
 		closeErr := file.Close()
 
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("capture stream %q: %w", name, err)
 		}
 
 		if closeErr != nil {
-			return "", closeErr
+			return "", fmt.Errorf("close snapshot archive for stream %q: %w", name, closeErr)
 		}
 
 		metadata, err := json.Marshal(snapshot)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("encode backup metadata for stream %q: %w", name, err)
 		}
 
 		if err := os.WriteFile(filepath.Join(streamDir, "backup.json"), metadata, 0o600); err != nil {
-			return "", err
+			return "", fmt.Errorf("write backup metadata for stream %q: %w", name, err)
 		}
 
 		snapshot.SnapshotID = id
 
 		if err := json.NewEncoder(&inventory).Encode(snapshot); err != nil {
-			return "", err
+			return "", fmt.Errorf("encode backup inventory for stream %q: %w", name, err)
 		}
 
 		files = append(files, path.Join(name, "backup.json"), path.Join(name, "stream.tar.s2"))
@@ -90,7 +94,7 @@ func (b *Backup) Capture(ctx context.Context) (string, error) {
 
 	after, err := b.Snapshots.List(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("list streams after backup: %w", err)
 	}
 
 	if !slices.Equal(names, after) {
@@ -98,7 +102,7 @@ func (b *Backup) Capture(ctx context.Context) (string, error) {
 	}
 
 	if err := os.WriteFile(filepath.Join(directory, "inventory.jsonl"), inventory.Bytes(), 0o600); err != nil {
-		return "", err
+		return "", fmt.Errorf("write backup inventory: %w", err)
 	}
 
 	var manifest strings.Builder
@@ -106,56 +110,60 @@ func (b *Backup) Capture(ctx context.Context) (string, error) {
 	for _, name := range files {
 		digest, err := fileDigest(filepath.Join(directory, filepath.FromSlash(name)))
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("digest backup file %q: %w", name, err)
 		}
 
 		_, _ = fmt.Fprintf(&manifest, "%s  %s\n", digest, name)
 	}
 
 	if err := os.WriteFile(filepath.Join(directory, "SHA256SUMS"), []byte(manifest.String()), 0o600); err != nil {
-		return "", err
+		return "", fmt.Errorf("write backup checksum manifest: %w", err)
 	}
 
 	for _, name := range append(files, "SHA256SUMS") {
 		file, err := os.Open(filepath.Join(directory, filepath.FromSlash(name)))
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("open backup file %q for upload: %w", name, err)
 		}
 
 		err = b.Store.Put(ctx, path.Join(id, name), file)
 		closeErr := file.Close()
 
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("upload backup file %q: %w", name, err)
 		}
 
 		if closeErr != nil {
-			return "", closeErr
+			return "", fmt.Errorf("close uploaded backup file %q: %w", name, closeErr)
 		}
 	}
 
 	if err := b.Store.Put(ctx, path.Join(id, "COMPLETE"), strings.NewReader(id+"\n")); err != nil {
-		return "", err
+		return "", fmt.Errorf("write backup completion marker: %w", err)
 	}
 
 	if err := b.Store.Put(ctx, "LATEST", strings.NewReader(id+"\n")); err != nil {
-		return "", err
+		return "", fmt.Errorf("write latest backup pointer: %w", err)
 	}
 
 	return id, nil
 }
 
-func fileDigest(name string) (string, error) {
+func fileDigest(name string) (digest string, result error) {
 	file, err := os.Open(name)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("open file for digest: %w", err)
 	}
 
-	defer func() { _ = file.Close() }()
+	defer func() {
+		if err := file.Close(); err != nil {
+			result = errors.Join(result, fmt.Errorf("close digested file: %w", err))
+		}
+	}()
 	hash := sha256.New()
 
 	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
+		return "", fmt.Errorf("read file for digest: %w", err)
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil
@@ -174,21 +182,29 @@ func (w *limitedWriter) Write(data []byte) (int, error) {
 	count, err := w.target.Write(data)
 	w.remaining -= int64(count)
 
-	return count, err
+	if err != nil {
+		return count, fmt.Errorf("write limited object: %w", err)
+	}
+
+	return count, nil
 }
 
 func (b *Backup) readSmall(ctx context.Context, key string, limit int64) ([]byte, error) {
 	var value bytes.Buffer
-	err := b.Store.Get(ctx, key, &limitedWriter{target: &value, remaining: limit})
 
-	return value.Bytes(), err
+	err := b.Store.Get(ctx, key, &limitedWriter{target: &value, remaining: limit})
+	if err != nil {
+		return nil, fmt.Errorf("read backup object %q: %w", key, err)
+	}
+
+	return value.Bytes(), nil
 }
 
-func (b *Backup) Restore(ctx context.Context, id string) error {
+func (b *Backup) Restore(ctx context.Context, id string) (result error) {
 	if id == "" {
 		latest, err := b.readSmall(ctx, "LATEST", 256)
 		if err != nil {
-			return err
+			return fmt.Errorf("read latest backup pointer: %w", err)
 		}
 
 		id = strings.TrimSpace(string(latest))
@@ -200,7 +216,7 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 
 	complete, err := b.readSmall(ctx, path.Join(id, "COMPLETE"), 256)
 	if err != nil {
-		return err
+		return fmt.Errorf("read backup completion marker: %w", err)
 	}
 
 	if strings.TrimSpace(string(complete)) != id {
@@ -209,15 +225,19 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 
 	manifest, err := b.readSmall(ctx, path.Join(id, "SHA256SUMS"), 8*1024*1024)
 	if err != nil {
-		return err
+		return fmt.Errorf("read backup checksum manifest: %w", err)
 	}
 
 	directory, err := os.MkdirTemp(b.Scratch, "nats-restore.")
 	if err != nil {
-		return err
+		return fmt.Errorf("create restore staging directory: %w", err)
 	}
 
-	defer func() { _ = os.RemoveAll(directory) }()
+	defer func() {
+		if err := os.RemoveAll(directory); err != nil {
+			result = errors.Join(result, fmt.Errorf("remove restore staging directory: %w", err))
+		}
+	}()
 	files := map[string]bool{}
 	scanner := bufio.NewScanner(bytes.NewReader(manifest))
 
@@ -245,12 +265,12 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 		local := filepath.Join(directory, filepath.FromSlash(name))
 
 		if err := os.MkdirAll(filepath.Dir(local), 0o700); err != nil {
-			return err
+			return fmt.Errorf("create restore directory for %q: %w", name, err)
 		}
 
 		file, err := os.OpenFile(local, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err != nil {
-			return err
+			return fmt.Errorf("create restored backup file %q: %w", name, err)
 		}
 
 		limit := int64(110 * 1024 * 1024 * 1024)
@@ -263,16 +283,16 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 		closeErr := file.Close()
 
 		if err != nil {
-			return err
+			return fmt.Errorf("download backup file %q: %w", name, err)
 		}
 
 		if closeErr != nil {
-			return closeErr
+			return fmt.Errorf("close restored backup file %q: %w", name, closeErr)
 		}
 
 		actual, err := fileDigest(local)
 		if err != nil {
-			return err
+			return fmt.Errorf("digest restored backup file %q: %w", name, err)
 		}
 
 		if actual != expected {
@@ -281,7 +301,7 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return err
+		return fmt.Errorf("read backup checksum manifest: %w", err)
 	}
 
 	if !files["inventory.jsonl"] {
@@ -290,7 +310,7 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 
 	inventory, err := os.ReadFile(filepath.Join(directory, "inventory.jsonl"))
 	if err != nil {
-		return err
+		return fmt.Errorf("read restored backup inventory: %w", err)
 	}
 
 	var snapshots []Snapshot
@@ -306,7 +326,7 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 		}
 
 		if err != nil {
-			return err
+			return fmt.Errorf("decode backup inventory: %w", err)
 		}
 
 		name := snapshot.Config.Name
@@ -319,25 +339,32 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 
 		metadata, err := os.ReadFile(filepath.Join(directory, name, "backup.json"))
 		if err != nil {
-			return err
+			return fmt.Errorf("read backup metadata for stream %q: %w", name, err)
 		}
 
 		var saved Snapshot
 
-		if json.Unmarshal(metadata, &saved) != nil {
-			return errors.New("invalid snapshot metadata")
+		if err := json.Unmarshal(metadata, &saved); err != nil {
+			return fmt.Errorf("decode backup metadata for stream %q: %w", name, err)
 		}
 
-		left, _ := json.Marshal(Snapshot{Config: snapshot.Config, State: snapshot.State})
+		left, err := json.Marshal(Snapshot{Config: snapshot.Config, State: snapshot.State})
+		if err != nil {
+			return fmt.Errorf("encode inventory metadata for stream %q: %w", name, err)
+		}
 
-		right, _ := json.Marshal(Snapshot{Config: saved.Config, State: saved.State})
+		right, err := json.Marshal(Snapshot{Config: saved.Config, State: saved.State})
+		if err != nil {
+			return fmt.Errorf("encode saved metadata for stream %q: %w", name, err)
+		}
+
 		if !bytes.Equal(left, right) {
 			return errors.New("snapshot metadata differs from inventory")
 		}
 
 		stat, err := os.Stat(filepath.Join(directory, name, "stream.tar.s2"))
 		if err != nil {
-			return err
+			return fmt.Errorf("inspect snapshot archive for stream %q: %w", name, err)
 		}
 
 		if stat.Size() == 0 {
@@ -353,7 +380,7 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 
 	names, err := b.Snapshots.List(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("list restore target streams: %w", err)
 	}
 
 	if len(names) != 0 {
@@ -363,18 +390,18 @@ func (b *Backup) Restore(ctx context.Context, id string) error {
 	for _, snapshot := range snapshots {
 		file, err := os.Open(filepath.Join(directory, snapshot.Config.Name, "stream.tar.s2"))
 		if err != nil {
-			return err
+			return fmt.Errorf("open snapshot archive for stream %q: %w", snapshot.Config.Name, err)
 		}
 
 		err = b.Snapshots.Restore(ctx, snapshot, file)
 		closeErr := file.Close()
 
 		if err != nil {
-			return err
+			return fmt.Errorf("restore stream %q: %w", snapshot.Config.Name, err)
 		}
 
 		if closeErr != nil {
-			return closeErr
+			return fmt.Errorf("close snapshot archive for stream %q: %w", snapshot.Config.Name, closeErr)
 		}
 	}
 

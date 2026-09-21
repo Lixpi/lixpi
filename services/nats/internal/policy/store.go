@@ -46,12 +46,12 @@ func (s *Store) read(ctx context.Context) ([]SignedRegistration, uint64, []byte,
 	}
 
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, fmt.Errorf("read registration state: %w", err)
 	}
 
 	var registrations []SignedRegistration
 	if err := Decode(message.Data, &registrations); err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, fmt.Errorf("decode registration state: %w", err)
 	}
 
 	return registrations, message.Sequence, message.Data, nil
@@ -69,7 +69,7 @@ func (s *Store) Resolve(ctx context.Context, revision string) (*Snapshot, error)
 	if s.snapshot == nil || !bytes.Equal(s.cached, encoded) {
 		snapshot, err := s.Trust.Compile(registrations)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("compile registration state: %w", err)
 		}
 
 		s.cached, s.snapshot = slices.Clone(encoded), snapshot
@@ -84,12 +84,12 @@ func (s *Store) Resolve(ctx context.Context, revision string) (*Snapshot, error)
 
 func (s *Store) Apply(ctx context.Context, request ApplyRequest) (uint64, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("apply registration: %w", err)
 	}
 
 	manifest, err := s.Trust.Verify(request.Registration)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("verify registration: %w", err)
 	}
 
 	if s.Replicas < 1 || s.Replicas > 5 {
@@ -106,12 +106,12 @@ func (s *Store) Apply(ctx context.Context, request ApplyRequest) (uint64, error)
 			MaxValueSize: 1024 * 1024,
 		},
 	); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("create registration key-value bucket: %w", err)
 	}
 
 	registrations, sequence, _, err := s.read(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("load registrations before update: %w", err)
 	}
 
 	index := -1
@@ -119,7 +119,7 @@ func (s *Store) Apply(ctx context.Context, request ApplyRequest) (uint64, error)
 	for i, current := range registrations {
 		old, err := s.Trust.Verify(current)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("verify stored registration: %w", err)
 		}
 
 		if old.Owner != manifest.Owner {
@@ -148,12 +148,12 @@ func (s *Store) Apply(ctx context.Context, request ApplyRequest) (uint64, error)
 	}
 
 	if _, err := s.Trust.Compile(registrations); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("compile updated registrations: %w", err)
 	}
 
 	encoded, err := json.Marshal(registrations)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("encode updated registrations: %w", err)
 	}
 
 	if len(encoded) > 1024*1024 {
@@ -166,28 +166,28 @@ func (s *Store) Apply(ctx context.Context, request ApplyRequest) (uint64, error)
 	}
 
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("publish registration update: %w", err)
 	}
 
 	return ack.Sequence, nil
 }
 
-func (s *Store) Subscribe(connection *nats.Conn) (*nats.Subscription, error) {
+func (s *Store) Subscribe(ctx context.Context, connection *nats.Conn) (*nats.Subscription, error) {
 	subscription, err := connection.QueueSubscribe(RegistrationSubject, "registration", func(message *nats.Msg) {
 		var request ApplyRequest
 		response := ApplyResponse{}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		requestCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := Decode(message.Data, &request)
 		if err == nil {
-			response.Revision, err = s.Apply(ctx, request)
+			response.Revision, err = s.Apply(requestCtx, request)
 		}
 
 		if err != nil {
 			response.Error = err.Error()
 			// Only the sequence is exposed to bootstrap clients, never registered identities or grants.
-			_, response.Revision, _, _ = s.read(ctx)
+			_, response.Revision, _, _ = s.read(requestCtx)
 		}
 
 		encoded, err := json.Marshal(response)
@@ -196,13 +196,16 @@ func (s *Store) Subscribe(connection *nats.Conn) (*nats.Subscription, error) {
 		}
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("subscribe to registration updates: %w", err)
 	}
 
 	if err := subscription.SetPendingLimits(32, 4*1024*1024); err != nil {
-		_ = subscription.Unsubscribe()
+		unsubscribeErr := subscription.Unsubscribe()
+		if unsubscribeErr != nil {
+			unsubscribeErr = fmt.Errorf("unsubscribe failed registration subscription: %w", unsubscribeErr)
+		}
 
-		return nil, err
+		return nil, errors.Join(fmt.Errorf("set registration subscription limits: %w", err), unsubscribeErr)
 	}
 
 	return subscription, nil
