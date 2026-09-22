@@ -56,18 +56,23 @@ return NodeIdentity{}, err
 return NodeIdentity{}, fmt.Errorf("Failed to read broker name: %v.", err)
 ```
 
-### Don't repeat context
+### Write the message as the failing step
 
-Every wrap adds one step to the chain, so the message only needs to name that step. Don't put "failed to", "error", or "unable to" in it, because the whole chain is already an error. Don't repeat what the callee's own message says either.
+A wrapping message names the step that failed, as a short verb phrase such as `list streams before backup` or `restore stream %q`. A sentinel's message names the condition, such as `credentials denied`. Each wrap adds one link, so the whole chain already reads as a path through the code. Anything beyond the step only repeats what the chain says: words like "failed to", "error", or "unable to", package or function names, and whatever the callee's own message already covers.
 
-```text
-Good: capture broker snapshot: list streams before backup: request JetStream operation "$JS.API.STREAM.LIST": context deadline exceeded
-Bad:  failed to capture broker snapshot: failed to list streams: error: context deadline exceeded
+```go
+// Good: each layer names one step, and the sentinel names a plain condition.
+// capture broker snapshot: list streams before backup: request JetStream operation "$JS.API.STREAM.LIST": context deadline exceeded
+return "", fmt.Errorf("list streams before backup: %w", err)
+
+var ErrDenied = errors.New("credentials denied")
+
+// Bad: "failed to" and "error" repeat what the chain already says, and the package prefix repeats where it came from.
+// maintenance: failed to capture broker snapshot: error listing streams: context deadline exceeded
+return "", fmt.Errorf("maintenance: failed to capture broker snapshot: %w", err)
+
+var ErrDenied = errors.New("auth: credentials denied")
 ```
-
-### Don't prefix messages with the package name
-
-Don't start an error message with a package prefix such as `broker: ` or `policy: `. The wrap chain already shows where the error came from, so a prefix only repeats it. This goes for sentinels declared with `errors.New` as well as for `fmt.Errorf` wraps.
 
 ### Put identifying values in the message
 
