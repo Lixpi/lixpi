@@ -23,21 +23,155 @@ This guide applies to every Go file. Service-specific architecture, storage, tra
 - Represent exact quantities such as money with an integer unit or an exact decimal representation chosen by the domain. Do not use `float32` or `float64` when rounding would change persisted or transferred value.
 - Put `context.Context` first on functions that perform I/O, wait, or cross a request boundary. Propagate cancellation and apply deadlines to bounded external work.
 - Accept only the data a function needs. Avoid configuration bags and broad interfaces that expose unrelated behavior.
-- Return values that let callers handle expected outcomes directly. Do not encode ordinary control flow in log messages or panics.
+- Return values that let callers handle expected outcomes directly. Do not encode ordinary control flow in log messages. [Panic and exit](#panic-and-exit) covers when `panic` is allowed.
 - Keep wire payloads typed. Validate required fields at the boundary before passing data into domain code.
 
 ## Configuration and startup
 
 - Load and validate configuration once at startup, before accepting work. The service's deployment documentation decides whether values come from environment variables, files, flags, or another source.
 - Construct runtime dependencies after configuration validation and pass them to the packages that use them. Packages must not reach back into process-wide configuration during normal work.
-- Return startup errors to `main` with enough context to identify the failed component. Do not leave a partially started process running after required initialization fails.
+- Return startup errors to `main`, which logs them and exits as described in [Panic and exit](#panic-and-exit). Do not leave a partially started process running after required initialization fails.
 
-## Errors
+## Error handling
 
-- Return errors to the caller and wrap them with operation context using `fmt.Errorf("...: %w", err)`.
-- Use typed or sentinel errors only when callers need to branch on the failure with `errors.Is` or `errors.As`.
-- Do not use `panic` for request, message, configuration, storage, or network failures.
-- Preserve the original error when adding context. Error text should name the failed operation, not restate that an error occurred.
+Use only the standard library for errors: `errors.New`, `fmt.Errorf` with `%w`, `errors.Is`, and `errors.As` or its generic form `errors.AsType`. Don't add a third-party error package.
+
+### Wrap every error you return
+
+Don't return a bare `err`. Wrap it with a message that says what the function was doing when the call failed, so the final error reads like a trail through the code.
+
+The format is `"wrapping message: %w"`. Start the message with a lowercase letter and don't end it with punctuation.
+
+```go
+// Good
+data, err := os.ReadFile(filename)
+if err != nil {
+	return NodeIdentity{}, fmt.Errorf("read persistent broker name: %w", err)
+}
+
+// Bad: the caller can't tell which step failed.
+return NodeIdentity{}, err
+
+// Bad: capitalized, ends with punctuation, and %v breaks the chain.
+return NodeIdentity{}, fmt.Errorf("Failed to read broker name: %v.", err)
+```
+
+### Don't repeat context
+
+Every wrap adds one step to the chain, so the message only needs to name that step. Don't put "failed to", "error", or "unable to" in it, because the whole chain is already an error. Don't repeat what the callee's own message says either.
+
+```text
+Good: capture broker snapshot: list streams before backup: request JetStream operation "$JS.API.STREAM.LIST": context deadline exceeded
+Bad:  failed to capture broker snapshot: failed to list streams: error: context deadline exceeded
+```
+
+### Don't prefix messages with the package name
+
+Don't start an error message with a package prefix such as `broker: ` or `policy: `. The wrap chain already shows where the error came from, so a prefix only repeats it. This goes for sentinels declared with `errors.New` as well as for `fmt.Errorf` wraps.
+
+### Put identifying values in the message
+
+Include values such as stream names, domains, subjects, or file paths when they help someone find the failing record, like `fmt.Errorf("restore stream %q: %w", name, err)`. Never include secrets, such as passwords, NKey seeds, private keys, or bearer tokens. Error messages end up in logs, so the rules in [Logging](#logging) apply to them too.
+
+### Stop wrapping at the boundary
+
+The wrap rule is for errors you return. At a boundary, such as a NATS message handler's reply, an auth callout response, an HTTP handler, a Lambda handler, or `main`, nothing is left to return the error to. Log it or map it to a response there instead of wrapping it again.
+
+### Check errors in a wrap-aware way
+
+Because errors are wrapped, the error you receive is rarely the original value. Use `errors.Is` to match a sentinel and `errors.As` or `errors.AsType` to match a type. Don't compare errors with `==`, don't use a type assertion or type switch on an error that may be wrapped, and never match on the error message text.
+
+```go
+// Good
+if errors.Is(err, auth.ErrDenied) {
+	identity = nil
+}
+
+if _, ok := errors.AsType[*s3types.NoSuchKey](err); ok {
+	return nil, false, nil
+}
+
+// Bad: each of these misses a wrapped error or breaks when the text changes.
+if err == auth.ErrDenied {
+}
+
+if _, ok := err.(*s3types.NoSuchKey); ok {
+}
+
+if strings.Contains(err.Error(), "denied") {
+}
+```
+
+### Declare sentinel errors for repeated cases
+
+When the same failure comes up in more than one place, or another package may want to handle that case on its own, declare a sentinel error for it. Give it an exported `Err` prefix and a lowercase message a person can read. Declare a custom error type instead only when callers need data from the error through `errors.As`.
+
+Return a sentinel the same way as any other error: wrap it with `%w` and the context of the failing step. Callers still match it with `errors.Is`, because `errors.Is` walks the whole chain.
+
+```go
+var ErrDenied = errors.New("credentials denied")
+
+if rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature) != nil {
+	return nil, fmt.Errorf("verify browser token signature: %w", ErrDenied)
+}
+```
+
+### Panic and exit
+
+Never use `panic` to exit the app on purpose. Keep `panic` for unexpected situations and for branches that should never run, which means programmer errors and broken invariants. Don't panic in handlers or consumers on an expected failure, and treat request, message, configuration, storage, and network failures as expected. Return the error instead.
+
+Every expected exit goes through `os.Exit`, and that includes an exit caused by an error. Log the error first, then call `os.Exit(1)`.
+
+`os.Exit` skips deferred calls, so it belongs in `main` after cleanup has run, never deep in library code. The usual shape is a `run() error` function that holds the deferred cleanup, with `main` doing the log and the exit.
+
+```go
+// Good
+func main() {
+	if err := run(); err != nil {
+		slog.Error("NATS command failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+
+	if err := serve(ctx); err != nil {
+		return fmt.Errorf("run serve command: %w", err)
+	}
+
+	return nil
+}
+
+// Bad: panicking in main to report an expected failure.
+if err := serve(ctx); err != nil {
+	panic(err)
+}
+
+// Bad: a helper that exits, which skips the caller's deferred cleanup.
+func loadPolicy() *policy.Policy {
+	p, err := policy.Transport()
+	if err != nil {
+		slog.Error("load broker transport policy", "error", err)
+		os.Exit(1)
+	}
+
+	return p
+}
+```
+
+A `panic` is right for a branch that can't run, such as a `switch` default after configuration validation has already rejected every other value. The linter flags every `panic`, so a deliberate one needs a `//nolint:forbidigo` comment that says why the branch can't run.
+
+```go
+switch mode {
+case "live", "broker", "ready":
+	return probe(ctx, mode)
+default:
+	//nolint:forbidigo // readHealthMode rejects every other mode before this switch.
+	panic(fmt.Sprintf("unreachable health mode %q", mode))
+}
+```
 
 ## Logging
 
