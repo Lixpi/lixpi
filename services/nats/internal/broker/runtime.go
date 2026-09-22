@@ -122,9 +122,8 @@ func StartRuntime(ctx context.Context, config RuntimeConfig) (*Runtime, error) {
 		info, err := instance.Varz(nil)
 		if err != nil {
 			instance.Shutdown()
-			closeErr := r.close(ctx)
 
-			return nil, errors.Join(fmt.Errorf("read broker listener state: %w", err), closeErr)
+			return nil, errors.Join(fmt.Errorf("read broker listener state: %w", err), r.shutdown(ctx))
 		}
 
 		config.Certificates.Reload = r.reloadCertificate
@@ -136,9 +135,8 @@ func StartRuntime(ctx context.Context, config RuntimeConfig) (*Runtime, error) {
 
 	if err := r.startHealth(ctx); err != nil {
 		instance.Shutdown()
-		closeErr := r.close(ctx)
 
-		return nil, errors.Join(fmt.Errorf("start broker health listeners: %w", err), closeErr)
+		return nil, errors.Join(fmt.Errorf("start broker health listeners: %w", err), r.shutdown(ctx))
 	}
 
 	return r, nil
@@ -221,7 +219,7 @@ func (r *Runtime) Fence(enable bool) error {
 
 // Run recovers dispatch infrastructure independently of worker capacity and provider availability.
 func (r *Runtime) Run(ctx context.Context) (result error) {
-	defer func() { result = errors.Join(result, r.close(ctx)) }()
+	defer func() { result = errors.Join(result, r.shutdown(ctx)) }()
 	maintenanceCtx, cancelMaintenance := context.WithCancel(ctx)
 	var maintenanceGroup sync.WaitGroup
 
@@ -323,6 +321,15 @@ func (r *Runtime) watchCertificates(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// shutdown wraps the close error and returns nil when close succeeds, so callers can join it with their own error.
+func (r *Runtime) shutdown(ctx context.Context) error {
+	if err := r.close(ctx); err != nil {
+		return fmt.Errorf("close broker runtime: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Runtime) close(ctx context.Context) (result error) {

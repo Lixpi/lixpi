@@ -160,6 +160,13 @@ func (r *Runtime) startHealth(ctx context.Context) error {
 			}
 
 			if err := r.Fence(mode == "enable"); err != nil {
+				slog.Error(
+					"broker placement fence change failed",
+					"mode",
+					mode,
+					"error",
+					err,
+				)
 				http.Error(w, "fence reload failed", http.StatusInternalServerError)
 
 				return
