@@ -39,7 +39,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 	}
 
 	if err := policy.Decode([]byte(authorities), &trust.Authorities); err != nil {
-		return errors.New("NATS_REGISTRATION_AUTHORITIES must be a JSON array of registration authorities")
+		return fmt.Errorf("NATS_REGISTRATION_AUTHORITIES must be a JSON array of registration authorities: %w", err)
 	}
 
 	if err := trust.Validate(); err != nil {
@@ -126,12 +126,12 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 		certificates.Roots = x509.NewCertPool()
 
 		if !certificates.Roots.AppendCertsFromPEM(ca) {
-			return errors.New("invalid TLS CA file")
+			return fmt.Errorf("invalid TLS CA file %q", filename)
 		}
 	}
 
 	if err := certificates.Refresh(startupCtx); err != nil {
-		return fmt.Errorf("certificate bootstrap: %w", err)
+		return fmt.Errorf("bootstrap TLS certificate: %w", err)
 	}
 
 	defaults := map[string]string{

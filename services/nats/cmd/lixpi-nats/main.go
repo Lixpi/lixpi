@@ -26,11 +26,23 @@ func run(ctx context.Context, args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "health":
-			return health(ctx, args[1:])
+			if err := health(ctx, args[1:]); err != nil {
+				return fmt.Errorf("run health command: %w", err)
+			}
+
+			return nil
 		case "fence":
-			return fence(ctx, args[1:])
+			if err := fence(ctx, args[1:]); err != nil {
+				return fmt.Errorf("run fence command: %w", err)
+			}
+
+			return nil
 		case "backup", "restore":
-			return recovery(ctx, args[0], args[1:])
+			if err := recovery(ctx, args[0], args[1:]); err != nil {
+				return fmt.Errorf("run %s command: %w", args[0], err)
+			}
+
+			return nil
 		case "serve":
 			args = args[1:]
 		}
@@ -49,7 +61,11 @@ func run(ctx context.Context, args []string) error {
 		return errors.New("unexpected serve arguments")
 	}
 
-	return serve(ctx, *config, *routes, *check)
+	if err := serve(ctx, *config, *routes, *check); err != nil {
+		return fmt.Errorf("run serve command: %w", err)
+	}
+
+	return nil
 }
 
 func envDefault(name, value string) string {
