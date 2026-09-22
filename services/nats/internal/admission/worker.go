@@ -36,7 +36,7 @@ func (w *Worker) SetHealthy(healthy bool) { w.healthy.Store(healthy) }
 
 func (w *Worker) Evaluate(ctx context.Context, request *jwt.AuthorizationRequestClaims) (*auth.Identity, error) {
 	if !w.healthy.Load() {
-		return nil, auth.ErrUnavailable
+		return nil, fmt.Errorf("check worker health: %w", auth.ErrUnavailable)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -46,7 +46,7 @@ func (w *Worker) Evaluate(ctx context.Context, request *jwt.AuthorizationRequest
 	select {
 	case w.slots <- struct{}{}:
 	default:
-		return nil, ErrBusy
+		return nil, fmt.Errorf("reserve worker slot: %w", ErrBusy)
 	}
 
 	type result struct {
