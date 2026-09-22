@@ -41,7 +41,7 @@ func Read(root, domain string, roots *x509.CertPool, now time.Time) (Candidate, 
 
 	err := filepath.WalkDir(filepath.Join(root, "certificates"), func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			return fmt.Errorf("walk certificate path %q: %w", path, walkErr)
 		}
 
 		if entry.Type().IsRegular() && entry.Name() == filename {
@@ -60,7 +60,7 @@ func Read(root, domain string, roots *x509.CertPool, now time.Time) (Candidate, 
 		return nil
 	})
 	if err != nil {
-		return Candidate{}, fmt.Errorf("read certificate for %s: %w", domain, err)
+		return Candidate{}, fmt.Errorf("search certificate directories: %w", err)
 	}
 
 	if best.Leaf == nil {
@@ -176,7 +176,7 @@ func LocalRoots(root string) (*x509.CertPool, []byte, error) {
 
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(data) {
-		return nil, nil, errors.New("cannot load local CA certificate")
+		return nil, nil, errors.New("local CA certificate has no usable certificates")
 	}
 
 	return pool, data, nil

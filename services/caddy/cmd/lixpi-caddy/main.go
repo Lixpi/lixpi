@@ -91,10 +91,14 @@ func run(ctx context.Context, args []string) error {
 
 	configuration, err := readSettings(os.Getenv, command)
 	if err != nil {
-		return err
+		return fmt.Errorf("read settings: %w", err)
 	}
 
-	return execute(ctx, configuration)
+	if err := execute(ctx, configuration); err != nil {
+		return fmt.Errorf("execute certificate command: %w", err)
+	}
+
+	return nil
 }
 
 func execute(ctx context.Context, settings settings) error {
