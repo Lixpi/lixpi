@@ -143,7 +143,7 @@ func (c *Certificates) Refresh(ctx context.Context) (result error) {
 	}
 
 	if err := switchTo(version); err != nil {
-		return err
+		return fmt.Errorf("switch to new certificate version: %w", err)
 	}
 
 	certPath, keyPath := filepath.Join(current, "server.crt"), filepath.Join(current, "server.key")
@@ -166,11 +166,11 @@ func (c *Certificates) Refresh(ctx context.Context) (result error) {
 			if rollback != nil {
 				installed = true // Preserve both versions when rollback cannot establish a working target.
 
-				return errors.Join(fmt.Errorf("certificate reload failed: %w", err), fmt.Errorf("certificate rollback failed: %w", rollback))
+				return errors.Join(fmt.Errorf("reload installed certificate: %w", err), fmt.Errorf("roll back to previous certificate: %w", rollback))
 			}
 		} else {
 			if removeErr := os.Remove(current); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-				return errors.Join(fmt.Errorf("certificate reload failed: %w", err), fmt.Errorf("remove failed certificate link: %w", removeErr))
+				return errors.Join(fmt.Errorf("reload installed certificate: %w", err), fmt.Errorf("remove rejected certificate link: %w", removeErr))
 			}
 		}
 
