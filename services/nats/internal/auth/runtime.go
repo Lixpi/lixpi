@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -22,26 +23,26 @@ type RuntimeVerifier struct {
 func (v *RuntimeVerifier) Evaluate(ctx context.Context, request *jwt.AuthorizationRequestClaims) (*Identity, error) {
 	snapshot := policy.ContextSnapshot(ctx)
 	if snapshot == nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("read registration snapshot: %w", ErrUnavailable)
 	}
 
 	verifier := &Verifier{Registrations: snapshot.Services}
 
 	if token := request.ConnectOptions.Token; token != "" {
 		if len(token) > 32768 {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("check token size: %w", ErrDenied)
 		}
 
 		parts := strings.Split(token, ".")
 		if len(parts) != 3 {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("split token: %w", ErrDenied)
 		}
 
 		encoded, err := base64.RawURLEncoding.DecodeString(parts[1])
 
 		var claims tokenClaims
 		if err != nil || json.Unmarshal(encoded, &claims) != nil {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("decode token claims: %w", ErrDenied)
 		}
 
 		for _, browser := range snapshot.Browsers {
@@ -57,7 +58,12 @@ func (v *RuntimeVerifier) Evaluate(ctx context.Context, request *jwt.Authorizati
 		}
 	}
 
-	return verifier.Evaluate(ctx, request)
+	identity, err := verifier.Evaluate(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("verify with registration snapshot: %w", err)
+	}
+
+	return identity, nil
 }
 
 func (v *RuntimeVerifier) jwks(address string, profiles []policy.Browser) *JWKS {

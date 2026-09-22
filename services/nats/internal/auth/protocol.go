@@ -23,21 +23,29 @@ type Protocol struct {
 func NewProtocol(issuerSeed, curveSeed string) (*Protocol, error) {
 	signer, err := nkeys.FromSeed([]byte(issuerSeed))
 	if err != nil {
-		return nil, errors.New("invalid callout issuer seed")
+		return nil, fmt.Errorf("decode callout issuer seed: %w", err)
 	}
 
 	issuer, err := signer.PublicKey()
-	if err != nil || !nkeys.IsValidPublicAccountKey(issuer) {
+	if err != nil {
+		return nil, fmt.Errorf("read callout issuer public key: %w", err)
+	}
+
+	if !nkeys.IsValidPublicAccountKey(issuer) {
 		return nil, errors.New("callout issuer must be an account key")
 	}
 
 	curve, err := nkeys.FromSeed([]byte(curveSeed))
 	if err != nil {
-		return nil, errors.New("invalid callout curve seed")
+		return nil, fmt.Errorf("decode callout curve seed: %w", err)
 	}
 
 	public, err := curve.PublicKey()
-	if err != nil || !nkeys.IsValidPublicCurveKey(public) {
+	if err != nil {
+		return nil, fmt.Errorf("read callout curve public key: %w", err)
+	}
+
+	if !nkeys.IsValidPublicCurveKey(public) {
 		return nil, errors.New("callout encryption requires a curve key")
 	}
 
@@ -51,7 +59,7 @@ func (p *Protocol) Open(payload []byte, serverXKey string) (*jwt.AuthorizationRe
 
 	plaintext, err := p.Curve.Open(payload, serverXKey)
 	if err != nil {
-		return nil, errors.New("invalid callout encryption")
+		return nil, fmt.Errorf("decrypt callout request: %w", err)
 	}
 
 	parts := strings.Split(string(plaintext), ".")
@@ -65,13 +73,21 @@ func (p *Protocol) Open(payload []byte, serverXKey string) (*jwt.AuthorizationRe
 	}
 
 	encoded, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil || json.Unmarshal(encoded, &header) != nil || header.Algorithm != "ed25519-nkey" || header.Type != "JWT" {
+	if err != nil {
+		return nil, fmt.Errorf("decode callout JWT header: %w", err)
+	}
+
+	if err := json.Unmarshal(encoded, &header); err != nil {
+		return nil, fmt.Errorf("parse callout JWT header: %w", err)
+	}
+
+	if header.Algorithm != "ed25519-nkey" || header.Type != "JWT" {
 		return nil, errors.New("invalid callout JWT header")
 	}
 
 	request, err := jwt.DecodeAuthorizationRequestClaims(string(plaintext))
 	if err != nil {
-		return nil, errors.New("invalid callout signature")
+		return nil, fmt.Errorf("verify callout request claims: %w", err)
 	}
 
 	now := time.Now().Unix()
