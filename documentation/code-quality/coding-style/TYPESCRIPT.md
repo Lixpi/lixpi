@@ -7,7 +7,7 @@ Use `.ts` files only. JavaScript source files, TSX, JSX, and React are prohibite
 ## Imports And Exports
 
 - Never create or retain redundant files that only re-export another module's values or types. Import directly from the defining module. When moving code, update its callers and delete the old file; preserving an old internal import path is not a reason to leave a forwarding shim.
-- Always use `.ts` extension when importing files — never `.js`. Oxlint enforces file import extensions through the Dockerized [TypeScript quality runner](../../../dev-tools/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md).
+- Always use `.ts` extension when importing files — never `.js`. Oxlint enforces file import extensions through the Dockerized [TypeScript quality runner](../../../dev-tools/code-quality/typescript-quality-runner/README.md).
 - A named import list with two or more items must be multiline, with one imported item per line. A single value import stays inline. A single inline `type` import remains multiline. Oxfmt and the TypeScript quality runner enforce this layout.
 - Named exports use the same layout: two or more exported items are multiline with one item per line, while a single exported item stays inline. This applies to both value exports and `export type` declarations.
 - Always use inline `type` specifiers. Do not use top-level `import type`. This keeps type-only imports ready to accept value imports without rewriting the whole declaration. Oxlint enforces `import/consistent-type-specifier-style: "prefer-inline"`.
@@ -278,4 +278,4 @@ The only exception is test files (`*.test.ts`) where minimal DOM setup for mocki
 
 String concatenation is prohibited. Use template interpolation even when the concatenation spans multiple lines.
 
-Oxlint enforces template interpolation, `structuredClone()`, and `Object.hasOwn()` through the Dockerized [TypeScript quality runner](../../../dev-tools/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md).
+Oxlint enforces template interpolation, `structuredClone()`, and `Object.hasOwn()` through the Dockerized [TypeScript quality runner](../../../dev-tools/code-quality/typescript-quality-runner/README.md).

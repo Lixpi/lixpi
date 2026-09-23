@@ -36,6 +36,8 @@ init-config.bat
 
 For CI/automation, see [`dev-tools/config-utils/README.md`](dev-tools/config-utils/README.md).
 
+Configuration setup first generates the ignored machine-local `env.lixpi` from the repository template, then runs the environment wizard. The shared runner and its repository mount contract are documented with the automation options.
+
 ### 3. Point Docker Compose at your environment file
 
 `./init-config.sh` writes a `.env.<stage-name>` file (e.g. `.env.shelby-local`), not a plain `.env` — but Docker Compose only *auto-loads* a file literally named `.env`. Without one, every `docker compose`/`docker-compose` command in this repo (and there are many: `start.sh`, `rebuild-containers.sh`, the test runner, Pulumi, individual service commands in the docs) either needs `--env-file .env.<stage-name>` typed out explicitly every time, or variables across the root Compose file and its included partials come back unset with a wall of `variable is not set` warnings.

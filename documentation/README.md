@@ -19,7 +19,8 @@ These docs are maintained as Markdown and read directly in GitHub or an editor. 
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
 | [Implementation Plans](../skills/implementation-plans/references/writing-implementation-plans.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
 | [Spike Reports](../skills/implementation-plans/references/spike-report-guidelines.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
-| [TypeScript Linting and Formatting](../dev-tools/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
+| [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared Docker runner services, repository mount adapters, cache isolation, and cross-repository extension contracts |
+| [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
 | [Go Testing and Tooling](code-quality/testing/GO.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
@@ -42,7 +43,7 @@ When the architecture changes, update this map and the affected domain pages tog
 |-----------|----------|
 | `services/` | Application services, including the TypeScript web UI and API plus the Go NATS and Caddy services |
 | `packages/lixpi/` | Shared TypeScript libraries, contracts, UI packages, and constants |
-| `dev-tools/` | Configuration and dependency utilities, quality runners, test runners, and the shared skill utility runner |
+| `dev-tools/` | Configuration and dependency utilities, the code-quality runner toolchain, and the shared skill utility runner |
 | `infrastructure/` | Pulumi infrastructure code |
 | `documentation/` | Product, architecture, platform, code-quality, and development workflow documentation |
 | `documentation/memory/` | Active implementation plans, spike reports, and task continuity files |
@@ -129,7 +130,8 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | [Agent Skill Organization](development-workflow/AGENT-SKILLS.md) | Managing and installing the project skills under `skills/` |
 | [Skill Execution Guide](development-workflow/SKILL-EXECUTION-GUIDE.md) | Running a skill script inside the `lixpi-utils` container, and adding a script to a skill |
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
-| [TypeScript Linting and Formatting](../dev-tools/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
+| [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared runner images, reusable Compose services, per-repository mount adapters, and isolated dependency caches |
+| [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
 | [Code Quality Skill](../skills/code-quality/SKILL.md) | Selects the coding style and testing guides for an implementation iteration and enforces the test permission gate |
 | [Go Coding Style](code-quality/coding-style/GO.md) | Repository-wide Go package structure, service boundaries, APIs, startup, errors, logging, data access, concurrency, and tooling rules |
 | [TypeScript Coding Style](code-quality/coding-style/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules; mandatory for all TypeScript in the repo |

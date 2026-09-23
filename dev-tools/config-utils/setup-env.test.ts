@@ -4,7 +4,11 @@ import { parseEnv } from 'node:util'
 import * as prompts from '@clack/prompts'
 import * as nkeys from '@nats-io/nkeys'
 import { registrationEnvironment } from '@lixpi/nats-subject-registry/registration'
-import { EnvFileUpdates, runInteractivePrompts, writeFiles } from './setup-env.ts'
+import { EnvFileUpdates } from './environment-file.ts'
+import {
+    runInteractivePrompts,
+    writeFiles,
+} from './setup-env.ts'
 
 vi.mock('node:fs', async importOriginal => ({ ...await importOriginal<typeof fs>() }))
 vi.mock('@lixpi/nats-subject-registry/registration', () => ({ registrationEnvironment: vi.fn(() => ({})) }))

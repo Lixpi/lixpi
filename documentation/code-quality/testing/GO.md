@@ -7,6 +7,8 @@ description: Container-only Go builds, tests, dependency maintenance, formatting
 
 The Go modules live in the [NATS service](../../../services/nats/README.md) and [Caddy certificate service](../../../services/caddy/README.md). Every Go command runs inside Docker. The one-shot test and quality runners follow the TypeScript runners' layout: source and manifests are mounted separately, the module root belongs to the disposable container, and downloaded modules and compiled packages live in named Docker volumes. There is no host module cache, tool installation, or generated binary. Tests mount source read-only. Quality fixes write to the mounted source directories. The test image includes the NATS CLI from `natsio/nats-box` using its default `latest` tag solely for bidirectional snapshot-format verification; production uses Go APIs directly.
 
+Reusable service definitions live under `dev-tools/code-quality/runner-compose/`. The repository-root Compose files are mount adapters: they extend those services, register target manifests under `/usr/src/manifests/<target>`, register source under `/usr/src/service/<target>`, and declare their own cache volumes. Another checkout can extend the same service definitions and supply its own mount list without changing the runner. Target names are restricted to lowercase letters, digits, and internal hyphens, and a target is runnable only when both `go.mod`, `go.sum`, and its mounted source directory exist. [Code Quality Runners](../../../dev-tools/code-quality/README.md) explains the shared service and adapter boundary.
+
 Read the [`code-quality` skill](../../../skills/code-quality/SKILL.md) before writing or running tests. Tests require an explicit request in the active task. Use colocated `*_test.go` files and the standard `testing` package. Use table-driven tests when several inputs or cases exercise the same behavior and setup; use named subtests so a failure identifies the case. Keep a direct test when a table would hide the behavior or require case-specific control flow.
 
 Use temporary storage, generated test credentials, and disposable embedded brokers. Tests must not connect to application brokers or AWS. Bound waits with contexts or deadlines and close connections and servers through `t.Cleanup`. Exercise observable authentication and messaging behavior, including denial and timeout paths.
@@ -26,6 +28,8 @@ docker compose -f docker-compose.go-test-runner.yml --profile dev run --rm --no-
 ```
 
 The root Compose file includes both runners. Using their standalone Compose files avoids loading application credentials and starting application services. Each invocation gets a generated name and the current mounts. The compiler's module and build caches support concurrent access; lint containers use their separate cache.
+
+An external adapter owns any extra privileges required by its tests. For example, a Testcontainers suite may mount the Docker socket in that repository's test adapter; the reusable Go service and the main Lixpi adapter do not grant it.
 
 After editing imports or dependency versions, reconcile `go.mod` and `go.sum` inside the quality container. The `dependencies` action copies manifests into its disposable module root, runs `go mod tidy`, and copies just those two files back. Normal tests and lint use readonly module resolution.
 

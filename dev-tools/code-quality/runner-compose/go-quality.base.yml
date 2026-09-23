@@ -1,0 +1,12 @@
+services:
+    go-quality-runner-base:
+        profiles: ["dev"]
+        image: lixpi/go-quality-runner
+        build:
+            context: ../go-quality-runner
+        volumes:
+            - ../go-quality-runner/run-quality.sh:/usr/src/runner/run-quality.sh:ro,cached
+            - ../go-quality-runner/golangci.yml:/usr/src/runner/golangci.yml:ro,cached
+            - go-quality-runner-module-cache:/go-module-cache
+            - go-quality-runner-build-cache:/go-build-cache
+            - go-quality-runner-lint-cache:/go-lint-cache

@@ -7,7 +7,7 @@ ARG PNPM_VERSION
 # Install pnpm
 RUN corepack enable && corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
-WORKDIR /app
+WORKDIR /usr/src/config-utils
 
 # Copy package files and install dependencies
 COPY packages/lixpi/debug-tools/ts ./packages/lixpi/debug-tools/ts
@@ -17,9 +17,11 @@ COPY dev-tools/config-utils/pnpm-workspace.yaml ./
 COPY dev-tools/config-utils/package.json ./
 RUN pnpm install --prod
 
-# Copy source files
-COPY dev-tools/config-utils/setup-env.ts ./
-COPY dev-tools/config-utils/templates ./templates
+# Copy the shared runner. Repository-specific setup modules and templates are
+# mounted by each repository's Compose adapter.
+COPY dev-tools/config-utils/run-config.ts ./
+RUN mkdir -p repository
+COPY dev-tools/config-utils/environment-file.ts ./repository/environment-file.ts
 
 # Set environment for colored output
 ENV FORCE_COLOR=1
@@ -27,4 +29,4 @@ ENV FORCE_COLOR=1
 # Mount point for workspace
 VOLUME /workspace
 
-ENTRYPOINT ["node", "--experimental-transform-types", "setup-env.ts"]
+ENTRYPOINT ["node", "--experimental-transform-types", "run-config.ts"]

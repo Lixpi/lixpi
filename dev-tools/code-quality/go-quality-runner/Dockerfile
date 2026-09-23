@@ -8,7 +8,7 @@ COPY --from=lint /usr/bin/golangci-lint /usr/local/bin/golangci-lint
 COPY golangci.yml /usr/src/runner/golangci.yml
 COPY source-conventions.go /usr/src/runner/source-conventions.go
 WORKDIR /usr/src/runner
-RUN go mod init github.com/lixpi/lixpi/dev-tools/go-quality-runner \
+RUN go mod init github.com/lixpi/lixpi/dev-tools/code-quality/go-quality-runner \
     && golangci-lint fmt --diff --config /usr/src/runner/golangci.yml \
     && golangci-lint run --config /usr/src/runner/golangci.yml ./... \
     && go build -trimpath -o /usr/local/bin/check-go-source ./source-conventions.go

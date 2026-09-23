@@ -1,153 +1,139 @@
-# Environment Setup Script
+# Configuration runner
 
-Interactive setup wizard for creating or updating `.env` configuration files for Lixpi development. `init-config.sh` and `init-config.bat` launch the same Dockerized wizard.
+`dev-tools/config-utils` is the shared Dockerized runner for repository configuration wizards. The runner owns the runtime, dependencies, `env.lixpi` bootstrap, and base Compose service. Each repository owns its setup logic and templates.
 
-The directory also contains `setup-skills.ts`, which uses the same Clack and Chalk prompt stack for the project skill installer. [`setup-skills.sh`](../../setup-skills.sh) runs that UI through the `lixpi-utils` image, captures the confirmed selection from stdout, and applies the selected links on the host.
+The split matches the code-quality and test runners:
 
-The first prompt offers **Generate new** or **Edit existing**. Editing lists the available `.env.*` files in the project root, then asks whether to override the selected file completely or make partial updates. Complete replacement writes to the selected filename. Generating a new configuration asks for the developer name and environment; a matching filename triggers the same update choice before any further settings or credential generation.
+```text
+lixpi/dev-tools/config-utils/
+├── Dockerfile
+├── run-config.ts
+├── environment-file.ts
+├── runner-compose/
+│   └── config-utils.base.yml
+├── setup-env.ts
+├── setup-skills.ts
+└── templates/
+    ├── env.lixpi.template
+    ├── env.template
+    └── aws-config.template
 
-A complete override runs the configuration wizard with fresh values and NATS credentials. Partial editing uses the same wizard and asks whether to edit each group. Skipping a group preserves its values and shows no child prompts. Within a selected group, the existing conditional flow applies: local DynamoDB skips the custom endpoint, LocalAuth0 skips real Auth0 credentials, disabled AWS setup skips its fields, and Bedrock skips direct provider keys.
+lixpi-billing/dev-tools/config-utils/
+├── setup-env.ts
+└── templates/
+    ├── env.lixpi.template
+    └── env.template
+```
 
-An active field offers **Use existing value** or **Override value**. Explicitly empty values offer **Keep empty**; absent values offer only **Set new value**. Inapplicable fields are skipped even when empty or absent. The editor preserves custom variables and assignments outside the selected fields, including their comments, quoting, interpolation, multiline values, and line endings. Changing a wizard setting also updates the environment variables derived from that setting.
+The files at the top of the Lixpi directory are shared runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. Billing has the same adapter paths in its own repository. `setup-skills.ts` is the separate prompt used by `setup-skills.sh`; it shares the container dependencies but is not part of the repository adapter contract.
 
-NATS key pairs and passwords are reused unless their replacement is selected. Missing pairs are generated; an existing seed with a missing public key derives that public key without rotating the seed. Selected AWS SSO edits merge into the matching `.aws/config` profile and session while retaining unrelated profiles. Cancelling before saving leaves the files unchanged.
+## Mount contract
 
-Every save also prepares the signed NATS registration from the resulting service keys, browser authentication settings and application permissions. This applies to new configurations, complete replacements, partial updates and non-interactive creation. A partial save adds missing registration settings even when the NATS group is skipped. It reuses the registration signing key and password, preserves unchanged manifest versions, and increments the version when declarations change. Unrelated assignments keep their original text.
+[`runner-compose/config-utils.base.yml`](runner-compose/config-utils.base.yml) builds the shared image and mounts the shared runtime into `/usr/src/config-utils`. A repository-level `docker-compose.config-utils.yml` extends that service and supplies these mounts:
 
-To update an existing configuration, run `init-config`, choose **Edit existing**, select its file and choose **Partial update**. Keep the values you want to retain and confirm the save. If only application permission code changed, you can skip every group; the save still derives the registration from the application code included in the setup image. Both launchers build that image before opening the wizard. API startup submits the saved registration automatically before opening its ordinary NATS connection.
+| Container path | Access | Owner | Purpose |
+|---|---|---|---|
+| `/workspace` | read/write | consuming repository | Repository whose local configuration is being generated |
+| `/usr/src/config-utils/repository/setup-env.ts` | read-only | consuming repository | Repository-specific wizard entry point |
+| `/usr/src/config-utils/repository/templates/` | read-only | consuming repository | Repository-specific `env.lixpi` and runtime env templates |
+| `/usr/src/config-utils/repository/environment-file.ts` | read-only | shared runner | Environment-file editor used by adapters |
 
-The template includes EC2 broker sizing and scaling bounds. `NATS_MIN_NODES`, `NATS_MAX_NODES` and `NATS_DESIRED_NODES` default to three; raising the maximum enables additional hosts under load. `NATS_EC2_INSTANCE_TYPE` defaults to `t3.small`. Existing clusters use the staged AZ-tag rollout described in the [NATS cluster README](../../infrastructure/pulumi/src/resources/NATS-cluster/README.md) before changing `NATS_JETSTREAM_UNIQUE_TAG` to `az:`. `NATS_OPERATIONAL_ALERT_EMAIL` optionally subscribes an address to scaling alerts; AWS requires email confirmation. These deployment variables are literal template defaults and remain editable directly; partial wizard edits preserve their existing values.
+An adapter may declare additional read-only or read/write mounts. Billing mounts the main Lixpi checkout at `/lixpi`; the host path is supplied by `LIXPI_REPOSITORY_PATH` and is never inferred from relative directory placement.
 
-## What It Does
+The adapter file and directory names are part of the runner contract. A new repository can plug in by creating the same `dev-tools/config-utils/setup-env.ts` and `dev-tools/config-utils/templates/` paths, then adding a root Compose adapter that extends the shared base service.
 
-This script runs inside a Docker container and:
+## Startup order
 
-1. **Prompts for configuration** - Grouped into sections:
-   - **General**: Developer name, environment type (local/dev/production)
-   - **Database**: Local DynamoDB or custom endpoint
-   - **Authentication**: LocalAuth0 mock or real Auth0 configuration
-   - **NATS**: Auto-generates all required keys and passwords
-   - **AWS SSO Configuration**: Optional SSO profile setup
-   - **AWS Deployment Configuration**: Optional Route53, CloudWatch log retention, Container Insights
-   - **API Keys**: OpenAI, Anthropic, Google, Stability AI, Stripe
+The container entry point is [`run-config.ts`](run-config.ts). It performs setup in this order:
 
-2. **Generates NATS keys** using `@nats-io/nkeys`:
-   - `createAccount()` → `NATS_AUTH_NKEY_*` (seeds start with `SA`)
-   - `createCurve()` → `NATS_AUTH_XKEY_*` (seeds start with `SX`)
-   - `createUser()` produces distinct `SU` seeds and public keys for API, file conversion, character fidelity, backup, operator, NEX, and the AI Model Registry. The existing LLM key configuration remains available for compatibility.
+1. Read the consuming repository's `templates/env.lixpi.template`.
+2. Replace `{{VARIABLE_NAME}}` placeholders from the container environment.
+3. Write `/workspace/env.lixpi` with owner-only permissions.
+4. Start the mounted repository `setup-env.ts` and pass through all command-line arguments.
 
-3. **Creates secure passwords** for the NATS system user and restricted callout bootstrap user (`NATS_CALLOUT_PASSWORD`). The issuer and XKey seeds belong to the embedded broker/auth runtime in `services/nats`; application clients receive their own service seed.
+`env.lixpi` is therefore the first repository file written during configuration setup. It is generated local state, is ignored by Git, and is not checked in. The repository adapter must not try to run before this bootstrap completes.
 
-4. **Signs the NATS registration** using the application permission declarations and the resulting environment settings. It saves the approved payload for API startup and the public trust configuration for brokers. The signing seed stays in deployment configuration, outside serving containers.
+The Lixpi template writes:
 
-5. **Writes configuration files**:
-   - `.env.<name>-<environment>` in project root
-   - `.aws/config` (optional)
+```dotenv
+GITHUB_REPOSITORY=Lixpi/lixpi
+TICKET_KEY=LIX
+DEFAULT_TARGET_BRANCH=main
+DEFAULT_SOURCE_BRANCH=main
+```
 
-## Usage
+Billing's template adds its required absolute host checkout path:
 
-### Interactive Mode (Recommended)
+```dotenv
+GITHUB_REPOSITORY=Lixpi/lixpi-billing
+TICKET_KEY=LIX-BILL
+DEFAULT_TARGET_BRANCH=main
+DEFAULT_SOURCE_BRANCH=main
+LIXPI_REPOSITORY_PATH=/absolute/path/selected/during/setup
+```
 
-#### macOS / Linux
+Billing must collect and validate that host path before Compose can resolve the shared base file. `init-config.sh` is the single bootstrap exception to billing's normal `env.lixpi` gate. It prompts for the path, exports it only for the setup container, and the shared runner writes the authoritative file before the billing adapter starts. Every other billing script reads the generated file and fails if it is missing or invalid.
 
-Open Terminal in the project folder and run:
+## Lixpi adapter
+
+Run from the Lixpi root:
 
 ```bash
 ./init-config.sh
 ```
 
-#### Windows CMD
+The wrapper starts `docker-compose.config-utils.yml`. The shared runner creates `env.lixpi`, then the Lixpi adapter creates or updates `.env.<developer>-<environment>` and optional `.aws/config` files.
 
-Open Command Prompt in the project folder and run:
+The Lixpi wizard offers **Generate new** and **Edit existing**. Existing files can be replaced or edited by group. Partial edits preserve unrelated variables, comments, quoting, interpolation, multiline values, and line endings. NATS keys and passwords are reused unless replacement is selected. Every save regenerates or refreshes the signed NATS application registration from the resulting configuration.
 
-```cmd
-init-config.bat
-```
-
-#### Windows PowerShell
-
-Open PowerShell in the project folder and run:
-
-```powershell
-.\init-config.bat
-```
-
-### Non-Interactive Mode (CI/Automation)
-
-For automated environments without TTY:
+Non-interactive creation uses the same wrapper and refuses to overwrite an existing configuration:
 
 ```bash
-docker run --rm -v "$(pwd):/workspace" lixpi/setup --non-interactive --name=john --env=local
+./init-config.sh --non-interactive --name=shelby --env=local
 ```
 
-Non-interactive mode refuses to replace an existing configuration. Run interactive setup to choose how to update it.
+Supported options are `--help`, `--non-interactive`, `--name=<name>`, and `--env=local|dev|production`.
 
-### Help
+## Billing adapter
+
+Run from the billing root:
 
 ```bash
-docker run --rm lixpi/setup --help
+./init-config.sh
 ```
 
-## Options
+The wrapper always asks for the absolute main Lixpi checkout path. After the shared runner writes billing's `env.lixpi`, the billing adapter:
 
-| Option | Description |
-|--------|-------------|
-| `--help`, `-h` | Show help message |
-| `--non-interactive` | Run without prompts (requires `--name` and `--env`) |
-| `--name=<name>` | Developer name (e.g., "john") |
-| `--env=<environment>` | Environment type: `local`, `dev`, `production` |
+1. Lists the main checkout's `.env.*` files, excluding `.env.example`.
+2. Lets the user select one.
+3. Creates or updates a billing file with the identical basename, such as `.env.shelby-local`.
+4. Starts from billing's own `dev-tools/config-utils/templates/env.template` when the matching file does not exist. This template contains only billing-owned defaults.
+5. Copies the shared stage, organization, environment, AWS, DynamoDB, NATS/Nex, and portal values from the selected main configuration.
+6. Generates or reuses billing's private `BILLING_NATS_NKEY_SEED` in the billing file.
+7. Adds or refreshes `svc:billing-api` in the selected main configuration's `NATS_SERVICE_AUTH_REGISTRATIONS` and signed `NATS_APPLICATION_REGISTRATION`.
 
-## Output Files
+Billing-owned values—including its database, service mode, HTTP address, refresh interval, and Stripe secrets—remain in the billing file. Existing billing-only values are preserved on subsequent runs. A legacy billing seed in the main file is migrated to the billing file and removed from the main file after the registration has been prepared.
 
-### `.env.<name>-<environment>`
+Both repositories ignore `env.lixpi` and runtime `.env.*` files. Templates are the committed source of defaults; generated files may contain secrets and must not be committed.
 
-Complete environment configuration including:
-- Docker Compose settings
-- Domain and SSL configuration
-- SST/Pulumi configuration
-- AWS SSO settings
-- AWS deployment settings (Route53, CloudWatch)
-- NATS servers, keys, passwords and signed application registration
-- Auth0 configuration
-- API keys
-- Provider request authorization (`METRICS_ENABLED=false` by default)
+## Extending the runner
 
-The wizard maintains these registration settings on save:
+A repository adapter is an executable TypeScript module, not a branch in the shared runner. To add another repository:
 
-| Setting | Recipient |
-|---|---|
-| `NATS_REGISTRATION_AUTHORITY_SEED` | Deployment tooling only; keep this private signing key out of serving containers |
-| `NATS_REGISTRATION_AUTHORITIES` | Brokers; public authority key, owner and allowed accounts |
-| `NATS_REGISTRATION_PASSWORD` | Brokers and application initializer |
-| `NATS_APPLICATION_REGISTRATION` | API startup; signed payload without the private authority key |
+1. Add `dev-tools/config-utils/setup-env.ts` in that repository.
+2. Add `dev-tools/config-utils/templates/env.lixpi.template` and `env.template` there.
+3. Add a root `docker-compose.config-utils.yml` that extends `config-utils-base` and mounts the repository adapter paths.
+4. Add a root launcher that supplies any bootstrap variables required to locate the shared Lixpi checkout, then invokes the Compose adapter.
+5. Keep repository-specific prompts, defaults, file names, and side effects inside the adapter.
 
-Keep the authority seed and latest signed manifest with deployment secrets so a complete registry loss can be recovered. NATS persists accepted registrations in native JetStream KV, and ordinary restarts reuse them.
-
-### `.aws/config` (Optional)
-
-AWS SSO profile configuration for CLI access.
-
-## Smart Presets
-
-When you select **local** environment:
-- DynamoDB endpoint defaults to `http://lixpi-dynamodb:8000`
-- LocalAuth0 mock is enabled with pre-configured values
-- NATS debug mode is enabled
-- Pulumi uses local file storage
-
-## Technical Details
-
-- **Runtime**: Node.js 24 with `--experimental-transform-types` for the workspace's TypeScript enums
-- **Prompts**: `@clack/prompts` for beautiful interactive CLI
-- **Key Generation**: `@nats-io/nkeys` for cryptographic key pairs
-- **No host dependencies**: Everything runs inside Docker
+Do not add consuming-repository switches to `run-config.ts`. Shared behavior belongs in the runner only when every adapter needs it.
 
 ## Verification
 
-Run the configuration editor and prompt-flow tests in the shared TypeScript test runner:
+Configuration tests run only through the shared TypeScript test runner when test execution has been explicitly authorized:
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner init-config
 ```
 
-The tests use synthetic configuration contents and mocked prompts. They do not read or update a developer's environment file.
+The tests use synthetic content and mocked prompts; they must not read or update a developer's generated configuration files.
