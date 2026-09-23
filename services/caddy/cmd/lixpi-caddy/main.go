@@ -80,6 +80,7 @@ func run(ctx context.Context, args []string) error {
 					"error", err,
 				)
 
+				//nolint:wrapcheck // The Lambda handler is the error boundary, and the runtime reports this error as the invocation result.
 				return response{}, err
 			}
 

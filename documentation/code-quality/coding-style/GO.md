@@ -80,7 +80,7 @@ Include values such as stream names, domains, subjects, or file paths when they 
 
 ### Stop wrapping at the boundary
 
-The wrap rule is for errors you return. At a boundary, such as a NATS message handler's reply, an auth callout response, an HTTP handler, a Lambda handler, or `main`, nothing is left to return the error to. Log it or map it to a response there instead of wrapping it again.
+The wrap rule is for errors you return. At a boundary, such as a NATS message handler's reply, an auth callout response, an HTTP handler, a Lambda handler, or `main`, nothing is left to return the error to. Log it or map it to a response there instead of wrapping it again. When the boundary hands the error to a runtime, such as a Lambda handler's return value, mark that return with a `//nolint:wrapcheck` comment that names the boundary.
 
 ### Check errors in a wrap-aware way
 
