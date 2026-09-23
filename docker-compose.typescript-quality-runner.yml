@@ -4,41 +4,10 @@ services:
     # named Docker volumes. Repository paths are mounted separately so pnpm
     # cannot create a lockfile, store, or node_modules on the host.
     lixpi-typescript-quality-runner:
-        profiles: ["dev"]
-        image: lixpi/typescript-quality-runner
-        build:
-            context: ./dev-tools/typescript-quality-runner
-            dockerfile: Dockerfile
-        environment:
-            CI: "true"
-            DPRINT_CACHE_DIR: /dprint-cache
-            npm_config_store_dir: /pnpm-store
+        extends:
+            file: ./dev-tools/code-quality/runner-compose/typescript-quality.base.yml
+            service: typescript-quality-runner-base
         volumes:
-            # Tool workspace. No host directory is mounted over this path.
-            - ./dev-tools/typescript-quality-runner/package.json:/usr/src/quality-runner/package.json:ro,cached
-            - ./dev-tools/typescript-quality-runner/pnpm-workspace.yaml:/usr/src/quality-runner/pnpm-workspace.yaml:ro,cached
-            - ./dev-tools/typescript-quality-runner/run-quality.sh:/usr/src/quality-runner/run-quality.sh:ro,cached
-            - ./dev-tools/typescript-quality-runner/test-quality.sh:/usr/src/quality-runner/test-quality.sh:ro,cached
-            - ./dev-tools/typescript-quality-runner/fixtures:/usr/src/quality-runner/fixtures:ro,cached
-            - ./dev-tools/typescript-quality-runner/src:/usr/src/quality-runner/src:cached
-            - ./dev-tools/typescript-quality-runner/dprint.json:/usr/src/quality-runner/dprint.json:ro,cached
-            - ./dev-tools/typescript-quality-runner/oxfmt.json:/usr/src/quality-runner/oxfmt.json:ro,cached
-            - ./dev-tools/typescript-quality-runner/oxlint.json:/usr/src/quality-runner/oxlint.json:ro,cached
-            - ./dev-tools/typescript-quality-runner/stylelint.config.ts:/usr/src/quality-runner/stylelint.config.ts:cached
-            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/quality-runner/packages/debug-tools/package.json:ro,cached
-            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/quality-runner/packages/debug-tools/debug-tools.ts:ro,cached
-            - typescript-quality-runner-node-modules:/usr/src/quality-runner/node_modules
-            - typescript-quality-runner-debug-tools-node-modules:/usr/src/quality-runner/packages/debug-tools/node_modules
-            - typescript-quality-runner-pnpm-store:/pnpm-store
-            - typescript-quality-runner-dprint-cache:/dprint-cache
-
-            # Compatibility paths used by the existing fixture self-test. The
-            # source configuration still lives only in the runner directory.
-            - ./dev-tools/typescript-quality-runner/dprint.json:/usr/src/repository/dprint.json:ro,cached
-            - ./dev-tools/typescript-quality-runner/oxlint.json:/usr/src/repository/.oxlintrc.json:ro,cached
-            - ./dev-tools/typescript-quality-runner/fixtures:/usr/src/repository/dev-tools/typescript-quality-runner/fixtures:ro,cached
-            - ./dev-tools/typescript-quality-runner/src:/usr/src/repository/dev-tools/typescript-quality-runner/src:ro,cached
-
             - ./dev-tools/config-utils/setup-env.test.ts:/usr/src/repository/dev-tools/config-utils/setup-env.test.ts:cached
 
             # Application and library source. Package manifests are not mounted
@@ -60,6 +29,8 @@ services:
             - ./services/ai-model-registry/vite.config.ts:/usr/src/repository/services/ai-model-registry/vite.config.ts:cached
             - ./services/ai-model-registry/vitest.config.ts:/usr/src/repository/services/ai-model-registry/vitest.config.ts:cached
             - ./dev-tools/config-utils/setup-env.ts:/usr/src/repository/dev-tools/config-utils/setup-env.ts:cached
+            - ./dev-tools/config-utils/environment-file.ts:/usr/src/repository/dev-tools/config-utils/environment-file.ts:cached
+            - ./dev-tools/config-utils/run-config.ts:/usr/src/repository/dev-tools/config-utils/run-config.ts:cached
             - ./dev-tools/config-utils/setup-skills.ts:/usr/src/repository/dev-tools/config-utils/setup-skills.ts:cached
             - ./infrastructure/pulumi/src:/usr/src/repository/infrastructure/pulumi/src:cached
             - ./infrastructure/pulumi/vitest.config.ts:/usr/src/repository/infrastructure/pulumi/vitest.config.ts:cached

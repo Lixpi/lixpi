@@ -9,11 +9,9 @@ services:
     # per invocation — always reflects the current compose config, and
     # concurrent invocations never collide on a fixed name.
     lixpi-typescript-test-runner:
-        profiles: ["dev"]
-        image: lixpi/typescript-test-runner
-        build:
-            dockerfile: dev-tools/typescript-test-runner/Dockerfile
-            context: .
+        extends:
+            file: ./dev-tools/code-quality/runner-compose/typescript-test.base.yml
+            service: typescript-test-runner-base
         environment:
             # web-ui source reads these via import.meta.env at module-eval time,
             # including in code paths exercised by tests (e.g. VITE_API_URL in
@@ -29,21 +27,9 @@ services:
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
             VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
-            # Shared content-addressable pnpm store (see the named volume
-            # below) — caches downloaded package content across runs. pnpm's
-            # store has its own locking, so concurrent ephemeral containers
-            # can safely read/write it at once. node_modules itself is a
-            # separate concern: it lives in each domain's directory (mounted
-            # below via the typescript-test-runner-node-modules-* volumes)
-            # so pnpm's linking step is incremental across runs instead of
-            # starting from an empty node_modules every time — the pnpm
-            # store alone only avoids re-downloading, not re-linking.
-            npm_config_store_dir: /pnpm-store
         volumes:
             - ./infrastructure:/usr/src/infrastructure-source:ro,cached
             - ./dev-tools/config-utils:/usr/src/init-config-source:ro,cached
-            - ./dev-tools/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
-            - typescript-test-runner-pnpm-store:/pnpm-store
 
             # pnpm may rewrite workspace manifests with dependency build
             # decisions. Stage each source manifest outside its workspace so

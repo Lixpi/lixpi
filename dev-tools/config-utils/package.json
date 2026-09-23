@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "private": true,
     "type": "module",
-    "description": "Interactive environment setup script for Lixpi development",
+    "description": "Shared pluggable repository configuration runner",
     "scripts": {
         "setup": "node --experimental-transform-types setup-env.ts"
     },
