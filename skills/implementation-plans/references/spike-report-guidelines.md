@@ -5,11 +5,11 @@ description: How to investigate an uncertain question and maintain one evidence-
 
 # Spike Report Guidelines
 
-A spike report is the durable memory for an investigation. It lives in `documentation/memory/<NAME>.md` and answers a decision-driving question with evidence. A spike may study code, architecture, product behavior, infrastructure, operations, security, data, vendors, standards, cost, feasibility, or another technical subject. It does not need to produce code.
+A spike report is the durable memory for an investigation. It lives in `${LIXPI_REPOSITORY_PATH}/documentation/memory/<NAME>.md` and answers a decision-driving question with evidence. A spike may study code, architecture, product behavior, infrastructure, operations, security, data, vendors, standards, cost, feasibility, or another technical subject. It does not need to produce code.
 
 The report changes as the investigation changes. A fresh agent must be able to read it, see what is known, identify what remains uncertain, and continue without reconstructing the work from chat history.
 
-If the user approves implementation, keep the same memory file and follow [Writing and Running Implementation Plans](writing-implementation-plans.md). Do not copy that guide into the report or create a separate implementation document.
+If the user approves implementation, keep the same memory file and follow [Writing and Running Implementation Plans](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/writing-implementation-plans.md). Do not copy that guide into the report or create a separate implementation document.
 
 ## Run a spike to remove a real uncertainty
 
@@ -27,7 +27,7 @@ Do not create a spike for a quick lookup, routine repository navigation, or work
 
 ## Project rules stay linked, not copied
 
-Read the rules that apply to the investigation before gathering evidence. Use [Agent Skill Organization](../../../documentation/development-workflow/AGENT-SKILLS.md) for harness guidance and [Maintaining Documentation](../../../documentation/MAINTAINING-DOCUMENTATION.md) for documentation rules. Code prototypes and implementation checks remain subject to the [`code-quality` skill](../../code-quality/SKILL.md) and any nearer repository instructions.
+Read the rules that apply to the investigation before gathering evidence. Use [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md) for harness guidance and [Maintaining Documentation](${LIXPI_REPOSITORY_PATH}/documentation/MAINTAINING-DOCUMENTATION.md) for documentation rules. Code prototypes and implementation checks remain subject to the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) and any nearer repository instructions.
 
 Do not reproduce those rules in the report. Record only the way they constrain this investigation.
 
@@ -36,7 +36,7 @@ Do not reproduce those rules in the report. Record only the way they constrain t
 1. State the decision the research must support. "Research WebGPU" is a topic. "Decide whether WebGPU can replace the existing renderer without losing the required capture and fallback behavior" is a decision.
 2. Break the decision into concrete questions. Each question must be answerable with evidence or end in a clearly stated evidence gap.
 3. Record confirmed scope, constraints, source restrictions, and user decisions. Ask the user before choosing an unresolved direction that would materially change the investigation or its outcome.
-4. Create `documentation/memory/<NAME>.md` before the investigation spreads across tool calls or sources. Use an uppercase, dash-separated name.
+4. Create `${LIXPI_REPOSITORY_PATH}/documentation/memory/<NAME>.md` before the investigation spreads across tool calls or sources. Use an uppercase, dash-separated name.
 5. Define what evidence would be enough to finish. Use decision criteria and stopping conditions. Do not invent a time box unless the user set one.
 6. Write the investigation plan into the report, then update it as new evidence changes which questions matter.
 
@@ -159,8 +159,8 @@ Before a pause, handoff, or context compaction:
 Do not write a separate implementation report.
 
 1. Record the user's decision and set `Work status` to `Approved for implementation`.
-2. Read [Writing and Running Implementation Plans](writing-implementation-plans.md).
-3. Keep the same `documentation/memory/<NAME>.md` file.
+2. Read [Writing and Running Implementation Plans](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/writing-implementation-plans.md).
+3. Keep the same `${LIXPI_REPOSITORY_PATH}/documentation/memory/<NAME>.md` file.
 4. Preserve the decision, evidence, constraints, and findings that the implementation depends on.
 5. Add the implementation plan and verification material required by the implementation guide. Reuse existing context instead of restating it.
 6. As implementation exposes new evidence, update the finding, recommendation, decision, and implementation step that it changes.

@@ -62,7 +62,7 @@ Filling a blank is an override, and it is the only way a Lixpi file asserts a nu
 - No source covers the field. The four Seedance models are here, plus `gpt-image-2` and the Veo models for their text rates.
 - A source covers it in a different unit. Stability prices in credits while LiteLLM publishes dollars per image, so the merge refuses the value rather than converting it by guesswork and logs `UNIT MISMATCH`.
 
-Once a file states a value, the sync reports every later disagreement with the source instead of resolving it. Price disagreements are reported separately, because pricing reaches billing over the `metrics.*` wire. A price finding names the endpoint it belongs to, as in `inferenceProviders.stability.pricing.image.completion`, so a disagreement on one route is never read as a disagreement everywhere.
+Once a file states a value, the sync reports every later disagreement with the source instead of resolving it. Price disagreements are reported separately because pricing feeds provider usage metrics over the `metrics.*` wire. A price finding names the endpoint it belongs to, as in `inferenceProviders.stability.pricing.image.completion`, so a disagreement on one route is never read as a disagreement everywhere.
 
 A fetch is all or nothing. If any source fails, for any provider, the run raises before writing and the tree keeps what the last complete run left; a partial write would record a broken source as a source with nothing to say. Every run writes its outcome to `data/_last-sync.json`, and the catalog page shows a banner naming the sources that failed and what they said.
 

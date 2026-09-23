@@ -1,6 +1,6 @@
 # Configuration runner
 
-`dev-tools/config-utils` is the shared Dockerized runner for repository configuration wizards. The runner owns the runtime, dependencies, `env.lixpi` bootstrap, and base Compose service. Each repository owns its setup logic and templates.
+`dev-tools/config-utils` is the Dockerized runner for Lixpi's configuration wizard. The runner owns the runtime, dependencies, `env.lixpi` bootstrap, and base Compose service. The repository adapter owns its setup logic and templates.
 
 The split matches the code-quality and test runners:
 
@@ -17,15 +17,9 @@ lixpi/dev-tools/config-utils/
     ├── env.lixpi.template
     ├── env.template
     └── aws-config.template
-
-lixpi-billing/dev-tools/config-utils/
-├── setup-env.ts
-└── templates/
-    ├── env.lixpi.template
-    └── env.template
 ```
 
-The files at the top of the Lixpi directory are shared runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. Billing has the same adapter paths in its own repository. `setup-skills.ts` is the separate prompt used by `setup-skills.sh`; it shares the container dependencies but is not part of the repository adapter contract.
+The files at the top of the directory are runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. `setup-skills.ts` is the separate prompt used by `setup-skills.sh`; it shares the container dependencies but is not part of the repository adapter contract.
 
 ## Mount contract
 
@@ -38,7 +32,7 @@ The files at the top of the Lixpi directory are shared runner infrastructure. Th
 | `/usr/src/config-utils/repository/templates/` | read-only | consuming repository | Repository-specific `env.lixpi` and runtime env templates |
 | `/usr/src/config-utils/repository/environment-file.ts` | read-only | shared runner | Environment-file editor used by adapters |
 
-An adapter may declare additional read-only or read/write mounts. Billing mounts the main Lixpi checkout at `/lixpi`; the host path is supplied by `LIXPI_REPOSITORY_PATH` and is never inferred from relative directory placement.
+An adapter may declare additional read-only or read/write mounts. Checkout paths come from generated repository configuration and are not inferred from directory placement.
 
 The adapter file and directory names are part of the runner contract. A new repository can plug in by creating the same `dev-tools/config-utils/setup-env.ts` and `dev-tools/config-utils/templates/` paths, then adding a root Compose adapter that extends the shared base service.
 
@@ -62,19 +56,10 @@ GITHUB_REPOSITORY = Lixpi/lixpi
 TICKET_KEY = LIX
 DEFAULT_TARGET_BRANCH = main
 DEFAULT_SOURCE_BRANCH = main
+LIXPI_REPOSITORY_PATH = /absolute/path/to/lixpi
 ```
 
-Billing's template adds its required absolute host checkout path:
-
-```dotenv
-GITHUB_REPOSITORY = Lixpi/lixpi-billing
-TICKET_KEY = LIX-BILL
-DEFAULT_TARGET_BRANCH = main
-DEFAULT_SOURCE_BRANCH = main
-LIXPI_REPOSITORY_PATH = /absolute/path/selected/during/setup
-```
-
-Billing must collect and validate that host path before Compose can resolve the shared base file. `init-config.sh` is the single bootstrap exception to billing's normal `env.lixpi` gate. It prompts for the path, exports it only for the setup container, and the shared runner writes the authoritative file before the billing adapter starts. Every other billing script reads the generated file and fails if it is missing or invalid.
+The Lixpi launcher resolves its own directory through `pwd -P` and passes that absolute host path to the runner. The runner writes it into `env.lixpi` with the other repository metadata.
 
 ## Lixpi adapter
 
@@ -96,27 +81,7 @@ Non-interactive creation uses the same wrapper and refuses to overwrite an exist
 
 Supported options are `--help`, `--non-interactive`, `--name=<name>`, and `--env=local|dev|production`.
 
-## Billing adapter
-
-Run from the billing root:
-
-```bash
-./init-config.sh
-```
-
-The wrapper always asks for the absolute main Lixpi checkout path. After the shared runner writes billing's `env.lixpi`, the billing adapter:
-
-1. Lists the main checkout's `.env.*` files, excluding `.env.example`.
-2. Lets the user select one.
-3. Creates or updates a billing file with the identical basename, such as `.env.shelby-local`.
-4. Starts from billing's own `dev-tools/config-utils/templates/env.template` when the matching file does not exist. This template contains only billing-owned defaults.
-5. Copies the shared stage, organization, environment, AWS, DynamoDB, NATS/Nex, and portal values from the selected main configuration.
-6. Generates or reuses billing's private `BILLING_NATS_NKEY_SEED` in the billing file.
-7. Adds or refreshes `svc:billing-api` in the selected main configuration's `NATS_SERVICE_AUTH_REGISTRATIONS` and signed `NATS_APPLICATION_REGISTRATION`.
-
-Billing-owned values—including its database, service mode, HTTP address, refresh interval, and Stripe secrets—remain in the billing file. Existing billing-only values are preserved on subsequent runs. A legacy billing seed in the main file is migrated to the billing file and removed from the main file after the registration has been prepared.
-
-Both repositories ignore `env.lixpi` and runtime `.env.*` files. Templates are the committed source of defaults; generated files may contain secrets and must not be committed.
+Lixpi ignores `env.lixpi` and runtime `.env.*` files. Templates are the committed source of defaults; generated files may contain secrets and must not be committed.
 
 ## Extending the runner
 

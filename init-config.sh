@@ -2,6 +2,7 @@
 set -euo pipefail
 
 HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+export LIXPI_REPOSITORY_PATH="${HERE}"
 export LOCAL_UID="$(id -u)"
 export LOCAL_GID="$(id -g)"
 

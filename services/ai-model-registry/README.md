@@ -106,7 +106,7 @@ Every run records its outcome in `data/_last-sync.json`, whether it finished or 
 
 Every source is recorded, including ones that had nothing. `_source.consulted` says who was asked, and `_source.fields` gives each field's value per source with an `agreement` of `single`, `identical`, or `differs`. Nothing looks corroborated when only one source carries it.
 
-Where an authored value and a fetched value disagree, the merge keeps the authored one and reports the disagreement. Price disagreements are reported separately, because pricing reaches billing over the `metrics.*` wire and a wrong rate is a money bug rather than a display bug.
+Where an authored value and a fetched value disagree, the merge keeps the authored one and reports the disagreement. Price disagreements are reported separately because pricing feeds provider usage metrics over the `metrics.*` wire, and a wrong rate corrupts usage-cost reporting rather than only changing display data.
 
 A run reports four things: `SOURCES DIFFER` where two catalogs disagree with each other, `PRICE DRIFT` where an authored rate disagrees with a source, `NO PRICE` and `NO SOURCE` for a blank nothing filled, and `UNIT MISMATCH` where a source has the value but measures it differently, which the merge refuses to convert.
 

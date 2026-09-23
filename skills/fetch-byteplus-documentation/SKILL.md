@@ -15,7 +15,7 @@ docker compose -f docker-compose.lixpi-utils.yml run --rm -T lixpi-utils \
     https://docs.byteplus.com/en/docs/ModelArk/2377608
 ```
 
-The rule and the reasoning behind it are in [`documentation/development-workflow/SKILL-EXECUTION-GUIDE.md`](../../documentation/development-workflow/SKILL-EXECUTION-GUIDE.md). The script is TypeScript that Node 24 runs directly through native type stripping, so there is nothing to build and no `tsconfig.json` to keep in sync.
+The rule and the reasoning behind it are in [`${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md`](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md). The script is TypeScript that Node 24 runs directly through native type stripping, so there is nothing to build and no `tsconfig.json` to keep in sync.
 
 ## Naming a document
 
