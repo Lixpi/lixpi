@@ -27,10 +27,7 @@ const requireRegularFile = (filename: string): void => {
 }
 
 const renderTemplate = (template: string): string => {
-    const rendered = template.replaceAll(
-        /\{\{([A-Z][A-Z0-9_]*)\}\}/gu,
-        (_placeholder, name: string) => envLiteral(process.env[name]!),
-    )
+    const rendered = template.replaceAll(/\{\{([A-Z][A-Z0-9_]*)\}\}/gu, (_placeholder, name: string) => envLiteral(process.env[name]!))
 
     const unresolved = rendered.match(/\{\{[^{}]+\}\}/u)
 
