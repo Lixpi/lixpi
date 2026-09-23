@@ -9,10 +9,7 @@ const envLixpiTemplatePath = path.join(
     'templates',
     'env.lixpi.template',
 )
-const envLixpiPath = path.join(
-    workspacePath,
-    'env.lixpi',
-)
+const envLixpiPath = path.join(workspacePath, 'env.lixpi')
 const setupPath = path.join(
     repositoryConfigPath,
     'setup-env.ts',
