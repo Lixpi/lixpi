@@ -1,12 +1,9 @@
 services:
     lixpi-go-quality-runner:
-        profiles: ["dev"]
-        image: lixpi/go-quality-runner
-        build:
-            context: ./dev-tools/go-quality-runner
+        extends:
+            file: ./dev-tools/code-quality/runner-compose/go-quality.base.yml
+            service: go-quality-runner-base
         volumes:
-            - ./dev-tools/go-quality-runner/run-quality.sh:/usr/src/runner/run-quality.sh:ro,cached
-            - ./dev-tools/go-quality-runner/golangci.yml:/usr/src/runner/golangci.yml:ro,cached
             - ./services/nats/go.mod:/usr/src/manifests/nats/go.mod:cached
             - ./services/nats/go.sum:/usr/src/manifests/nats/go.sum:cached
             - ./services/nats/cmd:/usr/src/service/nats/cmd:cached
@@ -16,9 +13,6 @@ services:
             - ./services/caddy/go.sum:/usr/src/manifests/caddy/go.sum:cached
             - ./services/caddy/cmd:/usr/src/service/caddy/cmd:cached
             - ./services/caddy/internal:/usr/src/service/caddy/internal:cached
-            - go-quality-runner-module-cache:/go-module-cache
-            - go-quality-runner-build-cache:/go-build-cache
-            - go-quality-runner-lint-cache:/go-lint-cache
 
 volumes:
     go-quality-runner-module-cache:

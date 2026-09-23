@@ -49,7 +49,7 @@ Agents must not run project setup, package scripts, build scripts, docs builds, 
 
 If the Dockerized command is not documented or the required container is unavailable, agents stop and ask instead of falling back to a host command.
 
-TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only commands in [`TYPESCRIPT-QUALITY.md`](../../dev-tools/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md). Agents select the affected service or shared package instead of scanning unrelated workspaces. They must not invoke Oxfmt, dprint, Oxlint, Stylelint, TypeScript source, Node, or a package manager on the host.
+TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only commands in the [TypeScript quality runner README](../../dev-tools/code-quality/typescript-quality-runner/README.md). Agents select the affected service or shared package instead of scanning unrelated workspaces. They must not invoke Oxfmt, dprint, Oxlint, Stylelint, TypeScript source, Node, or a package manager on the host.
 
 ## Adding Or Updating A Skill
 

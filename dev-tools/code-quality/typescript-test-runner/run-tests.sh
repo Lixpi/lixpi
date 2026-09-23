@@ -1,10 +1,10 @@
 #!/bin/sh
 # Universal entrypoint for lixpi-typescript-test-runner.
 #
-# api / web-ui / web-ui-user-portal / ai-model-registry / nex use their own
-# package.json, pnpm-workspace.yaml, and vitest.config.ts. The workspace
-# manifest is staged outside the workspace and copied into disposable
-# container storage because pnpm may rewrite it during install.
+# Ordinary mounted workspaces use their own package.json, pnpm-workspace.yaml,
+# and vitest.config.ts. The workspace manifest is staged outside the workspace
+# and copied into disposable container storage because pnpm may rewrite it
+# during install.
 #
 # "shared" covers packages/lixpi/*, mounted file-by-file under
 # /usr/src/service/shared, tied together by packages/lixpi/pnpm-workspace.yaml
@@ -43,7 +43,7 @@
 # shared package with a "test:run" script runs.
 
 set -e
-domain="$1"
+domain=${1:-}
 [ "$#" -gt 0 ] && shift
 
 run_domain() {
@@ -119,9 +119,6 @@ case "$domain" in
         cp -R /usr/src/service/shared/nats-subject-registry/src /usr/src/service/init-config/packages/lixpi/nats-subject-registry/
         run_domain init-config "$@"
         ;;
-    api|web-ui|web-ui-user-portal|ai-model-registry|nex)
-        run_domain "$domain" "$@"
-        ;;
     shared)
         run_shared "$@"
         ;;
@@ -134,7 +131,17 @@ case "$domain" in
         run_shared
         ;;
     *)
-        echo "Usage: run-tests.sh {api|web-ui|web-ui-user-portal|ai-model-registry|nex|init-config|infrastructure|shared|all} [vitest args]" >&2
-        exit 1
+        case "$domain" in
+            ""|*[!a-z0-9-]*|-*|*-)
+                echo "Usage: run-tests.sh {<mounted-workspace>|init-config|infrastructure|shared|all} [vitest args]" >&2
+                exit 1
+                ;;
+        esac
+        if [ -f "/usr/src/service/$domain/package.json" ]; then
+            run_domain "$domain" "$@"
+        else
+            echo "Usage: run-tests.sh {<mounted-workspace>|init-config|infrastructure|shared|all} [vitest args]" >&2
+            exit 1
+        fi
         ;;
 esac

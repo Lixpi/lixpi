@@ -1,0 +1,13 @@
+services:
+    typescript-test-runner-base:
+        profiles: ["dev"]
+        image: lixpi/typescript-test-runner
+        build:
+            context: ../typescript-test-runner
+            dockerfile: Dockerfile
+        environment:
+            npm_config_store_dir: /pnpm-store
+        volumes:
+            - ../typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:ro,cached
+            - typescript-test-runner-pnpm-store:/pnpm-store
+        working_dir: /usr/src/service

@@ -11,7 +11,7 @@ Read the [`code-quality` skill](../../../skills/code-quality/SKILL.md) first. Ne
 
 ## Test Runner Container
 
-All TypeScript service and package tests run inside `lixpi-typescript-test-runner`, defined in `docker-compose.typescript-test-runner.yml` and included by the root `docker-compose.yml`. Application containers do not ship a test runner.
+All TypeScript service and package tests run inside `lixpi-typescript-test-runner`, defined in `docker-compose.typescript-test-runner.yml` and included by the root `docker-compose.yml`. Application containers do not ship a test runner. The reusable service definition lives in `dev-tools/code-quality/runner-compose/typescript-test.base.yml`; the repository-root Compose file extends it and supplies the main repository's workspace mounts and cache volumes. [Code Quality Runners](../../../dev-tools/code-quality/README.md) explains how another repository supplies its own workspace mounts.
 
 The test runner is invoked as a one-shot `docker compose run --rm` command. Each invocation gets the current Compose configuration and a generated container name, so concurrent runs do not collide.
 
@@ -19,7 +19,7 @@ The commands below assume `.env` is already symlinked via `./set-env.sh` (see th
 
 Every invocation runs `pnpm install` before the test command, but this is normally fast, not a full reinstall: a shared `typescript-test-runner-pnpm-store` volume caches downloaded package content, and a `typescript-test-runner-node-modules-*` volume per workspace directory (domain root plus each bind-mounted `packages/lixpi/*` member) persists the linked `node_modules` output across runs, so `pnpm install` is normally an incremental no-op ("Already up to date") rather than a from-scratch install. Both volume groups are declared in `docker-compose.typescript-test-runner.yml`.
 
-If the cache is corrupt or keeps a stale workspace link after a dependency rename or removal, wipe it with `./dev-tools/typescript-test-runner/nuke-cache.sh`. The next run performs a clean install. Routine dependency changes do not need this because each invocation reconciles `node_modules` against the lockfile.
+If the cache is corrupt or keeps a stale workspace link after a dependency rename or removal, wipe it with `./dev-tools/code-quality/typescript-test-runner/nuke-cache.sh`. The next run performs a clean install. Routine dependency changes do not need this because each invocation reconciles `node_modules` against the lockfile.
 
 Each service uses its own `package.json`, `pnpm-workspace.yaml`, and `vitest.config.ts`. The workspace manifest is mounted read-only in a staging directory and copied into the disposable workspace before `pnpm install`, so pnpm can record dependency build decisions without trying to replace a bind mount. The runner does not duplicate service configuration. Shared packages use the same copy-before-install pattern with `packages/lixpi/pnpm-workspace.yaml` so `workspace:*` dependencies resolve.
 
@@ -29,7 +29,9 @@ Use the same command for every configured service. The optional test path is rel
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
 ```
 
-The domain dispatcher in `dev-tools/typescript-test-runner/run-tests.sh` lists the available domains. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `init-config` separately.
+Every ordinary mounted workspace is runnable without adding its name to the dispatcher. Its adapter mounts `package.json`, test configuration, and source under `/usr/src/service/<workspace>`, and stages an optional workspace manifest at `/usr/src/service/workspace-manifests/<workspace>/pnpm-workspace.yaml`. Workspace names are restricted to lowercase letters, digits, and internal hyphens. The adapter also owns the named `node_modules` volumes for its mounted workspace members.
+
+`init-config`, `infrastructure`, `shared`, and `all` remain specialized main-repository domains. `init-config` runs the environment wizard's editor and prompt-flow tests against synthetic configuration contents. It copies the setup sources into the disposable container before installing dependencies. `all` runs service and shared-package suites; invoke `init-config` separately.
 
 The `nex` domain includes `workloads/nats-admission.runtime.test.ts`. Its opt-in application-cluster checks require NATS and LocalAuth0; set `LIXPI_NATS_AUTH_RUNTIME_TEST=true` and mount the selected local environment file read-only at `/run/nats-test.env`. They create and remove a unique Object Store bucket. `shared nats-subject-registry` verifies endpoint permission boundaries, user-scoped events, queues and declaration validation. Isolated Go admission tests are covered in [Go Testing and Tooling](GO.md).
 

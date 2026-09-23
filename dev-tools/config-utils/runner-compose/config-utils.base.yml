@@ -1,0 +1,11 @@
+services:
+    config-utils-base:
+        profiles: ["dev"]
+        image: lixpi/config-utils
+        build:
+            context: ../../..
+            dockerfile: dev-tools/config-utils/Dockerfile
+        volumes:
+            - ../run-config.ts:/usr/src/config-utils/run-config.ts:ro,cached
+            - ../environment-file.ts:/usr/src/config-utils/repository/environment-file.ts:ro,cached
+        working_dir: /usr/src/config-utils

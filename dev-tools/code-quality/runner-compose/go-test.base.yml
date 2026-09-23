@@ -1,0 +1,10 @@
+services:
+    go-test-runner-base:
+        profiles: ["dev"]
+        image: lixpi/go-test-runner
+        build:
+            context: ../go-test-runner
+        volumes:
+            - ../go-test-runner/run-tests.sh:/usr/src/runner/run-tests.sh:ro,cached
+            - go-test-runner-module-cache:/go-module-cache
+            - go-test-runner-build-cache:/go-build-cache

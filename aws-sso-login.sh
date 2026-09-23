@@ -20,7 +20,7 @@ echo ""
 echo "Using: $selected_env"
 echo ""
 
-aws_profile=$(grep -E '^AWS_PROFILE=' "$selected_env" | tail -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | xargs)
+aws_profile=$(grep -E '^[[:space:]]*AWS_PROFILE[[:space:]]*=' "$selected_env" | tail -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | xargs)
 
 if [ -z "$aws_profile" ]; then
     echo "AWS_PROFILE is not set in $selected_env."
