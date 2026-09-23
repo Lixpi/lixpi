@@ -1,3 +1,21 @@
+import { parseEnv } from 'node:util'
+
+export const envLiteral = (value: string): string => {
+    try {
+        const parsed = parseEnv(`VALUE = ${value}\nNEXT = sentinel\n`)
+
+        if (
+            parsed.VALUE === value
+            && parsed.NEXT === 'sentinel'
+        )
+            return value
+    } catch {
+        // Fall through to a quoted literal when the unquoted form is invalid.
+    }
+
+    return JSON.stringify(value)
+}
+
 // Keep the original assignments so partial updates don't discard comments,
 // custom variables, quoting, interpolation, or multiline values.
 export class EnvFileUpdates {
@@ -99,7 +117,9 @@ export class EnvFileUpdates {
             const suffix = this.splitComment(value, comment).comment
             const spacing = suffix.startsWith('#') ? ' ' : ''
 
-            return `${prefix}${this.changes.get(name)}${spacing}${suffix}${ending}`
+            const spacedPrefix = prefix.replace(/[\t ]*=[\t ]*$/, ' = ')
+
+            return `${spacedPrefix}${this.changes.get(name)}${spacing}${suffix}${ending}`
         })
         const newline = this.source.includes('\r\n') ? '\r\n' : '\n'
 
@@ -113,7 +133,7 @@ export class EnvFileUpdates {
             )
                 content += newline
 
-            content += `${name}=${literal}${newline}`
+            content += `${name} = ${literal}${newline}`
         }
 
         return content

@@ -4,7 +4,10 @@ import { parseEnv } from 'node:util'
 import * as prompts from '@clack/prompts'
 import * as nkeys from '@nats-io/nkeys'
 import { registrationEnvironment } from '@lixpi/nats-subject-registry/registration'
-import { EnvFileUpdates } from './environment-file.ts'
+import {
+    envLiteral,
+    EnvFileUpdates,
+} from './environment-file.ts'
 import {
     runInteractivePrompts,
     writeFiles,
@@ -46,34 +49,34 @@ describe('partial environment updates', () => {
         const updates = new EnvFileUpdates('API_KEY=old')
         updates.setValue('API_KEY', '""')
         updates.setValue('NEW_VALUE', "'${LITERAL}'")
-        expect(updates.render()).toBe('API_KEY=""\nNEW_VALUE=\'${LITERAL}\'\n')
+        expect(updates.render()).toBe('API_KEY = ""\nNEW_VALUE = \'${LITERAL}\'\n')
     })
 
     it('replaces an unquoted hash as part of the value but keeps a spaced inline comment', () => {
         const updates = new EnvFileUpdates('PASSWORD=old#literal # comment\n')
         expect(updates.getValues().get('PASSWORD')).toBe('old#literal')
         updates.setValue('PASSWORD', 'new#literal')
-        expect(updates.render()).toBe('PASSWORD=new#literal # comment\n')
+        expect(updates.render()).toBe('PASSWORD = new#literal # comment\n')
     })
 
     it('keeps a comment separate when overriding an empty assignment', () => {
         const updates = new EnvFileUpdates('VALUE= # comment\n')
         updates.setValue('VALUE', 'new')
-        expect(updates.render()).toBe('VALUE= new # comment\n')
+        expect(updates.render()).toBe('VALUE = new # comment\n')
     })
 
     it('replaces every duplicate assignment without changing other values', () => {
         const updates = new EnvFileUpdates('VALUE=first\nOTHER=keep\nVALUE=last\n')
         expect(updates.getValues().get('VALUE')).toBe('last')
         updates.setValue('VALUE', 'updated')
-        expect(updates.render()).toBe('VALUE=updated\nOTHER=keep\nVALUE=updated\n')
+        expect(updates.render()).toBe('VALUE = updated\nOTHER=keep\nVALUE = updated\n')
     })
 
     it('replaces multiline values without interpreting embedded assignment text', () => {
         const updates = new EnvFileUpdates('CERT="first\nFAKE=value\nlast" # keep\nREAL=original\n')
         expect([...updates.getValues().keys()]).toEqual(['CERT', 'REAL'])
         updates.setValue('CERT', '"replacement"')
-        expect(updates.render()).toBe('CERT="replacement" # keep\nREAL=original\n')
+        expect(updates.render()).toBe('CERT = "replacement" # keep\nREAL=original\n')
     })
 
     it.each(['"unterminated', "'unterminated", '"quoted" trailing', 'first\nOTHER=injected'])('rejects an invalid replacement: %s', literal => {
@@ -81,6 +84,15 @@ describe('partial environment updates', () => {
         expect(() => updates.setValue('VALUE', literal)).toThrow()
         expect(updates.render()).toBe('VALUE=original\n')
     })
+})
+
+describe('environment literals', () => {
+    it.each([
+        ['plain', 'plain'],
+        ['internal spaces stay unquoted', 'internal spaces stay unquoted'],
+        ['', '""'],
+        ['value # literal', '"value # literal"'],
+    ])('serializes %j as %j', (value, expected) => void expect(envLiteral(value)).toBe(expected))
 })
 
 
@@ -462,7 +474,10 @@ describe('shared grouped wizard', () => {
         selects.set('DynamoDB endpoint URL', 'override')
         texts.set('DynamoDB endpoint URL', 'https://dynamodb.example.test')
         await writeFiles(await collect())
-        expect(write).toHaveBeenCalledExactlyOnceWith(envPath, fixture.replace('http://lixpi-dynamodb:8000', 'https://dynamodb.example.test'))
+        expect(write).toHaveBeenCalledExactlyOnceWith(
+            envPath,
+            fixture.replace('DYNAMODB_ENDPOINT=http://lixpi-dynamodb:8000', 'DYNAMODB_ENDPOINT = https://dynamodb.example.test'),
+        )
         assertNoKeysGenerated()
     })
 
@@ -484,9 +499,9 @@ describe('shared grouped wizard', () => {
         texts.set(domainPrompt, 'https://tenant.auth.test')
         const config = await collect()
         const result = config.edits!.render(config)
-        expect(result).toContain('MOCK_AUTH0=false')
-        expect(result).toContain('AUTH0_DOMAIN=https://tenant.auth.test')
-        expect(result).toContain('VITE_AUTH0_DOMAIN=tenant.auth.test')
+        expect(result).toContain('MOCK_AUTH0 = false')
+        expect(result).toContain('AUTH0_DOMAIN = https://tenant.auth.test')
+        expect(result).toContain('VITE_AUTH0_DOMAIN = tenant.auth.test')
         expect(prompts.select).toHaveBeenCalledWith(expect.objectContaining({ message: 'Auth0 Client ID' }))
         assertNoKeysGenerated()
     })
@@ -525,7 +540,7 @@ describe('shared grouped wizard', () => {
             }],
         }))
         expect(prompts.text).toHaveBeenCalledTimes(1)
-        expect(config.edits!.render(config)).toBe(`${original  }ORG_NAME=NewOrg\n`)
+        expect(config.edits!.render(config)).toBe(`${original  }ORG_NAME = NewOrg\n`)
     })
 
     it('can keep an empty applicable field without exposing unrelated raw variables', async () => {
@@ -641,7 +656,10 @@ describe('shared grouped wizard', () => {
         selects.set('Organization name (used for Pulumi)', 'override')
         texts.set('Organization name (used for Pulumi)', 'Renamed')
         await writeFiles(await collect())
-        expect(write).toHaveBeenCalledExactlyOnceWith('/workspace/.env.development', fixture.replace('ORG_NAME=Existing', 'ORG_NAME=Renamed'))
+        expect(write).toHaveBeenCalledExactlyOnceWith(
+            '/workspace/.env.development',
+            fixture.replace('ORG_NAME=Existing', 'ORG_NAME = Renamed'),
+        )
     })
 
     it('merges selected SSO settings while retaining unrelated AWS profiles', async () => {

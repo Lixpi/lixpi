@@ -15,7 +15,10 @@ import {
     fromSeed,
 } from '@nats-io/nkeys'
 import c from 'chalk'
-import { EnvFileUpdates } from './environment-file.ts'
+import {
+    envLiteral,
+    EnvFileUpdates,
+} from './environment-file.ts'
 
 const WORKSPACE_DIR = '/workspace'
 const TEMPLATES_DIR = new URL('./templates', import.meta.url).pathname
@@ -1875,9 +1878,13 @@ const generateEnvFileContent = (config: EnvConfig): string => {
 
     let result = template
 
-    for (const [placeholder, value] of Object.entries(replacements)) {
-        result = result.replaceAll(placeholder, value)
-    }
+    for (const [placeholder, value] of Object.entries(replacements))
+        result = result.replaceAll(
+            placeholder,
+            placeholder === '{{NATS_CORS_COMMENT}}'
+                ? value
+                : envLiteral(value),
+        )
 
     return result
 }

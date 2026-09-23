@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { envLiteral } from './environment-file.ts'
 
 const workspacePath = '/workspace'
 const repositoryConfigPath = '/usr/src/config-utils/repository'
@@ -34,7 +35,7 @@ const renderTemplate = (template: string): string => {
             if (!value)
                 throw new Error(`${name} is required to render env.lixpi`)
 
-            return value
+            return envLiteral(value)
         },
     )
 

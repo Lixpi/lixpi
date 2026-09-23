@@ -53,23 +53,25 @@ The container entry point is [`run-config.ts`](run-config.ts). It performs setup
 
 `env.lixpi` is therefore the first repository file written during configuration setup. It is generated local state, is ignored by Git, and is not checked in. The repository adapter must not try to run before this bootstrap completes.
 
+Environment assignments use `KEY = value`. The shared `envLiteral` helper leaves values unquoted whenever the unquoted form round-trips through the environment-file parser, and adds double quotes only when they are required to preserve the value. Repository adapters must use that helper instead of quoting every value.
+
 The Lixpi template writes:
 
 ```dotenv
-GITHUB_REPOSITORY=Lixpi/lixpi
-TICKET_KEY=LIX
-DEFAULT_TARGET_BRANCH=main
-DEFAULT_SOURCE_BRANCH=main
+GITHUB_REPOSITORY = Lixpi/lixpi
+TICKET_KEY = LIX
+DEFAULT_TARGET_BRANCH = main
+DEFAULT_SOURCE_BRANCH = main
 ```
 
 Billing's template adds its required absolute host checkout path:
 
 ```dotenv
-GITHUB_REPOSITORY=Lixpi/lixpi-billing
-TICKET_KEY=LIX-BILL
-DEFAULT_TARGET_BRANCH=main
-DEFAULT_SOURCE_BRANCH=main
-LIXPI_REPOSITORY_PATH=/absolute/path/selected/during/setup
+GITHUB_REPOSITORY = Lixpi/lixpi-billing
+TICKET_KEY = LIX-BILL
+DEFAULT_TARGET_BRANCH = main
+DEFAULT_SOURCE_BRANCH = main
+LIXPI_REPOSITORY_PATH = /absolute/path/selected/during/setup
 ```
 
 Billing must collect and validate that host path before Compose can resolve the shared base file. `init-config.sh` is the single bootstrap exception to billing's normal `env.lixpi` gate. It prompts for the path, exports it only for the setup container, and the shared runner writes the authoritative file before the billing adapter starts. Every other billing script reads the generated file and fails if it is missing or invalid.
