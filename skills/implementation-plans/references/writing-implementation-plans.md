@@ -5,7 +5,7 @@ description: How to create and maintain one durable implementation plan from des
 
 # Writing and Running Implementation Plans
 
-An implementation plan is the durable memory for a piece of work. It lives in `documentation/memory/<NAME>.md`, explains the intended result, records the decisions that shape it, and stays accurate while the work is implemented. A fresh agent must be able to read that file, inspect the working tree, and continue without relying on the conversation that created it.
+An implementation plan is the durable memory for a piece of work. It lives in `${LIXPI_REPOSITORY_PATH}/documentation/memory/<NAME>.md`, explains the intended result, records the decisions that shape it, and stays accurate while the work is implemented. A fresh agent must be able to read that file, inspect the working tree, and continue without relying on the conversation that created it.
 
 The plan is not a frozen proposal, a chronological work diary, or a copy of repository-wide instructions. It contains the task-specific state. It links to stable project guidance instead of repeating it.
 
@@ -22,11 +22,11 @@ Create a plan when at least one of these is true:
 
 Do not create a plan for a small, direct change that can be understood and completed in one pass unless the user asks for one.
 
-When feasibility, vendor behavior, product direction, or another material unknown needs investigation first, follow [Spike Report Guidelines](spike-report-guidelines.md). If that spike leads to implementation, keep using the same memory file. Do not create a second document.
+When feasibility, vendor behavior, product direction, or another material unknown needs investigation first, follow [Spike Report Guidelines](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/spike-report-guidelines.md). If that spike leads to implementation, keep using the same memory file. Do not create a second document.
 
 ## Project rules stay linked, not copied
 
-Read the rules that apply to the work before drafting or implementing the plan. The main entry points are [Agent Skill Organization](../../../documentation/development-workflow/AGENT-SKILLS.md), the [`code-quality` skill](../../code-quality/SKILL.md), and [Maintaining Documentation](../../../documentation/MAINTAINING-DOCUMENTATION.md).
+Read the rules that apply to the work before drafting or implementing the plan. The main entry points are [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md), the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md), and [Maintaining Documentation](${LIXPI_REPOSITORY_PATH}/documentation/MAINTAINING-DOCUMENTATION.md).
 
 Do not paste those rules into a plan. Record only their task-specific effect, such as a required container, a forbidden verification method, or a coding guide selected for the affected files. Stable policy belongs in its canonical guide.
 
@@ -37,7 +37,7 @@ The same rule applies outside `documentation/memory`. Skills, tickets, issues, a
 1. Read the user's request, the applicable repository instructions, and any existing memory file for the same work.
 2. Inspect enough of the live system to identify the outcome, the affected boundaries, and the decisions that cannot be derived from the repository.
 3. Ask the user about any unresolved choice that would materially change the result, scope, compatibility contract, risk, or implementation direction.
-4. Create `documentation/memory/<NAME>.md` as soon as the task has a stable identity. Use an uppercase, dash-separated name that describes the work.
+4. Create `${LIXPI_REPOSITORY_PATH}/documentation/memory/<NAME>.md` as soon as the task has a stable identity. Use an uppercase, dash-separated name that describes the work.
 5. Fill the file while researching and planning. Do not keep the real plan in chat and write the file only after the thinking is finished.
 6. Keep that file for the rest of the work. Revise it during implementation and after every discovery that changes what the file says.
 
@@ -45,7 +45,7 @@ Planning does not authorize implementation. Keep product changes out of the plan
 
 ## Research the live system before choosing the design
 
-Use the source and evidence rules in [Spike Report Guidelines](spike-report-guidelines.md) when the plan depends on external claims, measurements, or uncertain facts. For repository work:
+Use the source and evidence rules in [Spike Report Guidelines](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/spike-report-guidelines.md) when the plan depends on external claims, measurements, or uncertain facts. For repository work:
 
 1. Read the product and domain documentation that defines the affected behavior.
 2. Read nearby package or service READMEs and the selected coding and testing guides.
@@ -118,7 +118,7 @@ Keep details proportional to risk. A plan for a small internal refactor may need
 
 List the acceptance scenarios and the evidence that will prove them. Use observable inputs and outputs where possible. Include failure cases when they define important behavior.
 
-Follow the [`code-quality` skill](../../code-quality/SKILL.md) when deciding what an agent may write or run. Do not invent commands, claim checks were run, or treat static inspection as runtime proof. If the permitted checks cannot prove an acceptance condition, state the verification gap.
+Follow the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) when deciding what an agent may write or run. Do not invent commands, claim checks were run, or treat static inspection as runtime proof. If the permitted checks cannot prove an acceptance condition, state the verification gap.
 
 ### References contain only sources the plan depends on
 
@@ -138,7 +138,7 @@ The core sections do not prevent detailed design. Put the detail under headings 
 - Migration, rollout, rollback, and compatibility.
 - Documentation and developer workflow changes.
 
-Use TypeScript definitions, payload examples, tables, or diagrams when they make the contract easier to review. Diagrams are optional. When a Mermaid diagram helps, follow the [`mermaid-diagrams` skill](../../mermaid-diagrams/SKILL.md).
+Use TypeScript definitions, payload examples, tables, or diagrams when they make the contract easier to review. Diagrams are optional. When a Mermaid diagram helps, follow the [`mermaid-diagrams` skill](${LIXPI_REPOSITORY_PATH}/skills/mermaid-diagrams/SKILL.md).
 
 ## Keep the plan coherent while implementing it
 

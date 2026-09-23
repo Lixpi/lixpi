@@ -8,7 +8,7 @@ This guide does not replace the PIXI rendering rules for canvas scene content. I
 
 ## Frontend Boundary
 
-`services/web-ui` is a presentational and interaction layer. It must not own distributed-system decisions or product-domain orchestration. Frontend code may collect user input, build non-authoritative snapshots for the API, render streamed API state, compute local geometry, and handle direct UI interaction. It must not decide branch topology, generated-media parentage, fork/origin marker creation, reasoning-run routing, model fanout, context relevance, resolver outcomes, lineage provenance, billing, authorization, persistence ownership, or any other API-owned workflow state.
+`services/web-ui` is a presentational and interaction layer. It must not own distributed-system decisions or product-domain orchestration. Frontend code may collect user input, build non-authoritative snapshots for the API, render streamed API state, compute local geometry, and handle direct UI interaction. It must not decide branch topology, generated-media parentage, fork/origin marker creation, reasoning-run routing, model fanout, context relevance, resolver outcomes, lineage provenance, metrics reporting, authorization, persistence ownership, or any other API-owned workflow state.
 
 If a feature needs a decision that must stay correct across reloads, concurrent editors, multiple clients, retries, workers, or service restarts, the decision belongs in `services/api` or a shared backend service. The browser receives that decision through a typed API response, stream event, or persisted state contract, then applies it visually. Do not hide these decisions in UI components, ProseMirror plugins, `WorkspaceCanvas.ts`, canvas utilities, stores, or client services.
 

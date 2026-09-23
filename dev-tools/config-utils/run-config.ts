@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { envLiteral } from './environment-file.ts'
+import { envLiteral } from './repository/environment-file.ts'
 
 const workspacePath = '/workspace'
 const repositoryConfigPath = '/usr/src/config-utils/repository'
@@ -29,14 +29,7 @@ const requireRegularFile = (filename: string): void => {
 const renderTemplate = (template: string): string => {
     const rendered = template.replaceAll(
         /\{\{([A-Z][A-Z0-9_]*)\}\}/gu,
-        (_placeholder, name: string) => {
-            const value = process.env[name]
-
-            if (!value)
-                throw new Error(`${name} is required to render env.lixpi`)
-
-            return envLiteral(value)
-        },
+        (_placeholder, name: string) => envLiteral(process.env[name]!),
     )
 
     const unresolved = rendered.match(/\{\{[^{}]+\}\}/u)

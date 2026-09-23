@@ -395,8 +395,7 @@ Highlights:
 | `CAPABILITIES_META` | `scopeAndOwner / searchKey` | — | Scope and principal catalog projections |
 | `CAPABILITIES_ACCESS_LIST` | `capabilityId / principalId` | — | Explicit Capability grants |
 | `CAPABILITY_RUNS` | `runId / workspaceId` | — | Sealed run index, state, and event-stream coordinates |
-| `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Usage ledger |
-| `FINANCIAL_TRANSACTIONS` | `userId / transactionId` | LSI on status, createdAt, provider | Billing |
+| `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Provider usage metrics |
 | `AI_MODELS_LIST` | `provider / model` | — | Provider/model registry |
 
 The six Asset/Blob tables have no GSIs; `ASSETS_META.updatedAt` is their only secondary index. Capability tables use their primary keys without GSIs. All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only. Retired document/thread/media-library table definitions exist only inside the explicit staged-removal helper and are excluded from the normal resource set.

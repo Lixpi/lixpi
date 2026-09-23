@@ -7,7 +7,7 @@ description: How Lixpi constructs browser stores, persists local preferences, an
 
 Lixpi uses Nano Stores for focused browser state shared by UI modules and plain TypeScript code. Application and shared-package code does not construct Nano Stores directly. Every concrete browser store goes through `createStore()` from `@lixpi/web-client-service-factory`.
 
-Use browser stores for state such as panel visibility, local UI dimensions, current route state, and client-side projections used by several components. Do not treat them as the authority for billing, authorization, generated-media lineage, or data that must remain correct across clients and service restarts.
+Use browser stores for state such as panel visibility, local UI dimensions, current route state, and client-side projections used by several components. Do not treat them as the authority for metrics reporting, authorization, generated-media lineage, or data that must remain correct across clients and service restarts.
 
 ## Package boundary
 
