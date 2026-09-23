@@ -10,10 +10,7 @@ const envLixpiTemplatePath = path.join(
     'env.lixpi.template',
 )
 const envLixpiPath = path.join(workspacePath, 'env.lixpi')
-const setupPath = path.join(
-    repositoryConfigPath,
-    'setup-env.ts',
-)
+const setupPath = path.join(repositoryConfigPath, 'setup-env.ts')
 
 const requireRegularFile = (filename: string): void => {
     let file: fs.Stats
