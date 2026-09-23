@@ -57,20 +57,14 @@ const writeEnvLixpi = (): void => {
     }
 
     const content = renderTemplate(
-        fs.readFileSync(
-            envLixpiTemplatePath,
-            'utf8',
-        ),
+        fs.readFileSync(envLixpiTemplatePath, 'utf8'),
     )
     fs.writeFileSync(
         envLixpiPath,
         content,
         { mode: 0o600 },
     )
-    fs.chmodSync(
-        envLixpiPath,
-        0o600,
-    )
+    fs.chmodSync(envLixpiPath, 0o600)
 }
 
 const main = (): void => {
