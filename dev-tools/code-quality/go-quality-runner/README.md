@@ -37,6 +37,6 @@ Run a main-repository target from the repository root:
 docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner <target> <fix|validate|dependencies>
 ```
 
-[`golangci.yml`](golangci.yml) configures the enabled linters, formatters, and repository restrictions. [`source-conventions.go`](source-conventions.go) adds AST checks that are not supplied by GolangCI-Lint: it rejects block comments and keeps a validation `if` attached to the assignment whose value it checks. The image compiles that checker during the Docker build, after validating the checker with the same formatter and linter configuration.
+[`golangci.yml`](golangci.yml) configures the enabled linters, formatters, and repository restrictions. [`source-conventions.go`](source-conventions.go) adds AST checks that are not supplied by GolangCI-Lint: it rejects block comments, rejects error messages that start a step with "failed", "unable to", "could not", "error", or the package name, rejects matching an error by its `Error()` text outside tests, and keeps a validation `if` attached to the assignment whose value it checks. The image compiles that checker during the Docker build, after validating the checker with the same formatter and linter configuration.
 
 The complete Go workflow and target-specific commands are in [Go Testing and Tooling](../../../documentation/code-quality/testing/GO.md).

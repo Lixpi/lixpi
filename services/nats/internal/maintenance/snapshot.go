@@ -50,7 +50,7 @@ func (s *Snapshots) request(ctx context.Context, subject string, value, target a
 	}
 
 	if err := response.ToError(); err != nil {
-		return fmt.Errorf("JetStream operation %q failed: %w", subject, err)
+		return fmt.Errorf("check JetStream response for %q: %w", subject, err)
 	}
 
 	if err := json.Unmarshal(message.Data, target); err != nil {
@@ -227,7 +227,7 @@ func (s *Snapshots) Restore(ctx context.Context, snapshot Snapshot, source io.Re
 	}
 
 	if err := completion.ToError(); err != nil {
-		return fmt.Errorf("restore stream %q failed: %w", snapshot.Config.Name, err)
+		return fmt.Errorf("check restore completion for stream %q: %w", snapshot.Config.Name, err)
 	}
 
 	var actual server.JSApiStreamInfoResponse

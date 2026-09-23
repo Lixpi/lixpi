@@ -51,7 +51,7 @@ func (s *frozenStorage) Store(ctx context.Context, key string, value []byte) err
 	defer s.mu.Unlock()
 
 	if s.closed {
-		return fs.ErrClosed
+		return fmt.Errorf("store Caddy file %q: %w", key, fs.ErrClosed)
 	}
 
 	if err := s.FileStorage.Store(ctx, key, value); err != nil {
@@ -66,7 +66,7 @@ func (s *frozenStorage) Delete(ctx context.Context, key string) error {
 	defer s.mu.Unlock()
 
 	if s.closed {
-		return fs.ErrClosed
+		return fmt.Errorf("delete Caddy file %q: %w", key, fs.ErrClosed)
 	}
 
 	if err := s.FileStorage.Delete(ctx, key); err != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -30,7 +31,7 @@ type JWKS struct {
 
 func (j *JWKS) Key(ctx context.Context, id string) (*rsa.PublicKey, error) {
 	if id == "" || len(id) > 256 {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("check key ID: %w", ErrDenied)
 	}
 
 	j.mu.Lock()
@@ -45,7 +46,7 @@ func (j *JWKS) Key(ctx context.Context, id string) (*rsa.PublicKey, error) {
 
 		select {
 		case <-ctx.Done():
-			return nil, ErrUnavailable
+			return nil, fmt.Errorf("wait for shared key set fetch: %w", ErrUnavailable)
 		case <-pending:
 		}
 
@@ -57,10 +58,10 @@ func (j *JWKS) Key(ctx context.Context, id string) (*rsa.PublicKey, error) {
 		}
 
 		if j.fetchError != nil {
-			return nil, ErrUnavailable
+			return nil, fmt.Errorf("read shared key set fetch result: %w", ErrUnavailable)
 		}
 
-		return nil, ErrDenied
+		return nil, fmt.Errorf("find key %q in shared key set: %w", id, ErrDenied)
 	}
 
 	now := time.Now()
@@ -75,7 +76,7 @@ func (j *JWKS) Key(ctx context.Context, id string) (*rsa.PublicKey, error) {
 	if len(j.fetchTimes) >= 10 {
 		j.mu.Unlock()
 
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("check key set refresh rate: %w", ErrUnavailable)
 	}
 
 	j.fetchTimes = append(j.fetchTimes, now)
@@ -94,14 +95,14 @@ func (j *JWKS) Key(ctx context.Context, id string) (*rsa.PublicKey, error) {
 	j.fetching = nil
 
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("fetch key set from %s: %w", j.URL, err)
 	}
 
 	if entry, exists := j.keys[id]; exists {
 		return entry.key, nil
 	}
 
-	return nil, ErrDenied
+	return nil, fmt.Errorf("find key %q in fetched key set: %w", id, ErrDenied)
 }
 
 func (j *JWKS) fetch(ctx context.Context) (map[string]cachedKey, error) {
@@ -110,7 +111,7 @@ func (j *JWKS) fetch(ctx context.Context) (map[string]cachedKey, error) {
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, j.URL, nil)
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("create key set request: %w", ErrUnavailable)
 	}
 
 	client := j.Client
@@ -120,18 +121,18 @@ func (j *JWKS) fetch(ctx context.Context) (map[string]cachedKey, error) {
 
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("request key set: %w", ErrUnavailable)
 	}
 
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("key set returned HTTP status %d: %w", response.StatusCode, ErrUnavailable)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(response.Body, 1_048_577))
 	if err != nil || len(data) > 1_048_576 {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("read key set body: %w", ErrUnavailable)
 	}
 
 	var document struct {
@@ -146,7 +147,7 @@ func (j *JWKS) fetch(ctx context.Context) (map[string]cachedKey, error) {
 	}
 
 	if json.Unmarshal(data, &document) != nil || len(document.Keys) > 64 {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("decode key set: %w", ErrUnavailable)
 	}
 
 	keys := make(map[string]cachedKey)
@@ -173,14 +174,14 @@ func (j *JWKS) fetch(ctx context.Context) (map[string]cachedKey, error) {
 		}
 
 		if _, exists := keys[source.ID]; exists {
-			return nil, ErrUnavailable
+			return nil, fmt.Errorf("find duplicate key ID %q in key set: %w", source.ID, ErrUnavailable)
 		}
 
 		keys[source.ID] = cachedKey{key: &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: int(exponent)}, expires: time.Now().Add(10 * time.Minute)}
 	}
 
 	if len(keys) == 0 {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("find usable RSA key in key set: %w", ErrUnavailable)
 	}
 
 	return keys, nil

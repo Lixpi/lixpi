@@ -46,7 +46,7 @@ func health(ctx context.Context, args []string) error {
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
-		return errors.New("health probe failed")
+		return fmt.Errorf("health probe %s returned HTTP status %d", mode, response.StatusCode)
 	}
 
 	return nil
@@ -77,7 +77,7 @@ func fence(ctx context.Context, args []string) error {
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
-		return errors.New("fence operation failed")
+		return fmt.Errorf("fence %s returned HTTP status %d", args[0], response.StatusCode)
 	}
 
 	return nil
@@ -102,12 +102,16 @@ func recovery(ctx context.Context, operation string, args []string) (result erro
 
 	key, err := nkeys.FromSeed([]byte(os.Getenv(seedName)))
 	if err != nil {
-		return errors.New("invalid maintenance identity")
+		return fmt.Errorf("decode maintenance identity from %s: %w", seedName, err)
 	}
 	defer key.Wipe()
 
 	public, err := key.PublicKey()
-	if err != nil || !nkeys.IsValidPublicUserKey(public) {
+	if err != nil {
+		return fmt.Errorf("read maintenance identity public key: %w", err)
+	}
+
+	if !nkeys.IsValidPublicUserKey(public) {
 		return errors.New("maintenance identity must be a user key")
 	}
 

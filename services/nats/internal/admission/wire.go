@@ -86,8 +86,12 @@ func verify(p *auth.Protocol, data []byte, value any) error {
 
 	var envelope signedMessage
 
-	if json.Unmarshal(data, &envelope) != nil || p.Signer.Verify(envelope.Body, envelope.Signature) != nil {
-		return errors.New("invalid worker signature")
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return fmt.Errorf("decode signed message envelope: %w", err)
+	}
+
+	if err := p.Signer.Verify(envelope.Body, envelope.Signature); err != nil {
+		return fmt.Errorf("verify worker signature: %w", err)
 	}
 
 	if err := json.Unmarshal(envelope.Body, value); err != nil {

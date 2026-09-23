@@ -7,6 +7,7 @@ linters:
     enable:
         - bodyclose
         - contextcheck
+        - depguard
         - errname
         - errorlint
         - fatcontext
@@ -30,12 +31,41 @@ linters:
         - usestdlibvars
         - wrapcheck
         - wsl_v5
+    exclusions:
+        rules:
+            # Test doubles pass errors through unchanged so tests can match them.
+            - path: _test\.go
+              linters:
+                  - wrapcheck
     settings:
+        depguard:
+            rules:
+                errors:
+                    list-mode: lax
+                    deny:
+                        - pkg: github.com/cockroachdb/errors
+                          desc: Use the standard library errors and fmt packages.
+                        - pkg: github.com/go-errors/errors
+                          desc: Use the standard library errors and fmt packages.
+                        - pkg: github.com/hashicorp/go-multierror
+                          desc: Use errors.Join from the standard library.
+                        - pkg: github.com/juju/errors
+                          desc: Use the standard library errors and fmt packages.
+                        - pkg: github.com/pkg/errors
+                          desc: Use the standard library errors and fmt packages.
+                        - pkg: github.com/rotisserie/eris
+                          desc: Use the standard library errors and fmt packages.
+                        - pkg: emperror.dev/errors
+                          desc: Use the standard library errors and fmt packages.
+                        - pkg: go.uber.org/multierr
+                          desc: Use errors.Join from the standard library.
+                        - pkg: golang.org/x/xerrors
+                          desc: Use the standard library errors and fmt packages.
         forbidigo:
             analyze-types: true
             forbid:
                 - pattern: ^panic$
-                  msg: Return operational failures instead of panicking.
+                  msg: Return expected failures instead of panicking. Mark a deliberate unreachable-branch panic with //nolint:forbidigo and the reason.
                 - pattern: ^print(ln)?$
                   msg: Use log/slog for logging and an explicit writer for command output.
                 - pattern: ^fmt\.Print(f|ln)?$
@@ -46,13 +76,19 @@ linters:
             includes:
                 - G201
                 - G202
+        nolintlint:
+            require-explanation: true
+            require-specific: true
         revive:
             rules:
                 - name: context-as-argument
+                - name: deep-exit
         sloglint:
             args-on-sep-lines: true
             msg-style: lowercased
             static-msg: true
+        wrapcheck:
+            report-internal-errors: true
         wsl_v5:
             allow-first-in-block: false
             allow-whole-block: false

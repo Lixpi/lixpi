@@ -81,7 +81,11 @@ func readSettings(getenv func(string) string, command string) (settings, error) 
 
 	if value := getenv("CERT_TIMEOUT_SECONDS"); value != "" {
 		seconds, err := strconv.Atoi(value)
-		if err != nil || seconds < 1 || seconds > 840 {
+		if err != nil {
+			return settings{}, fmt.Errorf("parse CERT_TIMEOUT_SECONDS: %w", err)
+		}
+
+		if seconds < 1 || seconds > 840 {
 			return settings{}, errors.New("CERT_TIMEOUT_SECONDS must be between 1 and 840")
 		}
 

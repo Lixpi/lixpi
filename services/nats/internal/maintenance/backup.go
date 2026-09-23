@@ -250,7 +250,7 @@ func (b *Backup) Restore(ctx context.Context, id string) (result error) {
 		expected, name := line[:64], line[66:]
 
 		if _, err := hex.DecodeString(expected); err != nil {
-			return errors.New("invalid checksum")
+			return fmt.Errorf("decode checksum for %q: %w", name, err)
 		}
 
 		parts := strings.Split(name, "/")

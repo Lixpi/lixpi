@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -83,7 +84,13 @@ func checkFile(path string, fix bool) (int, error) {
 		return 0, fmt.Errorf("parse source: %w", err)
 	}
 
-	issues := reportBlockComments(file, fileSet)
+	issues := reportBlockComments(file, fileSet) + reportErrorMessages(file, fileSet)
+
+	// Tests may assert the exact message a caller or operator will read.
+	if !strings.HasSuffix(path, "_test.go") {
+		issues += reportErrorTextMatches(file, fileSet)
+	}
+
 	edits := validationIfSpacingEdits(file, fileSet, source)
 
 	if len(edits) == 0 {
@@ -150,6 +157,131 @@ func reportBlockComments(file *ast.File, fileSet *token.FileSet) int {
 	}
 
 	return issues
+}
+
+func reportErrorMessages(file *ast.File, fileSet *token.FileSet) int {
+	issues := 0
+
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 || !isPackageCall(call, "fmt", "Errorf") && !isPackageCall(call, "errors", "New") {
+			return true
+		}
+
+		literal, ok := call.Args[0].(*ast.BasicLit)
+		if !ok || literal.Kind != token.STRING {
+			return true
+		}
+
+		message, err := strconv.Unquote(literal.Value)
+		if err != nil {
+			return true
+		}
+
+		redundantText := redundantErrorMessageText(message, file.Name.Name)
+		if redundantText == "" {
+			return true
+		}
+
+		position := fileSet.Position(literal.Pos())
+		fmt.Fprintf(
+			os.Stderr,
+			"%s:%d:%d: name the failing step without %s in the error message (error-message-step)\n",
+			position.Filename,
+			position.Line,
+			position.Column,
+			redundantText,
+		)
+		issues++
+
+		return true
+	})
+
+	return issues
+}
+
+func redundantErrorMessageText(message, packageName string) string {
+	if strings.HasPrefix(message, packageName+":") {
+		return "the package name"
+	}
+
+	for segment := range strings.SplitSeq(strings.ToLower(message), ": ") {
+		for _, phrase := range []string{"failed", "unable to", "could not"} {
+			if strings.HasPrefix(segment, phrase) {
+				return strconv.Quote(phrase)
+			}
+		}
+
+		if segment == "error" || strings.HasPrefix(segment, "error ") {
+			return strconv.Quote("error")
+		}
+	}
+
+	return ""
+}
+
+func reportErrorTextMatches(file *ast.File, fileSet *token.FileSet) int {
+	issues := 0
+	textMatchers := []string{"Compare", "Contains", "ContainsAny", "Cut", "CutPrefix", "CutSuffix", "EqualFold", "HasPrefix", "HasSuffix", "Index"}
+
+	ast.Inspect(file, func(node ast.Node) bool {
+		var operands []ast.Expr
+
+		switch expression := node.(type) {
+		case *ast.CallExpr:
+			if slices.ContainsFunc(textMatchers, func(name string) bool { return isPackageCall(expression, "strings", name) }) {
+				operands = expression.Args
+			}
+		case *ast.BinaryExpr:
+			if expression.Op == token.EQL || expression.Op == token.NEQ {
+				operands = []ast.Expr{expression.X, expression.Y}
+			}
+		case *ast.SwitchStmt:
+			operands = []ast.Expr{expression.Tag}
+		}
+
+		for _, operand := range operands {
+			if !isErrorTextCall(operand) {
+				continue
+			}
+
+			position := fileSet.Position(operand.Pos())
+			fmt.Fprintf(
+				os.Stderr,
+				"%s:%d:%d: match errors with errors.Is or errors.As instead of their message text (error-text-match)\n",
+				position.Filename,
+				position.Line,
+				position.Column,
+			)
+			issues++
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+func isPackageCall(call *ast.CallExpr, packageName, functionName string) bool {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != functionName {
+		return false
+	}
+
+	identifier, ok := selector.X.(*ast.Ident)
+
+	return ok && identifier.Name == packageName
+}
+
+func isErrorTextCall(expression ast.Expr) bool {
+	call, ok := expression.(*ast.CallExpr)
+	if !ok || len(call.Args) > 0 {
+		return false
+	}
+
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+
+	return ok && selector.Sel.Name == "Error"
 }
 
 func validationIfSpacingEdits(file *ast.File, fileSet *token.FileSet, source []byte) []sourceEdit {

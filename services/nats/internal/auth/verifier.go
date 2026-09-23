@@ -56,7 +56,7 @@ type numericDate struct {
 
 func (d *numericDate) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
-		return ErrDenied
+		return fmt.Errorf("decode null numeric date: %w", ErrDenied)
 	}
 
 	if err := json.Unmarshal(data, &d.Seconds); err != nil {
@@ -70,12 +70,17 @@ func (d *numericDate) UnmarshalJSON(data []byte) error {
 
 func (v *Verifier) Evaluate(ctx context.Context, request *jwt.AuthorizationRequestClaims) (*Identity, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("start credential verification: %w", ErrUnavailable)
 	}
 
 	options := request.ConnectOptions
 	if options.Token != "" {
-		return v.verifyToken(ctx, options.Token)
+		identity, err := v.verifyToken(ctx, options.Token)
+		if err != nil {
+			return nil, fmt.Errorf("verify connect token: %w", err)
+		}
+
+		return identity, nil
 	}
 
 	nonce := request.RequestNonce
@@ -84,7 +89,7 @@ func (v *Verifier) Evaluate(ctx context.Context, request *jwt.AuthorizationReque
 	}
 
 	if nonce == "" || options.Nkey == "" || options.SignedNonce == "" {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("read nonce credentials: %w", ErrDenied)
 	}
 
 	for _, registration := range v.Registrations {
@@ -94,7 +99,7 @@ func (v *Verifier) Evaluate(ctx context.Context, request *jwt.AuthorizationReque
 
 		key, err := nkeys.FromPublicKey(registration.PublicKey)
 		if err != nil {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("decode registered key for service %q: %w", registration.UserID, ErrDenied)
 		}
 
 		signature, err := base64.RawURLEncoding.DecodeString(options.SignedNonce)
@@ -103,23 +108,23 @@ func (v *Verifier) Evaluate(ctx context.Context, request *jwt.AuthorizationReque
 		}
 
 		if err != nil || key.Verify([]byte(nonce), signature) != nil {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("verify nonce signature for service %q: %w", registration.UserID, ErrDenied)
 		}
 
 		return &Identity{Name: registration.UserID, Account: registration.Account, Permissions: registration.Permissions}, nil
 	}
 
-	return nil, ErrDenied
+	return nil, fmt.Errorf("find registered service key: %w", ErrDenied)
 }
 
 func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, error) {
 	if len(token) > 32768 {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("check token size: %w", ErrDenied)
 	}
 
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("split token: %w", ErrDenied)
 	}
 
 	var header tokenHeader
@@ -127,22 +132,22 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 
 	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil || json.Unmarshal(headerBytes, &header) != nil {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("decode token header: %w", ErrDenied)
 	}
 
 	claimsBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil || json.Unmarshal(claimsBytes, &claims) != nil {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("decode token claims: %w", ErrDenied)
 	}
 
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil || claims.Subject == "" {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("read token signature and subject: %w", ErrDenied)
 	}
 
 	now := float64(time.Now().UnixNano()) / 1e9
 	if (claims.Expires.Present && claims.Expires.Seconds <= now) || (claims.NotBefore.Present && claims.NotBefore.Seconds > now) {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("check token validity window: %w", ErrDenied)
 	}
 
 	message := []byte(parts[0] + "." + parts[1])
@@ -153,12 +158,12 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 		}
 
 		if header.Algorithm != "EdDSA" || claims.Subject != registration.UserID {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("match service token algorithm and subject: %w", ErrDenied)
 		}
 
 		key, err := nkeys.FromPublicKey(registration.PublicKey)
 		if err != nil || key.Verify(message, signature) != nil {
-			return nil, ErrDenied
+			return nil, fmt.Errorf("verify service token signature for %q: %w", registration.UserID, ErrDenied)
 		}
 
 		return &Identity{Name: registration.UserID, Account: registration.Account, Permissions: registration.Permissions}, nil
@@ -166,11 +171,11 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 
 	if v.Policy == nil || v.Account == "" || header.Algorithm != "RS256" || claims.Issuer != v.Issuer ||
 		!audienceMatches(claims.Audience, v.Audience) {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("match browser token profile: %w", ErrDenied)
 	}
 
 	if v.Keys == nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("find browser key set: %w", ErrUnavailable)
 	}
 
 	key, err := v.Keys.Key(ctx, header.KeyID)
@@ -180,20 +185,20 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 
 	digest := sha256.Sum256(message)
 	if rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature) != nil {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("verify browser token signature: %w", ErrDenied)
 	}
 
 	if claims.Expires.Present && claims.Expires.Seconds <= float64(time.Now().UnixNano())/1e9 {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("check browser token expiry: %w", ErrDenied)
 	}
 
 	if ctx.Err() != nil {
-		return nil, ErrUnavailable
+		return nil, fmt.Errorf("finish browser token verification: %w", ErrUnavailable)
 	}
 
 	permissions, err := v.Policy.BrowserPermissions(claims.Subject)
 	if err != nil {
-		return nil, ErrDenied
+		return nil, fmt.Errorf("resolve browser permissions: %w", ErrDenied)
 	}
 
 	return &Identity{Name: claims.Subject, Account: v.Account, Permissions: permissions}, nil
