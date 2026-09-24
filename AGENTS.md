@@ -4,7 +4,7 @@
 
 At the start of every agent turn, before writing any human-facing text, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
 
-The skill is stored at `skills/talk-like-a-human/SKILL.md`. Run `./setup-skills.sh` after cloning so the active harness can discover the skills managed under `skills/`.
+Read the repository's `env.lixpi` as configuration data and resolve `LIXPI_REPOSITORY_PATH` before following skill paths. The skill is stored at `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. Run `${LIXPI_REPOSITORY_PATH}/setup-skills.sh` after cloning so the active harness can discover the skills managed under `${LIXPI_REPOSITORY_PATH}/skills/`. Every repository skill path and skill-documentation link must use the owning repository's configured path variable; never use a relative path or a checkout alias.
 
 If the skill cannot be resolved or read, stop immediately. Do not continue the task and do not produce any substantive response. The only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
 
@@ -28,11 +28,11 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 Every concrete Capability MUST be self-contained under `packages/lixpi/capability-system/src/capabilities/<module-id>/`. The module directory owns its shared contracts, backend and frontend behavior, Tool and Skill packages, runtime orchestration, prompts, schemas, resources, and tests.
 
-Consuming services MUST NOT implement capability-specific runtime logic or import a concrete capability strategy. A service may only supply infrastructure through package-owned typed ports, register the module definition in its composition root, and install module-published strategies through `CapabilityModuleCatalog`. Generic Capability infrastructure MUST NOT import a concrete module. See [Tools and Skills](documentation/library/TOOLS-AND-SKILLS.md) and the nearby [`@lixpi/capability-system` README](packages/lixpi/capability-system/README.md) before changing Capability code.
+Consuming services MUST NOT implement capability-specific runtime logic or import a concrete capability strategy. A service may only supply infrastructure through package-owned typed ports, register the module definition in its composition root, and install module-published strategies through `CapabilityModuleCatalog`. Generic Capability infrastructure MUST NOT import a concrete module. See [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md) and the nearby [`@lixpi/capability-system` README](packages/lixpi/capability-system/README.md) before changing Capability code.
 
 ## Code Quality
 
-At the start of every implementation iteration, resolve and read the [`code-quality` skill](skills/code-quality/SKILL.md). It selects the coding style and testing guides that apply to the files being changed. Its TypeScript rules bind every TypeScript file in the monorepo, not only web UI code, and its testing rules apply before an agent decides whether any test writing or execution is allowed.
+At the start of every implementation iteration, resolve and read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md). It selects the coding style and testing guides that apply to the files being changed. Its TypeScript rules bind every TypeScript file in the monorepo, not only web UI code, and its testing rules apply before an agent decides whether any test writing or execution is allowed.
 
 ## AI Model Registry
 

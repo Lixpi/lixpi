@@ -353,7 +353,7 @@ export type DriftFinding = {
     lixpiValue: unknown
     fetchedValue: unknown
     source: string
-    // Pricing reaches billing over the `metrics.*` wire, so a price mismatch is a
+    // Usage reporting consumes pricing over `metrics.*`; a mismatch is a
     // money bug and is reported apart from ordinary field drift.
     isPricing: boolean
 }

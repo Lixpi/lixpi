@@ -44,8 +44,9 @@ Frontmatter is optional, but human-facing pages should keep it when it already e
 
 Use standard Markdown whenever possible:
 
-- Relative links to documentation pages should point at `.md` files.
-- Links to source code outside the documentation tree should be normal relative repo links.
+- Skill paths and links to skill documentation in this repository must use `${LIXPI_REPOSITORY_PATH}`, including references inside skills, examples, and inline paths. Never use relative paths or checkout aliases for these references.
+- Other documentation links should be relative and point at `.md` files.
+- Other links to source code outside the documentation tree should be normal relative repo links.
 - Use fenced code blocks with a language tag.
 - Use Mermaid only inside fenced `mermaid` blocks.
 - Write notes and warnings as ordinary Markdown paragraphs or blockquotes.

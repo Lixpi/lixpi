@@ -5,7 +5,7 @@ description: Repository-wide conventions for Go package structure, service bound
 
 # Go Coding Style Guide
 
-This guide applies to every Go file. Service-specific architecture, storage, transport, and dependency rules stay in that service's repository documentation.
+This guide applies to every Go file in Lixpi repositories that consume the shared guides. Service-specific architecture, storage, transport, and dependency rules stay in that service's repository documentation and supplement this guide.
 
 ## Packages and ownership
 
@@ -166,21 +166,21 @@ func loadPolicy() *policy.Policy {
 }
 ```
 
-A `panic` is right for a branch that can't run, such as a `switch` default after configuration validation has already rejected every other value. The linter flags every `panic`, so a deliberate one needs a `//nolint:forbidigo` comment that says why the branch can't run.
+A `panic` is right for a branch that can't run, such as a `switch` default after configuration validation has already rejected every other value. The typed analyzer flags uses of the builtin `panic`. A deliberate one needs a `//lixpi:allow-panic` comment immediately above the call, with a reason explaining why the branch can't run. The exception applies to that call only.
 
 ```go
 switch mode {
 case "live", "broker", "ready":
 	return probe(ctx, mode)
 default:
-	//nolint:forbidigo // readHealthMode rejects every other mode before this switch.
+	//lixpi:allow-panic readHealthMode rejects every other mode before this switch.
 	panic(fmt.Sprintf("unreachable health mode %q", mode))
 }
 ```
 
 ## Logging
 
-- Use the standard library `log/slog` for structured logging.
+- Use the standard library `log/slog` for structured logging. Do not add a competing logging framework; a custom or third-party `slog.Handler` can supply the required output format.
 - Select and configure the `slog.Handler` once at startup. Application and domain packages log through the configured logger without choosing environment-specific output formats themselves.
 - Choose the handler output for its consumer. Prefer readable text for interactive local use and JSON for deployed log aggregation unless the runtime has a different stream or encoding contract.
 - Log stable event names and structured attributes instead of formatting values into the message.
@@ -207,3 +207,5 @@ default:
 ## Formatting and tooling
 
 Use the Dockerized Go quality runner documented in the [Go testing and tooling guide](../testing/GO.md). Its formatter and linter own mechanical layout, imports, and source-level convention checks. Do not hand-format code against a competing style or run Go tooling on the host.
+
+Use specialized GolangCI-Lint analyzers when they cover a rule. Custom source rules must inspect Go syntax trees; rules about functions, methods, packages, or types must resolve symbols through Go's type information. Do not classify source constructs by regex or their written identifier names. Text checks may inspect decoded constants or parsed comments after the AST identifies their role. Formatting changes must be derived from parsed syntax and preserve program behavior.

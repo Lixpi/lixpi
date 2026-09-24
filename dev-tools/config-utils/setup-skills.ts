@@ -126,7 +126,10 @@ class SkillSetupWizard {
                     choice => ({
                         value: choice.value,
                         label: choice.label,
-                        hint: scope === 'global' ? choice.globalHint : choice.projectHint,
+                        hint: scope === 'global' ? choice.globalHint : path.join(
+                            projectPath.trim(),
+                            choice.projectHint,
+                        ),
                     }),
                 ),
                 required: true,

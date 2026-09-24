@@ -11,7 +11,6 @@ linters:
         - errname
         - errorlint
         - fatcontext
-        - forbidigo
         - gochecknoglobals
         - gochecknoinits
         - gocritic
@@ -61,17 +60,6 @@ linters:
                           desc: Use errors.Join from the standard library.
                         - pkg: golang.org/x/xerrors
                           desc: Use the standard library errors and fmt packages.
-        forbidigo:
-            analyze-types: true
-            forbid:
-                - pattern: ^panic$
-                  msg: Return expected failures instead of panicking. Mark a deliberate unreachable-branch panic with //nolint:forbidigo and the reason.
-                - pattern: ^print(ln)?$
-                  msg: Use log/slog for logging and an explicit writer for command output.
-                - pattern: ^fmt\.Print(f|ln)?$
-                  msg: Use log/slog for logging and an explicit writer for command output.
-                - pattern: ^log\.(Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln|Print|Printf|Println)$
-                  msg: Use log/slog for structured logging and return failures to the caller.
         gosec:
             includes:
                 - G201

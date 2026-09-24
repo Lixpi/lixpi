@@ -16,7 +16,7 @@
 // namespaces, no parameter properties, and type-only imports written as `import type`. There is no
 // tsconfig and no build step, and adding either would break the "just run the file" contract.
 //
-// Must run inside the lixpi-utils container. See documentation/development-workflow/SKILL-EXECUTION-GUIDE.md.
+// Must run inside the lixpi-utils container. See ${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md.
 
 import { writeFile } from 'node:fs/promises'
 

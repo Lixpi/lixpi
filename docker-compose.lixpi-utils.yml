@@ -1,10 +1,10 @@
 ---
 # Shared utility container for skill scripts.
 #
-# Any skill under skills/ that has to execute code executes it here. The host
+# Any skill under ${LIXPI_REPOSITORY_PATH}/skills/ that has to execute code executes it here. The host
 # has no Node or pnpm toolchain to run these against, and per-skill containers
 # would multiply images for no gain, so all skills share this one runner.
-# See documentation/development-workflow/SKILL-EXECUTION-GUIDE.md for the rule and the commands.
+# See ${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md for the rule and the commands.
 #
 # Its own Compose project, so a skill run never touches the application stack's
 # containers and never reports them as orphans.
@@ -20,22 +20,23 @@ services:
         image: lixpi/utils
         build:
             dockerfile: dev-tools/lixpi-utils/Dockerfile
-            context: .
+            context: ${LIXPI_REPOSITORY_PATH:?Set LIXPI_REPOSITORY_PATH from env.lixpi}
         init: false    # tini is the image's entrypoint already.
         volumes:
             # The whole skills tree, writable: a skill script may legitimately
             # write its output next to itself (a fetched doc, a cache) and the
             # user expects that file on the host afterwards.
-            - ./skills:/skills:cached
+            - ${LIXPI_REPOSITORY_PATH:?Set LIXPI_REPOSITORY_PATH from env.lixpi}/skills:/skills:cached
 
             # Bind-mounted, not baked in, so entrypoint edits need no rebuild.
-            - ./dev-tools/lixpi-utils/run-skill.sh:/usr/local/bin/run-skill.sh:ro,cached
+            - ${LIXPI_REPOSITORY_PATH}/dev-tools/lixpi-utils/run-skill.sh:/usr/local/bin/run-skill.sh:ro,cached
 
             # Shared pnpm store, for the rare skill that needs a dependency.
             # pnpm's store does its own locking, so concurrent one-shot
             # containers can safely share it.
             - lixpi-utils-pnpm-store:/pnpm-store
         environment:
+            LIXPI_REPOSITORY_PATH: ${LIXPI_REPOSITORY_PATH:?Set LIXPI_REPOSITORY_PATH from env.lixpi}
             npm_config_store_dir: /pnpm-store
 
             # Skill scripts reach the public internet (docs.byteplus.com and
@@ -52,8 +53,8 @@ services:
         image: lixpi/utils
         init: false
         volumes:
-            - ./skills:/skills:ro,cached
-            - ./dev-tools/config-utils/setup-skills.ts:/opt/lixpi-utils/setup-skills.ts:ro,cached
+            - ${LIXPI_REPOSITORY_PATH:?Set LIXPI_REPOSITORY_PATH from env.lixpi}/skills:/skills:ro,cached
+            - ${LIXPI_REPOSITORY_PATH}/dev-tools/config-utils/setup-skills.ts:/opt/lixpi-utils/setup-skills.ts:ro,cached
         environment:
             FORCE_COLOR: 1
         working_dir: /opt/lixpi-utils

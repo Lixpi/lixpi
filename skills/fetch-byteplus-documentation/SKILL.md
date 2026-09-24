@@ -10,8 +10,9 @@ description: 'Read a BytePlus / ModelArk documentation page (docs.byteplus.com) 
 Run it through `lixpi-utils`. Never run it on the host, and never install Node to work around that:
 
 ```bash
-docker compose -f docker-compose.lixpi-utils.yml run --rm -T lixpi-utils \
-    fetch-byteplus-documentation scripts/fetch-byteplus-doc.ts \
+docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
+    -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
+    fetch-byteplus-documentation "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" \
     https://docs.byteplus.com/en/docs/ModelArk/2377608
 ```
 
@@ -22,9 +23,9 @@ The rule and the reasoning behind it are in [`${LIXPI_REPOSITORY_PATH}/documenta
 Pass a full URL or the shorter `Library/DocCode` form. Query strings are ignored, so a URL copied out of a browser with BytePlus tracking params (`?_vtm_=...`) works as-is.
 
 ```bash
-... fetch-byteplus-doc.ts https://docs.byteplus.com/en/docs/ModelArk/2377608
-... fetch-byteplus-doc.ts ModelArk/2377608
-... fetch-byteplus-doc.ts ModelArk/2377608 ModelArk/2333565     # several at once
+... "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" https://docs.byteplus.com/en/docs/ModelArk/2377608
+... "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" ModelArk/2377608
+... "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" ModelArk/2377608 ModelArk/2333565     # several at once
 ```
 
 ## Options
@@ -41,7 +42,7 @@ Pass a full URL or the shorter `Library/DocCode` form. Query strings are ignored
 A `#fragment` on the URL is used as `--section` when you don't pass one, so pasting the exact link someone shared gives you the section they meant:
 
 ```bash
-... fetch-byteplus-doc.ts "https://docs.byteplus.com/en/docs/ModelArk/2608626#trust-model-output"
+... "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" "https://docs.byteplus.com/en/docs/ModelArk/2608626#trust-model-output"
 ```
 
 ## Anchors are not slugs

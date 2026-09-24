@@ -19,7 +19,7 @@ lixpi/dev-tools/config-utils/
     └── aws-config.template
 ```
 
-The files at the top of the directory are runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. `setup-skills.ts` is the separate prompt used by `setup-skills.sh`; it shares the container dependencies but is not part of the repository adapter contract.
+The files at the top of the directory are runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. `${LIXPI_REPOSITORY_PATH}/dev-tools/config-utils/setup-skills.ts` is the separate prompt used by `${LIXPI_REPOSITORY_PATH}/setup-skills.sh`; it shares the container dependencies but is not part of the repository adapter contract. The installer reads `LIXPI_REPOSITORY_PATH` from `env.lixpi`, so configuration setup must run first.
 
 ## Mount contract
 

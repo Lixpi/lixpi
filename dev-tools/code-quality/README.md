@@ -68,6 +68,8 @@ Test adapters mount source and manifests read-only. The test entrypoint sets rea
 
 Quality adapters mount source and manifests read-write because `fix` edits source and `dependencies` intentionally writes reconciled `go.mod` and `go.sum` back to the checkout. `validate` uses the same mounts but only reports differences. A consumer adds privileges such as the Docker socket only in its own test adapter; the shared base services do not grant them.
 
+The main adapters include `go-quality-tools` for the shared Go checkers' own module. The [Go quality runner](go-quality-runner/README.md) combines syntax-based formatting, specialized GolangCI-Lint analyzers, and a typed `go/analysis` executable for Lixpi's symbol and error conventions. Its image build runs regression tests before publishing the executables used by every consuming repository.
+
 A Go target name may contain lowercase letters, digits, and internal hyphens. It is accepted only when the corresponding manifest files and source directory are mounted.
 
 ## TypeScript test workspace assembly

@@ -5,6 +5,11 @@ services:
             file: ./dev-tools/code-quality/runner-compose/go-test.base.yml
             service: go-test-runner-base
         volumes:
+            - ./dev-tools/code-quality/go-quality-runner/go.mod:/usr/src/manifests/go-quality-tools/go.mod:ro,cached
+            - ./dev-tools/code-quality/go-quality-runner/go.sum:/usr/src/manifests/go-quality-tools/go.sum:ro,cached
+            - ./dev-tools/code-quality/go-quality-runner/source-conventions.go:/usr/src/service/go-quality-tools/source-conventions.go:ro,cached
+            - ./dev-tools/code-quality/go-quality-runner/cmd:/usr/src/service/go-quality-tools/cmd:ro,cached
+            - ./dev-tools/code-quality/go-quality-runner/internal:/usr/src/service/go-quality-tools/internal:ro,cached
             - ./services/nats/go.mod:/usr/src/manifests/nats/go.mod:ro,cached
             - ./services/nats/go.sum:/usr/src/manifests/nats/go.sum:ro,cached
             - ./services/nats/cmd:/usr/src/service/nats/cmd:ro,cached

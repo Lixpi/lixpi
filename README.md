@@ -149,7 +149,7 @@ For the full architecture deep-dive — including AI chat request/response flow,
 - [System Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md) — services, NATS backbone, design decisions, scalability
 - [AI Generation Pipeline](documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, routing, streaming, usage
 - [Development Guide](documentation/platform/DEVELOPMENT.md) — building services, local auth, Pulumi
-- [Agent Skill Organization](documentation/development-workflow/AGENT-SKILLS.md) — managing and installing the project skills under `skills/`
+- [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md) explains how to manage and install the project skills under `${LIXPI_REPOSITORY_PATH}/skills/`.
 - [Style Extraction & Library](documentation/library/STYLE-EXTRACTION-OVERVIEW.md)
 - [Media Library](documentation/library/MEDIA-LIBRARY.md)
 - [Branch Lineage & Provenance](documentation/media-generation/BRANCH-LINEAGE.md)

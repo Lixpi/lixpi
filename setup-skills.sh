@@ -4,9 +4,23 @@
 
 set -euo pipefail
 
-LIXPI_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-SKILLS_ROOT="${LIXPI_ROOT}/skills"
-COMPOSE_FILE="${LIXPI_ROOT}/docker-compose.lixpi-utils.yml"
+SCRIPT_REPOSITORY_PATH="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+CONFIGURATION_FILE="${SCRIPT_REPOSITORY_PATH}/env.lixpi"
+LIXPI_REPOSITORY_PATH="$(awk '
+    /^[[:space:]]*LIXPI_REPOSITORY_PATH[[:space:]]*=/ {
+        sub(/^[[:space:]]*LIXPI_REPOSITORY_PATH[[:space:]]*=[[:space:]]*/, "")
+        sub(/\r$/, "")
+        sub(/[[:space:]]+$/, "")
+        print
+    }
+' "${CONFIGURATION_FILE}")"
+case "${LIXPI_REPOSITORY_PATH}" in
+    \"*\") LIXPI_REPOSITORY_PATH="${LIXPI_REPOSITORY_PATH:1:${#LIXPI_REPOSITORY_PATH}-2}" ;;
+    \'*\') LIXPI_REPOSITORY_PATH="${LIXPI_REPOSITORY_PATH:1:${#LIXPI_REPOSITORY_PATH}-2}" ;;
+esac
+export LIXPI_REPOSITORY_PATH
+SKILLS_ROOT="${LIXPI_REPOSITORY_PATH}/skills"
+COMPOSE_FILE="${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml"
 
 HARNESS_NAMES=(
     "Codex"
@@ -61,35 +75,6 @@ resolve_repository() {
     (CDPATH= cd -- "${repository_root}" && pwd -P)
 }
 
-relative_path_from() {
-    local from_directory="$1"
-    local destination="$2"
-    local common_directory="${from_directory}"
-    local upward_path=""
-    local remaining_path
-
-    while [[ "${destination}" != "${common_directory}" && "${destination}" != "${common_directory}/"* ]]; do
-        [[ "${common_directory}" != "/" ]] || break
-        common_directory="${common_directory%/*}"
-        [[ -n "${common_directory}" ]] || common_directory="/"
-        upward_path="../${upward_path}"
-    done
-
-    if [[ "${destination}" == "${common_directory}" ]]; then
-        remaining_path=""
-    elif [[ "${common_directory}" == "/" ]]; then
-        remaining_path="${destination#/}"
-    else
-        remaining_path="${destination#"${common_directory}"/}"
-    fi
-
-    if [[ -n "${upward_path}${remaining_path}" ]]; then
-        printf '%s%s\n' "${upward_path}" "${remaining_path}"
-    else
-        printf '.\n'
-    fi
-}
-
 resolve_link_target() {
     local link_path="$1"
     local link_directory
@@ -131,6 +116,8 @@ trap cleanup EXIT
 trap handle_signal INT TERM HUP
 
 [[ "$#" -eq 0 ]] || fail "This installer is interactive and does not accept arguments."
+[[ "${LIXPI_REPOSITORY_PATH}" == /* && "${LIXPI_REPOSITORY_PATH}" != *$'\n'* ]] \
+    || fail "env.lixpi must define one absolute LIXPI_REPOSITORY_PATH."
 [[ -t 0 && -t 1 ]] || fail "Run this installer in an interactive terminal."
 [[ -d "${SKILLS_ROOT}" ]] || fail "No canonical skills directory exists at ${SKILLS_ROOT}."
 [[ -f "${COMPOSE_FILE}" ]] || fail "Missing Docker Compose file: ${COMPOSE_FILE}."
@@ -140,7 +127,7 @@ TERMINAL_STATE="$(stty -g)"
 stty -icanon -echo -icrnl min 1 time 0
 SELECTION_PLAN="$(
     docker compose -f "${COMPOSE_FILE}" run --rm --no-deps -i -T \
-        -e "LIXPI_HOST_ROOT=${LIXPI_ROOT}" \
+        -e "LIXPI_HOST_ROOT=${LIXPI_REPOSITORY_PATH}" \
         setup-skills < /dev/tty
 )"
 stty "${TERMINAL_STATE}"
@@ -234,17 +221,19 @@ EXISTING_LINKS=0
 for harness_index in "${SELECTED_HARNESS_INDICES[@]}"; do
     harness_directory="$(harness_directory_for "${harness_index}")"
     mkdir -p "${harness_directory}"
-    physical_harness_directory="$(CDPATH= cd -- "${harness_directory}" && pwd -P)"
 
     for skill_directory in "${SELECTED_SKILL_DIRECTORIES[@]}"; do
         skill_name="${skill_directory##*/}"
         link_path="${harness_directory}/${skill_name}"
 
         if [[ -L "${link_path}" ]]; then
+            if [[ "$(readlink "${link_path}")" != "${skill_directory}" ]]; then
+                unlink "${link_path}"
+                ln -s "${skill_directory}" "${link_path}"
+            fi
             EXISTING_LINKS=$((EXISTING_LINKS + 1))
         else
-            relative_skill_path="$(relative_path_from "${physical_harness_directory}" "${skill_directory}")"
-            ln -s "${relative_skill_path}" "${link_path}"
+            ln -s "${skill_directory}" "${link_path}"
             CREATED_LINKS=$((CREATED_LINKS + 1))
         fi
 

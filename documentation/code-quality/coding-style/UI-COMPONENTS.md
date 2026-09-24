@@ -396,7 +396,7 @@ Component docs should describe:
 - Cleanup expectations.
 - Known limitations.
 
-If adding Mermaid diagrams, follow the [`mermaid-diagrams` skill](../../../skills/mermaid-diagrams/SKILL.md). Keep Mermaid syntax GitHub-safe: single-line theme config, ASCII labels when in doubt, full-width `Note over First, Last` for sequence phase titles, and paired activations in sequence diagrams.
+If adding Mermaid diagrams, follow the [`mermaid-diagrams` skill](${LIXPI_REPOSITORY_PATH}/skills/mermaid-diagrams/SKILL.md). Keep Mermaid syntax GitHub-safe: single-line theme config, ASCII labels when in doubt, full-width `Note over First, Last` for sequence phase titles, and paired activations in sequence diagrams.
 
 ## Review Checklist
 

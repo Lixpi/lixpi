@@ -479,9 +479,9 @@ export class ModelMerger {
 
         // Every inference provider this model can be reached through, and the one the
         // platform is calling today. The top-level fields describe that call; each
-        // provider's own values are kept beside them, because a rate Lixpi is not
-        // billing on today is still a fact about the model and the flag that switches
-        // between them changes nothing about the others.
+        // provider's own values are kept beside them. A rate on an endpoint the
+        // platform is not calling today is still a model fact; switching the active
+        // provider does not change the other endpoint's values.
         const inferenceProviders = baseIndex.providersFor(provider)
         const activeProvider = baseIndex.calledByThePlatformFor(provider)
 
