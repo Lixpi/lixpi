@@ -104,4 +104,4 @@ Generated partials and Character Creator panel intermediates use organization-sc
 - [Video Generation](../media-generation/VIDEO-GENERATION.md)
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md)
 - [Character Creator](../library/CHARACTER-CREATOR.md)
-- [Tools, Skills, and Capability Modules](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md)
+- [Tools, Skills, and Capability Modules](../library/TOOLS-AND-SKILLS.md)

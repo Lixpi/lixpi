@@ -76,7 +76,7 @@ Each embedded surface keeps the cited Asset alive after its canvas and Media cat
 
 ## Related documentation
 
-- [Tools, Skills, and Capability Modules](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md)
+- [Tools, Skills, and Capability Modules](./TOOLS-AND-SKILLS.md)
 - [Capability Storage and Operations](./CAPABILITY-STORAGE.md)
 - [Media Library](./MEDIA-LIBRARY.md)
 - [Workspace Model](../canvas/WORKSPACE-MODEL.md)

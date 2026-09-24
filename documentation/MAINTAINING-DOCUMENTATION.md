@@ -9,7 +9,7 @@ Use this guide when creating, moving, deleting, or reorganizing documentation.
 
 ## Required Writing Skill
 
-Before creating, revising, reviewing, or replying about any documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule. The skill owns prose style, live-system framing, durable factual claims, and document organization. This guide owns discovery, Markdown conventions, page moves, navigation, and verification.
+Before creating, revising, reviewing, or replying about any documentation, read `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. This is a hard rule. The skill owns prose style, live-system framing, durable factual claims, and document organization. This guide owns discovery, Markdown conventions, page moves, navigation, and verification.
 
 If the skill cannot be resolved or read, stop immediately. Do not edit the documentation and do not continue the task. Report that `talk-like-a-human` could not be resolved, then wait for the user's instructions.
 
@@ -44,9 +44,9 @@ Frontmatter is optional, but human-facing pages should keep it when it already e
 
 Use standard Markdown whenever possible:
 
-- Skill paths and links to skill documentation in this repository must use `${LIXPI_REPOSITORY_PATH}`, including references inside skills, examples, and inline paths. Never use relative paths or checkout aliases for these references.
-- Other documentation links should be relative and point at `.md` files.
-- Other links to source code outside the documentation tree should be normal relative repo links.
+- Paths to canonical agent skills under `${LIXPI_REPOSITORY_PATH}/skills/` use the configured repository root. Capability Skill packages under `packages/lixpi/capability-system/` follow normal relative links.
+- Relative links to documentation pages should point at `.md` files.
+- Links to source code outside the documentation tree should be normal relative repo links.
 - Use fenced code blocks with a language tag.
 - Use Mermaid only inside fenced `mermaid` blocks.
 - Write notes and warnings as ordinary Markdown paragraphs or blockquotes.

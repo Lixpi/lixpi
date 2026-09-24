@@ -180,7 +180,7 @@ The resulting `ResolvedCapabilityPlan` records every Capability ID and manifest 
 The reusable runtime, service adapters, and concrete modules have separate dependency boundaries:
 
 ```text
-${LIXPI_REPOSITORY_PATH}/packages/lixpi/capability-system/
+packages/lixpi/capability-system/
   src/
     shared/                       cross-runtime validation, limits, schemas, errors
     backend/                      resolver, registry, runner, dispatcher, module/package contracts
@@ -233,8 +233,8 @@ Action keys should be namespaced to the module, such as `metadata-audit.inspect`
 Use a first-class module when one product behavior needs executable orchestration plus reusable instruction packages.
 
 1. Choose a stable module ID, entry package ID, and IDs for every supporting package.
-2. Put each Skill in `${LIXPI_REPOSITORY_PATH}/packages/lixpi/capability-system/src/capabilities/<module-id>/skills/<skill-id>/`, with its instruction file at `${LIXPI_REPOSITORY_PATH}/packages/lixpi/capability-system/src/capabilities/<module-id>/skills/<skill-id>/SKILL.md` and a seeding adapter beside it.
-3. Export all Skill modules from `${LIXPI_REPOSITORY_PATH}/packages/lixpi/capability-system/src/capabilities/<module-id>/skills/index.ts`.
+2. Put each Skill in `skills/<skill-id>/` with its own `SKILL.md` and seeding adapter.
+3. Export all Skill modules from `skills/index.ts`.
 4. Put Tool schemas, action registration, workflow definition, resources, and implementation code under `tools/`.
 5. Add Skill references to the Tool manifest.
 6. Add a complete `descriptionSheet` to the `CapabilityModuleDefinition`.

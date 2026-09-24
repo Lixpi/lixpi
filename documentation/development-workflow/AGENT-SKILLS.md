@@ -4,21 +4,23 @@ This document defines how Lixpi keeps project guidance available to coding agent
 
 ## Design
 
-Every shared installable skill lives under `${LIXPI_REPOSITORY_PATH}/skills/`. Read `LIXPI_REPOSITORY_PATH` from the consuming repository's `env.lixpi` before resolving these paths. A skill may contain its own rules or scripts, or it may point to an authoritative document elsewhere in the repository. Its frontmatter states when the guidance applies, and its body tells the agent what to read or run.
+Every shared agent skill lives under `${LIXPI_REPOSITORY_PATH}/skills/`. Read `LIXPI_REPOSITORY_PATH` from the consuming repository's `env.lixpi` before resolving these paths. A skill may contain its own rules or scripts, or it may point to an authoritative document elsewhere in the repository. Its frontmatter states when the guidance applies, and its body tells the agent what to read or run.
 
-[`setup-skills.sh`](${LIXPI_REPOSITORY_PATH}/setup-skills.sh) installs the tool-specific discovery links needed by the supported agents. Those generated locations are local configuration. Git ignores them, and the repository does not track their contents.
+[`setup-skills.sh`](../../setup-skills.sh) optionally installs tool-specific discovery links for native skill selectors. Agents can discover the canonical skills directly without running it. Generated links are local configuration. Git ignores them, and the repository does not track their contents.
 
-Skill paths and skill-documentation links in this repository always start with `${LIXPI_REPOSITORY_PATH}`. Apply this to Markdown links, inline paths, examples, and instructions inside skills. Do not use relative paths or the `.lixpi` alias to refer to canonical skill files.
+For each task, use any skill names and descriptions already supplied by the harness, then inspect the frontmatter of `${LIXPI_REPOSITORY_PATH}/skills/*/SKILL.md` files that are not already represented. Resolve harness links to their canonical files before comparing them. Read a selected skill's full instructions once; do not load every skill body or rescan unchanged directories during the same task.
+
+Paths to canonical agent skills under `${LIXPI_REPOSITORY_PATH}/skills/` use the configured repository root. Capability Skill packages under `packages/lixpi/capability-system/` use ordinary relative paths, as do links to documentation outside the agent skill directory.
 
 ## Required Human-Facing Interaction Skill
 
-The canonical `talk-like-a-human` skill lives at [its skill file](${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md). Every agent must resolve and read `$talk-like-a-human` through the active harness's skill discovery at the start of every turn before writing human-facing text. The rule covers answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies to every interaction, not only documentation work.
+The canonical `talk-like-a-human` skill lives at [its skill file](${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md). Every agent must read it at the start of every turn before writing human-facing text, whether or not the harness has installed it. The rule covers answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies to every interaction, not only documentation work.
 
 If the canonical skill cannot be resolved or read, the agent must stop immediately. It must not continue the task or produce a substantive response. Its only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
 
 ## Installing Skills
 
-Run configuration setup after cloning so `env.lixpi` exists, then invoke the installer using its configured `LIXPI_REPOSITORY_PATH`:
+If you want native harness skill selectors, run configuration setup after cloning so `env.lixpi` exists, then invoke the installer using its configured `LIXPI_REPOSITORY_PATH`:
 
 ```bash
 "${LIXPI_REPOSITORY_PATH}/setup-skills.sh"
@@ -43,7 +45,7 @@ Links point to absolute canonical paths derived from `LIXPI_REPOSITORY_PATH`. Ex
 
 ## Skills That Execute Code
 
-Anything under `${LIXPI_REPOSITORY_PATH}/skills/` that executes code runs inside the `lixpi-utils` container, never on the host. The [Skill Execution Guide](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md) contains the rule, the exact `docker compose` commands, and the process for adding a script to a skill.
+Anything under `${LIXPI_REPOSITORY_PATH}/skills/` that executes code runs inside the `lixpi-utils` container, never on the host. The [Skill Execution Guide](SKILL-EXECUTION-GUIDE.md) contains the rule, the exact `docker compose` commands, and the process for adding a script to a skill.
 
 ## Command Execution Rule
 
@@ -60,9 +62,9 @@ TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only comma
 1. Create or update the canonical skill at `${LIXPI_REPOSITORY_PATH}/skills/<name>/SKILL.md`.
 2. Keep shared routing and constraints in that skill file. Put substantial mode-specific procedures in `${LIXPI_REPOSITORY_PATH}/skills/<name>/references/` and link them with the same repository path variable.
 3. Give the skill a description that names the work and task signals that should load it.
-4. Run `${LIXPI_REPOSITORY_PATH}/setup-skills.sh`, choose the installation scope and harnesses, then select the updated skill or `All skills`.
+4. To expose the skill in a harness's native selector, run `${LIXPI_REPOSITORY_PATH}/setup-skills.sh`, choose the installation scope and harnesses, then select the updated skill or `All skills`.
 
-Do not copy a skill into tool-specific directories or add it to a manually maintained inventory. The `${LIXPI_REPOSITORY_PATH}/skills/` directory and the installer define what is available.
+Do not copy a skill into tool-specific directories or add it to a manually maintained inventory. The `${LIXPI_REPOSITORY_PATH}/skills/` directory defines what agents can discover; the installer only adds native harness links.
 
 ## Documentation Roots
 

@@ -5,7 +5,7 @@ description: The Style Extraction Tool's router, parallel specialists, source ev
 
 # Style Extraction Pipeline
 
-Style Extraction is a built-in Capability module executed through the generic Capability workflow runner. Its self-contained source lives under `${LIXPI_REPOSITORY_PATH}/packages/lixpi/capability-system/src/capabilities/style-extraction/`. The module's tools directory contains the module-internal entry Tool manifest, schemas, action bindings, input resolver, complete specialist pipeline, and tests. `${LIXPI_REPOSITORY_PATH}/packages/lixpi/capability-system/src/capabilities/style-extraction/skills/` contains module-internal router, axes, and synthesis Skills, each with its own instruction file and stable package ID. The manifest owns ordering, conditions, value bindings, and progress labels. Registered TypeScript actions retain the specialist algorithms, validators, Asset authorization, provider calls, sample generation, and persistence rules.
+Style Extraction is a built-in Capability module executed through the generic Capability workflow runner. Its self-contained source lives under `packages/lixpi/capability-system/src/capabilities/style-extraction/`. The `tools/` side contains the module-internal entry Tool manifest, schemas, action bindings, input resolver, complete specialist pipeline, and tests. The sibling `skills/` side contains module-internal router, axes, and synthesis Skills, each with its own `SKILL.md` and stable package ID. The manifest owns ordering, conditions, value bindings, and progress labels. Registered TypeScript actions retain the specialist algorithms, validators, Asset authorization, provider calls, sample generation, and persistence rules.
 
 ## Public input
 
@@ -64,6 +64,6 @@ Reloading the workspace reconstructs progress from the Capability run index and 
 ## Related pages
 
 - [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md)
-- [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md)
+- [Tools and Skills](./TOOLS-AND-SKILLS.md)
 - [Capability Storage and Operations](./CAPABILITY-STORAGE.md)
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md)

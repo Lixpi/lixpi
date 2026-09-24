@@ -162,7 +162,7 @@ The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero fr
 
 Each concrete Capability lives under `packages/lixpi/capability-system/src/capabilities/<module-id>/`. Its directory contains the capability-specific contracts, orchestration, prompts, policies, Tool and Skill packages, schemas, resources, and tests. Generic Capability infrastructure can execute and install a module, but it does not import concrete module behavior.
 
-Application services provide infrastructure through typed ports defined by the module. Those adapters can authorize and load Assets, access storage, call selected providers, publish events, or send NATS requests. They do not own capability-specific prompts, scheduling, retry rules, assessment, composition, tracing, or cleanup. A module that needs deep media integration publishes its strategy through `CapabilityModuleDefinition.mediaStrategies`, and `CapabilityModuleCatalog` installs it without the API importing the strategy. See [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md).
+Application services provide infrastructure through typed ports defined by the module. Those adapters can authorize and load Assets, access storage, call selected providers, publish events, or send NATS requests. They do not own capability-specific prompts, scheduling, retry rules, assessment, composition, tracing, or cleanup. A module that needs deep media integration publishes its strategy through `CapabilityModuleDefinition.mediaStrategies`, and `CapabilityModuleCatalog` installs it without the API importing the strategy. See [Tools and Skills](../library/TOOLS-AND-SKILLS.md).
 
 ### Provider-Agnostic AI
 
