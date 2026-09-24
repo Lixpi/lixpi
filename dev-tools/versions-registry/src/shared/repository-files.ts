@@ -23,6 +23,7 @@ const ignoredDirectoryNames = new Set([
     '.next',
     '.pnpm-store',
     '.venv',
+    'archive',
     '__fixtures__',
     'build',
     'dist',
@@ -35,13 +36,27 @@ const ignoredDirectoryNames = new Set([
 ])
 
 export class RepositoryFiles {
-    readonly registryRoot = resolve(
-        dirname(
-            fileURLToPath(import.meta.url),
-        ),
-        '../..',
-    )
-    readonly repositoryRoot = resolve(this.registryRoot, '../..')
+    readonly registryRoot: string
+    readonly repositoryRoot: string
+
+    constructor() {
+        const sourceRegistryRoot = resolve(
+            dirname(
+                fileURLToPath(import.meta.url),
+            ),
+            '../..',
+        )
+        const configuredRoot = process.env.VERSIONS_REGISTRY_REPOSITORY_ROOT
+
+        if (
+            configuredRoot !== undefined
+            && !isAbsolute(configuredRoot)
+        )
+            throw new Error('VERSIONS_REGISTRY_REPOSITORY_ROOT must be an absolute path')
+
+        this.repositoryRoot = configuredRoot ?? resolve(sourceRegistryRoot, '../..')
+        this.registryRoot = resolve(this.repositoryRoot, 'dev-tools/versions-registry')
+    }
 
     private absoluteFrom(
         root: string,
