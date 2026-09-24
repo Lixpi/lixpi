@@ -13,7 +13,7 @@ This is the same rule the rest of the repository already follows. TypeScript tes
 
 **A skill script runs through `lixpi-utils` or it does not run.**
 
-There is no host toolchain to fall back on. A script run on the host picks up whatever Node the developer's machine happens to have, which is exactly the difference that makes a skill work for one person and fail for the next. It is also why [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md) bans host `pnpm` outright.
+There is no host toolchain to fall back on. A script run on the host picks up whatever Node the developer's machine happens to have, which is exactly the difference that makes a skill work for one person and fail for the next. It is also why [Agent Skill Organization](AGENT-SKILLS.md) bans host `pnpm` outright.
 
 Prohibited, without exception:
 
@@ -88,4 +88,4 @@ The image includes the Clack and Chalk packages used by the Dockerized `${LIXPI_
 
 ## Running these skills from another repository
 
-Another repository can install the skills in `${LIXPI_REPOSITORY_PATH}/skills/` as symlinks into that project through the interactive [`setup-skills.sh`](${LIXPI_REPOSITORY_PATH}/setup-skills.sh) installer. Use the same commands above with the main checkout's configured path. [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md) covers the installer and the direction of the dependency.
+Another repository can install the skills in `${LIXPI_REPOSITORY_PATH}/skills/` as symlinks into that project through the interactive [`setup-skills.sh`](../../setup-skills.sh) installer. Use the same commands above with the main checkout's configured path. [Agent Skill Organization](AGENT-SKILLS.md) covers the installer and the direction of the dependency.

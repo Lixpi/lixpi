@@ -19,26 +19,17 @@ dist
 
 # .env
 .env
-.env.dev
-.env.staging
-.env.production
-.env*.local
-.env.development
 .env.*
 env.lixpi
 
 # temp & debug files
 temp-ai-responses/
 
-# sst
-.sst
-.build
-
 # opennext
 .open-next
 
 # AWS config
-.aws/config
+.aws/
 
 # Agents temp files
 documentation/memory/*
@@ -49,8 +40,11 @@ documentation/memory/*
 .conductor/
 .cursor/
 .github/skills/
+
+# IDEs
+.idea/
 .vscode/
-.aws/
+
 documentation/Media-Posts/
 
 ca.crt

@@ -2,11 +2,15 @@
 
 ## Required Human-Facing Communication Skill
 
-At the start of every agent turn, before writing any human-facing text, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
+Read the repository's `env.lixpi` as configuration data and resolve `LIXPI_REPOSITORY_PATH` before following agent skill paths. At the start of every agent turn, before writing any human-facing text, read and follow `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
 
-Read the repository's `env.lixpi` as configuration data and resolve `LIXPI_REPOSITORY_PATH` before following skill paths. The skill is stored at `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. Run `${LIXPI_REPOSITORY_PATH}/setup-skills.sh` after cloning so the active harness can discover the skills managed under `${LIXPI_REPOSITORY_PATH}/skills/`. Every repository skill path and skill-documentation link must use the owning repository's configured path variable; never use a relative path or a checkout alias.
+Harness installation is optional. The configured-path rule applies to agent skills in `${LIXPI_REPOSITORY_PATH}/skills/`, not Capability Skill packages under `packages/lixpi/capability-system/`.
 
 If the skill cannot be resolved or read, stop immediately. Do not continue the task and do not produce any substantive response. The only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
+
+## Agent Skill Discovery
+
+Use `${LIXPI_REPOSITORY_PATH}/skills/*/SKILL.md` as the canonical skill catalog even when no harness links are installed. For each task, reuse the names and descriptions already supplied by the harness for those canonical files; inspect only the frontmatter of files missing from that list. Resolve installed symlinks to their canonical `SKILL.md` paths so each skill is processed once. Read the full instructions only for a skill relevant to the task, and only once. Recheck the catalog when its files change, not at every step.
 
 ## Architecture
 
@@ -28,7 +32,7 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 Every concrete Capability MUST be self-contained under `packages/lixpi/capability-system/src/capabilities/<module-id>/`. The module directory owns its shared contracts, backend and frontend behavior, Tool and Skill packages, runtime orchestration, prompts, schemas, resources, and tests.
 
-Consuming services MUST NOT implement capability-specific runtime logic or import a concrete capability strategy. A service may only supply infrastructure through package-owned typed ports, register the module definition in its composition root, and install module-published strategies through `CapabilityModuleCatalog`. Generic Capability infrastructure MUST NOT import a concrete module. See [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md) and the nearby [`@lixpi/capability-system` README](packages/lixpi/capability-system/README.md) before changing Capability code.
+Consuming services MUST NOT implement capability-specific runtime logic or import a concrete capability strategy. A service may only supply infrastructure through package-owned typed ports, register the module definition in its composition root, and install module-published strategies through `CapabilityModuleCatalog`. Generic Capability infrastructure MUST NOT import a concrete module. See [Tools and Skills](documentation/library/TOOLS-AND-SKILLS.md) and the nearby [`@lixpi/capability-system` README](packages/lixpi/capability-system/README.md) before changing Capability code.
 
 ## Code Quality
 

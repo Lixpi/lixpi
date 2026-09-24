@@ -146,4 +146,4 @@ Markdown element styles are **global** and live in [`src/sass/_markdown.scss`](.
 | Capability run progress | Safe stage reasoning and output summaries | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
 | Capability library | Skill and Tool instruction resources | `renderMarkdownStatic` |
 
-See also: [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md), [Style Extraction Tool](../library/STYLE-EXTRACTION-TOOL.md), and [Media Library](../library/MEDIA-LIBRARY.md).
+See also: [Tools and Skills](../library/TOOLS-AND-SKILLS.md), [Style Extraction Tool](../library/STYLE-EXTRACTION-TOOL.md), and [Media Library](../library/MEDIA-LIBRARY.md).

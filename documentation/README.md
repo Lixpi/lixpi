@@ -29,7 +29,7 @@ These docs are maintained as Markdown and read directly in GitHub or an editor. 
 
 Do not rely on tiny routing files or stale folder names. To find the right guidance:
 
-1. Before writing or revising documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. If it cannot be resolved or read, stop, report the failure, and wait for the user's instructions.
+1. Before writing or revising documentation, read `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. If it cannot be read, stop, report the failure, and wait for the user's instructions.
 2. Use this index for the main product and platform entry points.
 3. Search the documentation tree for the complete current file list.
 4. Search by the concept you are changing, then read nearby pages before editing.
@@ -110,7 +110,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 
 | Page | What it covers |
 |------|----------------|
-| [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md) | Self-contained Capability modules, typed host ports, description sheets, standalone packages, sealed execution, scopes, and progress |
+| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Self-contained Capability modules, typed host ports, description sheets, standalone packages, sealed execution, scopes, and progress |
 | [Capability Storage and Operations](library/CAPABILITY-STORAGE.md) | Catalog tables, Blob-backed packages, run logs, limits, backup, restore, repair, and garbage collection |
 | [Character Creator](library/CHARACTER-CREATOR.md) | Panel graph, source evidence, provider capability adapters, fidelity assessment, deterministic composition, and normal Asset settlement |
 | [Action Timeline](library/ACTION-TIMELINE.md) | Reusable timed prompt Artifacts, prompt-derived timing, editing, references, library behavior, and model admission |
@@ -127,8 +127,8 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
-| [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md) | Managing and installing the project skills under `${LIXPI_REPOSITORY_PATH}/skills/` |
-| [Skill Execution Guide](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md) | Running a skill script inside the `lixpi-utils` container, and adding a script to a skill |
+| [Agent Skill Organization](development-workflow/AGENT-SKILLS.md) | Discovering project skills under `${LIXPI_REPOSITORY_PATH}/skills/` and optionally installing harness links |
+| [Skill Execution Guide](development-workflow/SKILL-EXECUTION-GUIDE.md) | Running a skill script inside the `lixpi-utils` container, and adding a script to a skill |
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
 | [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared runner images, reusable Compose services, per-repository mount adapters, and isolated dependency caches |
 | [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
