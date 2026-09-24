@@ -1,7 +1,7 @@
 # Shared utility runner for skill scripts.
 #
-# Every skill under skills/ that needs to execute code executes it here, never on the host. See
-# documentation/development-workflow/SKILL-EXECUTION-GUIDE.md. The whole skills/ tree is bind-mounted at /skills
+# Every skill under ${LIXPI_REPOSITORY_PATH}/skills/ that needs to execute code executes it here, never on the host. See
+# ${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md. The canonical skills tree is bind-mounted at /skills
 # (docker-compose.lixpi-utils.yml), so a script edit applies on the next run with no rebuild.
 #
 # The shared setup UI reuses the dependency manifest from dev-tools/config-utils so it renders

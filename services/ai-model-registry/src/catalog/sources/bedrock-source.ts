@@ -118,7 +118,7 @@ export class BedrockSource implements ModelSource {
     // under. It comes from `catalog-settings.json` rather than a constant here, so adding a
     // Bedrock-served vendor is a data change. Every directory named is fetched on
     // every run whatever the `*_USE_AWS_BEDROCK_INFERENCE` flags say: a model's Bedrock
-    // rates belong in the catalog whether or not Lixpi is billing on them today, so
+    // rates belong in the catalog whether or not Lixpi calls that endpoint today, so
     // flipping a flag re-prices from data already on disk instead of waiting for a
     // fetch.
     constructor(private readonly listedUnderProviderName: Partial<Record<ProviderDirectory, string>>) {}

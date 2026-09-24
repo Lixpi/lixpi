@@ -1,5 +1,4 @@
 packages:
-  - "billing-portal"
   - "auth-service"
   - "auth-client"
   - "capability-system"

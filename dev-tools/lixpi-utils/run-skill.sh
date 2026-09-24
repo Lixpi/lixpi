@@ -2,11 +2,12 @@
 # Universal entrypoint for lixpi-utils.
 #
 # Usage:
-#   docker compose -f docker-compose.lixpi-utils.yml run --rm -T lixpi-utils \
+#   docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
+#       -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
 #       <skill-name> <script> [args...]
 #
-# <skill-name> is a directory under skills/. <script> is a path relative to that
-# skill's directory. Both are resolved and checked here so a typo fails with a
+# <skill-name> is a directory under ${LIXPI_REPOSITORY_PATH}/skills/. <script> is an
+# absolute path under that skill's directory. Both are checked here so a typo fails with a
 # readable message that lists what does exist, instead of a bare "not found".
 #
 # Dispatch is by file extension: .ts/.mjs/.js run under node, .sh under sh. Anything else is
@@ -16,6 +17,7 @@
 set -e
 
 SKILLS_ROOT=/skills
+: "${LIXPI_REPOSITORY_PATH:?Set LIXPI_REPOSITORY_PATH from env.lixpi}"
 
 usage() {
     echo "Usage: <skill-name> <script> [args...]" >&2
@@ -36,21 +38,30 @@ script="$2"
 shift 2
 
 skill_dir="$SKILLS_ROOT/$skill"
+source_skill_dir="${LIXPI_REPOSITORY_PATH}/skills/$skill"
 
 if [ ! -d "$skill_dir" ]; then
-    echo "No skill directory: skills/$skill" >&2
+    echo "No skill directory: $source_skill_dir" >&2
     usage
     exit 1
 fi
 
-script_path="$skill_dir/$script"
+case "$script" in
+    "$source_skill_dir/"*) script_path="$skill_dir/${script#"$source_skill_dir/"}" ;;
+    *)
+        echo "Script path must start with $source_skill_dir/" >&2
+        exit 1
+        ;;
+esac
 
 if [ ! -f "$script_path" ]; then
-    echo "No script: skills/$skill/$script" >&2
+    echo "No script: $script" >&2
     echo "" >&2
-    echo "Scripts in skills/$skill:" >&2
+    echo "Scripts in $source_skill_dir:" >&2
     find "$skill_dir" -type f \( -name '*.ts' -o -name '*.mjs' -o -name '*.js' -o -name '*.sh' \) \
-        | sed "s|$skill_dir/|  |" >&2
+        | while IFS= read -r candidate; do
+            printf '  %s/%s\n' "$source_skill_dir" "${candidate#"$skill_dir/"}" >&2
+        done
     exit 1
 fi
 

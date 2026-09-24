@@ -164,7 +164,7 @@ Hovering or focusing a Character Creator prompt-reference chip opens the module'
 
 ## Related pages
 
-- [Tools, Skills, and Capability Modules](./TOOLS-AND-SKILLS.md)
+- [Tools, Skills, and Capability Modules](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md)
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md)
 - [Image Generation](../media-generation/IMAGE-GENERATION.md)
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md)

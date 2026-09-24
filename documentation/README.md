@@ -17,8 +17,8 @@ These docs are maintained as Markdown and read directly in GitHub or an editor. 
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, Capability ownership boundaries, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
-| [Implementation Plans](../skills/implementation-plans/references/writing-implementation-plans.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
-| [Spike Reports](../skills/implementation-plans/references/spike-report-guidelines.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
+| [Implementation Plans](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/writing-implementation-plans.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
+| [Spike Reports](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/spike-report-guidelines.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
 | [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared Docker runner services, repository mount adapters, cache isolation, and cross-repository extension contracts |
 | [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
 | [Go Testing and Tooling](code-quality/testing/GO.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
@@ -33,7 +33,7 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 2. Use this index for the main product and platform entry points.
 3. Search the documentation tree for the complete current file list.
 4. Search by the concept you are changing, then read nearby pages before editing.
-5. At the start of every implementation iteration, resolve and read the [`code-quality` skill](../skills/code-quality/SKILL.md). It selects the coding style and testing guides that match the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
+5. At the start of every implementation iteration, resolve and read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md). It selects the coding style and testing guides that match the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
 
@@ -110,7 +110,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 
 | Page | What it covers |
 |------|----------------|
-| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Self-contained Capability modules, typed host ports, description sheets, standalone packages, sealed execution, scopes, and progress |
+| [Tools and Skills](${LIXPI_REPOSITORY_PATH}/documentation/library/TOOLS-AND-SKILLS.md) | Self-contained Capability modules, typed host ports, description sheets, standalone packages, sealed execution, scopes, and progress |
 | [Capability Storage and Operations](library/CAPABILITY-STORAGE.md) | Catalog tables, Blob-backed packages, run logs, limits, backup, restore, repair, and garbage collection |
 | [Character Creator](library/CHARACTER-CREATOR.md) | Panel graph, source evidence, provider capability adapters, fidelity assessment, deterministic composition, and normal Asset settlement |
 | [Action Timeline](library/ACTION-TIMELINE.md) | Reusable timed prompt Artifacts, prompt-derived timing, editing, references, library behavior, and model admission |
@@ -127,12 +127,12 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
-| [Agent Skill Organization](development-workflow/AGENT-SKILLS.md) | Managing and installing the project skills under `skills/` |
-| [Skill Execution Guide](development-workflow/SKILL-EXECUTION-GUIDE.md) | Running a skill script inside the `lixpi-utils` container, and adding a script to a skill |
+| [Agent Skill Organization](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/AGENT-SKILLS.md) | Managing and installing the project skills under `${LIXPI_REPOSITORY_PATH}/skills/` |
+| [Skill Execution Guide](${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md) | Running a skill script inside the `lixpi-utils` container, and adding a script to a skill |
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
 | [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared runner images, reusable Compose services, per-repository mount adapters, and isolated dependency caches |
 | [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
-| [Code Quality Skill](../skills/code-quality/SKILL.md) | Selects the coding style and testing guides for an implementation iteration and enforces the test permission gate |
+| [Code Quality Skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) | Selects the coding style and testing guides for an implementation iteration and enforces the test permission gate |
 | [Go Coding Style](code-quality/coding-style/GO.md) | Repository-wide Go package structure, service boundaries, APIs, startup, errors, logging, data access, concurrency, and tooling rules |
 | [TypeScript Coding Style](code-quality/coding-style/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules; mandatory for all TypeScript in the repo |
 | [UI Components Coding Style](code-quality/coding-style/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas chrome, component ownership, layout, and event rules |

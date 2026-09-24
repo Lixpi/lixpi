@@ -32,11 +32,15 @@ fi
 export GOFLAGS=-mod=readonly
 go mod download
 config=/usr/src/runner/golangci.yml
+status=0
 if [ "$action" = fix ]; then
-    check-go-source --fix .
-    golangci-lint fmt --config "$config"
-    exec golangci-lint run --fix --config "$config" ./...
+    check-go-source --fix . || status=1
+    golangci-lint fmt --config "$config" || status=1
+    golangci-lint run --fix --config "$config" ./... || status=1
+else
+    check-go-source . || status=1
+    golangci-lint fmt --diff --config "$config" || status=1
+    golangci-lint run --config "$config" ./... || status=1
 fi
-check-go-source .
-golangci-lint fmt --diff --config "$config"
-exec golangci-lint run --config "$config" ./...
+go vet -vettool=/usr/local/bin/check-go-semantics ./... || status=1
+exit "$status"

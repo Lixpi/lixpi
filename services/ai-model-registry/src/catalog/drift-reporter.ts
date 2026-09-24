@@ -17,9 +17,9 @@ export type DriftReport = {
 // value: the authored file stays authoritative and this only says where an external
 // source now disagrees with it.
 //
-// Pricing is separated because it reaches billing over the `metrics.*` wire, so a
-// price the vendor changed underneath a hand-verified number is a money bug, while
-// a context window that moved is a display bug.
+// Pricing is separate because usage reporting consumes it over `metrics.*`.
+// A vendor price change beneath a verified value is a money bug; a context
+// window change is a display bug.
 //
 // This is drift between the catalog and a source. Disagreement between two sources
 // is a different thing and is recorded per field in the fetched file by the fetcher.

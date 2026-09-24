@@ -7,7 +7,7 @@ description: Shared TypeScript test commands, infrastructure, and test-writing c
 
 This guide owns TypeScript testing across services and shared packages. A service does not get another testing guide just to repeat its domain name, Vitest environment, or runner command.
 
-Read the [`code-quality` skill](../../../skills/code-quality/SKILL.md) first. Never write, modify, or run tests unless the user explicitly asks for tests in the current thread; these conventions apply only once that test work is permitted.
+Read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) first. Never write, modify, or run tests unless the user explicitly asks for tests in the current thread; these conventions apply only once that test work is permitted.
 
 ## Test Runner Container
 
