@@ -12,18 +12,10 @@ export type TypeScriptVersions = {
 export type GoVersions = {
     go: string
     modules: Record<string, string>
-    tools: {
-        gopls: string
-        dlv: string
-        'golangci-lint': string
-    }
+    tools: Record<string, string>
 }
 
-export type ToolVersions = {
-    fnm: string
-    nex: string
-    pulumi: string
-}
+export type ToolVersions = Record<string, string>
 
 export type VersionCatalogData = {
     typescript: TypeScriptVersions

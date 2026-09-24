@@ -1,0 +1,19 @@
+services:
+    versions-registry-base:
+        working_dir: /workspace
+        network_mode: none
+        environment:
+            VERSIONS_REGISTRY_REPOSITORY_ROOT: /workspace
+        volumes:
+            - ../src:/usr/src/versions-registry/src:ro
+        entrypoint: ["node", "/usr/src/versions-registry/src/sync/command.ts"]
+        command: ["check"]
+
+    versions-registry-update-base:
+        extends:
+            service: versions-registry-base
+        network_mode: bridge
+        environment:
+            GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+        entrypoint: ["node", "/usr/src/versions-registry/src/update/command.ts"]
+        command: []

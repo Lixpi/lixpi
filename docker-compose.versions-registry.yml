@@ -2,18 +2,16 @@ name: lixpi-versions-registry
 
 services:
     versions-registry:
+        extends:
+            file: dev-tools/versions-registry/runner-compose/versions-registry.base.yml
+            service: versions-registry-base
         image: node:24.21.0-alpine
-        working_dir: /workspace
         volumes:
             - .:/workspace
-        network_mode: none
-        entrypoint: ["node", "/workspace/dev-tools/versions-registry/src/sync/command.ts"]
-        command: ["check"]
     versions-registry-update:
         extends:
-            service: versions-registry
-        network_mode: bridge
-        environment:
-            GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-        entrypoint: ["node", "/workspace/dev-tools/versions-registry/src/update/command.ts"]
-        command: []
+            file: dev-tools/versions-registry/runner-compose/versions-registry.base.yml
+            service: versions-registry-update-base
+        image: node:24.21.0-alpine
+        volumes:
+            - .:/workspace
