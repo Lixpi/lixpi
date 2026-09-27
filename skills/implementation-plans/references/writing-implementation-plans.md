@@ -9,6 +9,8 @@ An implementation plan is the durable memory for a piece of work. It lives in `$
 
 The plan is not a frozen proposal, a chronological work diary, or a copy of repository-wide instructions. It contains the task-specific state. It links to stable project guidance instead of repeating it.
 
+Read and follow the shared completion and clarification requirements in [the implementation-plans skill](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/SKILL.md), including when this guide is opened directly. Recording an answer or naming unfinished technical work is not a stopping point.
+
 ## Use a plan when the work needs durable state
 
 Create a plan when at least one of these is true:
@@ -41,7 +43,7 @@ The same rule applies outside `documentation/memory`. Skills, tickets, issues, a
 5. Fill the file while researching and planning. Do not keep the real plan in chat and write the file only after the thinking is finished.
 6. Keep that file for the rest of the work. Revise it during implementation and after every discovery that changes what the file says.
 
-Planning does not authorize implementation. Keep product changes out of the planning pass unless the user asked for planning and implementation together. When the plan is decision-complete but implementation is not authorized, set its state to `Ready for implementation` and stop there.
+Planning does not authorize implementation. Keep product changes out of the planning pass unless the user asked for planning and implementation together. Complete the planning check below before setting the state to `Ready for implementation`. That is the stopping point for a planning-only request; unresolved design work is not.
 
 ## Research the live system before choosing the design
 
@@ -167,7 +169,22 @@ Before a pause, handoff, or context compaction, make the file resume-ready:
 4. Record unverified work and failed checks without presenting them as complete.
 5. Remove stale alternatives, duplicate explanations, and scratch notes that no longer help the next agent.
 
-## Finish the plan against the outcome
+## Finish the planning pass
+
+Before returning a finished plan, read it as someone who has not seen the conversation and must implement it without choosing missing product behavior or material architecture. Check all of the following:
+
+- Every in-scope requirement and user answer is reflected consistently in the design, implementation steps, and acceptance conditions.
+- Every material choice is resolved from evidence or an explicit user answer. No necessary contract is left as "specify later," a placeholder, or an unexplained assumption.
+- Applicable technical contracts name their owners, inputs, outputs, stored state, and trust boundaries. Required failure, retry, concurrency, recovery, and migration behavior is concrete enough to implement.
+- Supported environments and existing workflows have an explicit treatment. Preserving a default path is part of the plan, not work left for the next agent to discover.
+- Implementation steps describe the actual change, dependencies, and allowed completion evidence. A step named "design the missing contract" does not replace the contract when it is needed to choose the implementation.
+- Required deployment inputs and execution-time checks have a defined source, resolution procedure, and failure outcome. They do not conceal a product or architecture decision. Planned runtime verification is clearly distinguished from evidence already obtained.
+
+If any check fails, keep working. Resolve the technical gap or ask a self-contained question under the skill's clarification requirements; do not return a partial plan as the deliverable. When an answer is required, complete independent work and keep the plan waiting for that answer rather than declaring readiness. After incorporating an answer, run this review again across the whole document, not just the paragraph that changed.
+
+When all checks pass, a planning-only task may finish with state `Ready for implementation`. This means the plan is complete; it does not mean implementation or runtime verification has happened.
+
+## Finish implementation against the outcome
 
 Set the plan to `Complete` only when every acceptance condition has evidence and no requested work remains. Replace planned behavior with the actual result where implementation refined the design. Keep unresolved gaps visible.
 

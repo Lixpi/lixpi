@@ -18,4 +18,4 @@ The API calls `ProviderUsageClient.authorizeRequest()` before provider transport
 
 The API's graph adapter is `services/api/src/llm/usage/provider-usage-estimate.ts`. The shared estimator accepts `ProviderUsageEstimateInput`, so callers supply measured prompt tokens without importing graph state.
 
-Tests, when explicitly requested, use the shared TypeScript runner's `usage-reporter` target.
+When `CODING_AGENTS_TEST_EXECUTION_MODE` in `env.lixpi` permits tests, use the shared TypeScript runner's `usage-reporter` target.

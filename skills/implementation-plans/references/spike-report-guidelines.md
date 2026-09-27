@@ -9,6 +9,8 @@ A spike report is the durable memory for an investigation. It lives in `${LIXPI_
 
 The report changes as the investigation changes. A fresh agent must be able to read it, see what is known, identify what remains uncertain, and continue without reconstructing the work from chat history.
 
+Read and follow the shared completion and clarification requirements in [the implementation-plans skill](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/SKILL.md), including when this guide is opened directly. They apply throughout the investigation and any resulting plan.
+
 If the user approves implementation, keep the same memory file and follow [Writing and Running Implementation Plans](${LIXPI_REPOSITORY_PATH}/skills/implementation-plans/references/writing-implementation-plans.md). Do not copy that guide into the report or create a separate implementation document.
 
 ## Run a spike to remove a real uncertainty
@@ -40,7 +42,7 @@ Do not reproduce those rules in the report. Record only the way they constrain t
 5. Define what evidence would be enough to finish. Use decision criteria and stopping conditions. Do not invent a time box unless the user set one.
 6. Write the investigation plan into the report, then update it as new evidence changes which questions matter.
 
-Research is complete when the report answers the decision-driving questions well enough to make the requested decision, or when it proves that a decision cannot be made without specific missing evidence. More links and more prose do not make a spike more complete.
+Research is complete when the report answers the decision-driving questions well enough to make the requested decision. Evidence that an approach cannot meet the requirements can be a completed finding. Missing evidence is an unresolved gap: obtain it or ask for the specific access, information, or decision needed, following the skill's clarification requirements. Do not treat documenting that gap as completing the investigation. More links and more prose do not make a spike more complete.
 
 ## Every report needs the same core information
 
@@ -92,6 +94,8 @@ Label a claim as an `Inference` when it is derived from cited facts rather than 
 Compare only serious options. For each option, state where it fits, where it fails, its important costs and risks, and the evidence behind those claims. Include doing nothing when it is a real option.
 
 Give a recommendation when the evidence supports one. State why it wins against the decision criteria, which uncertainties remain, and what evidence would reverse the recommendation. If the evidence does not support a decision, say exactly what is missing and how it could be obtained.
+
+When the user selects an option, carry it into the report and continue the remaining authorized research and design. If the requested deliverable includes an implementation plan, a completed vendor comparison or set of product answers does not finish that deliverable. Apply the implementation guide's planning completion check in the same memory file.
 
 ### References make claims checkable
 
@@ -165,7 +169,7 @@ Do not write a separate implementation report.
 5. Add the implementation plan and verification material required by the implementation guide. Reuse existing context instead of restating it.
 6. As implementation exposes new evidence, update the finding, recommendation, decision, and implementation step that it changes.
 
-If implementation disproves a material premise or requires a new user choice, stop that line of implementation, make the report coherent, and get the decision before continuing.
+If implementation disproves a material premise or requires a new user choice, pause that dependent line of implementation, make the report coherent, and ask an explained clarification question. Continue independent authorized work while waiting, then incorporate the answer and resume. Do not substitute an unfinished-plan summary for the question.
 
 ## Starting template
 

@@ -40,6 +40,8 @@ For CI/automation (non-interactive), see [`dev-tools/config-utils/README.md`](..
 
 The shared configuration runner writes the ignored repository metadata file `env.lixpi` before the wizard starts, then creates or updates the selected `.env.<stage-name>` file. Repository-specific behavior and templates are mounted into the shared runner; the mount contract is documented in the config-utils README.
 
+`env.lixpi` also sets `CODING_AGENTS_TEST_EXECUTION_MODE` and `CODING_AGENTS_TEST_LINTER_MODE`. Agents read these values before choosing test and quality checks; the [code-quality skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) defines what `true`, `false`, and `auto` mean.
+
 ### 2. Point Docker Compose at your environment file
 
 The wizard above writes `.env.<stage-name>` (e.g. `.env.shelby-local`), not a plain `.env` — and Docker Compose only auto-loads a file literally named `.env`. Without one, every `docker compose` command in this repo needs `--env-file .env.<stage-name>` typed out explicitly, or variables across the root Compose file and its included partials come back unset with a wall of `variable is not set` warnings.
