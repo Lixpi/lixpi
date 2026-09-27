@@ -1,6 +1,6 @@
 ---
 name: code-quality
-description: 'Select and apply Lixpi coding style and testing guides for implementation, review, refactors, and verification. Read at the start of every implementation iteration; testing remains explicitly user-gated.'
+description: 'Select and apply Lixpi coding style and testing guides for implementation, review, refactors, and verification. Read at the start of every implementation iteration and use the verification modes in env.lixpi.'
 ---
 
 # Code Quality
@@ -33,11 +33,17 @@ The shared coding-style guides map to work as follows:
 
 The guides stack. A TypeScript UI component with styles requires all three. `TYPESCRIPT.md` applies to every TypeScript file in the monorepo, not only web UI code. Only its DOM templating section is limited to `services/web-ui`.
 
-## Testing Guides
+## Verification Modes and Testing Guides
 
-Never write tests, modify tests, or run test commands unless the user explicitly asks for tests in the current thread. If tests were not requested, use static review and non-test hygiene checks only, and do not report the missing test run as a verification failure.
+Before choosing verification, read `CODING_AGENTS_TEST_EXECUTION_MODE` and `CODING_AGENTS_TEST_LINTER_MODE` from the current repository's `env.lixpi` as configuration data. Require both values and accept only `true`, `false`, or `auto`; stop if either value is missing or invalid. The two modes are independent:
 
-When tests are explicitly requested, use the same progressive discovery process for testing guides. Read the matching shared guide first, then every applicable repository-local testing guide:
+- `true`: Run relevant tests for the test mode, or relevant formatting and lint checks for the linter mode.
+- `false`: Run the corresponding checks only after the user explicitly authorizes them in the active thread.
+- `auto`: Decide whether the corresponding checks are useful for the task and run them when they are.
+
+An explicit user instruction about verification takes precedence over either mode. The linter mode covers the Docker quality runners' combined formatting and lint validation. Never write or modify test files unless the user explicitly asks for test work in the current thread.
+
+When test work is permitted by the test mode or an explicit user request, use the same progressive discovery process for testing guides. Read the matching shared guide first, then every applicable repository-local testing guide:
 
 - TypeScript: `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/testing/TYPESCRIPT.md`
 - Go: `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/testing/GO.md`

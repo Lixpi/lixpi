@@ -100,7 +100,7 @@ When a domain changes shape, update the index at the same time as the pages. Do 
 
 There is no active documentation-site build. Use static review to check links, headings, and surrounding context.
 
-If documentation changes a tested source assertion, run the relevant test through the allowed project test command only when the user explicitly asks for tests in the current thread. For web UI tests, use Dockerized Vitest. Do not use browsers, screenshots, or manual visual inspection as substitutes for permitted tests.
+If documentation changes a tested source assertion, follow `CODING_AGENTS_TEST_EXECUTION_MODE` in the repository's `env.lixpi` when deciding whether to run the relevant test. For web UI tests, use Dockerized Vitest. Do not use browsers, screenshots, or manual visual inspection as substitutes for permitted tests.
 
 ## Before Calling It Done
 

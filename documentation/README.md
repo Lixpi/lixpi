@@ -33,7 +33,7 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 2. Use this index for the main product and platform entry points.
 3. Search the documentation tree for the complete current file list.
 4. Search by the concept you are changing, then read nearby pages before editing.
-5. At the start of every implementation iteration, resolve and read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md). It selects the coding style and testing guides that match the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
+5. At the start of every implementation iteration, resolve and read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md). It selects the coding style and testing guides that match the files being touched and reads the test and linter modes from `env.lixpi`.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
 
@@ -132,7 +132,7 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | [AI Model Registry](../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
 | [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared runner images, reusable Compose services, per-repository mount adapters, and isolated dependency caches |
 | [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based Oxfmt, Oxc, parse5, dprint, Oxlint, and Stylelint rules, checks, fixes, cache behavior, and import formatting |
-| [Code Quality Skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) | Selects the coding style and testing guides for an implementation iteration and enforces the test permission gate |
+| [Code Quality Skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) | Selects coding and testing guides and applies the test and linter modes from `env.lixpi` |
 | [Go Coding Style](code-quality/coding-style/GO.md) | Repository-wide Go package structure, service boundaries, APIs, startup, errors, logging, data access, concurrency, and tooling rules |
 | [TypeScript Coding Style](code-quality/coding-style/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules; mandatory for all TypeScript in the repo |
 | [UI Components Coding Style](code-quality/coding-style/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas chrome, component ownership, layout, and event rules |

@@ -2,7 +2,7 @@
 
 ## Required Human-Facing Communication Skill
 
-Read the repository's `env.lixpi` as configuration data and resolve `LIXPI_REPOSITORY_PATH` before following agent skill paths. At the start of every agent turn, before writing any human-facing text, read and follow `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
+Read the repository's `env.lixpi` as configuration data and resolve `LIXPI_REPOSITORY_PATH`, `CODING_AGENTS_TEST_EXECUTION_MODE`, and `CODING_AGENTS_TEST_LINTER_MODE` before following agent skill paths or choosing verification. At the start of every agent turn, before writing any human-facing text, read and follow `${LIXPI_REPOSITORY_PATH}/skills/talk-like-a-human/SKILL.md`. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
 
 Harness installation is optional. The configured-path rule applies to agent skills in `${LIXPI_REPOSITORY_PATH}/skills/`, not Capability Skill packages under `packages/lixpi/capability-system/`.
 
@@ -61,9 +61,9 @@ Start at the documentation index, then read [Maintaining Documentation](document
 ## Conventions
 
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
-- Agents MUST NOT write tests or run tests unless the user explicitly asks for tests in the current thread. Static review and non-test hygiene checks are allowed, but test files and test commands are user-gated.
-- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. If the user explicitly asks to run web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/code-quality/testing/TYPESCRIPT.md`.
-- Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review unless the user explicitly asks for permitted automated test commands.
+- Test execution and formatting and lint checks follow the two `CODING_AGENTS_*` modes in this repository's `env.lixpi` and the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md).
+- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. When the test execution mode permits web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/code-quality/testing/TYPESCRIPT.md`.
+- Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review or permitted automated test commands.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.
 

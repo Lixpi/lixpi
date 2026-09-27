@@ -42,8 +42,9 @@ The container entry point is [`run-config.ts`](run-config.ts). It performs setup
 
 1. Read the consuming repository's `templates/env.lixpi.template`.
 2. Replace `{{VARIABLE_NAME}}` placeholders from the container environment.
-3. Write `/workspace/env.lixpi` with owner-only permissions.
-4. Start the mounted repository `setup-env.ts` and pass through all command-line arguments.
+3. Check that both coding-agent verification modes are `true`, `false`, or `auto`.
+4. Write `/workspace/env.lixpi` with owner-only permissions.
+5. Start the mounted repository `setup-env.ts` and pass through all command-line arguments.
 
 `env.lixpi` is therefore the first repository file written during configuration setup. It is generated local state, is ignored by Git, and is not checked in. The repository adapter must not try to run before this bootstrap completes.
 
@@ -57,9 +58,13 @@ TICKET_KEY = LIX
 DEFAULT_TARGET_BRANCH = main
 DEFAULT_SOURCE_BRANCH = main
 LIXPI_REPOSITORY_PATH = /absolute/path/to/lixpi
+CODING_AGENTS_TEST_EXECUTION_MODE = auto
+CODING_AGENTS_TEST_LINTER_MODE = auto
 ```
 
 The Lixpi launcher resolves its own directory through `pwd -P` and passes that absolute host path to the runner. The runner writes it into `env.lixpi` with the other repository metadata.
+
+Each repository template sets both coding-agent verification modes to `auto`. Agents read the modes from that repository's `env.lixpi`: `true` requires relevant tests or formatting and lint checks, `false` requires an explicit request before running them, and `auto` lets the agent decide which checks the task needs. The modes do not change the Docker-only command rule.
 
 ## Lixpi adapter
 
@@ -97,7 +102,7 @@ Do not add consuming-repository switches to `run-config.ts`. Shared behavior bel
 
 ## Verification
 
-Configuration tests run only through the shared TypeScript test runner when test execution has been explicitly authorized:
+When `CODING_AGENTS_TEST_EXECUTION_MODE` permits configuration tests, run them through the shared TypeScript test runner:
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner init-config

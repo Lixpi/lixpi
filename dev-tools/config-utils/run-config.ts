@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { parseEnv } from 'node:util'
 import { envLiteral } from './repository/environment-file.ts'
 
 const workspacePath = '/workspace'
@@ -12,6 +13,25 @@ const envLixpiTemplatePath = path.join(
 )
 const envLixpiPath = path.join(workspacePath, 'env.lixpi')
 const setupPath = path.join(repositoryConfigPath, 'setup-env.ts')
+const codingAgentModeNames = [
+    'CODING_AGENTS_TEST_EXECUTION_MODE',
+    'CODING_AGENTS_TEST_LINTER_MODE',
+] as const
+
+const validateCodingAgentModes = (content: string): void => {
+    const environment = parseEnv(content)
+
+    for (const name of codingAgentModeNames) {
+        const value = environment[name]
+
+        if (
+            value !== 'true'
+            && value !== 'false'
+            && value !== 'auto'
+        )
+            throw new Error(`${name} must be true, false, or auto`)
+    }
+}
 
 const requireRegularFile = (filename: string): void => {
     let file: fs.Stats
@@ -50,6 +70,7 @@ const writeEnvLixpi = (): void => {
     const content = renderTemplate(
         fs.readFileSync(envLixpiTemplatePath, 'utf8'),
     )
+    validateCodingAgentModes(content)
     fs.writeFileSync(
         envLixpiPath,
         content,
