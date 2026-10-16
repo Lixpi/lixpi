@@ -476,6 +476,8 @@ export class GoogleProvider extends BaseProvider {
         }
 
         const update: Partial<ProviderState> = {}
+        const settleUsage = this.prepareUsageSettlement(state)
+        let usageMetadata: any = null
 
         try {
             if (
@@ -483,8 +485,6 @@ export class GoogleProvider extends BaseProvider {
                 && !effectiveVideoGen
             )
                 this.publisher.start()
-
-            let usageMetadata: any = null
 
             if (effectiveVideoGen) {
                 // Native video-generation path (called via VideoRouter). Async
@@ -585,6 +585,15 @@ export class GoogleProvider extends BaseProvider {
                             textChunks.push(text)
                     }
                 }
+
+                await settleUsage({
+                    ...googleUsageUpdate(usageMetadata, `google-${state.workspaceId}-${state.aiChatThreadId}`),
+                    ...(imageParts.length ? { imageUsage: {
+                        generatedCount: 1,
+                        size: imageSize,
+                        quality: 'high',
+                    } } : {}),
+                })
 
                 if (textChunks.length > 0)
                     this.publisher.chunk(
@@ -955,26 +964,9 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
 
-            if (usageMetadata) {
-                const promptTokens = usageMetadata.promptTokenCount ?? 0
-                const reasoningTokens = usageMetadata.thoughtsTokenCount ?? 0
-                // Gemini reports thinking (thoughts) separately from candidates but
-                // bills it as output. Fold reasoning into completionTokens so the
-                // contract invariant holds (completionTokens INCLUDES reasoning, like
-                // OpenAI's output_tokens) and the metering backend charges it; keep the subset in
-                // completionReasoningTokens for reference.
-                const completionTokens = (usageMetadata.candidatesTokenCount ?? 0) + reasoningTokens
-                update.usage = {
-                    promptTokens,
-                    promptAudioTokens: 0,
-                    promptCachedTokens: usageMetadata.cachedContentTokenCount ?? 0,
-                    completionTokens,
-                    completionAudioTokens: 0,
-                    completionReasoningTokens: reasoningTokens,
-                    totalTokens: usageMetadata.totalTokenCount ?? (promptTokens + completionTokens),
-                }
-                update.aiVendorRequestId = `google-${state.workspaceId}-${state.aiChatThreadId}`
-            }
+            const measured = googleUsageUpdate(usageMetadata, `google-${state.workspaceId}-${state.aiChatThreadId}`)
+            update.usage = measured.usage
+            update.aiVendorRequestId = measured.aiVendorRequestId
 
             if (
                 effectiveImageGen
@@ -1004,6 +996,10 @@ export class GoogleProvider extends BaseProvider {
                 this.publisher.error(update.error)
                 this.publisher.end()
             }
+        } finally {
+            await settleUsage(
+                googleUsageUpdate(usageMetadata, `google-${state.workspaceId}-${state.aiChatThreadId}`),
+            )
         }
 
         return update
@@ -1053,6 +1049,7 @@ export class GoogleProvider extends BaseProvider {
     // via state.videoFirstFrameImage (start) followed by state.videoReferenceImages
     // (the optional stop frame), populated by the structured VLM resolver.
     private async runVeoGeneration(state: ProviderState): Promise<void> {
+        const settleUsage = this.prepareUsageSettlement(state)
         const modelVersion = state.modelVersion
         // VideoRouter passes the prompt as the first user message's string content.
         const first = state.messages[0]
@@ -1310,6 +1307,14 @@ export class GoogleProvider extends BaseProvider {
                     buildVeoNoVideoError(terminalSummary),
                 )
 
+            await settleUsage({
+                aiVendorRequestId: typeof operation.name === 'string' ? operation.name : undefined,
+                videoUsage: {
+                    durationSeconds: Number(state.videoDurationSeconds) || 0,
+                    resolution: state.videoResolution ?? '',
+                    aspectRatio: state.videoAspectRatio ?? '',
+                },
+            })
             const videoBuffer = await this.fetchVideoBytes(video)
 
             if (
@@ -1459,6 +1464,32 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
         }
+    }
+}
+
+const googleUsageUpdate = (
+    usage: any,
+    requestId: string,
+): Partial<ProviderState> => {
+    if (!usage)
+        return {}
+
+    const promptTokens = usage.promptTokenCount ?? 0
+    const reasoningTokens = usage.thoughtsTokenCount ?? 0
+    // Gemini bills thoughts separately from candidates, but both are output.
+    const completionTokens = (usage.candidatesTokenCount ?? 0) + reasoningTokens
+
+    return {
+        aiVendorRequestId: requestId,
+        usage: {
+            promptTokens,
+            promptAudioTokens: 0,
+            promptCachedTokens: usage.cachedContentTokenCount ?? 0,
+            completionTokens,
+            completionAudioTokens: 0,
+            completionReasoningTokens: reasoningTokens,
+            totalTokens: usage.totalTokenCount ?? (promptTokens + completionTokens),
+        },
     }
 }
 

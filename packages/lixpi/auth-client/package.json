@@ -13,6 +13,7 @@
     "dependencies": {
         "@auth0/auth0-spa-js": "2.27.0",
         "@lixpi/constants": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
         "@lixpi/ui-primitives": "workspace:*",
         "@lixpi/web-client-service-factory": "workspace:*"
     },

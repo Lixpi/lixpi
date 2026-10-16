@@ -84,6 +84,7 @@ export type AuthClientInstance = WebClientAuthService & {
     readonly userStore: UserStateStore
     initializeSession: () => Promise<AuthClientSession | null>
     loadCurrentUser: (config: LoadCurrentUserConfig) => Promise<void>
+    rejectAccess: (cleanup: () => Promise<void>) => Promise<void>
 }
 
 class AuthClient implements AuthClientInstance {
@@ -92,6 +93,8 @@ class AuthClient implements AuthClientInstance {
     readonly userStore: UserStateStore
 
     private readonly authService: WebClientAuthService | null
+    private rejected = false
+    private rejection: Promise<void> | undefined
 
     constructor(config: AuthClientConfig) {
         const authEnabled = config.features?.auth ?? true
@@ -111,17 +114,56 @@ class AuthClient implements AuthClientInstance {
         ? this.authService.init()
         : Promise.resolve()
 
-    login = (): Promise<void> => this.authService
-        ? this.authService.login()
+    login = (
+        forceFresh = false,
+        screenHint?: 'signup',
+    ): Promise<void> => this.authService
+        ? this.authService.login(forceFresh, screenHint)
         : Promise.resolve()
+
+    recoverAccess = (): Promise<void> => this.authService?.recoverAccess() ?? Promise.resolve()
+
+    confirmAccess = (): void => void this.authService?.confirmAccess()
 
     logout = (): Promise<void> => this.authService
         ? this.authService.logout()
         : Promise.resolve()
 
-    getTokenSilently = (forceRefresh = false): Promise<string | false> => this.authService
-        ? this.authService.getTokenSilently(forceRefresh)
-        : Promise.resolve(false)
+    getTokenSilently = async (forceRefresh = false): Promise<string | false> => {
+        if (
+            !this.authService
+            || this.rejected
+        )
+            return false
+
+        const token = await this.authService.getTokenSilently(forceRefresh)
+
+        return this.rejected ? false : token
+    }
+
+    clearSession = async (): Promise<void> => {
+        this.authStore.resetStore()
+        this.userStore.resetStore()
+        await this.authService?.clearSession()
+    }
+
+    rejectAccess = (cleanup: () => Promise<void>): Promise<void> => {
+        this.rejected = true
+        this.authStore.resetStore()
+        this.userStore.resetStore()
+        this.rejection ??= this.finishRejection(cleanup)
+
+        return this.rejection
+    }
+
+    private async finishRejection(cleanup: () => Promise<void>): Promise<void> {
+        try {
+            await cleanup()
+        } finally {
+            await this.clearSession()
+            await this.recoverAccess()
+        }
+    }
 
     initializeSession = async (): Promise<AuthClientSession | null> => {
         await this.init()
@@ -142,14 +184,19 @@ class AuthClient implements AuthClientInstance {
         }
     }
 
-    loadCurrentUser = (config: LoadCurrentUserConfig): Promise<void> =>
-        this.features.currentUser
-            ? createUserService({
+    loadCurrentUser = async (config: LoadCurrentUserConfig): Promise<void> => {
+        if (this.features.currentUser) {
+            await createUserService({
                 getToken: this.getTokenSilently,
                 requestClient: config.requestClient,
                 store: this.userStore,
+                isSessionActive: () => !this.rejected,
             }).getUser()
-            : Promise.resolve()
+
+            if (!this.rejected)
+                this.confirmAccess()
+        }
+    }
 }
 
 export const createAuthClient = (config: AuthClientConfig): AuthClientInstance => new AuthClient(config)

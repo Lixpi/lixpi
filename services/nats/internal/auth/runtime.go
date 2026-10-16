@@ -16,8 +16,9 @@ type Registration = policy.Service
 
 // RuntimeVerifier uses the snapshot pinned by the originating coordinator.
 type RuntimeVerifier struct {
-	mu   sync.Mutex
-	keys map[string]*JWKS
+	ApplicationPolicy *ApplicationPolicy
+	mu                sync.Mutex
+	keys              map[string]*JWKS
 }
 
 func (v *RuntimeVerifier) Evaluate(ctx context.Context, request *jwt.AuthorizationRequestClaims) (*Identity, error) {
@@ -27,6 +28,8 @@ func (v *RuntimeVerifier) Evaluate(ctx context.Context, request *jwt.Authorizati
 	}
 
 	verifier := &Verifier{Registrations: snapshot.Services}
+	var selected *policy.Browser
+	var verifiedClaims map[string]json.RawMessage
 
 	if token := request.ConnectOptions.Token; token != "" {
 		if len(token) > 32768 {
@@ -53,6 +56,11 @@ func (v *RuntimeVerifier) Evaluate(ctx context.Context, request *jwt.Authorizati
 			verifier.Issuer, verifier.Audience, verifier.Account = browser.Issuer, browser.Audience, browser.Account
 			verifier.Policy = &policy.Policy{Browser: browser.Permissions}
 			verifier.Keys = v.jwks(browser.JWKSURL, snapshot.Browsers)
+			selected = &browser
+
+			if err := json.Unmarshal(encoded, &verifiedClaims); err != nil {
+				return nil, fmt.Errorf("decode browser policy claims: %w", ErrDenied)
+			}
 
 			break
 		}
@@ -61,6 +69,16 @@ func (v *RuntimeVerifier) Evaluate(ctx context.Context, request *jwt.Authorizati
 	identity, err := verifier.Evaluate(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("verify with registration snapshot: %w", err)
+	}
+
+	if selected != nil && selected.Admission != nil {
+		if v.ApplicationPolicy == nil {
+			return nil, fmt.Errorf("require browser admission policy: %w", ErrUnavailable)
+		}
+
+		if err := v.ApplicationPolicy.Check(ctx, *selected, snapshot.Revision, request, verifiedClaims, identity); err != nil {
+			return nil, fmt.Errorf("check application admission: %w", err)
+		}
 	}
 
 	return identity, nil

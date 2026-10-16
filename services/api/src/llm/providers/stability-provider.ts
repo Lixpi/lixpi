@@ -208,6 +208,8 @@ export class StabilityProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
+        const settleUsage = this.prepareUsageSettlement(state)
+
         if (!state.enableImageGeneration)
             throw new Error('Stability AI is an image-only provider and requires enableImageGeneration=true')
 
@@ -328,6 +330,14 @@ export class StabilityProvider extends BaseProvider {
         if (!imageBase64)
             throw new Error('Stability API returned empty image data')
 
+        await settleUsage({
+            aiVendorRequestId: requestId,
+            imageUsage: {
+                generatedCount: 1,
+                size: aspectRatio,
+                quality: 'high',
+            },
+        })
         await this.imagePub.complete({
             imageBase64,
             responseId: requestId,

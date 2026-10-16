@@ -34,6 +34,7 @@ import {
 } from './asset-canvas-projection.ts'
 import AssetRenditionService from './asset-rendition-service.ts'
 import { enqueueRenditionRetry } from './asset-maintenance-queue.ts'
+import { AccountRequestContext } from './account-request-context.ts'
 import { deriveSubjectIdentityFromLineage } from './asset-subject-identity-service.ts'
 
 const {
@@ -486,24 +487,27 @@ export const settleGeneratedAssetOriginal = async ({
     }
 
     publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.RENDITION_UPDATED, next)
-    void (async () => {
-        try {
-            await AssetRenditionService.process({ assetId })
-        } catch (error) {
-            debugError(
-                'Generated Asset rendition processing failed:',
-                {
+    AccountRequestContext.startDetached(
+        async () => {
+            try {
+                await AssetRenditionService.process({ assetId })
+            } catch (error) {
+                debugError(
+                    'Generated Asset rendition processing failed:',
+                    {
+                        assetId,
+                        error,
+                    },
+                )
+                await enqueueRenditionRetry({
+                    organizationId: asset.organizationId,
                     assetId,
-                    error,
-                },
-            )
-            await enqueueRenditionRetry({
-                organizationId: asset.organizationId,
-                assetId,
-                retryAttempt: 1,
-            })
-        }
-    })()
+                    retryAttempt: 1,
+                })
+            }
+        },
+        error => debugError('Generated rendition request cancelled:', error),
+    )
 
     return {
         assetId,

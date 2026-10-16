@@ -5,6 +5,7 @@ import {
 
 import { listAuthorizedCapabilities } from '../models/capability.ts'
 import { getCapabilityRunEventStreamName } from '../services/capability-run-event-log.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import {
     CapabilityModelResolverStore,
     createCapabilityModelRunPersistence,
@@ -20,6 +21,7 @@ export const getCapabilityDispatcher = (): CapabilityDispatcher => {
         store: new CapabilityModelResolverStore(),
         registry: capabilityActionRegistry,
         createPersistence: createCapabilityModelRunPersistence,
+        runDetached: async operation => await AccountRequestContext.detach(async () => await operation(AccountRequestContext.current()?.signal)),
         createEventStreamName: run => getCapabilityRunEventStreamName(run.workspaceId),
         search: async (request, requester) =>
             await listAuthorizedCapabilities({
@@ -41,13 +43,17 @@ export const getCapabilityDispatcher = (): CapabilityDispatcher => {
             )
                 return undefined
 
-            return async event =>
+            return async event => {
+                if (AccountRequestContext.current()?.signal.aborted)
+                    return
+
                 await mirrorCapabilityRunEventToChat({
                     event,
                     workspaceId: request.requester.workspaceId,
                     organizationId: request.requester.organizationId,
                     conversationAssetId,
                 })
+            }
         },
     })
 

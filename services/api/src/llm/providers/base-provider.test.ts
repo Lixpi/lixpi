@@ -36,6 +36,8 @@ import {
 } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
+import { AccountRequestScopes,AccountRequestScope } from '../../services/account-request-scopes.ts'
+import { AccountAdmissionRuntime } from '../../services/account-admission-runtime.ts'
 
 type Published = {
     subject: string
@@ -92,6 +94,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+    vi.unstubAllEnvs()
     debugInfoSpy?.mockRestore()
     debugInfoSpy = null
     debugWarnSpy?.mockRestore()
@@ -192,6 +195,100 @@ class TestProvider extends BaseProvider {
         return this.executeVideoGeneration(state)
     }
 }
+
+describe('incurred usage after account cancellation', () => {
+    it('records measured usage with the original authority and does not repeat it during graph cleanup', async () => {
+        vi.stubEnv('ACCOUNT_ADMISSION_ENABLED', 'true')
+        const account = {
+            identityKey: 'account',
+            issuer: 'issuer',
+            subject: 'user-1',
+            epoch: 1,
+            personalOrganizationId: 'org-1',
+            tokenExpiresAt: Date.now() + 60000,
+        }
+        const scopes = new AccountRequestScopes({ admitVerifiedToken: vi.fn(async () => account) })
+        scopes.setControlAvailable(true)
+        const runtime = vi.spyOn(AccountAdmissionRuntime, 'current').mockReturnValue({ scopes } as never)
+        const recordUsage = vi.fn(async () => {
+            expect(AccountRequestContext.current()).toBeUndefined()
+
+            return { recorded: true }
+        })
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            providerUsage: {
+                enabled: true,
+                recordUsage,
+            },
+            usageReporter: { measureTextUsage: vi.fn(input => ({
+                ...input,
+                modelVersion: 'test-model',
+                prompt: {
+                    usageTokens: input.usage.promptTokens,
+                    cachedTokens: 0,
+                },
+                completion: {
+                    usageTokens: input.usage.completionTokens,
+                    reasoningTokens: 0,
+                },
+            })) },
+        } as never)
+        const state = createFanoutState({
+            workflowId: 'workflow',
+            requestAuthorizationId: 'original-authorization',
+            eventMeta: {
+                userId: 'user-1',
+                organizationId: 'org-1',
+            },
+        })
+        const entered = Promise.withResolvers<(update: Partial<ProviderState>) => Promise<void>>()
+        const payload = {}
+        AccountRequestContext.remember(payload, {})
+        const running = AccountRequestContext.runPayload(payload, async () => {
+            entered.resolve((provider as any).prepareUsageSettlement(state))
+            await new Promise<void>(resolve => AccountRequestContext.current()!.signal.addEventListener('abort', () => resolve(), { once: true }))
+        })
+
+        try {
+            const settle = await entered.promise
+            const denied = expect(running).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')
+            scopes.invalidate({
+                identityKey: 'account',
+                epoch: 2,
+                state: 'blocked',
+            })
+            await denied
+            const measured = {
+                usage: {
+                    promptTokens: 12,
+                    completionTokens: 3,
+                },
+                aiVendorRequestId: 'provider-response',
+                requestAuthorizationId: 'replacement',
+                eventMeta: { userId: 'replacement' },
+            } as Partial<ProviderState>
+            await settle(measured)
+            await settle(measured)
+            await (provider as any).calculateUsage({
+                ...state,
+                ...measured,
+                error: 'cancelled',
+            })
+            expect(recordUsage).toHaveBeenCalledOnce()
+            expect(recordUsage).toHaveBeenCalledWith(expect.objectContaining({
+                authorizationId: 'original-authorization',
+                userId: 'user-1',
+                orgId: 'org-1',
+                providerRequestId: 'provider-response',
+                usage: expect.objectContaining({
+                    promptTokens: 12,
+                    completionTokens: 3,
+                }),
+            }))
+        } finally { runtime.mockRestore() }
+    })
+})
 
 class FailingStreamProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Anthropic'
@@ -1356,6 +1453,61 @@ describe('BaseProvider streamTokens failure path', () => {
 })
 
 describe('BaseProvider process failure path', () => {
+    it('propagates account revocation into an already running graph', async () => {
+        const scope = new AccountRequestScope({
+            identityKey: 'verified',
+            issuer: 'issuer/',
+            subject: 'user',
+            epoch: 1,
+            personalOrganizationId: 'organization-1',
+            tokenExpiresAt: Date.now() + 60_000,
+        }, () => true)
+        const context = vi.spyOn(AccountRequestContext, 'current').mockReturnValue(scope)
+        const failure = vi.spyOn(StreamPublisher.prototype, 'error')
+        const end = vi.spyOn(StreamPublisher.prototype, 'end')
+        const entered = Promise.withResolvers<AbortSignal>()
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        ;(provider as any).app = {
+            invoke: vi.fn(async (_state: ProviderState, options: { signal: AbortSignal }) => {
+                entered.resolve(options.signal)
+
+                return await new Promise<ProviderState>((_resolve, reject) => void options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }))
+            }),
+        }
+
+        try {
+            const running = provider.process({
+                organizationId: 'organization-1',
+                workspaceId: 'ws1',
+                aiChatThreadId: 'thread1',
+                aiModelMetaInfo: {
+                    provider: 'Anthropic',
+                    model: 'claude',
+                    modelVersion: 'claude',
+                },
+                messages: [],
+            })
+            const signal = await entered.promise
+            const denied = expect(running).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')
+            scope.cancel()
+            await denied
+            expect(signal.aborted).toBe(true)
+            expect(signal.reason.message).toBe('ACCOUNT_ADMISSION_DENIED')
+            expect(failure).not.toHaveBeenCalled()
+            expect(end).not.toHaveBeenCalled()
+        } finally {
+            context.mockRestore()
+            failure.mockRestore()
+            end.mockRestore()
+            scope.cancel()
+        }
+    })
+
     it('settles a direct user stop as cancellation without publishing a provider failure', async () => {
         const beginCancellation = vi.spyOn(StreamPublisher.prototype, 'beginMediaGenerationRequestCancellation')
         const cancelTranscript = vi.spyOn(StreamPublisher.prototype, 'cancelProseMirrorGenerationRequest')
@@ -1538,7 +1690,7 @@ describe('BaseProvider process failure path', () => {
 })
 
 describe('BaseProvider usage lifecycle', () => {
-    it('skips usage reporter calls when the workflow failed upstream', async () => {
+    it('retains measured usage when the workflow fails after the provider call', async () => {
         const measureTextUsage = vi.fn()
         const measureImageUsage = vi.fn()
         const measureVideoUsage = vi.fn()
@@ -1573,7 +1725,7 @@ describe('BaseProvider usage lifecycle', () => {
             eventMeta: {},
         } as any)
 
-        expect(measureTextUsage).not.toHaveBeenCalled()
+        expect(measureTextUsage).toHaveBeenCalledWith(expect.objectContaining({ usage: { promptTokens: 4 } }))
         expect(measureImageUsage).not.toHaveBeenCalled()
         expect(measureVideoUsage).not.toHaveBeenCalled()
     })
@@ -1730,3 +1882,4 @@ describe('BaseProvider usage lifecycle', () => {
         failUnfinishedRuns.mockRestore()
     })
 })
+import { AccountRequestContext } from '../../services/account-request-context.ts'

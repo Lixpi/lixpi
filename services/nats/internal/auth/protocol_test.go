@@ -78,7 +78,7 @@ func protocolFixture(t *testing.T) (*Protocol, nkeys.KeyPair, nkeys.KeyPair, *jw
 	return protocol, serverKey, serverCurve, request
 }
 
-func TestCalloutValidationAndNonExpiringSession(t *testing.T) {
+func TestCalloutValidationAndServiceSession(t *testing.T) {
 	protocol, serverKey, serverCurve, request := protocolFixture(t)
 
 	encoded, err := request.Encode(serverKey)
@@ -140,6 +140,47 @@ func TestCalloutValidationAndNonExpiringSession(t *testing.T) {
 	for _, account := range []string{"SYS", "CALLOUT", ""} {
 		if _, err := protocol.Reply(verified, &Identity{Name: "user", Account: account}, ""); err == nil {
 			t.Fatal("forbidden account accepted")
+		}
+	}
+}
+
+func TestCalloutAppliesBrowserLeaseToUserJWT(t *testing.T) {
+	protocol, _, serverCurve, request := protocolFixture(t)
+
+	public, err := protocol.Curve.PublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expires := time.Now().Add(45 * time.Second).Unix()
+
+	response, err := protocol.Reply(request, &Identity{Name: "browser", Account: "AUTH", Expires: expires}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plaintext, err := serverCurve.Open(response, public)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claims, err := jwt.DecodeAuthorizationResponseClaims(string(plaintext))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	user, err := jwt.DecodeUserClaims(claims.Jwt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if user.Expires != expires || claims.Expires != request.Expires {
+		t.Fatal("browser lease was not applied separately from the callout deadline")
+	}
+
+	for _, expires := range []int64{-1, time.Now().Unix()} {
+		if _, err := protocol.Reply(request, &Identity{Name: "browser", Account: "AUTH", Expires: expires}, ""); err == nil {
+			t.Fatal("expired browser lease accepted")
 		}
 	}
 }

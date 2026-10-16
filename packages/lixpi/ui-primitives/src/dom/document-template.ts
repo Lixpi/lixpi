@@ -94,7 +94,9 @@ class DocumentTemplateBuilder {
     }
 
     getTemplateFunction() {
-        return (htm as unknown as typeof htm.default).bind(this.buildElement)
+        const template = htm as unknown as typeof htm extends { default: infer Template } ? Template : typeof htm
+
+        return template.bind(this.buildElement)
     }
 
     getCreateElementFunction() {

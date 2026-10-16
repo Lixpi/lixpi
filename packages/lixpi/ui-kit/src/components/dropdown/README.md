@@ -1,6 +1,6 @@
 # Dropdown Primitive
 
-Dropdown menus for ProseMirror NodeViews. Lives outside the document schema – never part of saved content.
+Dropdown menus for application controls and ProseMirror NodeViews. Menus live outside the document schema and are never part of saved content.
 
 ## What it is
 
@@ -87,6 +87,8 @@ createPureDropdown({
   theme?: 'dark' | 'light',
   renderPosition?: 'top' | 'bottom',
   buttonIcon?: svgString,
+  triggerContent?: HTMLElement,
+  triggerLabel?: string,
   ignoreColorValuesForOptions?: boolean,
   ignoreColorValuesForSelectedValue?: boolean,
   renderIconForSelectedValue?: boolean,
@@ -114,6 +116,8 @@ createPureDropdown({
 - `onSelect`: Callback when option selected (receives selected option)
 - `theme`: 'dark' or 'light' (default: 'dark')
 - `buttonIcon`: SVG icon for dropdown button (default: chevron)
+- `triggerContent`: Custom content, such as an avatar, inside the component's button. It replaces the selected-value display and chevron, stays mounted after selection, and receives any later content updates from the caller. The component positions the menu against the entire button and shows error-state text beside the custom content.
+- `triggerLabel`: Accessible name for the trigger and menu. Set it when using custom content or an icon without text.
 - `enableTagFilter`: Show tag filter in dropdown header (default: false)
 - `availableTags`: Tags for filtering options
 - `mountToBody`: Appends bubble to `document.body` when `true`, otherwise nests it under the trigger container
@@ -125,6 +129,8 @@ createPureDropdown({
 The option list is capped at 280px and scrolls internally when its content exceeds that height.
 
 The dropdown marks both its trigger and popover with `data-side-panel-no-drag`, so body-mounted menus inside side panels remain interactive and do not trigger side-panel drag or overlay-close behavior before option clicks run.
+
+The class instance owns the trigger, menu state and event listeners. Enter, Space and the arrow keys open the menu from the trigger. Arrow keys, Home and End move between options; Enter or Space selects the focused option. Escape and Tab close the menu, with focus returned to the trigger before Tab continues. Clicking outside also closes it. `destroy()` removes the popover and detaches its listeners.
 
 **Note**: `renderPosition` is deprecated and removed. The dropdown now uses InfoBubble's smart auto-flip logic instead.
 

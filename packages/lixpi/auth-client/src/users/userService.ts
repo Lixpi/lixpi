@@ -19,6 +19,7 @@ export type UserServiceConfig = {
     getToken: () => Promise<string | false>
     requestClient: UserRequestClient
     store: UserStateStore
+    isSessionActive?: () => boolean
 }
 
 export type WebClientUserService = {
@@ -32,17 +33,40 @@ class UserService implements WebClientUserService {
         this.config.store.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
         try {
+            const token = await this.config.getToken()
+
+            if (
+                !token
+                || this.config.isSessionActive?.() === false
+            )
+                throw new Error('ACCOUNT_ADMISSION_DENIED')
+
             const user = (await this.config.requestClient.request(
                 NATS_SUBJECTS.USER_SUBJECTS.GET_USER,
                 {
-                    token: await this.config.getToken(),
+                    token,
                 },
             )) as Partial<User>
+
+            if (this.config.isSessionActive?.() === false)
+                throw new Error('ACCOUNT_ADMISSION_DENIED')
+
+            if (
+                !user
+                || typeof user.userId !== 'string'
+                || !user.userId
+                || 'error' in user
+            )
+                throw new Error('CURRENT_USER_UNAVAILABLE')
+
             this.config.store.setDataValues(user)
             this.config.store.setMetaValues({ loadingStatus: LoadingStatus.success })
         } catch (error) {
             console.error('Failed to load user:', error)
+            this.config.store.resetStore()
             this.config.store.setMetaValues({ loadingStatus: LoadingStatus.error })
+
+            throw error
         }
     }
 }

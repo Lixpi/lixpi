@@ -15,6 +15,7 @@ import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'
 
 import { CHARACTER_FIDELITY_MODEL_MANIFEST } from './model-manifest.ts'
+import { AccountWorkScope } from '../account-work.ts'
 
 const MAX_OBJECT_BYTES = 32 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 8_192
@@ -39,7 +40,7 @@ let modelsPromise: Promise<RuntimeModels> | undefined
 
 export const assessCharacterFidelity = async (
     request: CharacterFidelityAssessmentRequest,
-    storage: NatsService,
+    storage: Pick<NatsService, 'getObject'>,
     signal?: AbortSignal,
 ): Promise<CharacterFidelityAssessmentResponse> => {
     const startedAt = Date.now()
@@ -394,7 +395,9 @@ const detectFaces = async (
         640,
         'detector',
     )
+    await AccountWorkScope.check()
     const outputs = await session.run({ [session.inputNames[0]!]: tensor })
+    AccountWorkScope.assertActive()
     const detections = [8, 16, 32].flatMap(stride => decodeYuNetStride(outputs, stride))
 
     return nonMaximumSuppression(detections, 0.3).map(
@@ -458,7 +461,9 @@ const embedFace = async (
         112,
         'recognizer',
     )
+    await AccountWorkScope.check()
     const outputs = await session.run({ [session.inputNames[0]!]: tensor })
+    AccountWorkScope.assertActive()
     const output = outputs[session.outputNames[0]!]
 
     if (
@@ -640,7 +645,7 @@ const cosineSimilarity = (
 }
 
 const readCoordinate = async (
-    storage: NatsService,
+    storage: Pick<NatsService, 'getObject'>,
     coordinate: CharacterFidelityObjectCoordinate,
     organizationId: string,
 ): Promise<Uint8Array> => {

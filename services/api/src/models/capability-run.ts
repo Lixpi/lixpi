@@ -1,4 +1,5 @@
 import * as process from 'node:process'
+import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
 import {
     getDynamoDbTableStageName,
@@ -84,7 +85,7 @@ export const updateCapabilityRunStatus = async ({
     const statusValues = Object.fromEntries(
         expectedStatuses.map((value, index) => [`:expectedStatus${index}`, value]),
     )
-    await dynamoDBService.updateItem({
+    await updateAccountItem({
         tableName: capabilityRunsTableName(),
         key: {
             runId,
@@ -109,4 +110,46 @@ const CapabilityRunModel = {
     updateStatus: updateCapabilityRunStatus,
 }
 
+export const cancelCapabilityRun = async (args: {
+    runId: string
+    workspaceId: string
+    ownerUserId: string
+}): Promise<boolean> => {
+    try {
+        await updateAccountItem({
+            tableName: capabilityRunsTableName(),
+            key: {
+                runId: args.runId,
+                workspaceId: args.workspaceId,
+            },
+            updates: {
+                status: 'cancelled',
+                currentStepIds: [],
+                updatedAt: Date.now(),
+            },
+            conditionExpression: '#owner = :owner AND #status IN (:pending, :running, :cancelled)',
+            expressionAttributeNames: {
+                '#owner': 'ownerUserId',
+                '#status': 'status',
+            },
+            expressionAttributeValues: {
+                ':owner': args.ownerUserId,
+                ':pending': 'pending',
+                ':running': 'running',
+                ':cancelled': 'cancelled',
+            },
+            logConditionalCheckFailures: false,
+            origin: 'CapabilityRun.cancel',
+        })
+
+        return true
+    } catch (error) {
+        if (isTransactionConditionalCheckFailure(error))
+            return false
+
+        throw error
+    }
+}
+
 export default CapabilityRunModel
+import { updateAccountItem } from '../services/account-model-update.ts'

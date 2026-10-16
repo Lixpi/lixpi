@@ -10,6 +10,7 @@ import {
 } from '@lixpi/constants'
 
 import { jwtVerifier } from '../helpers/auth.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import AssetModel from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
 import Workspace from '../models/workspace.ts'
@@ -58,7 +59,12 @@ const authenticateRequest = async (
         return res.status(401).json({ error: 'Invalid or expired token' })
 
     req.user = { userId: decoded.sub }
-    next()
+    await AccountRequestContext.runHttp(
+        decoded,
+        req,
+        res,
+        next,
+    )
 }
 
 router.post(

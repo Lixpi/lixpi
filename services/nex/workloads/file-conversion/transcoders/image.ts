@@ -5,6 +5,7 @@ import {
 import { join } from 'node:path'
 
 import sharp from 'sharp'
+import { AccountWorkScope } from '../../account-work.ts'
 
 import {
     runProcess,
@@ -48,6 +49,8 @@ export const transcodeImage = async (
     canonicalMime: string,
     options: TranscodeImageOptions = {},
 ): Promise<Buffer> => {
+    await AccountWorkScope.check()
+
     // HEIC/HEIF take the system-libheif path (see heifConvert). HEIC/HEIF only
     // ever map to JPEG/PNG in MEDIA_POLICY, both of which heif-convert produces.
     if (
@@ -82,6 +85,8 @@ export const transcodeImage = async (
 // model-safe canonical (JPEG/PNG/WebP), which sharp reads fine — only HEIC
 // decoding is delegated above.
 export const getImageAspectRatio = async (buffer: Buffer): Promise<number | null> => {
+    await AccountWorkScope.check()
+
     try {
         const {
             width,
@@ -115,6 +120,7 @@ export const createImageRendition = async ({
     width: number
     height: number
 }> => {
+    await AccountWorkScope.check()
     const {
         data,
         info,
@@ -128,6 +134,7 @@ export const createImageRendition = async ({
         })
         .webp({ quality })
         .toBuffer({ resolveWithObject: true })
+    AccountWorkScope.assertActive()
 
     return {
         data,

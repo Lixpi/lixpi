@@ -113,7 +113,7 @@ func TestServiceJWTAndNKeyVerification(t *testing.T) {
 				return
 			}
 
-			if err != nil || identity.Name != "svc:test" || identity.Account != "AUTH" {
+			if err != nil || identity.Name != "svc:test" || identity.Account != "AUTH" || identity.Expires != 0 {
 				t.Fatalf("service verification failed: %v", err)
 			}
 		})
@@ -188,11 +188,21 @@ func TestBrowserJWKSCacheRotationAndOutage(t *testing.T) {
 
 	keys := &JWKS{URL: endpoint.URL, Client: endpoint.Client()}
 	v := &Verifier{Policy: p, Keys: keys, Issuer: "https://issuer.example/", Audience: "test-api", Account: "AUTH"}
-	create := func(id, audience, issuer, algorithm string) *jwt.AuthorizationRequestClaims {
+	create := func(id, audience, issuer, algorithm string, expiry ...any) *jwt.AuthorizationRequestClaims {
+		claims := map[string]any{"sub": "用户|123", "aud": []string{audience}, "iss": issuer, "exp": time.Now().Add(time.Hour).Unix()}
+
+		if len(expiry) > 0 {
+			if expiry[0] == nil {
+				delete(claims, "exp")
+			} else {
+				claims["exp"] = expiry[0]
+			}
+		}
+
 		token := testToken(
 			t,
 			map[string]string{"alg": algorithm, "typ": "JWT", "kid": id},
-			map[string]any{"sub": "用户|123", "aud": []string{audience}, "iss": issuer, "exp": time.Now().Add(time.Hour).Unix()},
+			claims,
 			func(message []byte) ([]byte, error) {
 				digest := sha256.Sum256(message)
 
@@ -217,6 +227,32 @@ func TestBrowserJWKSCacheRotationAndOutage(t *testing.T) {
 
 	if fetches.Load() != 1 {
 		t.Fatalf("concurrent misses fetched %d times", fetches.Load())
+	}
+
+	before := time.Now().Unix()
+
+	identity, err := v.Evaluate(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if identity.Expires < before+60 || identity.Expires > time.Now().Unix()+60 {
+		t.Fatal("browser lease exceeds one minute or has no expiry")
+	}
+
+	nearExpiry := time.Now().Add(20 * time.Second).Unix()
+
+	identity, err = v.Evaluate(t.Context(), create("first", v.Audience, v.Issuer, "RS256", nearExpiry))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if identity.Expires != nearExpiry {
+		t.Fatal("browser lease outlives its access token")
+	}
+
+	if _, err := v.Evaluate(t.Context(), create("first", v.Audience, v.Issuer, "RS256", nil)); !errors.Is(err, ErrDenied) {
+		t.Fatal("browser token without expiry accepted")
 	}
 
 	rotated.Store(true)

@@ -3,6 +3,7 @@ import { Router } from 'express'
 import NATS_Service from '@lixpi/nats-service'
 
 import { jwtVerifier } from '../helpers/auth.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import Workspace from '../models/workspace.ts'
 import {
     getTransientMediaBucketName,
@@ -35,7 +36,12 @@ const authenticateRequest = async (
         return res.status(401).json({ error: 'Invalid or expired token' })
 
     req.user = { userId: decoded.sub }
-    next()
+    await AccountRequestContext.runHttp(
+        decoded,
+        req,
+        res,
+        next,
+    )
 }
 
 router.get(

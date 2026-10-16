@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid'
+import { AccountRequestContext } from '../../services/account-request-context.ts'
 import type NatsService from '@lixpi/nats-service'
 import {
     info,
@@ -13,6 +14,7 @@ import {
     type MediaGenerationConfigSelectionGroup,
     type MediaGenerationConfigControl,
     type MediaGenerationConfigControlKey,
+    type MediaGenerationRunMeta,
     type MediaRunLineageAssignment,
     type ProviderName,
 } from '@lixpi/constants'
@@ -330,6 +332,9 @@ export class MediaGenerationMatrixOrchestrator {
     ) {}
 
     async process(requestData: MatrixRequestData): Promise<void> {
+        AccountRequestContext.assertActive()
+        const accountScope = AccountRequestContext.current()
+        const failCancelledRuns = AccountRequestContext.prepareCleanup(async () => await this.failUnfinishedDurableRuns(requestData))
         const normalized = await this.resolveRequest(
             this.normalizeRequest(requestData),
         )
@@ -369,6 +374,38 @@ export class MediaGenerationMatrixOrchestrator {
             )
         } catch (error) {
             authorizationInstanceKeys.forEach(instanceKey => this.registry.remove(instanceKey))
+            const detail = "AI generation could not be authorized. Check your organization's AI credits in Billing and try again."
+
+            try {
+                if (accountScope?.signal.aborted)
+                    await failCancelledRuns()
+                else
+                    await this.failUnfinishedDurableRuns(requestData, detail)
+            } catch (settlementError) {
+                warn(`[MEDIA_MATRIX] Failed to settle durable runs after authorization failure: ${String(settlementError)}`)
+            }
+
+            if (!accountScope?.signal.aborted) {
+                try {
+                    const reasoningModel = normalized.reasoningModels[0]
+                    const publisher = this.createRequestPublisher(
+                        requestData,
+                        reasoningModel.provider,
+                        this.runPlanner.buildMatrixReasoningRun({
+                            generationRequestId: normalized.generationRequestId,
+                            reasoningRunId: this.runPlanner.buildReasoningRunId(normalized.generationRequestId, 0),
+                            reasoningModelId: reasoningModel.modelId,
+                            reasoningIndex: 0,
+                        }),
+                    )
+                    publisher.error(detail)
+                    publisher.mediaGenerationRequestComplete(normalized.generationRequestId)
+                    await publisher.drainPendingWrites()
+                    await publisher.finishProseMirrorStream()
+                } catch (settlementError) {
+                    warn(`[MEDIA_MATRIX] Failed to publish authorization failure: ${String(settlementError)}`)
+                }
+            }
 
             throw error
         }
@@ -409,7 +446,10 @@ export class MediaGenerationMatrixOrchestrator {
             })
         } catch (error) {
             try {
-                await this.failUnfinishedDurableRuns(requestData)
+                if (accountScope?.signal.aborted)
+                    await failCancelledRuns()
+                else
+                    await this.failUnfinishedDurableRuns(requestData)
             } catch (settlementError) {
                 warn(`[MEDIA_MATRIX] Failed to settle durable runs after preflight failure: ${String(settlementError)}`)
             }
@@ -563,6 +603,14 @@ export class MediaGenerationMatrixOrchestrator {
                 throw rejectedResult.reason
         } finally {
             const removeProjectedPendingNodes = this.cancelledRequestGroupKeys.delete(normalized.requestGroupKey)
+            this.scheduleRequestPublisherCleanup(normalized.requestGroupKey)
+
+            if (accountScope?.signal.aborted) {
+                await failCancelledRuns()
+
+                throw accountScope.signal.reason
+            }
+
             let terminalSweepError: unknown
 
             if (!removeProjectedPendingNodes) {
@@ -582,20 +630,23 @@ export class MediaGenerationMatrixOrchestrator {
             )
             await sharedPreflight.publisher.drainPendingWrites()
             await sharedPreflight.publisher.finishProseMirrorStream()
-            this.scheduleRequestPublisherCleanup(normalized.requestGroupKey)
 
             if (terminalSweepError)
                 throw terminalSweepError
         }
     }
 
-    private async failUnfinishedDurableRuns(requestData: MatrixRequestData): Promise<void> {
+    private async failUnfinishedDurableRuns(
+        requestData: MatrixRequestData,
+        detail?: string,
+    ): Promise<void> {
         if (!requestData.durableGenerationRequestId)
             return
 
         await new MediaGenerationRequestService().failUnfinishedRuns({
             generationRequestId: requestData.durableGenerationRequestId,
             workspaceId: requestData.workspaceId,
+            ...(detail ? { detail } : {}),
         })
     }
 
@@ -961,6 +1012,30 @@ export class MediaGenerationMatrixOrchestrator {
         )
     }
 
+    private createRequestPublisher(
+        requestData: MatrixRequestData,
+        provider: ProviderName,
+        generationRun: MediaGenerationRunMeta,
+    ): StreamPublisher {
+        return new StreamPublisher(
+            this.natsService,
+            requestData.workspaceId,
+            requestData.aiChatThreadId,
+            provider,
+            generationRun,
+            {
+                organizationId: requestData.organizationId,
+                assetLeaseId: requestData.assetLeaseId,
+                assetLeaseHolderId: requestData.assetLeaseHolderId,
+                enableProseMirrorStream: Boolean(requestData.proseMirrorInitialDoc),
+                proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
+                proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
+                deferProseMirrorEnd: true,
+                canvasVisibleArea: requestData.canvasVisibleArea,
+            },
+        )
+    }
+
     private async runSharedPreflight({
         requestData,
         normalized,
@@ -978,28 +1053,18 @@ export class MediaGenerationMatrixOrchestrator {
     }): Promise<SharedPreflightResult> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
+        const accountSignal = AccountRequestContext.current()?.signal
+        const signal = accountSignal ? AbortSignal.any([abortController.signal, accountSignal]) : abortController.signal
         const generationRun = this.runPlanner.buildMatrixReasoningRun({
             generationRequestId: normalized.generationRequestId,
             reasoningRunId: this.runPlanner.buildReasoningRunId(normalized.generationRequestId, 0),
             reasoningModelId: reasoningModel.modelId,
             reasoningIndex: 0,
         })
-        const publisher = new StreamPublisher(
-            this.natsService,
-            requestData.workspaceId,
-            requestData.aiChatThreadId,
+        const publisher = this.createRequestPublisher(
+            requestData,
             reasoningModel.provider,
             generationRun,
-            {
-                organizationId: requestData.organizationId,
-                assetLeaseId: requestData.assetLeaseId,
-                assetLeaseHolderId: requestData.assetLeaseHolderId,
-                enableProseMirrorStream: Boolean(requestData.proseMirrorInitialDoc),
-                proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
-                proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
-                deferProseMirrorEnd: true,
-                canvasVisibleArea: requestData.canvasVisibleArea,
-            },
         )
         let state: ProviderState = {
             messages: requestData.messages ?? [],
@@ -1086,16 +1151,16 @@ export class MediaGenerationMatrixOrchestrator {
                 {
                     natsService: this.natsService,
                     publisher,
-                    abortSignal: abortController.signal,
+                    abortSignal: signal,
                 },
             ),
         )
-        applyResolved(await resolveCapabilitiesForState(state, abortController.signal))
+        applyResolved(await resolveCapabilitiesForState(state, signal))
         applyResolved(
             await executeRequiredCapabilitiesForState(
                 state,
                 getCapabilityDispatcher(),
-                abortController.signal,
+                signal,
                 normalized.reasoningModels.map(
                     (model, reasoningIndex) => ({
                         axis: 'reasoning-model',
@@ -1133,7 +1198,7 @@ export class MediaGenerationMatrixOrchestrator {
                 {
                     natsService: this.natsService,
                     publisher,
-                    abortSignal: abortController.signal,
+                    abortSignal: signal,
                 },
             ),
         )

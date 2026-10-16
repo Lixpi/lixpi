@@ -56,7 +56,7 @@ func (r *Runtime) HealthHandler() http.Handler {
 
 		w.WriteHeader(http.StatusOK)
 	}))
-	mux.HandleFunc("GET /metrics", protected(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /metrics", protected(func(w http.ResponseWriter, request *http.Request) {
 		d := r.dispatcher.Load()
 		w.Header().Set("Content-Type", "application/json")
 		values := map[string]any{
@@ -65,6 +65,7 @@ func (r *Runtime) HealthHandler() http.Handler {
 			"workerInFlight": r.config.Admission.Worker.InFlight(),
 		}
 		values["serverName"] = r.config.Identity.Name
+		values["accountAdmission"] = r.accountReadiness(request.Context())
 
 		if r.config.Certificates != nil {
 			values["certificateRefreshHealthy"] = r.certificateHealthy.Load()

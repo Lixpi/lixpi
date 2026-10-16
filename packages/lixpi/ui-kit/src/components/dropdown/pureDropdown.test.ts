@@ -156,6 +156,95 @@ describe('pureDropdown — portaled popovers', () => {
     })
 })
 
+describe('pureDropdown custom triggers and keyboard access', () => {
+    afterEach(() => void (document.body.innerHTML = ''))
+
+    it('keeps custom trigger content after selection, updates and errors', () => {
+        const avatar = document.createElement('span')
+        avatar.textContent = 'A'
+        const onSelect = vi.fn()
+        const dropdown = createPureDropdown({
+            id: 'account',
+            selectedValue: { title: '' },
+            options: defaultOptions,
+            triggerContent: avatar,
+            triggerLabel: 'Account',
+            mountToBody: true,
+            onSelect,
+        })
+        document.body.appendChild(dropdown.dom)
+        const button = dropdown.dom.querySelector('button')!
+        expect(button.getAttribute('aria-label')).toBe('Account')
+        expect(button.type).toBe('button')
+        expect(button.contains(avatar)).toBe(true)
+        avatar.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+        }))
+        expect(dropdown.dom.classList.contains('dropdown-open')).toBe(true)
+        expect(button.getAttribute('aria-expanded')).toBe('true')
+        document.querySelector<HTMLElement>('#dropdown-menu-account [role="menuitem"]')!.click()
+        expect(onSelect).toHaveBeenCalledWith(defaultOptions[0])
+        dropdown.update(defaultOptions[1])
+        expect(button.textContent).toBe('A')
+        expect(button.contains(avatar)).toBe(true)
+        dropdown.setErrorState({ title: 'Please retry' })
+        expect(button.querySelector('[role="status"]')?.textContent).toBe('Please retry')
+        dropdown.setErrorState()
+        expect(button.textContent).toBe('A')
+        dropdown.destroy()
+        avatar.click()
+        expect(button.getAttribute('aria-expanded')).toBe('false')
+        expect(document.querySelector('#dropdown-menu-account')).toBeNull()
+    })
+
+    it('navigates and selects portaled options, and dismisses with Escape or Tab', () => {
+        const onSelect = vi.fn()
+        const dropdown = createPureDropdown({
+            id: 'keyboard',
+            selectedValue: defaultOptions[0],
+            options: defaultOptions,
+            mountToBody: true,
+            onSelect,
+        })
+        document.body.appendChild(dropdown.dom)
+        const button = dropdown.dom.querySelector('button')!
+        const items = document.querySelectorAll<HTMLElement>('#dropdown-menu-keyboard [role="menuitem"]')
+        const press = (target: Element, key: string) => target.dispatchEvent(new KeyboardEvent('keydown', {
+            key,
+            bubbles: true,
+            cancelable: true,
+        }))
+        button.focus()
+        press(button, 'Enter')
+        expect(document.activeElement).toBe(items[0])
+        press(items[0], 'ArrowDown')
+        expect(document.activeElement).toBe(items[1])
+        press(items[1], 'ArrowDown')
+        expect(document.activeElement).toBe(items[0])
+        press(items[0], 'End')
+        expect(document.activeElement).toBe(items[1])
+        press(items[1], 'Home')
+        expect(document.activeElement).toBe(items[0])
+        press(items[0], 'ArrowUp')
+        expect(document.activeElement).toBe(items[1])
+        press(items[1], ' ')
+        expect(onSelect).toHaveBeenCalledExactlyOnceWith(defaultOptions[1])
+        expect(document.activeElement).toBe(button)
+        expect(button.getAttribute('aria-expanded')).toBe('false')
+        press(button, 'ArrowUp')
+        expect(document.activeElement).toBe(items[1])
+        press(items[1], 'Escape')
+        expect(document.activeElement).toBe(button)
+        expect(button.getAttribute('aria-expanded')).toBe('false')
+        press(button, 'ArrowDown')
+        press(items[0], 'Tab')
+        expect(button.getAttribute('aria-expanded')).toBe('false')
+        expect(onSelect).toHaveBeenCalledOnce()
+        dropdown.destroy()
+    })
+})
+
 describe('pureDropdown — outside click behavior', () => {
     let addEventListenerSpy: ReturnType<typeof vi.spyOn>
     let removeEventListenerSpy: ReturnType<typeof vi.spyOn>
@@ -257,6 +346,7 @@ describe('pureDropdown — selection and API updates', () => {
         dropdown.update(defaultOptions[1])
 
         expect(title.textContent).toBe('Model B')
+        expect(dropdown.dom.querySelector('button')?.getAttribute('aria-label')).toBe('Model B')
     })
 
     it('replaces options and selected value via setOptions()', () => {

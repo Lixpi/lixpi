@@ -1,4 +1,5 @@
 import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
+import { AccountRequestContext } from '../../services/account-request-context.ts'
 import { createHash } from 'node:crypto'
 
 import chalk from 'chalk'
@@ -1330,7 +1331,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     return rejectSend(lease)
 
                 let leaseReleased = false
-                releaseLease = async (): Promise<void> => {
+                releaseLease = AccountRequestContext.prepareCleanup(async (): Promise<void> => {
                     if (leaseReleased)
                         return
 
@@ -1341,7 +1342,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                         leaseId: lease.leaseId,
                         holderId: leaseHolderId,
                     }).catch(() => undefined)
-                }
+                })
                 const conversationSnapshot = await AssetDocumentService.loadCurrentSnapshot(conversationAsset, 'conversation')
 
                 if (!conversationSnapshot) {
@@ -1960,23 +1961,49 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     return true
                 }
                 const runWithLease = async (run: () => Promise<void>): Promise<void> => {
+                    const scope = AccountRequestContext.current()
                     const renewal = setInterval(
-                        () => void AssetModel.renewLease({
-                            assetId: conversationAssetId,
-                            workspaceId,
-                            leaseId: lease.leaseId,
-                            holderId: leaseHolderId,
-                        }),
+                        async () => {
+                            try {
+                                scope?.assertActive()
+                                await AssetModel.renewLease({
+                                    assetId: conversationAssetId,
+                                    workspaceId,
+                                    leaseId: lease.leaseId,
+                                    holderId: leaseHolderId,
+                                })
+                            } catch (error) {
+                                clearInterval(renewal)
+                                scope?.cancel()
+                                err('Conversation lease renewal stopped:', error)
+                            }
+                        },
                         10000,
+                    )
+                    const stopRenewal = (): void => void clearInterval(renewal)
+                    scope?.signal.addEventListener(
+                        'abort',
+                        stopRenewal,
+                        { once: true },
                     )
 
                     try {
+                        scope?.assertActive()
                         await run()
                     } finally {
                         clearInterval(renewal)
+                        scope?.signal.removeEventListener('abort', stopRenewal)
                         await releaseLease()
                     }
                 }
+                const failCancelledConversation = AccountRequestContext.prepareCleanup(async () => {
+                    await AssetModel.updateConversationStateSystem({
+                        assetId: conversationAssetId,
+                        organizationId,
+                        conversation: 'failed',
+                        expectedConversation: 'receiving',
+                    })
+                })
                 const claimConversation = async (): Promise<boolean> => {
                     try {
                         const claimed = await AssetModel.claimConversationReceivingSystem({
@@ -2090,6 +2117,12 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                                 expectedConversation: 'receiving',
                             })
                         } catch (e) {
+                            if (AccountRequestContext.current()?.signal.aborted) {
+                                await failCancelledConversation()
+
+                                throw e
+                            }
+
                             if (await pauseForBranchAmbiguity(e))
                                 return
 
@@ -2104,7 +2137,10 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                             natsService!.publish(canonicalResponseSubject, { error: e instanceof Error ? e.message : String(e) })
                         }
                     }
-                    void runMediaGenerationMatrix()
+                    AccountRequestContext.startDetached(runMediaGenerationMatrix, async error => {
+                        await releaseLease()
+                        err('Media request admission cancelled:', error)
+                    })
 
                     return
                 }
@@ -2249,6 +2285,12 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                                 expectedConversation: 'receiving',
                             })
                         } catch (e) {
+                            if (AccountRequestContext.current()?.signal.aborted) {
+                                await failCancelledConversation()
+
+                                throw e
+                            }
+
                             if (await pauseForBranchAmbiguity(e))
                                 return
 
@@ -2263,7 +2305,10 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                             natsService!.publish(canonicalResponseSubject, { error: e instanceof Error ? e.message : String(e) })
                         }
                     }
-                    void runLlmProcess()
+                    AccountRequestContext.startDetached(runLlmProcess, async error => {
+                        await releaseLease()
+                        err('Conversation request admission cancelled:', error)
+                    })
                 } catch (error) {
                     await releaseLease()
                     err('❌ [AI_INTERACTION] handler error:', error)

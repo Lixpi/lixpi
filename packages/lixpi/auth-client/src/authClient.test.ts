@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
     init: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
+    clearSession: vi.fn(),
+    recoverAccess: vi.fn(),
+    confirmAccess: vi.fn(),
 }))
 
 vi.mock('./auth/createAuthService.ts', () => ({
@@ -29,6 +32,37 @@ const tokenForUser = (userId: string): string => [
 ].join('.')
 
 describe('auth client', () => {
+    it('clears user state before cleanup, discards an in-flight token and redirects once afterwards', async () => {
+        vi.resetAllMocks()
+        const token = Promise.withResolvers<string>()
+        const cleanup = Promise.withResolvers<void>()
+        mocks.getTokenSilently.mockReturnValue(token.promise)
+        const client = createAuthClient({ auth: {
+            audience: 'audience',
+            clientId: 'client',
+            domain: 'auth.example.com',
+            logoutReturnTo: 'https://example.com',
+            redirectUri: 'https://example.com',
+        } })
+        client.userStore.setDataValues({
+            userId: 'user',
+            email: 'private@example.com',
+        })
+        const pendingToken = client.getTokenSilently()
+        const rejected = client.rejectAccess(async () => await cleanup.promise)
+        expect(client.userStore.getData('userId')).toBe('')
+        expect(mocks.login).not.toHaveBeenCalled()
+        token.resolve('late-token')
+        await expect(pendingToken).resolves.toBe(false)
+        expect(client.rejectAccess(vi.fn())).toBe(rejected)
+        cleanup.resolve()
+        await rejected
+        expect(mocks.clearSession).toHaveBeenCalledOnce()
+        expect(mocks.recoverAccess).toHaveBeenCalledOnce()
+        expect(mocks.login).not.toHaveBeenCalled()
+        await expect(client.getTokenSilently()).resolves.toBe(false)
+    })
+
     it('combines authentication and current-user loading behind one injected client', async () => {
         vi.resetAllMocks()
         const accessToken = tokenForUser('user-1')
@@ -63,6 +97,7 @@ describe('auth client', () => {
         )
         expect(userState.getData('userId')).toBe('user-1')
         expect(userState.getMeta('loadingStatus')).toBe(LoadingStatus.success)
+        expect(mocks.confirmAccess).toHaveBeenCalledOnce()
     })
 
     it('owns isolated auth and current-user stores by default', () => {

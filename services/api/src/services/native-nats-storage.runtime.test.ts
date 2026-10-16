@@ -12,6 +12,9 @@ import {
     getContentAddressedBlob,
     putContentAddressedBlob,
 } from './blob-storage.ts'
+import { ACCOUNT_ADMISSION_CHANGED_SUBJECT } from '@lixpi/constants'
+import { AccountControlFeed } from './account-control-feed.ts'
+import { AccountRequestScopes } from './account-request-scopes.ts'
 
 vi.mock('@lixpi/debug-tools', () => ({
     log: vi.fn(),
@@ -29,6 +32,7 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
     const bucket = `blobs-${organizationId}-files`
     const events = `NATIVE_EVENTS_${id}`
     const work = `NATIVE_WORK_${id}`
+    const control = `NATIVE_ADMISSION_${id}`
     let service: NatsService
 
     beforeAll(async () => {
@@ -53,7 +57,7 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
         try {
             const manager = await service.getJetStreamManager()
 
-            for (const name of [`OBJ_${bucket}`, events, work]) {
+            for (const name of [`OBJ_${bucket}`, events, work, control]) {
                 if (await service.getJetStreamStreamInfoOrNull(name))
                     await manager.streams.delete(name)
             }
@@ -81,6 +85,53 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
             blobHash: stored.blobHash,
         })).toEqual(bytes)
     })
+
+    it('fans a durable account-disable event out to two API consumers and cancels both active requests', async () => {
+        await service.ensureJetStreamStream({
+            name: control,
+            subjects: [ACCOUNT_ADMISSION_CHANGED_SUBJECT],
+            storage: 'file',
+            retention: 'limits',
+            num_replicas: 1,
+        })
+        const admission = { admitVerifiedToken: vi.fn(async () => ({
+            identityKey: 'identity',
+            issuer: 'https://auth.example.com/',
+            subject: 'user',
+            epoch: 1,
+            personalOrganizationId: 'org',
+            tokenExpiresAt: Date.now() + 60000,
+        })) }
+        const first = new AccountRequestScopes(admission)
+        const second = new AccountRequestScopes(admission)
+        const firstFeed = new AccountControlFeed(service, first, control)
+        const secondFeed = new AccountControlFeed(service, second, control)
+
+        try {
+            await Promise.all([firstFeed.start(), secondFeed.start()])
+            const accepted: AbortSignal[] = []
+            const pending = [first, second].map(scopes => scopes.run({}, async scope => {
+                accepted.push(scope.signal)
+                await new Promise<void>(resolve => scope.signal.addEventListener('abort', () => resolve(), { once: true }))
+            }))
+            const denied = Promise.all(pending.map(request => expect(request).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')))
+            await vi.waitFor(() => expect(accepted).toHaveLength(2))
+            await service.publishJetStream(ACCOUNT_ADMISSION_CHANGED_SUBJECT, {
+                version: 1,
+                eventId: randomUUID(),
+                identityKey: 'identity',
+                epoch: 2,
+                state: 'blocked',
+            }, { expect: { streamName: control } })
+            await denied
+            expect(accepted.every(signal => signal.aborted)).toBe(true)
+            await expect(first.run({}, async () => 'unexpected')).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')
+            await expect(second.run({}, async () => 'unexpected')).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')
+        } finally {
+            firstFeed.stop()
+            secondFeed.stop()
+        }
+    }, 15000)
 
     it('uses native event sequences, message-ID deduplication and replay', async () => {
         const subject = `${events}.event`

@@ -107,6 +107,8 @@ type Identity struct {
 	Name        string
 	Account     string
 	Permissions jwt.Permissions
+	Expires     int64
+	Admission   *BrowserGrant
 }
 
 func (p *Protocol) Reply(request *jwt.AuthorizationRequestClaims, identity *Identity, denial string) ([]byte, error) {
@@ -116,7 +118,7 @@ func (p *Protocol) Reply(request *jwt.AuthorizationRequestClaims, identity *Iden
 
 	if identity != nil {
 		if identity.Account == "" || identity.Account == "SYS" || identity.Account == "CALLOUT" || identity.Account == policy.RegistryAccount ||
-			identity.Name == "" {
+			identity.Name == "" || (identity.Expires != 0 && identity.Expires <= time.Now().Unix()) {
 			return nil, errors.New("invalid application identity")
 		}
 
@@ -124,6 +126,7 @@ func (p *Protocol) Reply(request *jwt.AuthorizationRequestClaims, identity *Iden
 		user.Name = identity.Name
 		user.Audience = identity.Account
 		user.Permissions = identity.Permissions
+		user.Expires = identity.Expires
 
 		encoded, err := user.Encode(p.Signer)
 		if err != nil {

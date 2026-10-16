@@ -12,10 +12,9 @@
 // 2. Faster startup - no Pulumi state management overhead
 // 3. Simpler Docker integration - just run this script on container start
 //
-// Existing tables are force-recreated from the current definitions by default so
-// the persisted dynamodb-data volume can never serve a stale schema; see
-// local-dynamodb-table-reconciler.ts for the prompt, the
-// LOCAL_DYNAMODB_FORCE_RECREATE override, and the data-loss reporting.
+// Compose preserves existing tables by setting LOCAL_DYNAMODB_FORCE_RECREATE=false.
+// Explicit resets and direct invocations follow local-dynamodb-table-reconciler.ts.
+// The fixed mock fixture validates after table setup, before Compose starts the API.
 
 import {
     err as debugError,
@@ -24,12 +23,17 @@ import {
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { getTableDefinitions } from './resources/db/DynamoDB-tables.ts'
 import {
+    localMockConfiguration,
+    LocalMockAccount,
+} from './local-mock-account.ts'
+import {
     LocalDynamoDbTableReconciler,
     resolveForceRecreate,
     type TableDefinition,
 } from './local-dynamodb-table-reconciler.ts'
 
 const { DYNAMODB_ENDPOINT } = process.env
+const mockConfiguration = localMockConfiguration(process.env)
 
 if (!DYNAMODB_ENDPOINT) {
     debugError('DYNAMODB_ENDPOINT is required')
@@ -65,6 +69,16 @@ const createTables = async () => {
 
 try {
     await createTables()
+
+    if (mockConfiguration) {
+        const fixture = new LocalMockAccount(mockConfiguration)
+
+        try {
+            await fixture.load()
+        } finally {
+            fixture.destroy()
+        }
+    }
 } catch (e) {
     debugError('Failed to create tables:', e)
     process.exit(1)

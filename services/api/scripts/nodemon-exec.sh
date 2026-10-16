@@ -44,7 +44,9 @@ fi
 
 touch "$MARKER"
 
-node ./src/server.ts
+# Reserve argv space for the full admission consumer name in process.title.
+# Docker inventory uses that immutable title to distinguish watched processes.
+node ./src/server.ts --account-enforcement-process
 code=$?
 
 if [ "$code" -eq 0 ]; then

@@ -5,7 +5,7 @@ description: Docker image, workspace assembly, cache layout, and dispatcher for 
 
 # TypeScript Test Runner
 
-This directory builds the shared one-shot TypeScript test image. The image contains Node and pnpm but no application dependencies. A repository-specific Compose adapter mounts a workspace under `/usr/src/service/<workspace>`, and [`run-tests.sh`](run-tests.sh) installs that workspace in container storage before invoking Vitest.
+This directory builds the shared one-shot TypeScript test image. The image contains Node, pnpm, and the `script` utility for pseudo-terminal regression tests, but no application dependencies. A repository-specific Compose adapter mounts a workspace under `/usr/src/service/<workspace>`, and [`run-tests.sh`](run-tests.sh) installs that workspace in container storage before invoking Vitest.
 
 The reusable service is defined in [`../runner-compose/typescript-test.base.yml`](../runner-compose/typescript-test.base.yml). The main repository extends it from [`../../../docker-compose.typescript-test-runner.yml`](../../../docker-compose.typescript-test-runner.yml). Another repository can extend the same base service with a smaller adapter containing only its own workspaces.
 

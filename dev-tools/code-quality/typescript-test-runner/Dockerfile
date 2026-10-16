@@ -13,6 +13,7 @@ FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
 ARG PNPM_VERSION
 
 RUN npm install -g "pnpm@${PNPM_VERSION}"
+RUN apk add --no-cache util-linux-misc
 
 WORKDIR /usr/src/service
 

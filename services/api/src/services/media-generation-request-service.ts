@@ -1456,18 +1456,38 @@ export class MediaGenerationRequestService {
         const message = run.status === 'running'
             ? run.progress?.message ?? 'The provider is generating media.'
             : problem?.detail ?? 'Generation failed.'
-        const projection = run.status === 'completed'
-            ? removeMediaGenerationOperationNode({
+        const updateOperation = async (): Promise<void> =>
+            await updateMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
                 operationNodeId: run.operationNodeId,
                 generationRequestId: request.generationRequestId,
                 generationRun: run.generationRun,
-                progress: run.progress,
+                status: run.status === 'failed' ? 'failed' : 'in-progress',
+                removeOperationWhenOutputProjected: run.status === 'failed',
+                message,
+                progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
+                ...(problem ? { problem } : {}),
+                requestRevision: request.revision,
             })
-            : run.status === 'failed'
+        const project = async (): Promise<void> => {
+            if (run.status === 'completed') {
+                await removeMediaGenerationOperationNode({
+                    workspaceId: request.workspaceId,
+                    operationNodeId: run.operationNodeId,
+                    generationRequestId: request.generationRequestId,
+                    generationRun: run.generationRun,
+                    progress: run.progress,
+                })
+
+                return
+            }
+
+            if (
+                run.status === 'failed'
                 && run.outputNodeId
                 && run.outputAssetId
-                ? settleFailedGeneratedMediaRunOnCanvas({
+            ) {
+                const geometry = await settleFailedGeneratedMediaRunOnCanvas({
                     workspaceId: request.workspaceId,
                     generationRun: {
                         requestKind: 'media-generation-matrix',
@@ -1489,17 +1509,15 @@ export class MediaGenerationRequestService {
                     ...(run.progress ? { progress: run.progress } : {}),
                     requestRevision: request.revision,
                 })
-                : updateMediaGenerationOperationNode({
-                    workspaceId: request.workspaceId,
-                    operationNodeId: run.operationNodeId,
-                    generationRequestId: request.generationRequestId,
-                    generationRun: run.generationRun,
-                    status: run.status === 'failed' ? 'failed' : 'in-progress',
-                    message,
-                    progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-                    ...(problem ? { problem } : {}),
-                    requestRevision: request.revision,
-                })
+
+                if (geometry)
+                    return
+            }
+
+            // Authorization can fail before the reserved output has an Asset record.
+            await updateOperation()
+        }
+        const projection = project()
         const event = this.events().append({
             userId: request.userId,
             workspaceId: request.workspaceId,

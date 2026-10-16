@@ -22,6 +22,7 @@ RUN pnpm install --prod
 COPY dev-tools/config-utils/run-config.ts ./
 RUN mkdir -p repository
 COPY dev-tools/config-utils/environment-file.ts ./repository/environment-file.ts
+COPY dev-tools/config-utils/secret-input.ts ./repository/secret-input.ts
 
 # Set environment for colored output
 ENV FORCE_COLOR=1

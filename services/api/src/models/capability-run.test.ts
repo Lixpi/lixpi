@@ -6,7 +6,7 @@ import {
     vi,
 } from 'vitest'
 
-import { updateCapabilityRunStatus } from './capability-run.ts'
+import { cancelCapabilityRun, updateCapabilityRunStatus } from './capability-run.ts'
 
 describe('Capability run persistence', () => {
     const updateItem = vi.fn()
@@ -53,5 +53,34 @@ describe('Capability run persistence', () => {
         })).rejects.toThrow('EXPECTED_RUN_STATUS_REQUIRED')
 
         expect(updateItem).not.toHaveBeenCalled()
+    })
+
+    it('cancels only a matching owner and unfinished run without replacing existing output', async () => {
+        await expect(cancelCapabilityRun({
+            runId: 'run-1',
+            workspaceId: 'workspace-1',
+            ownerUserId: 'owner',
+        })).resolves.toBe(true)
+        expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            conditionExpression: '#owner = :owner AND #status IN (:pending, :running, :cancelled)',
+            expressionAttributeValues: expect.objectContaining({ ':owner': 'owner' }),
+            updates: {
+                status: 'cancelled',
+                currentStepIds: [],
+                updatedAt: expect.any(Number),
+            },
+        }))
+        updateItem.mockRejectedValueOnce({ name: 'ConditionalCheckFailedException' })
+        await expect(cancelCapabilityRun({
+            runId: 'run-1',
+            workspaceId: 'workspace-1',
+            ownerUserId: 'owner',
+        })).resolves.toBe(false)
+        updateItem.mockRejectedValueOnce(new Error('database unavailable'))
+        await expect(cancelCapabilityRun({
+            runId: 'run-1',
+            workspaceId: 'workspace-1',
+            ownerUserId: 'owner',
+        })).rejects.toThrow('database unavailable')
     })
 })

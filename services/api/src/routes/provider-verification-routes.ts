@@ -1,6 +1,7 @@
 import { Router } from 'express'
 
 import { jwtVerifier } from '../helpers/auth.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import {
     ProviderVerificationCoordinator,
     verifyProviderVerificationState,
@@ -33,7 +34,12 @@ const authenticateRequest = async (
         return res.status(401).json({ error: 'INVALID_ACCESS_TOKEN' })
 
     req.user = { userId: decoded.sub }
-    next()
+    await AccountRequestContext.runHttp(
+        decoded,
+        req,
+        res,
+        next,
+    )
 }
 
 router.post(

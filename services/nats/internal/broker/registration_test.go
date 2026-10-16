@@ -48,12 +48,15 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 	start := func() *Runtime {
 		t.Helper()
 
-		worker, err := admission.NewWorker(&auth.RuntimeVerifier{}, 4)
+		applicationPolicy := &auth.ApplicationPolicy{}
+
+		worker, err := admission.NewWorker(&auth.RuntimeVerifier{ApplicationPolicy: applicationPolicy}, 4)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		r, err := StartRuntime(t.Context(), RuntimeConfig{
+			ApplicationPolicy: applicationPolicy,
 			Options: &server.Options{
 				Host:          "127.0.0.1",
 				Port:          -1,
@@ -95,7 +98,37 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 
 		return r
 	}
+
 	r := start()
+	if connection, err := nats.Connect(
+		r.Server.ClientURL(),
+		nats.UserInfo("browser_policy_UNFAMILIAR", "internal-secret"),
+		nats.NoReconnect(),
+	); err == nil {
+		connection.Close()
+		t.Fatal("network client used the in-process policy identity")
+	}
+
+	if len(r.policyConnections) != 1 {
+		t.Fatal("missing isolated application policy connection")
+	}
+
+	policyErrors := make(chan error, 2)
+	r.policyConnections[0].SetErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { policyErrors <- err })
+
+	if err := r.policyConnections[0].Publish("never.seen.before", []byte("forbidden")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.policyConnections[0].FlushTimeout(time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-policyErrors:
+	case <-time.After(time.Second):
+		t.Fatal("policy connection published an application message")
+	}
 
 	connect := func() (*nats.Conn, error) {
 		return nats.Connect(r.Server.ClientURL(), nats.Nkey(public, clientKey.Sign), nats.NoReconnect(), nats.Timeout(2*time.Second))

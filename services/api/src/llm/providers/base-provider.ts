@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid'
+import { AccountRequestContext } from '../../services/account-request-context.ts'
 import {
     StateGraph,
     END,
@@ -203,6 +204,8 @@ export abstract class BaseProvider {
     private pipelineProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider | undefined
     private publishMirroredMediaLive = true
     private userStopRequested = false
+    private readonly settledUsageKinds = new Set<'usage' | 'imageUsage' | 'videoUsage'>()
+    private usageSequence = 0
 
     constructor(
         protected readonly _instanceKey: string,
@@ -331,9 +334,14 @@ export abstract class BaseProvider {
 
     // Run a request through the LangGraph workflow.
     async process(requestData: Record<string, any>): Promise<ProviderState> {
+        AccountRequestContext.assertActive()
+        const accountScope = AccountRequestContext.current()
         this.userStopRequested = false
+        this.settledUsageKinds.clear()
+        this.usageSequence = 0
         this.abortController = new AbortController()
-        const parentAbortSignal = requestData.abortSignal as AbortSignal | undefined
+        const signals = [requestData.abortSignal as AbortSignal | undefined, accountScope?.signal].filter((signal): signal is AbortSignal => !!signal)
+        const parentAbortSignal = signals.length ? AbortSignal.any(signals) : undefined
         const abortFromParent = (): void => {
             if (isUserStopReason(parentAbortSignal?.reason))
                 this.userStopRequested = true
@@ -552,6 +560,10 @@ export abstract class BaseProvider {
             mediaReferenceBindings: requestData.mediaReferenceBindings,
         }
 
+        const failCancelledRuns = AccountRequestContext.prepareCleanup(async () => {
+            if (this.ownsDurableMediaRequestLifecycle(initialState))
+                await this.failUnfinishedDurableRuns(initialState)
+        })
         const timeoutHandle = setTimeout(
             () => void this.abortController?.abort(
                 new Error('LLM circuit breaker timeout'),
@@ -566,14 +578,23 @@ export abstract class BaseProvider {
             )
                 this.streamPublisher.start()
 
-            return await this.app.invoke(
+            const result = await this.app.invoke(
                 initialState,
                 {
                     signal: this.abortController.signal,
                     recursionLimit: 25,
                 },
             )
+            AccountRequestContext.assertActive()
+
+            return result
         } catch (e: any) {
+            if (accountScope?.signal.aborted) {
+                await failCancelledRuns()
+
+                throw accountScope.signal.reason
+            }
+
             const message = e?.message ?? String(e)
             const cancelledByUser = this.userStopRequested
 
@@ -844,8 +865,12 @@ export abstract class BaseProvider {
     // lineage. Its result is forwarded to the child run, which skips a duplicate
     // authorization while retaining its identity for usage records.
     async preflightProviderRequestAuthorization(state: ProviderState): Promise<Partial<ProviderState>> {
+        AccountRequestContext.assertActive()
+        const validated = await this.validateRequest(state)
+        AccountRequestContext.assertActive()
+
         return {
-            ...await this.validateRequest(state),
+            ...validated,
             providerRequestAuthorized: true,
         }
     }
@@ -1671,10 +1696,65 @@ export abstract class BaseProvider {
         }
     }
 
-    protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
-        if (state.error)
-            return {}
+    // Bind accounting before the paid call. Report only provider measurements
+    // against this authorization after cancellation, never user output or a new
+    // provider request. Each call can settle text/image/video once.
+    protected prepareUsageSettlement(state: ProviderState): (update: Partial<ProviderState>) => Promise<void> {
+        if (
+            !this.deps.providerUsage?.enabled
+            || !state.workflowId
+        )
+            return async () => {}
 
+        const origin = {
+            ...state,
+            eventMeta: structuredClone(state.eventMeta),
+        }
+        const settled = new Set<string>()
+        let measurement: ProviderState
+        const record = AccountRequestContext.prepareCleanup(async () => void (await this.recordMeasuredUsage(measurement)))
+
+        return async update => {
+            const kinds = (['usage', 'imageUsage', 'videoUsage'] as const).filter(kind => update[kind] && !settled.has(kind))
+
+            if (!kinds.length)
+                return
+
+            const sequence = Math.max(this.usageSequence, origin.workflowSeq ?? 0)
+            this.usageSequence = sequence + kinds.length
+            measurement = {
+                ...origin,
+                usage: undefined,
+                imageUsage: undefined,
+                videoUsage: undefined,
+                aiVendorRequestId: update.aiVendorRequestId,
+                aiRequestFinishedAt: Date.now(),
+                workflowSeq: sequence,
+                ...Object.fromEntries(
+                    kinds.map(kind => [kind, structuredClone(update[kind])]),
+                ),
+            }
+
+            for (const kind of kinds) {
+                settled.add(kind)
+                this.settledUsageKinds.add(kind)
+            }
+
+            await record()
+        }
+    }
+
+    protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
+        return await this.recordMeasuredUsage({
+            ...state,
+            workflowSeq: Math.max(state.workflowSeq ?? 0, this.usageSequence),
+            ...Object.fromEntries(
+                [...this.settledUsageKinds].map(kind => [kind, undefined]),
+            ),
+        })
+    }
+
+    private async recordMeasuredUsage(state: ProviderState): Promise<Partial<ProviderState>> {
         // Record measured usage after each provider call. Recording is best-effort.
         const meteringOn = !!(this.deps.providerUsage?.enabled && state.workflowId)
         let seq = state.workflowSeq ?? 0

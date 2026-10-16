@@ -64,6 +64,7 @@ export type CapabilityDispatcherOptions = {
         requester: CapabilityRequesterContext,
     ) => Promise<CapabilitySearchResult>
     createEventHandler?: (request: CapabilityUseRequest) => ((event: Readonly<CapabilityRunEvent>) => void | Promise<void>) | undefined
+    runDetached?: (operation: (signal?: AbortSignal) => Promise<CapabilityWorkflowRunResult>) => Promise<CapabilityWorkflowRunResult>
 }
 
 export class CapabilityDispatcher {
@@ -164,22 +165,26 @@ export class CapabilityDispatcher {
             resolveCreated = resolve
             rejectCreated = reject
         })
-        const execution = this.use({
-            ...request,
-            signal: controller.signal,
-            onRunCreated: run => {
-                const snapshot = structuredClone(run)
-                this.activeRuns.set(
-                    run.runId,
-                    {
-                        controller,
-                        userId: request.requester.userId,
-                        workspaceId: request.requester.workspaceId,
-                    },
-                )
-                resolveCreated(snapshot)
-            },
-        })
+        const execute = async (signal?: AbortSignal): Promise<CapabilityWorkflowRunResult> =>
+            await this.use({
+                ...request,
+                signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+                onRunCreated: run => {
+                    const snapshot = structuredClone(run)
+                    this.activeRuns.set(
+                        run.runId,
+                        {
+                            controller,
+                            userId: request.requester.userId,
+                            workspaceId: request.requester.workspaceId,
+                        },
+                    )
+                    resolveCreated(snapshot)
+                },
+            })
+        const execution = this.options.runDetached
+            ? this.options.runDetached(execute)
+            : execute()
         void this.observeDetachedExecution(
             execution,
             controller,

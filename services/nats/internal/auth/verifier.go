@@ -170,7 +170,7 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 	}
 
 	if v.Policy == nil || v.Account == "" || header.Algorithm != "RS256" || claims.Issuer != v.Issuer ||
-		!audienceMatches(claims.Audience, v.Audience) {
+		!audienceMatches(claims.Audience, v.Audience) || !claims.Expires.Present {
 		return nil, fmt.Errorf("match browser token profile: %w", ErrDenied)
 	}
 
@@ -201,7 +201,18 @@ func (v *Verifier) verifyToken(ctx context.Context, token string) (*Identity, er
 		return nil, fmt.Errorf("resolve browser permissions: %w", ErrDenied)
 	}
 
-	return &Identity{Name: claims.Subject, Account: v.Account, Permissions: permissions}, nil
+	// Browser connection grants require re-admission at least once per minute.
+	// Service JWT and native NKey sessions keep their separately defined policy.
+	expires := time.Now().Unix() + 60
+	if claims.Expires.Seconds < float64(expires) {
+		expires = int64(claims.Expires.Seconds)
+	}
+
+	if expires <= time.Now().Unix() {
+		return nil, fmt.Errorf("require remaining browser lease: %w", ErrDenied)
+	}
+
+	return &Identity{Name: claims.Subject, Account: v.Account, Permissions: permissions, Expires: expires}, nil
 }
 
 func audienceMatches(encoded json.RawMessage, expected string) bool {

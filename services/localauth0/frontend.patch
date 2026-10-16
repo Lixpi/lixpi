@@ -1,0 +1,56 @@
+--- a/web/index.html
++++ b/web/index.html
+@@ -2,6 +2,7 @@
+ <html>
+ <head>
+     <meta charset="utf-8" />
++    <link data-trunk rel="rust" data-wasm-opt="0" />
+     <link data-trunk rel="scss" href="assets/scss/style.scss" />
+     <link data-trunk rel="icon" href="assets/static/media/localauth0.png">
+     <link data-trunk rel="copy-dir" href="assets/" />
+--- a/web/Cargo.toml
++++ b/web/Cargo.toml
+@@ -12,7 +12,8 @@
+ 
+ [dependencies]
+ anyhow = "1.0"
+-getrandom = {version = "0.2", features = ["js", "wasm_js"]}
++getrandom = {version = "0.2", features = ["js"]}
++getrandom_03 = {package = "getrandom", version = "0.3", features = ["wasm_js"]}
+ gloo-timers = "0.3"
+ js-sys = "0.3"
+ log = "0.4"
+--- a/web/Cargo.lock
++++ b/web/Cargo.lock
+@@ -228,10 +228,12 @@
+ checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
+ dependencies = [
+  "cfg-if",
++ "js-sys",
+  "libc",
+  "r-efi",
+  "wasip2",
++ "wasm-bindgen",
+ ]
+ 
+ [[package]]
+ name = "gimli"
+@@ -803,6 +805,7 @@
+ dependencies = [
+  "anyhow",
+  "getrandom 0.2.16",
++ "getrandom 0.3.4",
+  "gloo-timers 0.3.0",
+  "js-sys",
+  "log",
+--- a/web/src/pages/bindgen.rs
++++ b/web/src/pages/bindgen.rs
+@@ -47,7 +47,7 @@
+ }
+ 
+ #[wasm_bindgen(inline_js=r#"
+-export function js_redirect(value) {
++export async function js_redirect(value) {
+     try {
+         return window.location.replace(value);
+     } catch(e) {

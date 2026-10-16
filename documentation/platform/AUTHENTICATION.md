@@ -11,6 +11,8 @@ The main SPA and user portal share identity behavior through `@lixpi/auth-client
 
 Auth0 must list the portal in Allowed Callback URLs, Allowed Logout URLs, and Allowed Web Origins. NATS WebSocket `allowed_origins` must include both clients; Pulumi adds both origins for AWS stacks.
 
+Denied, cancelled or malformed callbacks stop protected startup and show a generic error with an explicit "Sign in again" button. The SDK validates callback state and exchanges codes; the client removes callback parameters even on failure and restores only a validated same-origin destination. Automatic recovery has a per-tab guard that resets after successful current-user loading. A rejected callback cannot start an endless authorization loop. The app and portal remove protected views before displaying the error.
+
 ## Credential verification
 
 | Client | Credential | Verification |
@@ -79,7 +81,7 @@ See the [registration protocol](../../services/nats/documentation/CONFIGURATION.
 
 API NATS middleware requires the current application JWT, replaces caller-supplied identity with the verified subject, and removes the raw token before invoking a handler. It has no callout exemption; the API never subscribes to that protocol subject. Workspace, Asset, and Capability handlers perform their own membership and resource checks.
 
-Input credentials and broker request time claims are validated at admission. The issued NATS user JWT has no expiry. This implementation does not periodically disconnect clients or renew established sessions; changing a registration affects subsequent admissions. Request JWT expiry remains enforced independently.
+Input credentials and broker request time claims are validated at admission. Browser access tokens require an expiry, and their issued NATS user JWT expires at the earlier of that time and a 60-second lease. The server closes an expired browser connection; reconnect performs admission again. Service JWT and native NKey sessions follow their separate policy. Changing a registration affects subsequent admissions, and request JWT expiry remains enforced independently. The lease is a connection-lifetime limit; immediate account revocation also requires the coordinated admission hook and invalidation consumer.
 
 ## LocalAuth0
 

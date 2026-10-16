@@ -26,11 +26,25 @@ type Service struct {
 }
 
 type Browser struct {
-	Issuer      string            `json:"issuer"`
-	Audience    string            `json:"audience"`
-	JWKSURL     string            `json:"jwksUrl"`
-	Account     string            `json:"account"`
-	Permissions []jwt.Permissions `json:"permissions"`
+	RegistrationDigest string            `json:"-"`
+	Issuer             string            `json:"issuer"`
+	Audience           string            `json:"audience"`
+	JWKSURL            string            `json:"jwksUrl"`
+	Account            string            `json:"account"`
+	Permissions        []jwt.Permissions `json:"permissions"`
+	Admission          *BrowserAdmission `json:"admission,omitempty"`
+}
+
+// The policy subject carries admission decisions, never application permissions.
+const (
+	BrowserAdmissionSubject = "accounts.admission.check.v1"
+	BrowserAdmissionInbox   = "_ADMISSION_REPLY"
+)
+
+type BrowserAdmission struct {
+	Subject string `json:"subject"`
+	Claim   string `json:"claim"`
+	Stream  string `json:"stream"`
 }
 
 type Manifest struct {
@@ -163,6 +177,12 @@ func (t Trust) Verify(signed SignedRegistration) (*Manifest, error) {
 			return nil, errors.New("invalid token profile")
 		}
 
+		if b.Admission != nil &&
+			(b.Admission.Subject != BrowserAdmissionSubject || !identifier.MatchString(b.Admission.Stream) || len(b.Admission.Claim) > 256 ||
+				!strings.HasPrefix(b.Admission.Claim, "https://") || strings.ContainsAny(b.Admission.Claim, " \r\n\t")) {
+			return nil, errors.New("invalid browser admission policy")
+		}
+
 		for _, address := range []string{b.Issuer, b.JWKSURL} {
 			u, err := url.Parse(address)
 			if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || (u.Scheme != "https" && (!t.AllowHTTP || u.Scheme != "http")) {
@@ -259,6 +279,8 @@ func (t Trust) Compile(registrations []SignedRegistration) (*Snapshot, error) {
 			}
 
 			issuers[b.Issuer] = true
+			digest := sha256.Sum256(signed.Payload)
+			b.RegistrationDigest = hex.EncodeToString(digest[:])
 			snapshot.Browsers = append(snapshot.Browsers, b)
 		}
 	}

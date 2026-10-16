@@ -9,6 +9,7 @@ import BlobModel from '../models/blob.ts'
 import { detectFileType } from './file-type-detection.ts'
 import AssetRenditionService from './asset-rendition-service.ts'
 import { enqueueRenditionRetry } from './asset-maintenance-queue.ts'
+import { AccountRequestContext } from './account-request-context.ts'
 
 export class AssetFileRejectedError extends Error {
     constructor(public readonly reason: string) {
@@ -93,24 +94,27 @@ export const ingestAssetFile = async ({
             provenance: 'none',
         },
     })
-    void (async () => {
-        try {
-            await AssetRenditionService.process({ assetId: asset.assetId })
-        } catch (error) {
-            debugError(
-                'Asset rendition processing failed:',
-                {
+    AccountRequestContext.startDetached(
+        async () => {
+            try {
+                await AssetRenditionService.process({ assetId: asset.assetId })
+            } catch (error) {
+                debugError(
+                    'Asset rendition processing failed:',
+                    {
+                        assetId: asset.assetId,
+                        error,
+                    },
+                )
+                await enqueueRenditionRetry({
+                    organizationId,
                     assetId: asset.assetId,
-                    error,
-                },
-            )
-            await enqueueRenditionRetry({
-                organizationId,
-                assetId: asset.assetId,
-                retryAttempt: 1,
-            })
-        }
-    })()
+                    retryAttempt: 1,
+                })
+            }
+        },
+        error => debugError('Asset rendition request cancelled:', error),
+    )
 
     return {
         assetId: asset.assetId,

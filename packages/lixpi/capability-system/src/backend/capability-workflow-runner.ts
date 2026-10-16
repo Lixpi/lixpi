@@ -34,6 +34,10 @@ export type CapabilityRunPersistence = {
     createRun: (run: CapabilityRun) => Promise<void>
     updateRun: (run: CapabilityRun) => Promise<void>
     appendEvent: (event: CapabilityRunEvent) => Promise<void>
+    cancelRun?: (
+        run: Readonly<CapabilityRun>,
+        event: Readonly<CapabilityRunEvent>,
+    ) => Promise<void>
 }
 
 export type CapabilityWorkflowRunnerOptions = {
@@ -162,15 +166,6 @@ export class CapabilityWorkflowRunner {
             updatedAt: createdAt,
         }
         run.eventStreamName = this.createEventStreamName(run)
-        await this.options.persistence.createRun(
-            structuredClone(run),
-        )
-        await request.onRunCreated?.(
-            Object.freeze(
-                structuredClone(run),
-            ),
-        )
-
         let sequence = 0
         const runEvents: CapabilityRunEvent[] = []
         const emit = async (event: Omit<CapabilityRunEvent, 'runId' | 'sequence' | 'timestamp'>): Promise<void> => {
@@ -203,12 +198,6 @@ export class CapabilityWorkflowRunner {
             )
         }
 
-        await persistRun({ status: 'running' })
-        await emit({
-            eventType: 'RUN_STARTED',
-            runStatus: 'running',
-        })
-
         const workflow = resolved.manifest.tool.workflow
         const dag = new CapabilityDagRunner(
             workflow.steps.map(
@@ -228,6 +217,21 @@ export class CapabilityWorkflowRunner {
         }
 
         try {
+            await this.options.persistence.createRun(
+                structuredClone(run),
+            )
+            request.signal?.throwIfAborted()
+            await request.onRunCreated?.(
+                Object.freeze(
+                    structuredClone(run),
+                ),
+            )
+            await persistRun({ status: 'running' })
+            await emit({
+                eventType: 'RUN_STARTED',
+                runStatus: 'running',
+            })
+
             while (dag.hasPending()) {
                 if (request.signal?.aborted) {
                     await this.cancelPendingSteps(dag, emit)
@@ -391,6 +395,31 @@ export class CapabilityWorkflowRunner {
             }
         } catch (error) {
             if (isCancellation(error, request.signal)) {
+                if (this.options.persistence.cancelRun) {
+                    const cancelled: CapabilityRunEvent = {
+                        runId,
+                        sequence: sequence + 1,
+                        timestamp: this.now(),
+                        eventType: 'RUN_CANCELLED',
+                        runStatus: 'cancelled',
+                        errorCode: 'CAPABILITY_RUN_CANCELLED',
+                        errorMessage: 'Capability run was cancelled',
+                    }
+                    await this.options.persistence.cancelRun(
+                        Object.freeze(
+                            structuredClone(run),
+                        ),
+                        cancelled,
+                    )
+                    await request.onEvent?.(
+                        Object.freeze(
+                            structuredClone(cancelled),
+                        ),
+                    )
+
+                    throw cancelledError(request.signal)
+                }
+
                 await persistRun({
                     status: 'cancelled',
                     currentStepIds: [],

@@ -40,6 +40,8 @@ export type PureDropdownConfig<Option extends DropdownOption = DropdownOption> =
     options: Option[]
     theme?: string
     buttonIcon?: string
+    triggerContent?: HTMLElement
+    triggerLabel?: string
     ignoreColorValuesForOptions?: boolean
     ignoreColorValuesForSelectedValue?: boolean
     renderIconForSelectedValue?: boolean
@@ -68,49 +70,204 @@ export type PureDropdownInstance<Option extends DropdownOption = DropdownOption>
     setErrorState(errorState?: DropdownErrorState): void
 }
 
-export const createPureDropdown = <Option extends DropdownOption>(config: PureDropdownConfig<Option>): PureDropdownInstance<Option> => {
-    const {
-        id,
-        selectedValue,
-        options,
-        theme = 'dark',
-        buttonIcon = chevronDownIcon,
-        ignoreColorValuesForOptions = false,
-        ignoreColorValuesForSelectedValue = false,
-        renderIconForSelectedValue = true,
-        renderIconForOptions = true,
-        renderTitleForSelectedValue = true,
-        enableTagFilter = false,
-        mountToBody = false,
-        disableAutoPositioning = false,
-        popoverClassName = '',
-        disableTriggerHover = false,
-        errorState,
-        onSelect,
-    } = config
+class PureDropdown<Option extends DropdownOption> implements PureDropdownInstance<Option> {
+    readonly dom: HTMLElement
+    private readonly button: HTMLButtonElement
+    private readonly dotsMenu: HTMLElement
+    private readonly bodyContent: HTMLElement
+    private readonly infoBubble: InfoBubbleInstance
+    private readonly modalityFilterEnabled: boolean
+    private availableTags: string[]
+    private currentSelectedValue: DropdownOption
+    private currentErrorState: DropdownErrorState | undefined
+    private readonly activeFilterTags = new Set<string>()
+    private allOptions: Option[]
+    private selectedDisplaySignature = ''
+    private readonly ignoreColorValuesForOptions: boolean
+    private readonly ignoreColorValuesForSelectedValue: boolean
+    private readonly renderIconForSelectedValue: boolean
+    private readonly renderIconForOptions: boolean
+    private readonly renderTitleForSelectedValue: boolean
+    private readonly triggerContent: HTMLElement | undefined
+    private readonly triggerLabel: string | undefined
+    private readonly onSelect: (option: Option) => void
 
-    let availableTags = config.availableTags || []
-    let currentSelectedValue: DropdownOption = selectedValue
-    let currentErrorState: DropdownErrorState | undefined = errorState
-    let activeFilterTags: Set<string> = new Set()
-    let allOptions = [...options]
-    let infoBubble: InfoBubbleInstance | null = null
-    let selectedDisplaySignature = ''
+    constructor(config: PureDropdownConfig<Option>) {
+        const {
+            id,
+            selectedValue,
+            options,
+            theme = 'dark',
+            buttonIcon = chevronDownIcon,
+            triggerContent,
+            triggerLabel,
+            ignoreColorValuesForOptions = false,
+            ignoreColorValuesForSelectedValue = false,
+            renderIconForSelectedValue = true,
+            renderIconForOptions = true,
+            renderTitleForSelectedValue = true,
+            enableTagFilter = false,
+            mountToBody = false,
+            disableAutoPositioning = false,
+            popoverClassName = '',
+            disableTriggerHover = false,
+            errorState,
+            onSelect,
+        } = config
 
-    const modalityFilterEnabled = Boolean(
-        enableTagFilter
-            && uiKitSettings.modelSelectorDropdown.useModalityFilter,
-    )
+        this.ignoreColorValuesForOptions = ignoreColorValuesForOptions
+        this.ignoreColorValuesForSelectedValue = ignoreColorValuesForSelectedValue
+        this.renderIconForSelectedValue = renderIconForSelectedValue
+        this.renderIconForOptions = renderIconForOptions
+        this.renderTitleForSelectedValue = renderTitleForSelectedValue
+        this.triggerContent = triggerContent
+        this.triggerLabel = triggerLabel
+        this.onSelect = onSelect
+        this.availableTags = config.availableTags || []
+        this.currentSelectedValue = selectedValue
+        this.currentErrorState = errorState
+        this.allOptions = [...options]
+        this.modalityFilterEnabled = Boolean(enableTagFilter && uiKitSettings.modelSelectorDropdown.useModalityFilter)
+        // Build header content (if tag filter enabled)
+        const headerContent = this.modalityFilterEnabled
+            && this.availableTags.length > 0
+            ? html`
+                <div
+                    class="tag-filter"
+                    onmousedown=${this.preventProseMirrorEdit}
+                >
+                    <div class="tag-filter-title">Filter by modality:</div>
+                    <div class="tag-filter-list">
+                        ${
+                            this.availableTags.map(
+                                tag =>
+                                    html`
+                                        <span
+                                            class="tag-filter-item"
+                                            role="button"
+                                            tabindex="0"
+                                            data-tag="${tag}"
+                                            onclick=${(e: Event) => this.handleTagFilterClick(e, tag)}
+                                        >${tag}</span>
+                                    `,
+                            )
+                        }
+                    </div>
+                </div>
+            `
+            : null
 
+        // Build body content (dropdown items)
+        this.bodyContent = html`
+            <ul
+                id=${`dropdown-menu-${id}`}
+                class="submenu"
+                role="menu"
+                aria-label=${triggerLabel || 'Options'}
+                onwheel=${this.handleWheel}
+            ></ul>
+        `
+
+        // Build the trigger before creating its anchored popover.
+        this.dom = html`
+            <div
+                class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}${this.triggerContent ? ' custom-trigger' : ''}"
+                data-dropdown-id="${id}"
+                data-arrow-side="top"
+                data-side-panel-no-drag="true"
+                contenteditable="false"
+            >
+                <span class="dots-dropdown-menu">
+                    <button
+                        type="button"
+                        class="dropdown-trigger-button"
+                        aria-label=${triggerLabel || selectedValue.title || 'Options'}
+                        aria-haspopup="menu"
+                        aria-controls=${`dropdown-menu-${id}`}
+                        aria-expanded="false"
+                        onmousedown=${this.preventProseMirrorEdit}
+                        contenteditable="false"
+                    >
+                        <span class="selected-option-icon dropdown-trigger-selected-icon"></span>
+                        <span class="title"></span>
+                        <span
+                            class="state-indicator dropdown-trigger-state-indicator"
+                            innerHTML=${buttonIcon}
+                        ></span>
+                    </button>
+                </span>
+            </div>
+        ` as HTMLElement
+        this.button = this.dom.querySelector('button') as HTMLButtonElement
+        this.dotsMenu = this.dom.querySelector('.dots-dropdown-menu') as HTMLElement
+
+        if (this.triggerContent)
+            this.button.replaceChildren(this.triggerContent, html`
+                <span
+                    class="title"
+                    role="status"
+                ></span>
+            `)
+
+        const positioningAnchor = this.triggerContent ? this.button : (this.dom.querySelector('.state-indicator') as HTMLElement)
+        this.infoBubble = createInfoBubble({
+            id: `dropdown-${id}`,
+            anchor: this.button,
+            positioningAnchor,
+            theme,
+            arrowSide: 'top',
+            headerContent,
+            bodyContent: this.bodyContent,
+            visible: false,
+            className: `dropdown-menu-popover${popoverClassName ? ` ${popoverClassName}` : ''}`,
+            disableAutoPositioning,
+            onOpen: () => {
+                this.button.setAttribute('aria-expanded', 'true')
+                this.dom.classList.add('dropdown-open')
+                this.dotsMenu?.classList.add('is-active')
+            },
+            onClose: () => {
+                this.button.setAttribute('aria-expanded', 'false')
+
+                if (this.infoBubble?.dom.contains(document.activeElement))
+                    this.button.focus()
+
+                this.dom.classList.remove('dropdown-open')
+                this.dotsMenu?.classList.remove('is-active')
+            },
+        })
+        this.infoBubble.dom.setAttribute('data-side-panel-no-drag', 'true')
+
+        // Apply theme shadow
+        this.infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', uiKitSettings.dropdown.styles.popoverBoxShadow)
+
+        // Append info bubble to dropdown or body
+        if (mountToBody)
+            document.body.appendChild(this.infoBubble.dom)
+        else {
+            const dropdownMenu = this.dom.querySelector<HTMLElement>('.dots-dropdown-menu')
+            dropdownMenu?.appendChild(this.infoBubble.dom)
+        }
+
+        this.updateSelectedDisplay()
+        this.renderOptionsList()
+        this.button.addEventListener('keydown', this.handleKeyDown)
+        this.bodyContent.addEventListener('keydown', this.handleKeyDown)
+        document.addEventListener(
+            'mousedown',
+            this.handleDocumentMouseDown,
+            true,
+        )
+    }
     // Prevent ProseMirror from handling mousedown on dropdown
-    const preventProseMirrorEdit = (e: Event) => {
+    private preventProseMirrorEdit = (e: Event) => {
         e.preventDefault()
         e.stopPropagation()
         e.stopImmediatePropagation()
     }
 
     // Handle option click
-    const optionClickHandler = (
+    private optionClickHandler = (
         e: Event,
         option: Option,
     ) => {
@@ -119,58 +276,58 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
         e.stopImmediatePropagation()
 
         // Update local state
-        currentSelectedValue = option
+        this.currentSelectedValue = option
 
-        // Close dropdown via infoBubble
-        infoBubble?.close()
+        // Close before dispatching the selected action.
+        this.infoBubble?.close()
 
         // Notify parent
-        onSelect(option)
+        this.onSelect(option)
 
         // Update visual
-        updateSelectedDisplay()
+        this.updateSelectedDisplay()
     }
 
-    const handleDocumentMouseDown = (e: MouseEvent) => {
-        if (!infoBubble?.isOpen?.())
+    private handleDocumentMouseDown = (e: MouseEvent) => {
+        if (!this.infoBubble?.isOpen?.())
             return
 
         const path = e.composedPath()
 
         if (
-            path.includes(dom)
-            || path.includes(infoBubble.dom)
+            path.includes(this.dom)
+            || path.includes(this.infoBubble.dom)
         )
             return
 
-        infoBubble.close()
+        this.infoBubble.close()
     }
 
     // Filter options based on active tags
-    const getFilteredOptions = () => {
+    private getFilteredOptions = () => {
         if (
-            !modalityFilterEnabled
-            || activeFilterTags.size === 0
+            !this.modalityFilterEnabled
+            || this.activeFilterTags.size === 0
         )
-            return allOptions
+            return this.allOptions
 
-        return allOptions.filter(option => {
+        return this.allOptions.filter(option => {
             if (
                 !option.tags
                 || option.tags.length === 0
             )
                 return false
 
-            return Array.from(activeFilterTags).every(filterTag => option.tags.includes(filterTag))
+            return Array.from(this.activeFilterTags).every(filterTag => option.tags.includes(filterTag))
         })
     }
 
     // Handle tag filter click
-    const handleTagFilterClick = (
+    private handleTagFilterClick = (
         e: Event,
         tag: string,
     ) => {
-        if (!modalityFilterEnabled)
+        if (!this.modalityFilterEnabled)
             return
 
         e.preventDefault()
@@ -184,46 +341,46 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
             setTimeout(() => target.classList.remove('click-feedback'), 150)
         }
 
-        if (activeFilterTags.has(tag))
-            activeFilterTags.delete(tag)
+        if (this.activeFilterTags.has(tag))
+            this.activeFilterTags.delete(tag)
         else
-            activeFilterTags.add(tag)
+            this.activeFilterTags.add(tag)
 
         // Re-render options list
-        renderOptionsList()
+        this.renderOptionsList()
 
         // Update tag filter UI
-        updateTagFilterUI()
+        this.updateTagFilterUI()
     }
 
     // Render options list based on current filter (single source of truth)
-    const renderOptionsList = () => {
-        const submenuList = infoBubble?.dom.querySelector<HTMLElement>('.submenu')
+    private renderOptionsList = () => {
+        const submenuList = this.infoBubble?.dom.querySelector<HTMLElement>('.submenu')
 
         if (!submenuList)
             return
 
-        const filteredOptions = getFilteredOptions()
+        const filteredOptions = this.getFilteredOptions()
 
         submenuList.innerHTML = ''
         filteredOptions.forEach(option => {
-            const isSelected = option === currentSelectedValue
-                || option.title === currentSelectedValue?.title
+            const isSelected = option === this.currentSelectedValue
+                || option.title === this.currentSelectedValue?.title
 
             const li = html`
                 <li
                     class="dropdown-option-item"
-                    role="button"
-                    tabindex="0"
+                    role="menuitem"
+                    tabindex="-1"
                     data-selected=${isSelected ? 'true' : 'false'}
-                    onclick=${(e: Event) => optionClickHandler(e, option)}
+                    onclick=${(e: Event) => this.optionClickHandler(e, option)}
                 >
-                    ${renderIconForOptions
+                    ${this.renderIconForOptions
                         && option.icon
                         ? html`
                             <span
                                 class="dropdown-option-icon"
-                                innerHTML=${ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}
+                                innerHTML=${this.ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}
                             ></span>
                         `
                         : ''}
@@ -235,8 +392,8 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
     }
 
     // Update tag filter UI to show active state
-    const updateTagFilterUI = () => {
-        const tagFilterElements = infoBubble?.dom.querySelectorAll<HTMLElement>('.tag-filter-item')
+    private updateTagFilterUI = () => {
+        const tagFilterElements = this.infoBubble?.dom.querySelectorAll<HTMLElement>('.tag-filter-item')
 
         if (!tagFilterElements)
             return
@@ -246,7 +403,7 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
 
             if (
                 tag
-                && activeFilterTags.has(tag)
+                && this.activeFilterTags.has(tag)
             )
                 el.classList.add('active')
             else
@@ -254,39 +411,10 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
         })
     }
 
-    // Build header content (if tag filter enabled)
-    const headerContent = modalityFilterEnabled
-        && availableTags.length > 0
-        ? html`
-            <div
-                class="tag-filter"
-                onmousedown=${preventProseMirrorEdit}
-            >
-                <div class="tag-filter-title">Filter by modality:</div>
-                <div class="tag-filter-list">
-                    ${
-                        availableTags.map(
-                            tag =>
-                                html`
-                                    <span
-                                        class="tag-filter-item"
-                                        role="button"
-                                        tabindex="0"
-                                        data-tag="${tag}"
-                                        onclick=${(e: Event) => handleTagFilterClick(e, tag)}
-                                    >${tag}</span>
-                                `,
-                        )
-                    }
-                </div>
-            </div>
-        `
-        : null
-
     // Only absorb wheel events when the dropdown can actually scroll in that direction.
     // At scroll boundaries or when content doesn't overflow, let the event propagate
     // so the canvas can pan normally. Always block browser zoom (pinch / ctrlKey).
-    const handleWheel = (e: WheelEvent) => {
+    private handleWheel = (e: WheelEvent) => {
         if (e.ctrlKey) {
             e.preventDefault()
 
@@ -311,99 +439,28 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
             e.stopPropagation()
     }
 
-    // Build body content (dropdown items)
-    const bodyContent = html`
-        <ul
-            class="submenu"
-            onwheel=${handleWheel}
-        ></ul>
-    `
-
-    // Build dropdown wrapper with button first
-    const dom = html`
-        <div
-            class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}"
-            data-dropdown-id="${id}"
-            data-arrow-side="top"
-            data-side-panel-no-drag="true"
-            contenteditable="false"
-        >
-            <span class="dots-dropdown-menu">
-                <button
-                    class="dropdown-trigger-button"
-                    onmousedown=${preventProseMirrorEdit}
-                    contenteditable="false"
-                >
-                    <span class="selected-option-icon dropdown-trigger-selected-icon"></span>
-                    <span class="title"></span>
-                    <span
-                        class="state-indicator dropdown-trigger-state-indicator"
-                        innerHTML=${buttonIcon}
-                    ></span>
-                </button>
-            </span>
-        </div>
-    ` as HTMLElement
-    // Get button reference to use as anchor
-    const button = dom.querySelector('button') as HTMLElement
-    const dotsMenu = dom.querySelector('.dots-dropdown-menu') as HTMLElement
-
-    // Create info bubble with button as anchor
-    const positioningAnchor = dom.querySelector('.state-indicator') as HTMLElement
-    infoBubble = createInfoBubble({
-        id: `dropdown-${id}`,
-        anchor: button,
-        positioningAnchor,
-        theme,
-        arrowSide: 'top',
-        headerContent,
-        bodyContent,
-        visible: false,
-        className: `dropdown-menu-popover${popoverClassName ? ` ${popoverClassName}` : ''}`,
-        disableAutoPositioning,
-        onOpen: () => {
-            dom.classList.add('dropdown-open')
-            dotsMenu?.classList.add('is-active')
-        },
-        onClose: () => {
-            dom.classList.remove('dropdown-open')
-            dotsMenu?.classList.remove('is-active')
-        },
-    })
-    infoBubble.dom.setAttribute('data-side-panel-no-drag', 'true')
-
-    // Apply theme shadow
-    infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', uiKitSettings.dropdown.styles.popoverBoxShadow)
-
-    // Append info bubble to dropdown or body
-    if (mountToBody)
-        document.body.appendChild(infoBubble.dom)
-    else {
-        const dropdownMenu = dom.querySelector<HTMLElement>('.dots-dropdown-menu')
-        dropdownMenu?.appendChild(infoBubble.dom)
-    }
-
     // Update selected value display
-    const updateSelectedDisplay = () => {
-        const titleEl = dom.querySelector<HTMLElement>('.title')
-        const iconWrap = dom.querySelector<HTMLElement>('.selected-option-icon')
-        const activeErrorState = currentErrorState
-            && currentErrorState.enabled !== false
-            ? currentErrorState
+    private updateSelectedDisplay = () => {
+        const titleEl = this.dom.querySelector<HTMLElement>('.title')
+        const iconWrap = this.dom.querySelector<HTMLElement>('.selected-option-icon')
+        const activeErrorState = this.currentErrorState
+            && this.currentErrorState.enabled !== false
+            ? this.currentErrorState
             : null
         const nextTitle = activeErrorState
             ? activeErrorState.title || uiKitSettings.dropdown.errorState.fallbackTitle
-            : renderTitleForSelectedValue
-                ? (currentSelectedValue?.title || '')
+            : this.renderTitleForSelectedValue
+                && !this.triggerContent
+                ? (this.currentSelectedValue?.title || '')
                 : ''
         const nextTitleColor = activeErrorState
             ? activeErrorState.textColor || uiKitSettings.dropdown.errorState.textColor
             : ''
-        const nextIcon = renderIconForSelectedValue
-            && currentSelectedValue?.icon
-            ? ignoreColorValuesForSelectedValue
-                ? currentSelectedValue.icon
-                : injectFillColor(currentSelectedValue.icon, currentSelectedValue.color)
+        const nextIcon = this.renderIconForSelectedValue
+            && this.currentSelectedValue?.icon
+            ? this.ignoreColorValuesForSelectedValue
+                ? this.currentSelectedValue.icon
+                : injectFillColor(this.currentSelectedValue.icon, this.currentSelectedValue.color)
             : ''
         const nextDisplaySignature = [
             Boolean(activeErrorState),
@@ -412,12 +469,13 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
             nextIcon,
         ].join('\u0000')
 
-        if (selectedDisplaySignature === nextDisplaySignature)
+        if (this.selectedDisplaySignature === nextDisplaySignature)
             return
 
-        selectedDisplaySignature = nextDisplaySignature
+        this.selectedDisplaySignature = nextDisplaySignature
+        this.button.setAttribute('aria-label', this.triggerLabel || nextTitle || 'Options')
 
-        dom.classList.toggle(
+        this.dom.classList.toggle(
             'dropdown-error-state',
             Boolean(activeErrorState),
         )
@@ -430,60 +488,115 @@ export const createPureDropdown = <Option extends DropdownOption>(config: PureDr
         if (iconWrap) {
             if (nextIcon) {
                 iconWrap.innerHTML = ''
-                const span = document.createElement('span')
-                span.innerHTML = nextIcon
-                iconWrap.appendChild(span)
+                iconWrap.appendChild(html`<span innerHTML=${nextIcon}></span>`)
             } else
                 iconWrap.innerHTML = ''
         }
     }
 
-    // Initialize display
-    updateSelectedDisplay()
-    renderOptionsList()
-    document.addEventListener(
-        'mousedown',
-        handleDocumentMouseDown,
-        true,
-    )
+    private handleKeyDown = (event: KeyboardEvent): void => {
+        const fromTrigger = event.currentTarget === this.button
+        const items = Array.from(
+            this.bodyContent.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+        )
+        const currentIndex = items.indexOf(document.activeElement as HTMLElement)
 
-    return {
-        dom,
-        update: (newSelectedValue: DropdownOption) => {
-            currentSelectedValue = newSelectedValue
-            updateSelectedDisplay()
-        },
-        setOptions: ({
-            options: newOptions,
-            availableTags: newTags,
-            selectedValue: newSelectedValue,
-        }) => {
-            allOptions = [...newOptions]
+        if (
+            event.key === 'Escape'
+            || event.key === 'Tab'
+        ) {
+            if (!this.infoBubble?.isOpen())
+                return
 
-            if (newTags)
-                availableTags = [...newTags]
+            if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+            }
 
-            if (newSelectedValue)
-                currentSelectedValue = newSelectedValue
+            this.infoBubble.close()
 
-            renderOptionsList()
-            updateSelectedDisplay()
-        },
-        rerender: () => {
-            renderOptionsList()
-            updateSelectedDisplay()
-        },
-        destroy: () => {
-            document.removeEventListener(
-                'mousedown',
-                handleDocumentMouseDown,
-                true,
-            )
-            infoBubble?.destroy()
-        },
-        setErrorState: (newErrorState?: DropdownErrorState) => {
-            currentErrorState = newErrorState
-            updateSelectedDisplay()
-        },
+            return
+        }
+
+        if (
+            event.key === 'Enter'
+            || event.key === ' '
+        ) {
+            event.preventDefault()
+            event.stopPropagation()
+
+            if (fromTrigger) {
+                this.infoBubble?.open()
+                items[0]?.focus()
+            } else
+                items[currentIndex]?.click()
+
+            return
+        }
+
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key))
+            return
+
+        event.preventDefault()
+        event.stopPropagation()
+        this.infoBubble?.open()
+
+        if (event.key === 'Home')
+            items[0]?.focus()
+        else if (
+            event.key === 'End'
+            || (fromTrigger && event.key === 'ArrowUp')
+        )
+            items.at(-1)?.focus()
+        else {
+            const direction = event.key === 'ArrowUp' ? -1 : 1
+            items[(currentIndex + direction + items.length) % items.length]?.focus()
+        }
+    }
+
+    update = (newSelectedValue: DropdownOption): void => {
+        this.currentSelectedValue = newSelectedValue
+        this.updateSelectedDisplay()
+    }
+
+    setOptions = ({
+        options,
+        availableTags,
+        selectedValue,
+    }: Parameters<PureDropdownInstance<Option>['setOptions']>[0]): void => {
+        this.allOptions = [...options]
+
+        if (availableTags)
+            this.availableTags = [...availableTags]
+
+        if (selectedValue)
+            this.currentSelectedValue = selectedValue
+
+        this.renderOptionsList()
+        this.updateSelectedDisplay()
+    }
+
+    rerender = (): void => {
+        this.renderOptionsList()
+        this.updateSelectedDisplay()
+    }
+
+    destroy = (): void => {
+        this.button.removeEventListener('keydown', this.handleKeyDown)
+        this.bodyContent.removeEventListener('keydown', this.handleKeyDown)
+        document.removeEventListener(
+            'mousedown',
+            this.handleDocumentMouseDown,
+            true,
+        )
+        this.infoBubble.destroy()
+    }
+
+    setErrorState = (errorState?: DropdownErrorState): void => {
+        this.currentErrorState = errorState
+        this.updateSelectedDisplay()
     }
 }
+
+export const createPureDropdown = <Option extends DropdownOption>(config: PureDropdownConfig<Option>): PureDropdownInstance<Option> =>
+    new PureDropdown(config)

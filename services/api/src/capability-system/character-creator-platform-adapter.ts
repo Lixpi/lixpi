@@ -3,6 +3,7 @@ import {
     info as debugInfo,
 } from '@lixpi/debug-tools'
 import type NatsService from '@lixpi/nats-service'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import {
     NATS_SUBJECTS,
     type CharacterFidelityAssessmentRequest,
@@ -295,7 +296,10 @@ const assessCharacterFidelity = async (
     )
     const pending = natsService.request<CharacterFidelityAssessmentRequest, CharacterFidelityAssessmentResponse>(
         NATS_SUBJECTS.CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL,
-        request,
+        {
+            ...request,
+            accountContext: AccountRequestContext.workContext(),
+        },
         DEFAULT_FIDELITY_TIMEOUT_MS,
     )
 

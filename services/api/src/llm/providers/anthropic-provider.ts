@@ -236,6 +236,7 @@ export class AnthropicProvider extends BaseProvider {
                 // only surfaces while draining. The drain is therefore retried
                 // too, but only up to the first published token — past that a
                 // restart would replay text the user already saw.
+                const settleUsage = this.prepareUsageSettlement(state)
                 finalMessage = await this.retryTransport('messages', async ({ markPublished }) => {
                     const stream = this.client.messages.stream(streamArgs as any, { signal: this.signal })
 
@@ -263,6 +264,21 @@ export class AnthropicProvider extends BaseProvider {
                 })
                 promptTokens += finalMessage.usage?.input_tokens ?? 0
                 completionTokens += finalMessage.usage?.output_tokens ?? 0
+
+                if (finalMessage.usage)
+                    await settleUsage({
+                        aiVendorRequestId: finalMessage.id,
+                        usage: {
+                            promptTokens: finalMessage.usage.input_tokens ?? 0,
+                            promptAudioTokens: 0,
+                            promptCachedTokens: 0,
+                            completionTokens: finalMessage.usage.output_tokens ?? 0,
+                            completionAudioTokens: 0,
+                            completionReasoningTokens: 0,
+                            totalTokens: (finalMessage.usage.input_tokens ?? 0) + (finalMessage.usage.output_tokens ?? 0),
+                        },
+                    })
+
                 const capabilityCalls = (finalMessage.content ?? []).flatMap((block: any) => {
                     if (
                         block?.type !== 'tool_use'

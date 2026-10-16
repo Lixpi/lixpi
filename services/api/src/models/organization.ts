@@ -232,7 +232,7 @@ const OrganizationModel = {
                 updatedAt: currentDate,
             }
 
-            await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: getDynamoDbTableStageName(
                     'ORGANIZATIONS',
                     ORG_NAME,
@@ -491,7 +491,7 @@ const OrganizationModel = {
                 ':updatedAt': currentDate,
             }
 
-            const createdOrganizationTag = await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: getDynamoDbTableStageName(
                     'ORGANIZATIONS',
                     ORG_NAME,
@@ -504,7 +504,10 @@ const OrganizationModel = {
                 origin: 'model::Organization->createTag()',
             })
 
-            return { tags: createdOrganizationTag.tags } // Returns tags object where the key is the tagId and the value is the tag object
+            return { tags: { [tagId]: {
+                name,
+                color,
+            } } }
         } catch (e) {
             debugError(e)
 
@@ -539,7 +542,7 @@ const OrganizationModel = {
                 '#tags': 'tags',
             }
 
-            const updatedOrganizationTag = await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: getDynamoDbTableStageName(
                     'ORGANIZATIONS',
                     ORG_NAME,
@@ -551,7 +554,13 @@ const OrganizationModel = {
                 origin: 'model::Organization->updateTag()',
             })
 
-            return updatedOrganizationTag
+            return {
+                tags: { [tagId]: {
+                    name,
+                    color,
+                } },
+                updatedAt: currentDate,
+            }
         } catch (e) {
             debugError(e)
 
@@ -579,7 +588,7 @@ const OrganizationModel = {
                 '#tags': 'tags',
             }
 
-            const updatedOrg = await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: getDynamoDbTableStageName(
                     'ORGANIZATIONS',
                     ORG_NAME,
@@ -591,7 +600,10 @@ const OrganizationModel = {
                 origin: 'model::Organization->deleteTag()',
             })
 
-            return updatedOrg
+            return {
+                tags: { [tagId]: null },
+                updatedAt: currentDate,
+            }
         } catch (e) {
             debugError(e)
 
@@ -601,3 +613,4 @@ const OrganizationModel = {
 }
 
 export default OrganizationModel
+import { updateAccountItem } from '../services/account-model-update.ts'

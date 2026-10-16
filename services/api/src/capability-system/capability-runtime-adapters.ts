@@ -1,6 +1,7 @@
 import {
     getAiInteractionCanonicalResponseSubject,
     STREAM_STATUS,
+    type CapabilityRun,
     type CapabilityRunEvent,
     type CapabilityRunEventStreamPayload,
     type CapabilityRunStatus,
@@ -15,10 +16,12 @@ import {
 } from '../models/capability.ts'
 import {
     createCapabilityRun,
+    cancelCapabilityRun,
     updateCapabilityRunStatus,
 } from '../models/capability-run.ts'
 import { CapabilityRunEventLog } from '../services/capability-run-event-log.ts'
 import { PipelineEventLog } from '../llm/graph/pipeline-event-log.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import {
     type CapabilityRequesterContext,
     type CapabilityResolverStore,
@@ -82,52 +85,121 @@ const snapshotKey = (
     manifestBlobHash: string,
 ): string => `${capabilityId}\u0000${manifestBlobHash}`
 
+type TrackedRun = {
+    workspaceId: string
+    status: CapabilityRunStatus
+    cancel: () => Promise<void>
+    cancellationEvent?: CapabilityRunEvent
+}
+
+export class CapabilityModelRunPersistence implements CapabilityRunPersistence {
+    private readonly runs = new Map<string, TrackedRun>()
+
+    constructor(
+        private readonly ownerUserId: string,
+        private readonly eventLog: CapabilityRunEventLog,
+    ) {}
+
+    async createRun(run: CapabilityRun): Promise<void> {
+        const runId = run.runId
+        const workspaceId = run.workspaceId
+        const tracked: TrackedRun = {
+            workspaceId,
+            status: run.status,
+            cancel: AccountRequestContext.prepareCleanup(async () => {
+                if (!tracked.cancellationEvent)
+                    throw new Error('CAPABILITY_CANCELLATION_REQUIRED')
+
+                const cancelled = await cancelCapabilityRun({
+                    runId,
+                    workspaceId,
+                    ownerUserId: this.ownerUserId,
+                })
+
+                if (cancelled) {
+                    tracked.status = 'cancelled'
+                    await this.eventLog.append({
+                        userId: this.ownerUserId,
+                        workspaceId,
+                        event: tracked.cancellationEvent,
+                    })
+                }
+            }),
+        }
+        this.runs.set(runId, tracked)
+        await createCapabilityRun({
+            ...run,
+            ownerUserId: this.ownerUserId,
+        })
+    }
+
+    private tracked(runId: string): TrackedRun {
+        const tracked = this.runs.get(runId)
+
+        if (!tracked)
+            throw new Error('CAPABILITY_RUN_NOT_INITIALIZED')
+
+        return tracked
+    }
+
+    async updateRun(run: CapabilityRun): Promise<void> {
+        const tracked = this.tracked(run.runId)
+
+        if (run.workspaceId !== tracked.workspaceId)
+            throw new Error('CAPABILITY_RUN_WORKSPACE_MISMATCH')
+
+        await updateCapabilityRunStatus({
+            runId: run.runId,
+            workspaceId: tracked.workspaceId,
+            expectedStatuses: [tracked.status],
+            status: run.status,
+            currentStepIds: run.currentStepIds,
+            outputAssetIds: run.outputAssetIds,
+        })
+        tracked.status = run.status
+    }
+
+    async appendEvent(event: CapabilityRunEvent): Promise<void> {
+        await this.eventLog.append({
+            userId: this.ownerUserId,
+            workspaceId: this.tracked(event.runId).workspaceId,
+            event,
+        })
+    }
+
+    async cancelRun(
+        run: Readonly<CapabilityRun>,
+        event: Readonly<CapabilityRunEvent>,
+    ): Promise<void> {
+        const tracked = this.tracked(run.runId)
+
+        if (
+            run.workspaceId !== tracked.workspaceId
+            || event.runId !== run.runId
+            || !Number.isSafeInteger(event.sequence)
+            || event.sequence < 1
+        )
+            throw new Error('CAPABILITY_CANCELLATION_MISMATCH')
+
+        // Retain existing outputs and persist only the terminal cancellation.
+        // Neither the supplied snapshot nor event can add output or progress data.
+        tracked.cancellationEvent = {
+            runId: run.runId,
+            sequence: event.sequence,
+            timestamp: Date.now(),
+            eventType: 'RUN_CANCELLED',
+            runStatus: 'cancelled',
+            errorCode: 'CAPABILITY_RUN_CANCELLED',
+            errorMessage: 'Capability run was cancelled',
+        }
+        await tracked.cancel()
+    }
+}
+
 export const createCapabilityModelRunPersistence = (
     ownerUserId: string,
     eventLog = CapabilityRunEventLog.fromSingleton(),
-): CapabilityRunPersistence => {
-    const workspaceIds = new Map<string, string>()
-    const lastStatuses = new Map<string, CapabilityRunStatus>()
-
-    return {
-        async createRun(run): Promise<void> {
-            await createCapabilityRun({
-                ...run,
-                ownerUserId,
-            })
-            workspaceIds.set(run.runId, run.workspaceId)
-            lastStatuses.set(run.runId, run.status)
-        },
-        async updateRun(run): Promise<void> {
-            const previousStatus = lastStatuses.get(run.runId)
-
-            if (!previousStatus)
-                throw new Error(`Capability run ${run.runId} is not initialized`)
-
-            await updateCapabilityRunStatus({
-                runId: run.runId,
-                workspaceId: run.workspaceId,
-                expectedStatuses: [previousStatus],
-                status: run.status,
-                currentStepIds: run.currentStepIds,
-                outputAssetIds: run.outputAssetIds,
-            })
-            lastStatuses.set(run.runId, run.status)
-        },
-        async appendEvent(event): Promise<void> {
-            const workspaceId = workspaceIds.get(event.runId)
-
-            if (!workspaceId)
-                throw new Error(`Capability run ${event.runId} has no workspace mapping`)
-
-            await eventLog.append({
-                userId: ownerUserId,
-                workspaceId,
-                event,
-            })
-        },
-    }
-}
+): CapabilityRunPersistence => new CapabilityModelRunPersistence(ownerUserId, eventLog)
 
 export const mirrorCapabilityRunEventToChat = async (args: {
     event: Readonly<CapabilityRunEvent>

@@ -12,10 +12,12 @@ import (
 
 	"github.com/lixpi/lixpi/services/nats/internal/auth"
 	"github.com/lixpi/lixpi/services/nats/internal/policy"
+	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 )
 
 type Settings struct {
+	Accept           func(context.Context, *jwt.AuthorizationRequestClaims, *auth.BrowserGrant) error
 	Resolve          func(context.Context, string) (*policy.Snapshot, error)
 	Node             string
 	Digest           string
@@ -283,6 +285,10 @@ func (d *Dispatcher) coordinate(message *nats.Msg) []byte {
 				return nil
 			}
 
+			if identity != nil && settings.Accept != nil && settings.Accept(ctx, request, identity.Admission) != nil {
+				return nil
+			}
+
 			response, err := settings.Protocol.Reply(request, identity, "credentials denied")
 			if err != nil {
 				return nil
@@ -366,6 +372,10 @@ func (d *Dispatcher) coordinate(message *nats.Msg) []byte {
 
 			if result.Status == "deny" {
 				d.Counters.Denied.Add(1)
+			}
+
+			if result.Status == "allow" && settings.Accept != nil && settings.Accept(ctx, request, result.Admission) != nil {
+				return nil
 			}
 
 			return result.Response

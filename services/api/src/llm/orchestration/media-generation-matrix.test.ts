@@ -12,6 +12,7 @@ import * as AiModelModelModule from '../../models/ai-model.ts'
 import * as capabilityStateResolver from '../../capability-system/capability-state-resolver.ts'
 import * as mediaBranchResolver from '../graph/media-branch-resolver.ts'
 import * as workspaceContextResolver from '../graph/workspace-context-resolver.ts'
+import { StreamPublisher } from '../graph/stream-publisher.ts'
 import {
     buildMediaGenerationRequestGroupKey,
     buildMediaGenerationThreadGroupPrefix,
@@ -954,11 +955,15 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(registry.process).not.toHaveBeenCalled()
     })
 
-    it('rejects an unauthorized spend before shared preflight persists pending media lineage', async () => {
+    it.each([undefined, 'denied-request'])('settles an unauthorized request before shared preflight (durable ID: %s)', async durableGenerationRequestId => {
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
         const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
         const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
+        const errorSpy = vi.spyOn(StreamPublisher.prototype, 'error').mockImplementation(() => undefined)
+        const completeSpy = vi.spyOn(StreamPublisher.prototype, 'mediaGenerationRequestComplete').mockImplementation(() => undefined)
+        const drainSpy = vi.spyOn(StreamPublisher.prototype, 'drainPendingWrites').mockResolvedValue(undefined)
+        const finishSpy = vi.spyOn(StreamPublisher.prototype, 'finishProseMirrorStream').mockResolvedValue(undefined)
 
         getAiModel.mockImplementation(async ({ model }: {
             provider: string
@@ -1012,12 +1017,29 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         })
         registry.preflightProviderRequestAuthorization.mockRejectedValueOnce(new Error('ProviderRequestAuthorization: request denied'))
 
-        await expect(orchestrator.process(createRequest())).rejects.toThrow('ProviderRequestAuthorization: request denied')
+        await expect(orchestrator.process(createRequest({
+            durableGenerationRequestId,
+        }))).rejects.toThrow('ProviderRequestAuthorization: request denied')
 
         expect(workspaceContextSpy).not.toHaveBeenCalled()
         expect(generatedAssetStorageMocks.ensurePendingGeneratedAssets).not.toHaveBeenCalled()
         expect(registry.process).not.toHaveBeenCalled()
         expect(registry.remove).toHaveBeenCalledOnce()
+        const detail = 'AI generation could not be authorized. Check your organization\'s AI credits in Billing and try again.'
+
+        if (durableGenerationRequestId)
+            expect(mediaGenerationRequestServiceMocks.failUnfinishedRuns).toHaveBeenCalledWith({
+                generationRequestId: durableGenerationRequestId,
+                workspaceId: 'ws-1',
+                detail,
+            })
+        else
+            expect(mediaGenerationRequestServiceMocks.failUnfinishedRuns).not.toHaveBeenCalled()
+
+        expect(errorSpy).toHaveBeenCalledWith(detail)
+        expect(completeSpy).toHaveBeenCalledWith(expect.any(String))
+        expect(drainSpy).toHaveBeenCalledOnce()
+        expect(finishSpy).toHaveBeenCalledOnce()
     })
 
     it('propagates every preflight-resolved field — including a future media field — to every fanout child', async () => {

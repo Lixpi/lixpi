@@ -1,6 +1,7 @@
 export * from './types.ts'
 export * from './asset-types.ts'
 export * from './aws-resources.ts'
+export * from './account-admission.ts'
 export * from './media-generation-progress.ts'
 export {
     mediaGenerationLayoutSettings,

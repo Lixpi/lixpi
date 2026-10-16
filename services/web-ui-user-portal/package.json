@@ -15,6 +15,7 @@
     },
     "dependencies": {
         "@lixpi/auth-client": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/user-portal": "workspace:*",

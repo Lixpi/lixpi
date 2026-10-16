@@ -14,6 +14,10 @@ The module context provides the current-user store, authenticated token provider
 
 The account view and its styles live in `packages/lixpi/user-portal`. The public service composes only the account module. Additional build-time compositions supply their own explicit module arrays. Modules own and clean up subscriptions or resources created by their hooks and route views.
 
+The portal shell uses the UI-kit logo, Herculanum wordmark and shared charcoal colors. Its scoped theme rounds Gentelella buttons, inputs and cards without changing unrelated Gentelella applications. At phone widths, account navigation moves above the page. Feature modules own their content widths and layout.
+
+Hosts can supply `createView(context)` for a standalone authenticated screen such as onboarding. Returning `undefined` selects the standard account layout. The host still initializes modules, loads the current user and tears down the returned view through the shared runtime.
+
 ## Local development
 
 Run the service through Docker Compose. It is available at `http://localhost:3002` and uses the same local or hosted identity provider configuration as `web-ui`, with its own redirect URI. `VITE_USER_PORTAL_URL` is required in the environment file. `web-ui` reads it and opens this service in a new tab when the user clicks the sidebar avatar.
@@ -25,5 +29,7 @@ Both SPAs configure their NATS reply inbox from the session user ID. Browser mod
 For a deployment with an external artifact publisher, set `USER_PORTAL_ARTIFACT_MANAGEMENT=external` in the infrastructure environment. Pulumi owns the bucket, distribution, and DNS; the external pipeline owns builds, uploads, and invalidation. The default `infrastructure` value builds and publishes this account-only composition.
 
 ## Tests and quality checks
+
+The application image includes UI-kit authentication presentation and its workspace dependencies. Private portal compositions can show the shared `AuthenticationFailure` panel and its explicit Auth0 signup action; its styles must be imported once by the composition root.
 
 Use the repository TypeScript test and quality runner containers. The `web-ui-user-portal` domain covers the application composition. The `shared user-portal` package covers the module catalog, layout, and account view beside their implementations.

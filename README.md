@@ -74,6 +74,12 @@ init-infrastructure.bat
 start.bat
 ```
 
+For an image rebuild, use `./rebuild-containers.sh <service>`. The helper stops on the first failed Docker command and returns a nonzero exit status; its completion message appears only after every requested rebuild succeeds.
+
+The avatar at the bottom of the left sidebar opens the account menu. **Profile** opens the configured user portal in a new tab. **Sign out** ends the application's Auth0 session and returns to the configured login page, where you can choose another login method.
+
+Deployments with the private billing portal can enable `VITE_BILLING_ONBOARDING_ENABLED=true`. After Auth0 login, the app asks billing whether the organization has completed onboarding and sends new owners to the portal to choose free access or purchase AI credits. Free access requires no card and excludes AI generation; the API enforces the organization balance with `METRICS_ENABLED=true` and fail-closed usage authorization.
+
 ---
 
 ## Key Features
@@ -139,6 +145,8 @@ Dependency versions are authored in [`dev-tools/versions-registry/`](dev-tools/v
 - **AI tokens stream directly** through per-thread NATS subjects to the browser, so token delivery is not gated by any extra service hop.
 
 For the full architecture deep-dive — including AI chat request/response flow, streaming, scalability via NATS queue groups, and authentication — see [Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md). For image generation specifics, see [Image Generation](documentation/media-generation/IMAGE-GENERATION.md).
+
+The main app and user portal share [authentication and recovery](documentation/platform/AUTHENTICATION.md). A denied sign-in removes protected views and offers an explicit retry; automatic recovery cannot keep redirecting a rejected callback.
 
 ---
 

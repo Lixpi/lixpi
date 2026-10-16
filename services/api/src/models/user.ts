@@ -66,7 +66,7 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: getDynamoDbTableStageName(
                     'USERS',
                     ORG_NAME,
@@ -117,7 +117,7 @@ export default {
             // Prepend the new tagId and trim the list to maximum 10 items
             const updatedTags = [tagId, ...currentTags].slice(0, 10)
 
-            const result = await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: getDynamoDbTableStageName(
                     'USERS',
                     ORG_NAME,
@@ -139,7 +139,10 @@ export default {
                 origin: 'model::User->addRecentTag()',
             })
 
-            return result
+            return {
+                recentTags: updatedTags,
+                updatedAt: currentDate,
+            }
         } catch (error) {
             debugError('Error adding recent tag:', error)
 
@@ -147,3 +150,4 @@ export default {
         }
     },
 }
+import { updateAccountItem } from '../services/account-model-update.ts'

@@ -224,9 +224,9 @@ func TestRealBrowserServiceAndNKeyAdmissions(t *testing.T) {
 
 		return connection
 	}
-	connect(nats.Nkey(public, key.Sign))
+	nativeConnection := connect(nats.Nkey(public, key.Sign))
 	serviceJWT := signedToken(t, "EdDSA", map[string]any{"iss": public, "sub": "svc:test", "exp": time.Now().Add(time.Minute).Unix()}, key.Sign)
-	connect(nats.Token(serviceJWT))
+	serviceConnection := connect(nats.Token(serviceJWT))
 	user := "auth0|é用户"
 	browserJWT := signedToken(
 		t,
@@ -282,6 +282,31 @@ func TestRealBrowserServiceAndNKeyAdmissions(t *testing.T) {
 
 	if requests.Load() != 1 {
 		t.Fatal("cached browser key fetched during outage")
+	}
+
+	closed := make(chan struct{})
+	shortExpiry := time.Now().Add(3 * time.Second).Unix()
+	shortToken := signedToken(t, "RS256", map[string]any{
+		"iss": verifier.Issuer, "sub": user, "aud": "test", "exp": shortExpiry,
+	}, func(message []byte) ([]byte, error) {
+		digest := sha256.Sum256(message)
+
+		return rsa.SignPKCS1v15(rand.Reader, rsaKey, crypto.SHA256, digest[:])
+	})
+	connect(nats.Token(shortToken), nats.ClosedHandler(func(_ *nats.Conn) { close(closed) }),
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, _ error) {}))
+
+	select {
+	case <-closed:
+		if time.Now().Unix() < shortExpiry {
+			t.Fatal("browser disconnected before lease expiry")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server retained browser connection past its user JWT lease")
+	}
+
+	if !nativeConnection.IsConnected() || !serviceConnection.IsConnected() {
+		t.Fatal("browser expiry disconnected a service identity")
 	}
 
 	invalid := signedToken(t, "EdDSA", map[string]any{"iss": public, "sub": "svc:impostor"}, key.Sign)

@@ -1,6 +1,7 @@
 import {
     createWebClientService,
     type WebClientServiceInstance,
+    type WebClientView,
 } from '@lixpi/web-client-service-factory'
 
 import { UserPortalModuleCatalog } from './moduleCatalog.ts'
@@ -14,6 +15,7 @@ import {
 export type UserPortalConfig = {
     modules: UserPortalModule[]
     createDependencies: () => Promise<UserPortalDependencies>
+    createView?: (context: UserPortalModuleContext) => WebClientView | undefined
     onError?: (error: unknown) => void
 }
 
@@ -41,7 +43,9 @@ export const createUserPortal = (config: UserPortalConfig): WebClientServiceInst
         createView: ({
             dependencies,
             router,
-        }) => createLayout({
+        }) => config.createView?.(
+            contextFor(dependencies, router),
+        ) ?? createLayout({
             context: contextFor(dependencies, router),
             routes: catalog.routes,
             navigationGroups: catalog.navigationGroups,

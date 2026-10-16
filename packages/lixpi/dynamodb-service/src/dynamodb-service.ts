@@ -17,6 +17,7 @@ import {
     UpdateCommand,
     BatchWriteCommand,
     TransactWriteCommand,
+    TransactGetCommand,
 } from '@aws-sdk/lib-dynamodb'
 
 // Export all methods from '@aws-sdk/util-dynamodb' module, specifically marshall and unmarshall methods that are used to read DynamoDB streams
@@ -84,6 +85,14 @@ const prepareSortKeyCondition = (condition: SortKeyCondition) => {
 // are expressed as a 'update' setting the TTL attribute.
 export type TransactOperation =
     | {
+        type: 'check'
+        tableName: string
+        key: Record<string, unknown>
+        conditionExpression: string
+        expressionAttributeNames?: Record<string, string>
+        expressionAttributeValues?: Record<string, unknown>
+    }
+    | {
         type: 'put'
         tableName: string
         item: Record<string, unknown>
@@ -91,6 +100,7 @@ export type TransactOperation =
         expressionAttributeNames?: Record<string, string>
         expressionAttributeValues?: Record<string, unknown>
     }
+
     | {
         type: 'update'
         tableName: string
@@ -109,6 +119,11 @@ export type TransactOperation =
         expressionAttributeNames?: Record<string, string>
         expressionAttributeValues?: Record<string, unknown>
     }
+
+export type TransactReadItem = {
+    tableName: string
+    key: Record<string, unknown>
+}
 
 // A transaction is cancelled as a whole; a failed per-item condition surfaces
 // as TransactionCanceledException with a ConditionalCheckFailed reason instead
@@ -692,19 +707,62 @@ export default class DynamoDBService {
         }
     }
 
+    // Transactional reads preserve the requested order and propagate failures.
+    async transactRead({
+        items,
+        abortSignal,
+    }: {
+        items: TransactReadItem[]
+        abortSignal?: AbortSignal
+    }): Promise<Array<Record<string, unknown> | undefined>> {
+        if (
+            !items.length
+            || items.length > 100
+            || items.some(item => !item.tableName || !Object.keys(item.key).length)
+        )
+            throw new Error('DynamoDB transaction requires 1 to 100 keyed reads')
+
+        abortSignal?.throwIfAborted()
+        const response = await this.dynamodbDocumentClient.send(
+            new TransactGetCommand({
+                TransactItems: items.map(
+                    item => ({ Get: {
+                        TableName: item.tableName,
+                        Key: item.key,
+                    } }),
+                ),
+            }),
+            { abortSignal },
+        )
+        abortSignal?.throwIfAborted()
+
+        if (
+            !response.Responses
+            || response.Responses.length !== items.length
+        )
+            throw new Error('DynamoDB transaction returned an incomplete response')
+
+        // Retain missing-item positions. Filtering them would associate a record
+        // with the wrong table/key at an authorization boundary.
+        return response.Responses.map(response => response.Item)
+    }
+
     // One atomic multi-table write. Operations mirror the argument shapes of
     // putItem / updateItem / deleteItems; the raw SDK TransactItems are built
-    // internally so models never touch SDK shapes. Throws on cancellation —
-    // when it throws, nothing was applied.
+    // internally so models never touch SDK shapes. Throws on cancellation.
     async transactWrite({
         operations,
         logConditionalCheckFailures = true,
         origin = 'unknown',
+        abortSignal,
     }: {
         operations: TransactOperation[]
         logConditionalCheckFailures?: boolean
         origin?: string
+        abortSignal?: AbortSignal
     }) {
+        abortSignal?.throwIfAborted()
+
         if (
             !operations
             || operations.length === 0
@@ -715,6 +773,21 @@ export default class DynamoDBService {
             throw new Error(`DynamoDB transactWrite: at most 100 operations are allowed, received ${operations.length}, origin: ${origin}`)
 
         const transactItems = operations.map(operation => {
+            if (operation.type === 'check') {
+                if (!operation.conditionExpression)
+                    throw new Error('DynamoDB transaction condition must not be empty')
+
+                return {
+                    ConditionCheck: {
+                        TableName: operation.tableName,
+                        Key: operation.key,
+                        ConditionExpression: operation.conditionExpression,
+                        ...(operation.expressionAttributeNames && { ExpressionAttributeNames: operation.expressionAttributeNames }),
+                        ...(operation.expressionAttributeValues && { ExpressionAttributeValues: operation.expressionAttributeValues }),
+                    },
+                }
+            }
+
             if (operation.type === 'put') {
                 return {
                     Put: {
@@ -785,7 +858,10 @@ export default class DynamoDBService {
                     TransactItems: transactItems,
                     ReturnConsumedCapacity: 'TOTAL',
                 }),
+                { abortSignal },
             )
+
+            abortSignal?.throwIfAborted()
 
             logStats({
                 operation: 'transactWrite',

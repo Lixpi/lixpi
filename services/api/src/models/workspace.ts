@@ -488,7 +488,7 @@ export default {
 
     markDeleting: async ({ workspaceId }: { workspaceId: string }): Promise<void> => {
         const now = Date.now()
-        await dynamoDBService.updateItem({
+        await updateAccountItem({
             tableName: getDynamoDbTableStageName(
                 'WORKSPACES',
                 ORG_NAME,
@@ -1012,3 +1012,4 @@ export default {
         }
     },
 }
+import { updateAccountItem } from '../services/account-model-update.ts'

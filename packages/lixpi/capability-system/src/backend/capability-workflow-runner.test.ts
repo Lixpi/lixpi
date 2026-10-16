@@ -420,7 +420,7 @@ describe('CapabilityWorkflowRunner', () => {
         expect(persistence.events.at(-1)?.eventType).toBe('RUN_FAILED')
     })
 
-    it('propagates cancellation to an active action and emits terminal cancellation events', async () => {
+    it.each([false, true])('propagates cancellation and notifies the caller with a restricted cleanup port: %s', async restricted => {
         const {
             manifest,
             resources,
@@ -435,6 +435,18 @@ describe('CapabilityWorkflowRunner', () => {
         registry.register(action('test.conditional', async () => ({ result: 'done' })))
         const persistence = makePersistence()
 
+        if (restricted)
+            persistence.cancelRun = async (run, event) => {
+                await persistence.updateRun({
+                    ...run,
+                    status: 'cancelled',
+                    currentStepIds: [],
+                })
+                await persistence.appendEvent(event)
+            }
+
+        const onEvent = vi.fn()
+
         await expect(new CapabilityWorkflowRunner({
             registry,
             persistence,
@@ -446,10 +458,12 @@ describe('CapabilityWorkflowRunner', () => {
             workspaceId: 'workspace-1',
             origin: 'prompt',
             signal: controller.signal,
+            onEvent,
         })).rejects.toMatchObject({ code: 'CAPABILITY_RUN_CANCELLED' })
         expect(persistence.events.some(event => event.eventType === 'STEP_CANCELLED')).toBe(true)
         expect(persistence.events.at(-1)?.eventType).toBe('RUN_CANCELLED')
         expect(persistence.runs.at(-1)?.status).toBe('cancelled')
+        expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'RUN_CANCELLED' }))
     })
 
     it('blocks prototype traversal in bindings', async () => {

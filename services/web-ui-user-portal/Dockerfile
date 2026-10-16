@@ -13,6 +13,8 @@ COPY ./packages/lixpi/constants ./packages/lixpi/constants
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools
 COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/ui-kit-gentelella ./packages/lixpi/ui-kit-gentelella
+COPY ./packages/lixpi/ui-kit ./packages/lixpi/ui-kit
+COPY ./packages/lixpi/test-utils ./packages/lixpi/test-utils
 COPY ./packages/lixpi/ui-primitives ./packages/lixpi/ui-primitives
 COPY ./packages/lixpi/auth-client ./packages/lixpi/auth-client
 COPY ./packages/lixpi/user-portal ./packages/lixpi/user-portal

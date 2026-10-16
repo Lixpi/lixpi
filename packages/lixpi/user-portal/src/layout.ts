@@ -6,6 +6,8 @@ import {
     createRouteViewOutlet,
     type RouteViewOutletInstance,
 } from '@lixpi/web-client-service-factory'
+import { html } from '@lixpi/ui-primitives/dom'
+import { lixpiLogo } from '@lixpi/ui-kit/svg'
 
 import {
     type UserPortalModuleContext,
@@ -33,8 +35,14 @@ class Layout implements LayoutInstance {
     constructor(config: LayoutConfig) {
         this.shell = createGentelellaApplicationShell({
             brand: {
-                mark: 'L',
-                name: 'Lixpi Portal',
+                mark: html`
+                    <span
+                        className="user-portal-logo"
+                        aria-hidden="true"
+                        innerHTML=${lixpiLogo}
+                    ></span>
+                ` as HTMLElement,
+                name: 'Lixpi',
             },
             navigationGroups: config.navigationGroups,
             onNavigate: path => config.context.router.navigateTo(path),
@@ -54,6 +62,7 @@ class Layout implements LayoutInstance {
         }
 
         this.el = this.shell.el
+        this.el.classList.add('user-portal-shell')
     }
 
     destroy(): void {

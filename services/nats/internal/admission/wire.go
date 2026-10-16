@@ -51,13 +51,14 @@ type workRequest struct {
 }
 
 type workReply struct {
-	Kind        string `json:"kind"`
-	Node        string `json:"node"`
-	Instance    string `json:"instance"`
-	Correlation string `json:"correlation"`
-	Attempt     string `json:"attempt"`
-	Status      string `json:"status"`
-	Response    []byte `json:"response,omitempty"`
+	Admission   *auth.BrowserGrant `json:"admission,omitempty"`
+	Kind        string             `json:"kind"`
+	Node        string             `json:"node"`
+	Instance    string             `json:"instance"`
+	Correlation string             `json:"correlation"`
+	Attempt     string             `json:"attempt"`
+	Status      string             `json:"status"`
+	Response    []byte             `json:"response,omitempty"`
 }
 
 func sign(p *auth.Protocol, value any) ([]byte, error) {

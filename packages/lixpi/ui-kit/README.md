@@ -44,6 +44,7 @@ Portaled sliding dropdowns reserve the overlay layer directly below the default 
 
 ## Components
 
+- Auth panel, a responsive split layout for authentication and account setup with caller-owned actions and content. Import `/components/auth-panel` and `/styles/auth-panel`. Its brand panel matches the company website's intro: the four-color sage palette, initial freeform gradient phase, translucent canvas and white glow, charcoal logo, and adjacent translucent white Herculanum wordmark. The gradient uses `ui-primitives`; the caller supplies the SVG logo. Call `destroy()` when replacing or removing it to release the gradient canvas and observers.
 - Dropdown
 - Info bubble
 - Media model badge
@@ -59,6 +60,8 @@ Portaled sliding dropdowns reserve the overlay layer directly below the default 
 Component implementations, styles, documentation, and component-scoped tests stay together in their `src/components/<component>` directory. The package must not import from `services/web-ui`.
 
 Panels, menus, tooltips, media controls, footers, preview popovers, loading placeholders and ripple animation are UI-kit components. They do not require a canvas engine or canvas-components dependency.
+
+The [dropdown](src/components/dropdown/README.md) accepts custom trigger content and an accessible label for avatar or icon menus. It owns keyboard navigation, outside dismissal, focus restoration and portaled menu cleanup; applications provide the options and their actions.
 
 ## Controls and overlays
 

@@ -60,12 +60,36 @@ describe('current user service', () => {
             store,
         })
 
-        await service.getUser()
+        await expect(service.getUser()).rejects.toThrow('request failed')
 
         expect(store.getMeta('loadingStatus')).toBe(LoadingStatus.error)
         expect(consoleErrorSpy).toHaveBeenCalledWith(
             'Failed to load user:',
             expect.any(Error),
         )
+    })
+
+    it('discards a user reply received after session rejection', async () => {
+        const store = createUserStore()
+        let active = true
+        const reply = Promise.withResolvers<unknown>()
+        const entered = Promise.withResolvers<void>()
+        const service = createUserService({
+            getToken: async () => 'token',
+            isSessionActive: () => active,
+            store,
+            requestClient: { request: async () => { entered.resolve()
+
+            return await reply.promise } },
+        })
+        const running = service.getUser()
+        await entered.promise
+        active = false
+        reply.resolve({
+            userId: 'user',
+            email: 'private@example.com',
+        })
+        await expect(running).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')
+        expect(store.getData('userId')).toBe('')
     })
 })

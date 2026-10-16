@@ -9,8 +9,20 @@
     },
     "exports": {
         ".": "./src/index.ts",
+        "./styles/tokens": {
+            "sass": "./styles/tokens.scss",
+            "style": "./styles/tokens.scss",
+            "default": "./styles/tokens.scss"
+        },
         "./svg": "./src/svg/index.ts",
         "./svg/animated": "./src/svg/animated/index.ts",
+        "./components/auth-panel": "./src/components/authPanel/authPanel.ts",
+        "./styles/auth-panel": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/auth-panel.scss",
+            "style": "./styles/auth-panel.scss",
+            "default": "./styles/auth-panel.scss"
+        },
         "./components/dropdown": "./src/components/dropdown/index.ts",
         "./components/info-bubble": "./src/components/infoBubble/index.ts",
         "./components/media-model-badge": "./src/components/mediaModelBadge/index.ts",

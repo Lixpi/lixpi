@@ -1,0 +1,40 @@
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1323,6 +1323,6 @@
+ [[package]]
+ name = "localauth0"
+-version = "0.9.0"
++version = "0.9.1"
+ dependencies = [
+  "actix-files",
+  "actix-web",
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -222,6 +222,7 @@
+ pub enum CustomFieldValue {
+     String(String),
+     Vec(Vec<String>),
++    Json(serde_json::Value),
+ }
+ 
+ #[derive(Debug, Deserialize, Getters)]
+--- a/src/model/claims.rs
++++ b/src/model/claims.rs
+@@ -98,6 +98,7 @@
+             match custom_claims.value() {
+                 CustomFieldValue::String(string) => map.serialize_entry(custom_claims.name(), &string),
+                 CustomFieldValue::Vec(vec) => map.serialize_entry(custom_claims.name(), &vec),
++                CustomFieldValue::Json(value) => map.serialize_entry(custom_claims.name(), value),
+             }?;
+         }
+ 
+--- a/src/model/user_info.rs
++++ b/src/model/user_info.rs
+@@ -84,6 +84,7 @@
+             match custom_field.value() {
+                 CustomFieldValue::String(string) => map.serialize_entry(custom_field.name(), &string),
+                 CustomFieldValue::Vec(vec) => map.serialize_entry(custom_field.name(), &vec),
++                CustomFieldValue::Json(value) => map.serialize_entry(custom_field.name(), value),
+             }?;
+         }
+ 

@@ -53,7 +53,7 @@ The update command does not treat a publisher's newest version as automatically 
 
 ## What belongs in the catalogs
 
-Catalog keys use the dependency's published identity. npm packages use exact package names, Go modules use exact module paths, container images use repository names, Actions use repository names, and tools use their upstream names such as `fnm`, `nex`, and `pulumi`. The surrounding catalog and section already establish that the value is a version, so keys do not add aliases or a `Version` suffix.
+Catalog keys use the dependency's published identity. npm packages use exact package names, Go modules use exact module paths, container images use repository names, Actions use repository names, and tools use their upstream names such as `fnm`, `nex`, `pulumi`, and `trunk`. The surrounding catalog and section already establish that the value is a version, so keys do not add aliases or a `Version` suffix.
 
 Only values that select a release belong here. Unversioned distribution package names such as `curl`, `jq`, `ffmpeg`, and `libreoffice` remain in the Dockerfile where the operating-system distribution and package repository are visible. Application schemas, protocol revisions, deployment identifiers, AI model IDs, provider parameters, and prices remain with the code that defines their compatibility rules.
 

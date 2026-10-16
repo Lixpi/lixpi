@@ -1,7 +1,4 @@
-import {
-    createAuth0Client,
-    type Auth0Client,
-} from '@auth0/auth0-spa-js'
+import { Auth0Client } from '@auth0/auth0-spa-js'
 
 import {
     type AuthStateStore,
@@ -21,7 +18,7 @@ class Auth0Service implements WebClientAuthService {
         this.store.setMetaValues({ isLoading: true })
 
         try {
-            this.auth0 = await createAuth0Client({
+            this.auth0 = new Auth0Client({
                 domain: this.config.domain,
                 clientId: this.config.clientId,
                 useRefreshTokens: true,
@@ -54,14 +51,36 @@ class Auth0Service implements WebClientAuthService {
 
         if (
             searchParams.has('code')
-            && searchParams.has('state')
+            || searchParams.has('error')
         ) {
-            await client.handleRedirectCallback()
-            window.history.replaceState(
-                {},
-                document.title,
-                window.location.pathname,
-            )
+            let returnTo: unknown
+
+            try {
+                if (
+                    searchParams.getAll('state').length !== 1
+                    || searchParams.getAll('code').length + searchParams.getAll('error').length !== 1
+                )
+                    throw new Error('Sign-in callback is incomplete')
+
+                const result = await client.handleRedirectCallback()
+                returnTo = result?.appState?.returnTo
+            } finally {
+                // Even denied callbacks must lose their single-use code/state.
+                window.history.replaceState(
+                    {},
+                    document.title,
+                    window.location.pathname,
+                )
+            }
+
+            const destination = this.localReturnPath(returnTo)
+
+            if (destination)
+                window.history.replaceState(
+                    {},
+                    document.title,
+                    destination,
+                )
         }
 
         const isAuthenticated = await client.isAuthenticated()
@@ -88,15 +107,97 @@ class Auth0Service implements WebClientAuthService {
         this.store.setDataValues({ user: null })
     }
 
-    async login(): Promise<void> {
+    async login(
+        forceFresh = false,
+        screenHint?: 'signup',
+    ): Promise<void> {
+        // A button press explicitly starts another attempt. Automatic recovery
+        // uses the separate method below and cannot reset this guard.
+        this.markRedirect()
+        await this.redirect(forceFresh, screenHint)
+    }
+
+    private async redirect(
+        forceFresh: boolean,
+        screenHint?: 'signup',
+    ): Promise<void> {
+        const hasCallback = new URLSearchParams(window.location.search).has('state')
+        const returnTo = hasCallback ? window.location.pathname : `${window.location.pathname}${window.location.search}${window.location.hash}`
         await this.getClient().loginWithRedirect({
+            appState: { returnTo: this.localReturnPath(returnTo) ?? '/' },
             authorizationParams: {
                 redirect_uri: this.config.redirectUri,
+                ...(screenHint ? { screen_hint: screenHint } : {}),
+                ...(forceFresh ? {
+                    prompt: 'login',
+                    max_age: 0,
+                } : {}),
             },
         })
     }
 
+    private get redirectKey(): string {
+        return `lixpi.auth.redirect:${this.config.domain}:${this.config.clientId}`
+    }
+
+    private markRedirect(): void {
+        try {
+            sessionStorage.setItem(this.redirectKey, 'pending')
+        } catch {
+            // Explicit login still works when browser storage is unavailable.
+            // Automatic recovery fails closed when it cannot read the guard.
+        }
+    }
+
+    private async automaticLogin(forceFresh: boolean): Promise<void> {
+        let attempted = true
+
+        try {
+            attempted = sessionStorage.getItem(this.redirectKey) === 'pending'
+
+            if (!attempted)
+                sessionStorage.setItem(this.redirectKey, 'pending')
+        } catch {
+            attempted = true
+        }
+
+        if (attempted)
+            throw new Error('Sign-in could not be completed. Choose Sign in again to retry.')
+
+        await this.redirect(forceFresh)
+    }
+
+    recoverAccess = (): Promise<void> => this.automaticLogin(true)
+
+    confirmAccess = (): void => {
+        try {
+            sessionStorage.removeItem(this.redirectKey)
+        } catch {}
+    }
+
+    private localReturnPath(value: unknown): string | undefined {
+        if (
+            typeof value !== 'string'
+            || value.length > 2048
+            || !value.startsWith('/')
+            || value.startsWith('//')
+            || /[\\\u0000-\u001f\u007f]/.test(value)
+        )
+            return undefined
+
+        const destination = new URL(value, window.location.origin)
+
+        if (
+            destination.searchParams.has('code')
+            || destination.searchParams.has('error')
+        )
+            return undefined
+
+        return destination.origin === window.location.origin ? `${destination.pathname}${destination.search}${destination.hash}` : undefined
+    }
+
     async logout(): Promise<void> {
+        this.confirmAccess()
         await this.getClient().logout({
             logoutParams: {
                 returnTo: this.config.logoutReturnTo,
@@ -105,11 +206,24 @@ class Auth0Service implements WebClientAuthService {
         this.setLoggedOut()
     }
 
+    async clearSession(): Promise<void> {
+        this.setLoggedOut()
+        await this.getClient().logout({ openUrl: false })
+    }
+
     async getTokenSilently(forceRefresh = false): Promise<string | false> {
         try {
-            return (await this.getClient().getTokenSilently(forceRefresh ? { cacheMode: 'off' } : undefined)) ?? false
+            const token = await this.getClient().getTokenSilently(forceRefresh ? { cacheMode: 'off' } : undefined)
+
+            if (token)
+                await this.updateAuthData()
+
+            return token ?? false
         } catch {
-            await this.login()
+            this.setLoggedOut()
+
+            if (!forceRefresh)
+                await this.automaticLogin(false)
 
             return false
         }

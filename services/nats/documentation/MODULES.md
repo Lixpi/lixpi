@@ -79,7 +79,7 @@ A supplied token takes precedence. If that token is invalid, the verifier reject
 
 [`runtime.go`](../internal/auth/runtime.go) selects a service registration or browser verification profile from the snapshot pinned on the request context. It keeps bounded JWKS caches for registered endpoints. The selected issuer is still checked against the token's signature, audience and claims; reading an unverified issuer only selects the profile to try. The client keeps its private NKey seed. The snapshot supplies the public key, account and subject permissions.
 
-After verification, `Protocol.Reply` signs a NATS user JWT with the chosen account and permissions, puts it inside the response to the requesting server and encrypts that response. A denial contains no user JWT. The authorization response expires with the request; the admitted session's user JWT has no expiry. The API's per-request token and resource checks remain necessary. See [Authentication](../../../documentation/platform/AUTHENTICATION.md).
+After verification, `Protocol.Reply` signs a NATS user JWT with the chosen account, permissions, and lease, puts it inside the response to the requesting server and encrypts that response. A denial contains no user JWT. The authorization response expires with the request. Browser user grants expire at the earlier of the access token's expiry and 60 seconds, independently of that response deadline; service sessions retain their separate policy. The API's per-request token and resource checks remain necessary. See [Authentication](../../../documentation/platform/AUTHENTICATION.md).
 
 ### Why browser key lookup has its own cache
 

@@ -31,6 +31,7 @@ import {
     enqueueRenditionRetry,
 } from './asset-maintenance-queue.ts'
 import { getBlobObjectKey } from './blob-storage.ts'
+import { AccountRequestContext } from './account-request-context.ts'
 
 const {
     ORG_NAME,
@@ -484,6 +485,7 @@ const AssetRenditionService = {
         publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.RENDITION_UPDATED, pending)
 
         const request: GenerateRenditionsRequest = {
+            accountContext: AccountRequestContext.workContext(),
             jobId,
             jobKey,
             organizationId: asset.organizationId,

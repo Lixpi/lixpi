@@ -399,7 +399,7 @@ describe('media generation operation-node projection', () => {
         })
     })
 
-    it('projects terminal failure without illegally removing the reserved Asset node', async () => {
+    it.each([false, true])('projects terminal failure while preserving the reserved Asset node (remove duplicate operation: %s)', async removeOperationWhenOutputProjected => {
         const failedRun = run({
             mediaType: 'image',
             mediaRunId: 'media-run-1',
@@ -432,6 +432,7 @@ describe('media generation operation-node projection', () => {
             status: 'failed',
             message: 'The generated result was blocked by the provider safety check.',
             requestRevision: 4,
+            removeOperationWhenOutputProjected,
         })
 
         expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
@@ -439,15 +440,20 @@ describe('media generation operation-node projection', () => {
             type: 'image',
             generationProgress: expect.objectContaining({ status: 'failed' }),
         })]))
-        expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
-            nodeId: failedRun.operationNodeId,
-            type: 'operationStatus',
-            status: 'failed',
-            position: {
-                x: reservedOutput.position.x + (reservedOutput.dimensions.width - 360) / 2,
-                y: reservedOutput.position.y + (reservedOutput.dimensions.height - 104) / 2,
-            },
-        })]))
+
+        if (removeOperationWhenOutputProjected)
+            expect(canvasState.nodes.some(node => node.nodeId === failedRun.operationNodeId)).toBe(false)
+        else
+            expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
+                nodeId: failedRun.operationNodeId,
+                type: 'operationStatus',
+                status: 'failed',
+                position: {
+                    x: reservedOutput.position.x + (reservedOutput.dimensions.width - 360) / 2,
+                    y: reservedOutput.position.y + (reservedOutput.dimensions.height - 104) / 2,
+                },
+            })]))
+
         expect(canvasState.edges).toEqual([expect.objectContaining({
             sourceNodeId: 'source-node',
             targetNodeId: 'output-node-1',

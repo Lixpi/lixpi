@@ -8,7 +8,12 @@ services:
             file: ./dev-tools/code-quality/runner-compose/typescript-quality.base.yml
             service: typescript-quality-runner-base
         volumes:
+            - ./dev-tools/config-utils/account-auth-configuration.ts:/usr/src/repository/dev-tools/config-utils/account-auth-configuration.ts:cached
+            - ./dev-tools/config-utils/account-auth-configuration.test.ts:/usr/src/repository/dev-tools/config-utils/account-auth-configuration.test.ts:cached
             - ./dev-tools/config-utils/setup-env.test.ts:/usr/src/repository/dev-tools/config-utils/setup-env.test.ts:cached
+            - ./dev-tools/config-utils/secret-input.ts:/usr/src/repository/dev-tools/config-utils/secret-input.ts:cached
+            - ./dev-tools/config-utils/secret-input.test.ts:/usr/src/repository/dev-tools/config-utils/secret-input.test.ts:cached
+            - ./dev-tools/config-utils/fixtures:/usr/src/repository/dev-tools/config-utils/fixtures:cached
 
             # Application and library source. Package manifests are not mounted
             # into this writable tree, so dependency artifacts cannot leak.
@@ -45,6 +50,8 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/repository/packages/lixpi/constants/ts/asset-types.ts:cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/repository/packages/lixpi/constants/ts/aws-resources.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/repository/packages/lixpi/constants/ts/index.ts:cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/repository/packages/lixpi/constants/ts/account-admission.ts:cached
+            - ./packages/lixpi/constants/ts/account-admission.test.ts:/usr/src/repository/packages/lixpi/constants/ts/account-admission.test.ts:cached
             - ./packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/repository/packages/lixpi/constants/ts/nats-subject-path.test.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-layout-settings.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-progress.ts:cached

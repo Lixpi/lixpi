@@ -1,12 +1,57 @@
 package policy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
 )
+
+func TestBrowserAdmissionIsSignedAndBoundToItsApplication(t *testing.T) {
+	trust, key, manifest := signedFixture(t)
+	manifest.Browsers = []Browser{{
+		Issuer: "https://auth.example.com/", Audience: "application", JWKSURL: "https://auth.example.com/.well-known/jwks.json", Account: "EXAMPLE",
+		Permissions: []jwt.Permissions{{Pub: jwt.Permission{Deny: jwt.StringList{">"}}, Sub: jwt.Permission{Deny: jwt.StringList{">"}}}},
+		Admission:   &BrowserAdmission{Subject: BrowserAdmissionSubject, Claim: "https://example.com/admission", Stream: "ACCOUNTS"},
+	}}
+	signed := signFixture(t, key, manifest)
+
+	snapshot, err := trust.Compile([]SignedRegistration{signed})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	digest := sha256.Sum256(signed.Payload)
+	if snapshot.Browsers[0].RegistrationDigest != hex.EncodeToString(digest[:]) {
+		t.Fatal("application revision not bound to signed bytes")
+	}
+
+	for _, change := range []func(*BrowserAdmission){
+		func(a *BrowserAdmission) { a.Subject = "arbitrary.command" },
+		func(a *BrowserAdmission) { a.Subject = "accounts.>" },
+		func(a *BrowserAdmission) { a.Claim = "" },
+		func(a *BrowserAdmission) { a.Stream = "" },
+		func(a *BrowserAdmission) { a.Stream = "ACCOUNTS.>" },
+		func(a *BrowserAdmission) { a.Claim = "https://example.com/\ninvalid" },
+	} {
+		candidate := *manifest.Browsers[0].Admission
+		change(&candidate)
+
+		manifest.Browsers[0].Admission = &candidate
+		if _, err := trust.Verify(signFixture(t, key, manifest)); err == nil {
+			t.Fatal("invalid admission hook accepted")
+		}
+
+		manifest.Browsers[0].Admission = &BrowserAdmission{
+			Subject: BrowserAdmissionSubject,
+			Claim:   "https://example.com/admission",
+			Stream:  "ACCOUNTS",
+		}
+	}
+}
 
 func signedFixture(t *testing.T) (Trust, nkeys.KeyPair, Manifest) {
 	t.Helper()

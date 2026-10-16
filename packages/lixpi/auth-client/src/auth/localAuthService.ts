@@ -97,9 +97,17 @@ class LocalAuthService implements WebClientAuthService {
     }
 
     async logout(): Promise<void> {
+        await this.clearSession()
+        window.location.href = this.config.logoutReturnTo
+    }
+
+    recoverAccess = (): Promise<void> => this.login()
+
+    confirmAccess = (): void => {}
+
+    async clearSession(): Promise<void> {
         localStorage.removeItem(this.storageKey)
         this.setLoggedOut()
-        window.location.href = this.config.logoutReturnTo
     }
 
     private isTokenExpired(token: string): boolean {

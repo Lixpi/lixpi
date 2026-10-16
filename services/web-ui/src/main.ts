@@ -1,10 +1,14 @@
 import { configureUiKit } from '@lixpi/ui-kit'
+import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
+import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import { createHelpTooltipProvider } from '@lixpi/ui-kit/components/help-tooltip'
 import { createWebClientService } from '@lixpi/web-client-service-factory'
 import NatsService from '@lixpi/nats-service'
 import { getNatsUserInboxPrefix } from '@lixpi/constants'
 import {
     createAuthClient,
+    AccessRecovery,
+    AuthenticationFailure,
     type AuthClientInstance,
 } from '@lixpi/auth-client'
 
@@ -12,10 +16,15 @@ import OrganizationService from '$src/services/organization-service.ts'
 import AiModelService from '$src/services/ai-model-service.ts'
 import WorkspaceService from '$src/services/workspace-service.ts'
 import AssetService from '$src/services/asset-service.ts'
+import {
+    OnboardingService,
+    OnboardingUnavailable,
+} from '$src/services/onboarding-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 
 import { settings } from '$src/settings.ts'
+import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/ui-kit/styles/bubble-menu'
 import '@lixpi/ui-kit/styles/canvas-node-footer'
 import '@lixpi/ui-kit/styles/dropdown'
@@ -43,6 +52,16 @@ type WebUiDependencies = {
 
 configureUiKit(settings)
 
+let retryAuthentication = async (): Promise<void> => window.location.reload()
+let startSignup = async (): Promise<void> => window.location.reload()
+const authenticationFailure = new AuthenticationFailure(() => retryAuthentication(), () => startSignup())
+const showAuthenticationFailure = (): void => {
+    const target = document.getElementById('app')
+
+    if (target)
+        authenticationFailure.show(target)
+}
+
 const application = createWebClientService<WebUiDependencies>({
     createDependencies: async () => {
         const auth = createAuthClient({
@@ -58,6 +77,8 @@ const application = createWebClientService<WebUiDependencies>({
                 },
             },
         })
+        retryAuthentication = () => auth.login(true)
+        startSignup = () => auth.login(true, 'signup')
         const session = await auth.initializeSession()
 
         if (
@@ -66,6 +87,11 @@ const application = createWebClientService<WebUiDependencies>({
         )
             throw new Error('Current-user loading requires authentication')
 
+        const recovery = new AccessRecovery(
+            auth,
+            async () => await application.destroy(),
+            () => showAuthenticationFailure(),
+        )
         const nats = await NatsService.init({
             servers: [VITE_NATS_SERVER],
             webSocket: true,
@@ -74,9 +100,11 @@ const application = createWebClientService<WebUiDependencies>({
             inboxPrefix: session ? getNatsUserInboxPrefix(session.userId) : undefined,
             getToken: session?.getToken,
             onAuthError: session
-                ? async () => void (await session.refreshToken())
+                ? recovery.authError
                 : undefined,
+            onAccessDenied: recovery.deny,
         })
+        nats.onReconnect(recovery.connected)
 
         return {
             auth,
@@ -137,14 +165,47 @@ const application = createWebClientService<WebUiDependencies>({
                 },
             })
 
+        if (
+            import.meta.env.VITE_BILLING_ONBOARDING_ENABLED === 'true'
+            && import.meta.env.VITE_MOCK_AUTH !== 'true'
+        ) {
+            const onboarding = new OnboardingService(
+                auth,
+                nats,
+                import.meta.env.VITE_USER_PORTAL_URL,
+            )
+
+            if (!await onboarding.enterWorkspace())
+                return
+        }
+
         servicesStore.getData('organizationService')!.getOrganization({
             organizationId: auth.userStore.getData('organizations')[0],
         })
         servicesStore.getData('aiModelService')!.getAvailableAiModels()
         servicesStore.getData('workspaceService')!.getUserWorkspaces()
     },
-    shutdownServices: async () => await servicesStore.getData('workspaceService')?.canvasSessions.close(),
-    onError: error => console.error('Application failed to start', error),
+    shutdownServices: async () => {
+        await servicesStore.getData('workspaceService')?.canvasSessions.close()
+        servicesStore.resetStore()
+    },
+    onError: error => {
+        if (error instanceof OnboardingUnavailable) {
+            const target = document.getElementById('app')
+            const view = new AuthPanel({
+                brand: 'Lixpi',
+                logo: lixpiLogo,
+                title: 'Your setup needs another moment.',
+                description: 'We could not load your account options. Please try again.',
+                actions: [{
+                    label: 'Try again',
+                    onClick: () => window.location.reload(),
+                }],
+            })
+            target?.replaceChildren(view.dom)
+        } else
+            showAuthenticationFailure()
+    },
 })
 
 void application.start()

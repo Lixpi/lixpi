@@ -177,6 +177,7 @@ services:
             VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
             VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
+            VITE_BILLING_ONBOARDING_ENABLED: ${VITE_BILLING_ONBOARDING_ENABLED:-false}
             VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
         volumes:
@@ -279,6 +280,9 @@ services:
 
     lixpi-api:
         container_name: lixpi-api
+        labels:
+            lixpi.account-enforcement.scope: ${ORG_NAME}/${STAGE}
+            lixpi.account-enforcement.role: api
         profiles: ["main"]
         restart: always
         image: lixpi/api
@@ -313,6 +317,8 @@ services:
             # Auth0 config
             AUTH0_DOMAIN: ${AUTH0_DOMAIN}
             AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
+            ACCOUNT_ADMISSION_ENABLED: ${ACCOUNT_ADMISSION_ENABLED:-false}
+            ACCOUNT_ADMISSION_STREAM: ${ACCOUNT_ADMISSION_STREAM:-}
 
             # LocalAuth0 mock config
             MOCK_AUTH0: ${MOCK_AUTH0}
@@ -403,9 +409,8 @@ services:
             retries: 10
             start_period: 30s
         depends_on:
-            # lixpi-pulumi-init:
-            #     condition: service_completed_successfully
-            #     restart: true
+            lixpi-pulumi-init:
+                condition: service_completed_successfully
             lixpi-dynamodb:
                 condition: service_healthy
                 restart: true
@@ -431,6 +436,9 @@ services:
             dockerfile: infrastructure/pulumi/Dockerfile
             context: .
         environment:
+            MOCK_AUTH0: ${MOCK_AUTH0}
+            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            MOCK_AUTH0_DOMAIN: ${MOCK_AUTH0_DOMAIN}
             # Force color output in the terminal, required for chalk.js to work
             FORCE_COLOR: 1
 
@@ -555,11 +563,13 @@ services:
 
     lixpi-pulumi-init:
         container_name: lixpi-pulumi-init
-        profiles: ["deploy"]
+        profiles: ["main", "deploy"]
         image: lixpi/pulumi-init
         extends:
             service: lixpi-pulumi
         restart: "no"
+        environment:
+            LOCAL_DYNAMODB_FORCE_RECREATE: ${LOCAL_DYNAMODB_FORCE_RECREATE:-false}
         entrypoint: []
         working_dir: /usr/src/service/infrastructure/pulumi
         command: ["pnpm", "run", "deploy:local"]

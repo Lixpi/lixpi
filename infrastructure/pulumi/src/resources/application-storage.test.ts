@@ -72,7 +72,10 @@ beforeAll(async () => {
         vpc,
         publicSubnets: [],
         privateSubnets,
-        resourceBindings: { tables },
+        resourceBindings: {
+            tables,
+            accountAdmissionTableArn: 'arn:aws:dynamodb:us-east-1:123456789012:table/Test-Account-Admission-Storage',
+        },
         environment: {
             NATS_SERVERS: 'nats://broker:4222',
             NATS_API_NKEY_SEED: 'synthetic-api-seed',
@@ -126,9 +129,17 @@ describe('API deployment with native NATS storage', () => {
         const policies = resources.filter(resource => resource.type === 'aws:iam/rolePolicy:RolePolicy').map(resource => JSON.parse(resource.inputs.policy))
         const statements = policies.flatMap(policy => policy.Statement)
         const tableStatements = statements.filter(statement => statement.Action.some?.((action: string) => action.startsWith('dynamodb:')))
-        expect(tableStatements).toHaveLength(1)
-        expect(tableStatements[0].Resource.toSorted()).toEqual(tableArns.flatMap(arn => [arn, `${arn}/index/*`]).toSorted())
-        expect(tableStatements[0].Action).toEqual(expect.arrayContaining(['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:ConditionCheckItem']))
+        expect(tableStatements).toHaveLength(2)
+        const writer = tableStatements.find(statement => statement.Action.includes('dynamodb:PutItem'))
+        expect(writer.Resource.toSorted()).toEqual(tableArns.flatMap(arn => [arn, `${arn}/index/*`]).toSorted())
+        expect(writer.Action).toEqual(expect.arrayContaining(['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:ConditionCheckItem']))
+        const admission = tableStatements.find(statement => !statement.Action.includes('dynamodb:PutItem'))
+        expect(admission).toEqual({
+            Effect: 'Allow',
+            Action: ['dynamodb:GetItem', 'dynamodb:ConditionCheckItem'],
+            Resource: ['arn:aws:dynamodb:us-east-1:123456789012:table/Test-Account-Admission-Storage'],
+        })
+        expect(resources.filter(resource => resource.type === 'aws:dynamodb/table:Table').some(resource => resource.inputs.name.includes('Admission'))).toBe(false)
         const actions: string[] = statements.flatMap(statement => statement.Action)
         expect(actions.filter(action => action.startsWith('s3:') || action.startsWith('ecs:'))).toEqual([])
     })

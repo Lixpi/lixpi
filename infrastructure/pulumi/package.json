@@ -9,6 +9,7 @@
         "preview": "node src/cli.ts preview",
         "deploy": "node src/cli.ts up",
         "deploy:local": "node src/local-dynamodb-init.ts",
+        "fixture:local": "node src/local-mock-account-cli.ts",
         "destroy": "node src/cli.ts destroy",
         "force-destroy": "node src/cli.ts force-destroy",
         "cancel": "node src/cli.ts cancel",
@@ -20,6 +21,7 @@
     },
     "dependencies": {
         "@aws-sdk/client-dynamodb": "3.1136.0",
+        "@aws-sdk/lib-dynamodb": "3.1136.0",
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@pulumi/aws": "7.47.0",

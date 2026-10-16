@@ -17,9 +17,14 @@ import {
     loadCharacterFidelityModels,
 } from './scorer.ts'
 import { CHARACTER_FIDELITY_MODEL_MANIFEST } from './model-manifest.ts'
+import {
+    AccountWorkScopes,
+    AccountWorkStorage,
+} from '../account-work.ts'
 
 const servers = process.env.NATS_SERVERS
 const nkeySeed = process.env.NATS_CHARACTER_FIDELITY_NKEY_SEED
+const scopes = new AccountWorkScopes(process.env.ACCOUNT_ADMISSION_ENABLED === 'true')
 
 if (
     !servers
@@ -42,6 +47,7 @@ const service = await NatsService.init({
     name: 'nex-character-fidelity',
     nkeySeed,
     userId: 'svc:character-fidelity',
+    requestScope: async (data, operation) => await scopes.run(data, operation),
     subscriptions: [{
         subject,
         type: 'reply',
@@ -64,7 +70,10 @@ const service = await NatsService.init({
             )
 
             try {
-                const result = await assessCharacterFidelity(request, NatsService.getInstance()!)
+                const result = await assessCharacterFidelity(
+                    request,
+                    new AccountWorkStorage(NatsService.getInstance()!),
+                )
                 info(
                     `character-fidelity: completed ${
                         JSON.stringify({
@@ -124,10 +133,12 @@ const service = await NatsService.init({
         },
     }],
 })
+scopes.start(service)
 
 info(`nex-entry character-fidelity up; listening on ${subject}`)
 
 const shutdown = async (signal: string): Promise<void> => {
+    scopes.stop()
     warn(`nex-entry received ${signal}; shutting down character-fidelity`)
 
     try {

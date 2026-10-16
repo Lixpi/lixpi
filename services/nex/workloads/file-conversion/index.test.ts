@@ -85,6 +85,7 @@ describe('file-conversion index responder', () => {
             name: 'nex-file-conversion',
             nkeySeed: 'synthetic-file-conversion-seed',
             userId: 'svc:file-conversion',
+            requestScope: expect.any(Function),
             subscriptions: expect.any(Array),
         })
     })
@@ -134,7 +135,10 @@ describe('file-conversion index responder', () => {
                 blobHash: 'sha256:def',
             }],
         })
-        expect(generateAssetRenditionsMock).toHaveBeenCalledWith(request, storage)
+        expect(generateAssetRenditionsMock).toHaveBeenCalledWith(request, expect.objectContaining({
+            getObject: expect.any(Function),
+            putObject: expect.any(Function),
+        }))
     })
 
     it('throws before attempting a conversion when the storage instance is unavailable', async () => {
