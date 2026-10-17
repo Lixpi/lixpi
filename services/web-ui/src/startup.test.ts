@@ -165,6 +165,23 @@ describe('public web UI startup', () => {
         expect(loadWorkspace).not.toHaveBeenCalled()
     })
 
+    it('keeps the neutral loader while custom-domain hosted login takes over', async () => {
+        const showSignIn = vi.spyOn(AuthenticationFailure.prototype, 'show')
+        const {
+            startup,
+            auth,
+            pending,
+            loadWorkspace,
+        } = harness()
+        const started = startup.start()
+        auth.authStore.setMetaValues({ isRedirecting: true })
+        pending.reject(new Error('No auth token'))
+        await started
+        expect(showSignIn).not.toHaveBeenCalled()
+        expect(document.querySelector('[role="status"]')).not.toBeNull()
+        expect(loadWorkspace).not.toHaveBeenCalled()
+    })
+
     it('does not show sign-in when a session check fails after shutdown', async () => {
         const showSignIn = vi.spyOn(AuthenticationFailure.prototype, 'show')
         const {

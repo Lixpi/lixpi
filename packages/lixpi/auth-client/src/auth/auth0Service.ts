@@ -45,6 +45,14 @@ class Auth0Service implements WebClientAuthService {
         return this.auth0
     }
 
+    private get usesHostedLogin(): boolean {
+        const domain = new URL(this.config.domain.includes('://') ? this.config.domain : `https://${this.config.domain}`).hostname
+
+        // The standard tenant uses the application's login page. Custom
+        // domains use their hosted login directly, without a second prompt.
+        return domain !== 'auth0.com' && !domain.endsWith('.auth0.com')
+    }
+
     private async updateAuthData(): Promise<void> {
         const client = this.getClient()
         const searchParams = new URLSearchParams(window.location.search)
@@ -95,6 +103,7 @@ class Auth0Service implements WebClientAuthService {
         this.store.setMetaValues({
             isLoading: false,
             isAuthenticated: true,
+            isRedirecting: false,
         })
         this.store.setDataValues({ user: user ?? null })
     }
@@ -103,6 +112,7 @@ class Auth0Service implements WebClientAuthService {
         this.store.setMetaValues({
             isLoading: false,
             isAuthenticated: false,
+            isRedirecting: false,
         })
         this.store.setDataValues({ user: null })
     }
@@ -120,20 +130,37 @@ class Auth0Service implements WebClientAuthService {
     private async redirect(
         forceFresh: boolean,
         screenHint?: 'signup',
+        logoutFirst = false,
     ): Promise<void> {
         const hasCallback = new URLSearchParams(window.location.search).has('state')
         const returnTo = hasCallback ? window.location.pathname : `${window.location.pathname}${window.location.search}${window.location.hash}`
-        await this.getClient().loginWithRedirect({
-            appState: { returnTo: this.localReturnPath(returnTo) ?? '/' },
-            authorizationParams: {
-                redirect_uri: this.config.redirectUri,
-                ...(screenHint ? { screen_hint: screenHint } : {}),
-                ...(forceFresh ? {
-                    prompt: 'login',
-                    max_age: 0,
+        this.store.setMetaValues({ isRedirecting: true })
+
+        try {
+            await this.getClient().loginWithRedirect({
+                appState: { returnTo: logoutFirst ? '/' : this.localReturnPath(returnTo) ?? '/' },
+                // Let the SDK save state, nonce and PKCE before leaving. Auth0
+                // ends its session, then opens this transaction directly,
+                // without loading the application between logout and login.
+                ...(logoutFirst ? {
+                    openUrl: (url: string) => this.getClient().logout({
+                        logoutParams: { returnTo: url },
+                    }),
                 } : {}),
-            },
-        })
+                authorizationParams: {
+                    redirect_uri: this.config.redirectUri,
+                    ...(screenHint ? { screen_hint: screenHint } : {}),
+                    ...(forceFresh ? {
+                        prompt: 'login',
+                        max_age: 0,
+                    } : {}),
+                },
+            })
+        } catch (error) {
+            this.store.setMetaValues({ isRedirecting: false })
+
+            throw error
+        }
     }
 
     private get redirectKey(): string {
@@ -150,6 +177,9 @@ class Auth0Service implements WebClientAuthService {
     }
 
     private async automaticLogin(forceFresh: boolean): Promise<void> {
+        if (!this.usesHostedLogin)
+            throw new Error('Authentication requires an explicit sign-in')
+
         let attempted = true
 
         try {
@@ -198,6 +228,19 @@ class Auth0Service implements WebClientAuthService {
 
     async logout(): Promise<void> {
         this.confirmAccess()
+
+        if (this.usesHostedLogin) {
+            this.setLoggedOut()
+            this.markRedirect()
+            await this.redirect(
+                true,
+                undefined,
+                true,
+            )
+
+            return
+        }
+
         await this.getClient().logout({
             logoutParams: {
                 returnTo: this.config.logoutReturnTo,
@@ -213,6 +256,20 @@ class Auth0Service implements WebClientAuthService {
 
     async getTokenSilently(forceRefresh = false): Promise<string | false> {
         try {
+            if (
+                !this.usesHostedLogin
+                && !this.store.getMeta('isAuthenticated')
+            ) {
+                // The SDK checks its remembered-session cookie before making
+                // a request. Logout removes that cookie, so this cannot start
+                // authentication again after a deliberate sign-out.
+                await this.getClient().checkSession()
+                await this.updateAuthData()
+
+                if (!this.store.getMeta('isAuthenticated'))
+                    return false
+            }
+
             const token = await this.getClient().getTokenSilently(forceRefresh ? { cacheMode: 'off' } : undefined)
 
             if (token)
@@ -222,7 +279,10 @@ class Auth0Service implements WebClientAuthService {
         } catch {
             this.setLoggedOut()
 
-            if (!forceRefresh)
+            if (
+                !forceRefresh
+                && this.usesHostedLogin
+            )
                 await this.automaticLogin(false)
 
             return false

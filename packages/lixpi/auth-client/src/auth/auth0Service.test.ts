@@ -7,6 +7,7 @@ import {
 } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+    checkSession: vi.fn(),
     getTokenSilently: vi.fn(),
     getUser: vi.fn(),
     handleRedirectCallback: vi.fn(),
@@ -96,6 +97,7 @@ describe('Auth0 web client service', () => {
         expect(store.getMeta()).toEqual({
             isAuthenticated: true,
             isLoading: false,
+            isRedirecting: false,
         })
         expect(store.getData('user')).toEqual(user)
     })
@@ -109,8 +111,9 @@ describe('Auth0 web client service', () => {
         expect(mocks.getTokenSilently).toHaveBeenCalledWith({ cacheMode: 'off' })
     })
 
-    it('falls back to an Auth0 redirect when silent token acquisition fails', async () => {
-        const service = createAuth0Service(config, createAuthStore())
+    it('goes directly to custom-domain hosted login when silent token acquisition fails', async () => {
+        const store = createAuthStore()
+        const service = createAuth0Service(config, store)
         mocks.getTokenSilently.mockRejectedValue(new Error('login_required'))
         await service.init()
 
@@ -121,6 +124,126 @@ describe('Auth0 web client service', () => {
                 redirect_uri: config.redirectUri,
             },
         })
+        expect(store.getMeta('isRedirecting')).toBe(true)
+    })
+
+    it.each(['tenant.auth0.com', 'tenant.us.auth0.com', 'https://tenant.eu.auth0.com'])('stays signed out on %s across logout and reload until explicit sign-in', async domain => {
+        const tenantConfig = {
+            ...config,
+            domain,
+        }
+        const service = createAuth0Service(tenantConfig, createAuthStore())
+        mocks.isAuthenticated.mockResolvedValue(true)
+        mocks.getUser.mockResolvedValue({ sub: 'auth0|user-1' })
+        await service.init()
+        await service.logout()
+        expect(mocks.logout).toHaveBeenCalledExactlyOnceWith({ logoutParams: { returnTo: config.logoutReturnTo } })
+
+        mocks.isAuthenticated.mockResolvedValue(false)
+        window.history.replaceState({}, '', '/login')
+
+        for (let reload = 0; reload < 2; reload++) {
+            const signedOut = createAuth0Service(tenantConfig, createAuthStore())
+            await signedOut.init()
+            await expect(signedOut.getTokenSilently()).resolves.toBe(false)
+            await expect(signedOut.recoverAccess()).rejects.toThrow('explicit sign-in')
+        }
+
+        expect(mocks.getTokenSilently).not.toHaveBeenCalled()
+        expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
+        const signedOut = createAuth0Service(tenantConfig, createAuthStore())
+        await signedOut.init()
+        await signedOut.login(true)
+        expect(mocks.loginWithRedirect).toHaveBeenCalledOnce()
+    })
+
+    it('leaves the application login available after an expired standard-tenant session', async () => {
+        const store = createAuthStore()
+        const service = createAuth0Service({
+            ...config,
+            domain: 'tenant.us.auth0.com',
+        }, store)
+        mocks.isAuthenticated.mockResolvedValue(true)
+        mocks.getUser.mockResolvedValue({ sub: 'auth0|user-1' })
+        mocks.getTokenSilently.mockRejectedValue(new Error('login_required'))
+        await service.init()
+        await expect(service.getTokenSilently()).resolves.toBe(false)
+        expect(store.getMeta('isAuthenticated')).toBe(false)
+        expect(store.getMeta('isRedirecting')).toBe(false)
+        expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
+    })
+
+    it('renews a remembered standard-tenant session without an interactive redirect', async () => {
+        const store = createAuthStore()
+        const service = createAuth0Service({
+            ...config,
+            domain: 'tenant.us.auth0.com',
+        }, store)
+        await service.init()
+        mocks.checkSession.mockImplementation(async () => {
+            mocks.isAuthenticated.mockResolvedValue(true)
+            mocks.getUser.mockResolvedValue({ sub: 'auth0|user-1' })
+        })
+        mocks.getTokenSilently.mockResolvedValue('renewed-token')
+
+        await expect(service.getTokenSilently()).resolves.toBe('renewed-token')
+        expect(mocks.checkSession).toHaveBeenCalledOnce()
+        expect(store.getMeta('isAuthenticated')).toBe(true)
+        expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
+    })
+
+    it('restores a standard-tenant callback without requiring another sign-in click', async () => {
+        window.history.replaceState({}, '', '/?code=single-use&state=bound')
+        mocks.handleRedirectCallback.mockResolvedValue({ appState: { returnTo: '/workspace/one' } })
+        mocks.isAuthenticated.mockResolvedValue(true)
+        mocks.getUser.mockResolvedValue({ sub: 'auth0|user-1' })
+        mocks.getTokenSilently.mockResolvedValue('callback-token')
+        const service = createAuth0Service({
+            ...config,
+            domain: 'tenant.us.auth0.com',
+        }, createAuthStore())
+        await service.init()
+        await expect(service.getTokenSilently()).resolves.toBe('callback-token')
+        expect(window.location.pathname).toBe('/workspace/one')
+        expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
+    })
+
+    it('clears the redirect state if the SDK cannot begin navigation', async () => {
+        const store = createAuthStore()
+        const service = createAuth0Service(config, store)
+        mocks.loginWithRedirect.mockRejectedValue(new Error('navigation unavailable'))
+        await service.init()
+        await expect(service.login(true)).rejects.toThrow('navigation unavailable')
+        expect(store.getMeta('isRedirecting')).toBe(false)
+    })
+
+    it('logs out on a custom domain directly into a fresh SDK login transaction', async () => {
+        const store = createAuthStore()
+        const service = createAuth0Service(config, store)
+        const authorizeUrl = 'https://auth.lixpi.test/authorize?state=sdk-state&nonce=sdk-nonce&code_challenge=sdk-pkce'
+        window.history.replaceState({}, '', '/workspace/previous-account')
+        mocks.isAuthenticated.mockResolvedValue(true)
+        mocks.getUser.mockResolvedValue({ sub: 'auth0|user-1' })
+        mocks.loginWithRedirect.mockImplementation(async options => options.openUrl(authorizeUrl))
+        await service.init()
+
+        await service.logout()
+
+        expect(mocks.loginWithRedirect).toHaveBeenCalledExactlyOnceWith({
+            appState: { returnTo: '/' },
+            authorizationParams: {
+                redirect_uri: config.redirectUri,
+                prompt: 'login',
+                max_age: 0,
+            },
+            openUrl: expect.any(Function),
+        })
+        expect(mocks.logout).toHaveBeenCalledExactlyOnceWith({ logoutParams: { returnTo: authorizeUrl } })
+        expect(mocks.checkSession).not.toHaveBeenCalled()
+        expect(mocks.getTokenSilently).not.toHaveBeenCalled()
+        expect(store.getMeta('isAuthenticated')).toBe(false)
+        expect(store.getMeta('isRedirecting')).toBe(true)
+        expect(store.getData('user')).toBeNull()
     })
 
     it('stops repeated automatic redirects across page instances until an explicit retry', async () => {

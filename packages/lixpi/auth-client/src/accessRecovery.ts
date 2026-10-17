@@ -3,7 +3,8 @@ import {
 } from './authClient.ts'
 
 // One uncached token retry is allowed per connection. A persistent rejection
-// closes the application and clears its session before a fresh hosted login.
+// closes the application and clears its session before applying the configured
+// domain's sign-in flow.
 export class AccessRecovery {
     private refreshed = false
     private rejected = false

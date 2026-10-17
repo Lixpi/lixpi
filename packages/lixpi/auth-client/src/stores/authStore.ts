@@ -12,6 +12,7 @@ export type WebClientAuthUser = Record<string, unknown> & {
 export type AuthStoreMeta = {
     isAuthenticated: boolean
     isLoading: boolean
+    isRedirecting: boolean
 }
 
 export type AuthStoreData = {
@@ -25,6 +26,7 @@ const initialState: {
     meta: {
         isAuthenticated: false,
         isLoading: false,
+        isRedirecting: false,
     },
     data: {
         user: null,

@@ -103,7 +103,10 @@ export class WebUiStartup {
     }
 
     private showSignIn(): void {
-        if (this.destroyed)
+        if (
+            this.destroyed
+            || this.config.auth.authStore.getMeta('isRedirecting')
+        )
             return
 
         this.clearView()
