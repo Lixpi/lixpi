@@ -6,6 +6,7 @@ import {
 import { listAuthorizedCapabilities } from '../models/capability.ts'
 import { getCapabilityRunEventStreamName } from '../services/capability-run-event-log.ts'
 import { AccountRequestContext } from '../services/account-request-context.ts'
+import { ProviderCallAccounting } from '../services/provider-call-accounting.ts'
 import {
     CapabilityModelResolverStore,
     createCapabilityModelRunPersistence,
@@ -20,6 +21,14 @@ export const getCapabilityDispatcher = (): CapabilityDispatcher => {
     defaultDispatcher ??= new CapabilityDispatcher({
         store: new CapabilityModelResolverStore(),
         registry: capabilityActionRegistry,
+        runInContext: async (requester, operation) => await ProviderCallAccounting.inScope(
+            {
+                organizationId: requester.organizationId ?? '',
+                userId: requester.userId,
+                workspaceId: requester.workspaceId,
+            },
+            operation,
+        ),
         createPersistence: createCapabilityModelRunPersistence,
         runDetached: async operation => await AccountRequestContext.detach(async () => await operation(AccountRequestContext.current()?.signal)),
         createEventStreamName: run => getCapabilityRunEventStreamName(run.workspaceId),

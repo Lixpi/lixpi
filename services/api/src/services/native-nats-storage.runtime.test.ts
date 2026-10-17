@@ -15,6 +15,9 @@ import {
 import { ACCOUNT_ADMISSION_CHANGED_SUBJECT } from '@lixpi/constants'
 import { AccountControlFeed } from './account-control-feed.ts'
 import { AccountRequestScopes } from './account-request-scopes.ts'
+import { AccountProcessIdentity } from './account-process-identity.ts'
+import { DurableProviderUsageOutbox, PROVIDER_USAGE_OUTBOX_STREAM } from './provider-usage-outbox.ts'
+import { type ProviderUsageRecordRequest, type ProviderUsageTransport } from '@lixpi/usage-reporter'
 
 vi.mock('@lixpi/debug-tools', () => ({
     log: vi.fn(),
@@ -57,7 +60,7 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
         try {
             const manager = await service.getJetStreamManager()
 
-            for (const name of [`OBJ_${bucket}`, events, work, control]) {
+            for (const name of [`OBJ_${bucket}`, events, work, control, PROVIDER_USAGE_OUTBOX_STREAM]) {
                 if (await service.getJetStreamStreamInfoOrNull(name))
                     await manager.streams.delete(name)
             }
@@ -86,6 +89,52 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
         })).toEqual(bytes)
     })
 
+    it('retains charges through billing outages and worker restart, including a lost reply after posting', async () => {
+        const committed = new Set<string>()
+        let available = false
+        let loseReply = true
+        const transport: ProviderUsageTransport = { request: vi.fn(async (_subject, data) => {
+            if (!available)
+                throw new Error('billing offline')
+
+            committed.add((data as ProviderUsageRecordRequest).providerRequestId)
+
+            if (loseReply)
+                throw new Error('reply lost after commit')
+
+            return { recorded: true } as never
+        }) }
+        const original = new DurableProviderUsageOutbox(service, transport, 1, 1)
+        await original.prepare()
+        await original.enqueueUsage({
+            providerRequestId: 'outbox-restart-usage',
+            authorizationId: 'authorization',
+            orgId: organizationId,
+            userId: 'owner',
+            workflowId: 'workflow',
+            workflowSeq: 1,
+            model: 'synthetic',
+            modality: 'tokens',
+            measuringUnit: 'tokens',
+            usage: {
+                promptTokens: 100,
+                completionTokens: 50,
+            },
+            occurredAt: new Date().toISOString(),
+        })
+        expect(await original.deliverPending()).toBe(0)
+        expect((await service.getJetStreamStreamInfo(PROVIDER_USAGE_OUTBOX_STREAM)).state.messages).toBe(1)
+        const restarted = new DurableProviderUsageOutbox(service, transport, 1, 1)
+        await restarted.prepare()
+        available = true
+        expect(await restarted.deliverPending()).toBe(0)
+        expect(committed.size).toBe(1)
+        loseReply = false
+        expect(await restarted.deliverPending()).toBe(1)
+        await vi.waitFor(async () => expect((await service.getJetStreamStreamInfo(PROVIDER_USAGE_OUTBOX_STREAM)).state.messages).toBe(0))
+        expect(committed.size).toBe(1)
+    }, 10000)
+
     it('fans a durable account-disable event out to two API consumers and cancels both active requests', async () => {
         await service.ensureJetStreamStream({
             name: control,
@@ -104,8 +153,10 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
         })) }
         const first = new AccountRequestScopes(admission)
         const second = new AccountRequestScopes(admission)
-        const firstFeed = new AccountControlFeed(service, first, control)
-        const secondFeed = new AccountControlFeed(service, second, control)
+        const firstFeed = new AccountControlFeed(service, first, control,
+            new AccountProcessIdentity({ ENVIRONMENT: 'local' }, () => 'a'.repeat(12), fetch, { title: '' }))
+        const secondFeed = new AccountControlFeed(service, second, control,
+            new AccountProcessIdentity({ ENVIRONMENT: 'local' }, () => 'b'.repeat(12), fetch, { title: '' }))
 
         try {
             await Promise.all([firstFeed.start(), secondFeed.start()])

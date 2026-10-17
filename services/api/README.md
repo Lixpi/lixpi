@@ -9,6 +9,8 @@ The native storage acceptance test exercises API Blob writes, event sequencing, 
 
 Provider calls use `ProviderUsageClient` for pre-call authorization and measured-usage recording. The NATS subject and JSON contracts are documented in [`@lixpi/usage-reporter`](../../packages/lixpi/usage-reporter/README.md) and require a paired responder release.
 
+Enabled metering prepares the replicated `PROVIDER_USAGE_OUTBOX` JetStream workqueue before serving requests. Usage and completion messages persist before delivery and retry across API/billing restarts. The worker acknowledges them only after billing confirms recording or completion. Auxiliary structured model calls use the authorized chat, Capability or Asset caller's billing scope and reserve each attempt separately, including output-truncation retries. Unknown provider outcomes retain their reservation for reconciliation.
+
 Denied media authorization settles the request and its reserved canvas output as failed. If the output Asset has not been created, the request service projects the failure onto the reservation and removes the duplicate operation card. The user sees the billing error instead of a running spinner.
 
 `organization.membership.get` is a service-only NATS request that accepts `{ token, organizationId }`. The JWT middleware verifies this token freshly on every request and replaces any supplied user identity with the verified subject. A strongly consistent organization read returns only `{ organizationId, userId, name, accessLevel }` for the caller's own membership. Missing members, invalid tokens, and unavailable data fail closed. The responder has no browser permission grant and never returns an access list.

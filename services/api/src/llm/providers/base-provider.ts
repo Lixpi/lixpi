@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import { AccountRequestContext } from '../../services/account-request-context.ts'
+import { ProviderCallAccounting } from '../../services/provider-call-accounting.ts'
 import {
     StateGraph,
     END,
@@ -27,6 +28,7 @@ import {
     usageRecordForTextCall,
     usageRecordForVideoCall,
     type ProviderUsageRecordRequest,
+    type ProviderRequestCompletionRequest,
     type ProviderUsageClient,
     type UsageReporter,
 } from '@lixpi/usage-reporter'
@@ -206,6 +208,13 @@ export abstract class BaseProvider {
     private userStopRequested = false
     private readonly settledUsageKinds = new Set<'usage' | 'imageUsage' | 'videoUsage'>()
     private usageSequence = 0
+    private readonly usageReservations = new Map<string, {
+        completion: ProviderRequestCompletionRequest
+        started: boolean
+        measured: boolean
+        terminal: boolean
+        completionQueued: boolean
+    }>()
 
     constructor(
         protected readonly _instanceKey: string,
@@ -339,6 +348,7 @@ export abstract class BaseProvider {
         this.userStopRequested = false
         this.settledUsageKinds.clear()
         this.usageSequence = 0
+        this.usageReservations.clear()
         this.abortController = new AbortController()
         const signals = [requestData.abortSignal as AbortSignal | undefined, accountScope?.signal].filter((signal): signal is AbortSignal => !!signal)
         const parentAbortSignal = signals.length ? AbortSignal.any(signals) : undefined
@@ -564,6 +574,30 @@ export abstract class BaseProvider {
             if (this.ownsDurableMediaRequestLifecycle(initialState))
                 await this.failUnfinishedDurableRuns(initialState)
         })
+
+        if (
+            initialState.requestAuthorizationId
+            && initialState.workflowId
+        )
+            this.rememberUsageReservation(initialState)
+
+        const completeUsageReservations = AccountRequestContext.prepareCleanup(async () => {
+            for (const reservation of this.usageReservations.values()) {
+                if (reservation.completionQueued)
+                    continue
+
+                // An interrupted transport with no measurement has an unknown cost.
+                // Preserve that liability for reconciliation, never free it on a timer.
+                if (
+                    reservation.started
+                    && (!reservation.measured || !reservation.terminal)
+                )
+                    continue
+
+                await this.deps.providerUsage?.completeRequest(reservation.completion)
+                reservation.completionQueued = true
+            }
+        })
         const timeoutHandle = setTimeout(
             () => void this.abortController?.abort(
                 new Error('LLM circuit breaker timeout'),
@@ -578,12 +612,19 @@ export abstract class BaseProvider {
             )
                 this.streamPublisher.start()
 
-            const result = await this.app.invoke(
-                initialState,
+            const result = await ProviderCallAccounting.inScope(
                 {
-                    signal: this.abortController.signal,
-                    recursionLimit: 25,
+                    organizationId: String(initialState.eventMeta.organizationId),
+                    userId: initialState.eventMeta.userId,
+                    workspaceId: initialState.workspaceId,
                 },
+                async () => await this.app.invoke(
+                    initialState,
+                    {
+                        signal: this.abortController.signal,
+                        recursionLimit: 25,
+                    },
+                ),
             )
             AccountRequestContext.assertActive()
 
@@ -665,6 +706,12 @@ export abstract class BaseProvider {
             }
         } finally {
             parentAbortSignal?.removeEventListener('abort', abortFromParent)
+
+            try {
+                await completeUsageReservations()
+            } catch (completionError) {
+                err('[ProviderUsage] could not persist reservation completion; funds remain reserved', completionError)
+            }
 
             try {
                 await this.imagePublisher?.clearTransientMedia()
@@ -875,6 +922,18 @@ export abstract class BaseProvider {
         }
     }
 
+    // A matrix may fail before dispatching its already-authorized children.
+    // Started calls retain their reservation until measured completion.
+    async releaseUnusedUsageReservations(): Promise<void> {
+        for (const [id, reservation] of this.usageReservations) {
+            if (reservation.started)
+                continue
+
+            await this.deps.providerUsage?.completeRequest(reservation.completion)
+            this.usageReservations.delete(id)
+        }
+    }
+
     // Authorize this provider request before transport. A denied or unavailable
     // authorization stops execution according to the configured policy.
     private async authorizeProviderRequest(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -922,11 +981,43 @@ export abstract class BaseProvider {
 
         // Thread the authorization ID into graph state so each recorded
         // call can correlate back to this authorization.
-        return {
+        const authorizedState = {
             workflowId,
             workflowSeq: 0,
             requestAuthorizationId: authorization.authorizationId,
         }
+        this.rememberUsageReservation({
+            ...state,
+            ...authorizedState,
+        })
+
+        return authorizedState
+    }
+
+    private rememberUsageReservation(state: ProviderState): void {
+        if (
+            !state.requestAuthorizationId
+            || !state.workflowId
+            || this.usageReservations.has(state.requestAuthorizationId)
+        )
+            return
+
+        this.usageReservations.set(
+            state.requestAuthorizationId,
+            {
+                completion: {
+                    authorizationId: state.requestAuthorizationId,
+                    orgId: String(state.eventMeta.organizationId),
+                    userId: state.eventMeta.userId,
+                    workflowId: state.workflowId,
+                    providerRequestIds: [],
+                },
+                started: false,
+                measured: false,
+                terminal: false,
+                completionQueued: false,
+            },
+        )
     }
 
     // Labels the workflow in denial messages; authorization uses the called model.
@@ -1699,22 +1790,48 @@ export abstract class BaseProvider {
     // Bind accounting before the paid call. Report only provider measurements
     // against this authorization after cancellation, never user output or a new
     // provider request. Each call can settle text/image/video once.
-    protected prepareUsageSettlement(state: ProviderState): (update: Partial<ProviderState>) => Promise<void> {
+    protected async prepareUsageSettlement(state: ProviderState): Promise<(
+        update: Partial<ProviderState>,
+        terminal?: boolean,
+    ) => Promise<void>> {
         if (
             !this.deps.providerUsage?.enabled
             || !state.workflowId
         )
             return async () => {}
 
+        this.rememberUsageReservation(state)
+        let measurement: ProviderState
+        const record = AccountRequestContext.prepareCleanup(async () => void (await this.recordMeasuredUsage(measurement)))
+        let authorizedState = state
+
+        if (
+            state.requestAuthorizationId
+            && this.usageReservations.get(state.requestAuthorizationId)?.started
+        )
+            authorizedState = {
+                ...state,
+                ...await this.authorizeProviderRequest(state),
+            }
+
+        const reservation = authorizedState.requestAuthorizationId ? this.usageReservations.get(authorizedState.requestAuthorizationId) : undefined
+
+        AccountRequestContext.assertActive()
+        const complete = AccountRequestContext.prepareCleanup(async () => {
+            if (reservation)
+                await this.deps.providerUsage!.completeRequest(reservation.completion)
+        })
+
+        if (reservation)
+            reservation.started = true
+
         const origin = {
-            ...state,
+            ...authorizedState,
             eventMeta: structuredClone(state.eventMeta),
         }
         const settled = new Set<string>()
-        let measurement: ProviderState
-        const record = AccountRequestContext.prepareCleanup(async () => void (await this.recordMeasuredUsage(measurement)))
 
-        return async update => {
+        return async (update, terminal = true) => {
             const kinds = (['usage', 'imageUsage', 'videoUsage'] as const).filter(kind => update[kind] && !settled.has(kind))
 
             if (!kinds.length)
@@ -1735,12 +1852,25 @@ export abstract class BaseProvider {
                 ),
             }
 
+            await record()
+
+            if (reservation) {
+                reservation.measured = true
+                reservation.terminal ||= terminal
+            }
+
             for (const kind of kinds) {
                 settled.add(kind)
                 this.settledUsageKinds.add(kind)
             }
 
-            await record()
+            if (
+                reservation?.terminal
+                && !reservation.completionQueued
+            ) {
+                await complete()
+                reservation.completionQueued = true
+            }
         }
     }
 
@@ -1755,7 +1885,7 @@ export abstract class BaseProvider {
     }
 
     private async recordMeasuredUsage(state: ProviderState): Promise<Partial<ProviderState>> {
-        // Record measured usage after each provider call. Recording is best-effort.
+        // Persist measured usage after each provider call before attempting delivery.
         const meteringOn = !!(this.deps.providerUsage?.enabled && state.workflowId)
         let seq = state.workflowSeq ?? 0
 
@@ -1780,6 +1910,7 @@ export abstract class BaseProvider {
                         state.workflowId!,
                         ++seq,
                     ),
+                    providerRequestId: `${state.aiVendorRequestId ?? 'provider'}:${state.workflowId}:tokens`,
                     authorizationId: state.requestAuthorizationId,
                 })
             }
@@ -1807,6 +1938,7 @@ export abstract class BaseProvider {
                         state.workflowId!,
                         ++seq,
                     ),
+                    providerRequestId: `${state.aiVendorRequestId ?? 'provider'}:${state.workflowId}:image`,
                     authorizationId: state.requestAuthorizationId,
                 })
             }
@@ -1837,6 +1969,7 @@ export abstract class BaseProvider {
                         state.workflowId!,
                         ++seq,
                     ),
+                    providerRequestId: `${state.aiVendorRequestId ?? 'provider'}:${state.workflowId}:video`,
                     authorizationId: state.requestAuthorizationId,
                 })
             }
@@ -1847,7 +1980,19 @@ export abstract class BaseProvider {
 
     // Record and log measured provider usage with its request authorization ID.
     private async recordProviderUsage(request: ProviderUsageRecordRequest): Promise<void> {
+        const reservation = request.authorizationId ? this.usageReservations.get(request.authorizationId) : undefined
+
+        if (
+            reservation
+            && !reservation.completion.providerRequestIds.includes(request.providerRequestId)
+        )
+            reservation.completion.providerRequestIds.push(request.providerRequestId)
+
         const response = await this.deps.providerUsage!.recordUsage(request)
+
+        if (reservation)
+            reservation.measured = true
+
         logRecordedProviderUsage({
             request,
             response,
@@ -1994,6 +2139,30 @@ export abstract class BaseProvider {
         operation: string,
         attempt: (context: TransportRetryAttempt) => Promise<T>,
     ): Promise<T> {
+        // A dropped connection can hide a paid attempt. Do not start another
+        // billable attempt under the same reservation when its outcome is unknown.
+        if (this.deps.providerUsage?.enabled) {
+            try {
+                return await attempt({ markPublished: () => {} })
+            } catch (error) {
+                const status = (error as { status?: number })?.status
+
+                if (
+                    status
+                    && [400, 401, 403, 404, 413, 422, 429].includes(status)
+                ) {
+                    const reservation = [...this.usageReservations.values()].findLast(value => value.started && !value.measured)
+
+                    // An explicit rejection never began paid work. Completion
+                    // with no receipts releases this unused authorization.
+                    if (reservation)
+                        reservation.started = false
+                }
+
+                throw error
+            }
+        }
+
         return await withTransportRetry({
             label: `${this.providerName}:${operation}:${this.instanceKey}`,
             faultNames: this.transportFaultNames,

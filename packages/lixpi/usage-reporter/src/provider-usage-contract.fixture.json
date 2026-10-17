@@ -1,5 +1,5 @@
 {
-    "version": 1,
+    "version": 2,
     "authorizationRequest": {
         "orgId": "org_1",
         "userId": "usr_1",
@@ -34,5 +34,15 @@
     },
     "usageRecordResult": {
         "recorded": true
+    },
+    "completionRequest": {
+        "authorizationId": "authorization_1",
+        "orgId": "org_1",
+        "userId": "usr_1",
+        "workflowId": "workflow_1",
+        "providerRequestIds": ["provider_request_1"]
+    },
+    "completionResult": {
+        "completed": true
     }
 }

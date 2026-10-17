@@ -13,6 +13,7 @@ import {
 } from '@lixpi/constants'
 
 import * as debugTools from '@lixpi/debug-tools'
+import { ProviderUsageClient, UsageReporter, type ProviderUsageTransport } from '@lixpi/usage-reporter'
 
 const capabilityOutputFinalizerMocks = vi.hoisted(() => ({
     finalize: vi.fn(),
@@ -220,6 +221,7 @@ describe('incurred usage after account cancellation', () => {
             providerUsage: {
                 enabled: true,
                 recordUsage,
+                completeRequest: vi.fn(),
             },
             usageReporter: { measureTextUsage: vi.fn(input => ({
                 ...input,
@@ -280,7 +282,7 @@ describe('incurred usage after account cancellation', () => {
                 authorizationId: 'original-authorization',
                 userId: 'user-1',
                 orgId: 'org-1',
-                providerRequestId: 'provider-response',
+                providerRequestId: 'provider-response:workflow:tokens',
                 usage: expect.objectContaining({
                     promptTokens: 12,
                     completionTokens: 3,
@@ -686,6 +688,53 @@ describe('BaseProvider request validation', () => {
         expect(streamTokens).not.toHaveBeenCalled()
         expect(result.error).toContain('metrics_unreachable')
     })
+
+    it.each(['denied', 'unavailable', 'malformed'])(
+        'stops provider transport when the real usage client receives %s authorization',
+        async outcome => {
+            const request = vi.fn<ProviderUsageTransport['request']>()
+
+            if (outcome === 'unavailable')
+                request.mockRejectedValue(new Error('billing timeout'))
+            else
+                request.mockResolvedValue(outcome === 'denied' ? { authorized: false } : {})
+
+            const provider = new TestProvider('ws-1:thread-1', {
+                natsService: makeFakeNats().fake,
+                usageReporter: {} as any,
+                runImageRouter: vi.fn(),
+                runVideoRouter: vi.fn(),
+                providerUsage: new ProviderUsageClient({ request }, {
+                    enabled: true,
+                    requestTimeoutMs: 3000,
+                    denyRequestWhenAuthorizationUnavailable: true,
+                }),
+            } as BaseProviderDeps)
+            const streamTokens = vi.spyOn(provider as any, 'streamTokens')
+            const result = await provider.process({
+                workspaceId: 'ws-1',
+                aiChatThreadId: 'thread-1',
+                aiModelMetaInfo: {
+                    provider: 'Anthropic',
+                    model: 'billing-test-model',
+                    modelVersion: 'billing-test-model',
+                },
+                messages: [{
+                    role: 'user',
+                    content: 'A synthetic billing authorization test.',
+                }],
+                eventMeta: {
+                    userId: 'user-1',
+                    organizationId: 'organization-1',
+                },
+            })
+
+            expect(request).toHaveBeenCalledOnce()
+            expect(request.mock.calls[0]?.[0]).toBe('metrics.provider.request.authorize')
+            expect(streamTokens).not.toHaveBeenCalled()
+            expect(result.error).toContain(outcome === 'denied' ? 'request_denied' : 'authorization_unavailable')
+        },
+    )
 
     it('validates required model and thread identity fields', async () => {
         const deps = {
@@ -1690,6 +1739,119 @@ describe('BaseProvider process failure path', () => {
 })
 
 describe('BaseProvider usage lifecycle', () => {
+    it('reserves each model round and does not deduplicate separate modalities or later rounds', async () => {
+        const authorizeRequest = vi.fn(async () => ({
+            authorized: true,
+            authorizationId: 'second-authorization',
+        }))
+        const recordUsage = vi.fn(async () => ({ recorded: true }))
+        const completeRequest = vi.fn()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: new UsageReporter(),
+            providerUsage: {
+                enabled: true,
+                authorizeRequest,
+                recordUsage,
+                completeRequest,
+            },
+        } as never)
+        const state = createFanoutState({
+            workflowId: 'first-workflow',
+            requestAuthorizationId: 'first-authorization',
+            eventMeta: {
+                userId: 'user-1',
+                organizationId: 'org-1',
+            },
+        })
+        const first = await (provider as any).prepareUsageSettlement(state)
+        await first({
+            aiVendorRequestId: 'shared-provider-id',
+            usage: {
+                promptTokens: 1,
+                completionTokens: 2,
+            },
+            imageUsage: {
+                generatedCount: 1,
+                size: 'auto',
+                quality: 'auto',
+            },
+        })
+        const second = await (provider as any).prepareUsageSettlement(state)
+        await second({
+            aiVendorRequestId: 'shared-provider-id',
+            usage: {
+                promptTokens: 3,
+                completionTokens: 4,
+            },
+        })
+
+        expect(authorizeRequest).toHaveBeenCalledOnce()
+        expect(recordUsage).toHaveBeenCalledTimes(3)
+        const records = recordUsage.mock.calls.map(([record]) => record)
+        expect(new Set(records.map(record => record.providerRequestId)).size).toBe(3)
+        expect(records[0].authorizationId).toBe('first-authorization')
+        expect(records[1].authorizationId).toBe('first-authorization')
+        expect(records[2].authorizationId).toBe('second-authorization')
+        await provider.releaseUnusedUsageReservations()
+        expect(completeRequest).toHaveBeenCalledTimes(2)
+    })
+
+    it('releases a preflight reservation if its child never starts', async () => {
+        const completeRequest = vi.fn()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: new UsageReporter(),
+            providerUsage: {
+                enabled: true,
+                completeRequest,
+                authorizeRequest: vi.fn(async () => ({
+                    authorized: true,
+                    authorizationId: 'unused',
+                })),
+            },
+        } as never)
+        await (provider as any).authorizeProviderRequest(createFanoutState({
+            eventMeta: {
+                userId: 'user-1',
+                organizationId: 'org-1',
+            },
+        }))
+        await provider.releaseUnusedUsageReservations()
+        await provider.releaseUnusedUsageReservations()
+        expect(completeRequest).toHaveBeenCalledOnce()
+        expect(completeRequest).toHaveBeenCalledWith(expect.objectContaining({
+            authorizationId: 'unused',
+            providerRequestIds: [],
+        }))
+    })
+
+    it.each([400, 429])('releases an unbilled HTTP %s rejection without retrying it', async status => {
+        const completeRequest = vi.fn()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: new UsageReporter(),
+            providerUsage: {
+                enabled: true,
+                completeRequest,
+            },
+        } as never)
+        await (provider as any).prepareUsageSettlement(createFanoutState({
+            workflowId: 'workflow',
+            requestAuthorizationId: 'authorization',
+        }))
+        const attempt = vi.fn(async () => {
+            const error = new Error('rejected') as Error & { status: number }
+            error.status = status
+
+            throw error
+        })
+        await expect((provider as any).retryTransport('request', attempt)).rejects.toThrow('rejected')
+        await provider.releaseUnusedUsageReservations()
+        expect(attempt).toHaveBeenCalledOnce()
+        expect(completeRequest).toHaveBeenCalledOnce()
+    })
+
     it('retains measured usage when the workflow fails after the provider call', async () => {
         const measureTextUsage = vi.fn()
         const measureImageUsage = vi.fn()

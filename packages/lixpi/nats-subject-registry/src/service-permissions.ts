@@ -67,6 +67,7 @@ export const builtInPermissions = {
                 ...events,
                 ...Object.values(ASSET_MAINTENANCE_SUBJECTS),
                 ...Object.values(METRICS_SUBJECTS),
+                'provider-usage.outbox',
                 BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS,
                 CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL,
             ],

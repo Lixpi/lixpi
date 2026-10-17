@@ -158,7 +158,10 @@ export class OpenAIProvider extends BaseProvider {
         if (!apiKey)
             throw new Error('OPENAI_API_KEY environment variable is required')
 
-        this.client = new OpenAI({ apiKey })
+        this.client = new OpenAI({
+            apiKey,
+            maxRetries: deps.providerUsage?.enabled ? 0 : 2,
+        })
     }
 
     // The OpenAI SDK wraps every socket failure in APIConnectionError.
@@ -376,7 +379,7 @@ export class OpenAIProvider extends BaseProvider {
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         const caps = args.state.aiModelMetaInfo.inferenceCapabilities
-        const settleUsage = this.prepareUsageSettlement(args.state)
+        const settleUsage = await this.prepareUsageSettlement(args.state)
         const requestKwargs: Record<string, any> = {
             model: args.modelVersion,
             input: args.inputMessages,
@@ -747,7 +750,7 @@ export class OpenAIProvider extends BaseProvider {
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         let prompt = ''
-        const settleUsage = this.prepareUsageSettlement(args.state)
+        const settleUsage = await this.prepareUsageSettlement(args.state)
         const resolvedReferences = args.state.resolvedImageGenerationReferences ?? []
         const referenceFiles = await buildOpenAIImageReferenceFiles(resolvedReferences)
 

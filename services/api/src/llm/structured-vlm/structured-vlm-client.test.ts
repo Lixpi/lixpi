@@ -8,6 +8,8 @@ import {
 } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
+import { ProviderUsageClient } from '@lixpi/usage-reporter'
+import { ProviderCallAccounting } from '../../services/provider-call-accounting.ts'
 import {
     type AiModelInferenceCapabilities,
 } from '@lixpi/constants'
@@ -143,12 +145,103 @@ describe('callStructuredVlm', () => {
     })
 
     afterEach(() => {
+        ProviderCallAccounting.configure()
         debugInfoSpy?.mockRestore()
         debugInfoSpy = null
         debugWarnSpy?.mockRestore()
         debugWarnSpy = null
         debugErrSpy?.mockRestore()
         debugErrSpy = null
+    })
+
+    it('authorizes and charges every truncated attempt before retrying with a larger budget', async () => {
+        const messages: Array<{
+            subject: string
+            data: any
+        }> = []
+        const client = new ProviderUsageClient({ request: vi.fn(async (subject, data: any) => {
+            messages.push({
+                subject,
+                data,
+            })
+
+            if (subject.endsWith('authorize'))
+                return {
+                    authorized: true,
+                    authorizationId: `auth:${data.workflowId}`,
+                } as never
+
+            if (subject.endsWith('complete'))
+                return { completed: true } as never
+
+            return { recorded: true } as never
+        }) }, {
+            enabled: true,
+            requestTimeoutMs: 100,
+            denyRequestWhenAuthorizationUnavailable: true,
+        })
+        ProviderCallAccounting.configure(client)
+        openAiCreate.mockResolvedValueOnce(makeAsyncStream([{
+            type: 'response.incomplete',
+            response: {
+                id: 'first',
+                usage: {
+                    input_tokens: 20,
+                    output_tokens: 256,
+                },
+                incomplete_details: { reason: 'max_output_tokens' },
+            },
+        }])).mockResolvedValueOnce(makeAsyncStream([{
+            ...makeOpenAiCompleted('{"status":"ok"}', 'synthetic', {
+                input_tokens: 20,
+                output_tokens: 300,
+            }),
+            response: {
+                id: 'second',
+                output_text: '{"status":"ok"}',
+                usage: {
+                    input_tokens: 20,
+                    output_tokens: 300,
+                },
+            },
+        }]))
+        const result = await callStructuredVlm({
+            ...baseArgs,
+            provider: 'OpenAI',
+            modelVersion: 'synthetic',
+            natsService: {} as never,
+            maxTokens: 256,
+            billingIdentity: {
+                organizationId: 'org',
+                userId: 'owner',
+                workspaceId: 'workspace',
+            },
+        })
+        expect(result.parsed).toEqual({ status: 'ok' })
+        expect(messages.map(message => message.subject.split('.').at(-1))).toEqual(['authorize', 'record', 'complete', 'authorize', 'record', 'complete'])
+        const charges = messages.filter(message => message.subject.endsWith('record')).map(message => message.data)
+        expect(charges.map(charge => charge.providerRequestId)).toEqual(['first', 'second'])
+        expect(charges.map(charge => charge.usage.completionTokens)).toEqual([256, 300])
+        expect(charges[0].authorizationId).not.toBe(charges[1].authorizationId)
+    })
+
+    it('denies an unfunded auxiliary call before SDK transport', async () => {
+        ProviderCallAccounting.configure(new ProviderUsageClient({ request: vi.fn(async () => ({ authorized: false }) as never) }, {
+            enabled: true,
+            requestTimeoutMs: 100,
+            denyRequestWhenAuthorizationUnavailable: true,
+        }))
+        await expect(callStructuredVlm({
+            ...baseArgs,
+            provider: 'OpenAI',
+            modelVersion: 'synthetic',
+            natsService: {} as never,
+            billingIdentity: {
+                organizationId: 'empty',
+                userId: 'owner',
+            },
+        })).rejects.toThrow('not authorized')
+        expect(openAiCreate).not.toHaveBeenCalled()
     })
 
     it('dispatches to OpenAI and parses streamed structured output', async () => {

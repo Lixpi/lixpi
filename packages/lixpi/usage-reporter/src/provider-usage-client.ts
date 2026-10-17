@@ -6,6 +6,8 @@ import {
     type ProviderRequestAuthorizationResult,
     type ProviderUsageRecordRequest,
     type ProviderUsageRecordResult,
+    type ProviderRequestCompletionRequest,
+    type ProviderRequestCompletionResult,
 } from './provider-usage-contract.ts'
 
 // Both subjects and JSON shapes must change with the paired responder repository.
@@ -23,6 +25,11 @@ export type ProviderUsageOptions = {
     enabled: boolean
     requestTimeoutMs: number
     denyRequestWhenAuthorizationUnavailable: boolean
+}
+
+export type ProviderUsageOutbox = {
+    enqueueUsage(request: ProviderUsageRecordRequest): Promise<void>
+    enqueueCompletion(request: ProviderRequestCompletionRequest): Promise<void>
 }
 
 export const providerUsageOptionsFromEnv = (): ProviderUsageOptions => ({
@@ -54,6 +61,7 @@ export class ProviderUsageClient {
     constructor(
         private readonly transport: ProviderUsageTransport,
         private readonly options: ProviderUsageOptions,
+        private readonly outbox?: ProviderUsageOutbox,
     ) {}
 
     get enabled(): boolean {
@@ -82,11 +90,13 @@ export class ProviderUsageClient {
         }
     }
 
-    // A recording failure does not discard a provider response already delivered.
-    // Retrying the same providerRequestId is safe.
+    // Persist before delivery. Failure to persist must surface to the caller;
+    // billing delivery can retry without discarding the measured usage.
     async recordUsage(request: ProviderUsageRecordRequest): Promise<ProviderUsageRecordResult | undefined> {
         if (!this.options.enabled)
             return undefined
+
+        await this.outbox?.enqueueUsage(request)
 
         try {
             const result = await this.transport.request<ProviderUsageRecordRequest, ProviderUsageRecordResult>(
@@ -103,6 +113,29 @@ export class ProviderUsageClient {
             warn(`[ProviderUsage] usage recording unavailable (providerRequestId=${request.providerRequestId})`)
 
             return undefined
+        }
+    }
+
+    async completeRequest(request: ProviderRequestCompletionRequest): Promise<void> {
+        if (!this.options.enabled)
+            return
+
+        await this.outbox?.enqueueCompletion(request)
+
+        try {
+            const result = await this.transport.request<ProviderRequestCompletionRequest, ProviderRequestCompletionResult>(
+                PROVIDER_USAGE_SUBJECTS.PROVIDER_REQUEST_COMPLETE,
+                request,
+                this.options.requestTimeoutMs,
+            )
+
+            if (!result?.completed)
+                throw new Error('Reservation completion pending')
+        } catch (error) {
+            if (!this.outbox)
+                throw error
+
+            warn(`[ProviderUsage] reservation completion queued (authorizationId=${request.authorizationId})`)
         }
     }
 }

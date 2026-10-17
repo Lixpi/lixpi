@@ -78,6 +78,8 @@ An API service supplies adapters for catalog storage, resource loading, run pers
 
 `CapabilityDispatcherOptions.runDetached` lets the host retain an authenticated execution scope for the whole detached workflow. Its signal combines with the run's stop controller. The optional persistence `cancelRun` port records terminal cancellation when normal user writes have been revoked. The API binds that operation to an already-created run and owner, preserves existing output IDs, and permits only the cancellation event through cleanup.
 
+`CapabilityDispatcherOptions.runInContext` wraps execution with infrastructure scoped to the authorized requester. The API uses it to carry organization, user and Workspace identity into auxiliary provider accounting, including detached runs. Capability modules do not implement ledger or delivery policy.
+
 A consuming service must not contain a capability runtime. Capability-specific prompts, policy, orchestration, scheduling, retry, assessment, composition, tracing, and cleanup belong in `capabilities/<module-id>/`. Service adapters are limited to implementing package-owned ports with application infrastructure.
 
 A module-owned instruction Skill uses `createInstructionSkillPackage()` with an injected storage adapter. The module catalog supplies its `parentModuleId` and `catalogExposure: 'module-internal'` during seeding. Standalone package saves use `catalogExposure: 'standalone'` with no parent module. This keeps file parsing and manifest construction in the package while the API controls Blob persistence and catalog seeding.

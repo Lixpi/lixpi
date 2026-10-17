@@ -61,7 +61,11 @@ const natsService = { publish: vi.fn() } as any
 const createRegistry = () => {
     const process = vi.fn(async () => ({}))
     const preflightProviderRequestAuthorization = vi.fn(async () => ({ providerRequestAuthorized: true }))
-    const getOrCreate = vi.fn(() => ({ preflightProviderRequestAuthorization }))
+    const releaseUnusedUsageReservations = vi.fn(async () => undefined)
+    const getOrCreate = vi.fn(() => ({
+        preflightProviderRequestAuthorization,
+        releaseUnusedUsageReservations,
+    }))
     const remove = vi.fn()
     const stopGroup = vi.fn(async () => undefined)
     const stopGroupsWithPrefix = vi.fn(async () => undefined)
@@ -70,6 +74,7 @@ const createRegistry = () => {
     return {
         process,
         preflightProviderRequestAuthorization,
+        releaseUnusedUsageReservations,
         getOrCreate,
         remove,
         stopGroup,
@@ -1025,6 +1030,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(generatedAssetStorageMocks.ensurePendingGeneratedAssets).not.toHaveBeenCalled()
         expect(registry.process).not.toHaveBeenCalled()
         expect(registry.remove).toHaveBeenCalledOnce()
+        expect(registry.releaseUnusedUsageReservations).toHaveBeenCalledOnce()
         const detail = 'AI generation could not be authorized. Check your organization\'s AI credits in Billing and try again.'
 
         if (durableGenerationRequestId)

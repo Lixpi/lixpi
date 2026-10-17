@@ -43,6 +43,9 @@ import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import {
     type ProviderRegistry,
 } from '../providers/provider-registry.ts'
+import {
+    type BaseProvider,
+} from '../providers/base-provider.ts'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
 import {
     executeRequiredCapabilitiesForState,
@@ -348,12 +351,18 @@ export class MediaGenerationMatrixOrchestrator {
             ),
         )
         let authorizations: Partial<ProviderState>[]
+        const authorizationProviders: BaseProvider[] = []
+        const releaseUnusedReservations = AccountRequestContext.prepareCleanup(async () => {
+            for (const provider of authorizationProviders)
+                await provider.releaseUnusedUsageReservations()
+        })
 
         try {
-            authorizations = await Promise.all(
+            const decisions = await Promise.allSettled(
                 normalized.reasoningModels.map(async (reasoningModel, reasoningIndex) => {
                     const instanceKey = buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
                     const provider = this.registry.getOrCreate(instanceKey, reasoningModel.provider)
+                    authorizationProviders.push(provider)
 
                     return provider.preflightProviderRequestAuthorization(
                         {
@@ -372,7 +381,14 @@ export class MediaGenerationMatrixOrchestrator {
                     )
                 }),
             )
+            const rejected = decisions.find(result => result.status === 'rejected')
+
+            if (rejected?.status === 'rejected')
+                throw rejected.reason
+
+            authorizations = decisions.map(result => (result as PromiseFulfilledResult<Partial<ProviderState>>).value)
         } catch (error) {
+            await releaseUnusedReservations()
             authorizationInstanceKeys.forEach(instanceKey => this.registry.remove(instanceKey))
             const detail = "AI generation could not be authorized. Check your organization's AI credits in Billing and try again."
 
@@ -445,6 +461,8 @@ export class MediaGenerationMatrixOrchestrator {
                 primaryVideoOptions,
             })
         } catch (error) {
+            await releaseUnusedReservations()
+
             try {
                 if (accountScope?.signal.aborted)
                     await failCancelledRuns()
@@ -602,6 +620,7 @@ export class MediaGenerationMatrixOrchestrator {
             if (rejectedResult?.status === 'rejected')
                 throw rejectedResult.reason
         } finally {
+            await releaseUnusedReservations()
             const removeProjectedPendingNodes = this.cancelledRequestGroupKeys.delete(normalized.requestGroupKey)
             this.scheduleRequestPublisherCleanup(normalized.requestGroupKey)
 

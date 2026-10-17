@@ -48,6 +48,8 @@ import providerVerificationRoutes from './routes/provider-verification-routes.ts
 
 import { createLlmModule } from './llm/index.ts'
 import { startAssetMaintenanceWorker } from './services/asset-maintenance-worker.ts'
+import { DurableProviderUsageOutbox } from './services/provider-usage-outbox.ts'
+import { ProviderCallAccounting } from './services/provider-call-accounting.ts'
 import { CapabilityRunEventRelay } from './services/capability-run-event-log.ts'
 import { getCapabilityDispatcher } from './capability-system/capability-runtime.ts'
 import { asCapabilityArguments } from './capability-system/capability-state-resolver.ts'
@@ -208,10 +210,22 @@ const providerUsageTransport: ProviderUsageTransport = {
         timeoutMs,
     ),
 }
+const providerUsageOptions = providerUsageOptionsFromEnv()
+const providerUsageOutbox = providerUsageOptions.enabled
+    ? new DurableProviderUsageOutbox(
+        providerUsageConnection,
+        providerUsageTransport,
+        Number(env.NATS_STREAM_REPLICAS || 3),
+    )
+    : undefined
+await providerUsageOutbox?.prepare()
+providerUsageOutbox?.start()
 const providerUsage = new ProviderUsageClient(
     providerUsageTransport,
-    providerUsageOptionsFromEnv(),
+    providerUsageOptions,
+    providerUsageOutbox,
 )
+ProviderCallAccounting.configure(providerUsage)
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
@@ -322,6 +336,7 @@ process.on('SIGINT', async () => {
         err('LLM module shutdown failed:', e)
     }
 
+    await providerUsageOutbox?.stop()
     await await NATS_Service.getInstance()!.drain() // Drains subscriptions and closes connection
     process.exit(0)
 })

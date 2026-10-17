@@ -3,7 +3,7 @@
 // metrics.provider.* subjects. Update and release both repositories together.
 // See ../documentation/METERING-PORT.md.
 
-export const PROVIDER_USAGE_CONTRACT_VERSION = 1
+export const PROVIDER_USAGE_CONTRACT_VERSION = 2
 
 export type MeteredModality = 'tokens' | 'image' | 'video'
 export type UsageUnit = 'tokens' | 'images' | 'seconds'
@@ -64,4 +64,17 @@ export type ProviderUsageRecordRequest = {
 
 export type ProviderUsageRecordResult = {
     recorded: boolean
+}
+
+// Release unused funds only after all listed measurements have committed.
+export type ProviderRequestCompletionRequest = {
+    authorizationId: string
+    orgId: string
+    userId: string
+    workflowId: string
+    providerRequestIds: string[]
+}
+
+export type ProviderRequestCompletionResult = {
+    completed: boolean
 }

@@ -20,6 +20,8 @@ import {
     type ProviderRequestAuthorizationResult,
     type ProviderUsageRecordRequest,
     type ProviderUsageRecordResult,
+    type ProviderRequestCompletionRequest,
+    type ProviderRequestCompletionResult,
 } from './provider-usage-contract.ts'
 
 type ProviderUsageContractFixture = {
@@ -28,6 +30,8 @@ type ProviderUsageContractFixture = {
     authorizationResult: ProviderRequestAuthorizationResult
     usageRecordRequest: ProviderUsageRecordRequest
     usageRecordResult: ProviderUsageRecordResult
+    completionRequest: ProviderRequestCompletionRequest
+    completionResult: ProviderRequestCompletionResult
 }
 
 const providerUsageContractFixture = JSON.parse(readFileSync(
@@ -106,6 +110,14 @@ const fixtureUsageRecordRequest: ProviderUsageRecordRequest = {
 }
 
 const fixtureUsageRecordResult: ProviderUsageRecordResult = { recorded: true }
+const fixtureCompletionRequest: ProviderRequestCompletionRequest = {
+    authorizationId: 'authorization_1',
+    orgId: 'org_1',
+    userId: 'usr_1',
+    workflowId: 'workflow_1',
+    providerRequestIds: ['provider_request_1'],
+}
+const fixtureCompletionResult: ProviderRequestCompletionResult = { completed: true }
 
 let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 
@@ -126,6 +138,8 @@ describe('provider usage contract fixture', () => {
         expect(JSON.stringify(providerUsageContractFixture.authorizationResult)).toBe(JSON.stringify(fixtureAuthorizationResult))
         expect(JSON.stringify(providerUsageContractFixture.usageRecordRequest)).toBe(JSON.stringify(fixtureUsageRecordRequest))
         expect(JSON.stringify(providerUsageContractFixture.usageRecordResult)).toBe(JSON.stringify(fixtureUsageRecordResult))
+        expect(JSON.stringify(providerUsageContractFixture.completionRequest)).toBe(JSON.stringify(fixtureCompletionRequest))
+        expect(JSON.stringify(providerUsageContractFixture.completionResult)).toBe(JSON.stringify(fixtureCompletionResult))
     })
 })
 
@@ -190,6 +204,38 @@ describe('ProviderUsageClient.authorizeRequest', () => {
             authorized: true,
             reason: 'authorization_unavailable',
         })
+    })
+})
+
+describe('durable usage delivery', () => {
+    it('persists a charge before the first delivery attempt and surfaces persistence failure', async () => {
+        const request = vi.fn().mockResolvedValue({ recorded: true })
+        const enqueueUsage = vi.fn().mockRejectedValueOnce(new Error('disk unavailable')).mockResolvedValue(undefined)
+        const client = new ProviderUsageClient(stubTransport(request), options(), {
+            enqueueUsage,
+            enqueueCompletion: vi.fn(),
+        })
+        await expect(client.recordUsage(usageRecord)).rejects.toThrow('disk unavailable')
+        expect(request).not.toHaveBeenCalled()
+        await expect(client.recordUsage(usageRecord)).resolves.toEqual({ recorded: true })
+        expect(enqueueUsage.mock.invocationCallOrder[1]).toBeLessThan(request.mock.invocationCallOrder[0])
+    })
+
+    it('keeps completion queued when usage has not reached billing yet', async () => {
+        const completion = {
+            authorizationId: 'auth_1',
+            orgId: 'org_1',
+            userId: 'usr_1',
+            workflowId: 'wf_1',
+            providerRequestIds: ['req_1'],
+        }
+        const enqueueCompletion = vi.fn().mockResolvedValue(undefined)
+        const client = new ProviderUsageClient(stubTransport(vi.fn().mockResolvedValue({ completed: false })), options(), {
+            enqueueUsage: vi.fn(),
+            enqueueCompletion,
+        })
+        await client.completeRequest(completion)
+        expect(enqueueCompletion).toHaveBeenCalledWith(completion)
     })
 })
 

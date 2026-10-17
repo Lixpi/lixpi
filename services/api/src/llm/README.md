@@ -235,7 +235,7 @@ The selected `AiModel` record supplies `inferenceCapabilities` to ordinary provi
 - `@lixpi/usage-reporter` authorizes provider requests before transport and records measured usage after completion. Its public results and logs contain only usage dimensions and neutral decisions.
 - The estimate describes the invoked model and modality. Reasoning calls use tokens; each transient image or video provider request has its own authorization.
 - Text estimates combine measured prompt tokens, a growth allowance, and the completion ceiling. Video estimates use the called endpoint's catalog usage unit and preserve the provisional-frame warning described in the package documentation.
-- Usage records retain the provider request ID, optional authorization ID, workflow sequence, and measured modality dimensions. Recording is awaited but best-effort.
+- Usage records retain the provider request ID, authorization ID, workflow sequence, and measured modality dimensions. The API durably queues each measurement before delivery. Completion releases unused funds only after billing has recorded every listed measurement. Additional model rounds acquire separate reservations. Metered transport attempts do not silently reconnect under one reservation when the previous attempt's cost is unknown.
 - Every request has an AbortController and the global timeout.
 - Attached Asset display titles/original filenames never enter provider-safe reasoning or media payloads; final adapters fail closed on a forbidden variant.
 - Every current provider has one validated policy definition with explicit moderation, verification, retention, sensitive-data, documentation, review, and problem-normalization fields.

@@ -95,7 +95,7 @@ export class BytePlusProvider extends BaseProvider {
     // VIDEO_COMPLETE on success (or VIDEO_ERROR + throw on failure, which the
     // streamImpl catch in BaseProvider converts to update.error).
     private async runSeedanceGeneration(state: ProviderState): Promise<VideoUsage & { responseId?: string }> {
-        const settleUsage = this.prepareUsageSettlement(state)
+        const settleUsage = await this.prepareUsageSettlement(state)
         const modelVersion = state.modelVersion
         // VideoRouter passes the final prompt as the first user message's content.
         const first = state.messages[0]

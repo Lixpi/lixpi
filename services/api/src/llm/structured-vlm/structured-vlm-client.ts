@@ -19,6 +19,11 @@ import {
     type ChatMessage,
 } from '../graph/state.ts'
 import { bedrockInference } from '../providers/bedrock-inference.ts'
+import { estimateInputTokens } from '../providers/provider-input-budget.ts'
+import {
+    ProviderCallAccounting,
+    type ProviderBillingIdentity,
+} from '../../services/provider-call-accounting.ts'
 import {
     assertMessageInputKindsSupported,
     convertAttachmentsForProvider,
@@ -38,6 +43,7 @@ export type VlmJsonSchema = {
 }
 
 export type VlmCallArgs = {
+    billingIdentity?: ProviderBillingIdentity
     provider: ProviderName
     modelVersion: string
     inferenceCapabilities: AiModelInferenceCapabilities
@@ -190,7 +196,10 @@ const getAnthropic = (): Anthropic | AnthropicBedrock => {
     if (!_anthropic) {
         if (bedrockInference.isEnabledFor('anthropic')) {
             bedrockInference.logRouting('anthropic', 'vlm')
-            _anthropic = new AnthropicBedrock({ awsRegion: bedrockInference.region })
+            _anthropic = new AnthropicBedrock({
+                awsRegion: bedrockInference.region,
+                maxRetries: 0,
+            })
 
             return _anthropic
         }
@@ -200,7 +209,10 @@ const getAnthropic = (): Anthropic | AnthropicBedrock => {
         if (!apiKey)
             throw new Error('ANTHROPIC_API_KEY environment variable is required')
 
-        _anthropic = new Anthropic({ apiKey })
+        _anthropic = new Anthropic({
+            apiKey,
+            maxRetries: 0,
+        })
     }
 
     return _anthropic
@@ -213,7 +225,10 @@ const getOpenAi = (): OpenAI => {
         if (!apiKey)
             throw new Error('OPENAI_API_KEY environment variable is required')
 
-        _openai = new OpenAI({ apiKey })
+        _openai = new OpenAI({
+            apiKey,
+            maxRetries: 0,
+        })
     }
 
     return _openai
@@ -356,34 +371,71 @@ const callAnthropicOnce = async <T>(
     if (bedrockInference.isEnabledFor('anthropic'))
         request.model = await bedrockInference.resolveModelId('anthropic', args.modelVersion)
 
-    const stream = client.messages.stream(request as any, { signal: args.abortSignal })
+    const finalMessage = await ProviderCallAccounting.run(
+        args.modelVersion,
+        estimateInputTokens(request).inputTokens + budget.wireMaxTokens,
+        async accounting => {
+            const stream = client.messages.stream(request as any, { signal: args.abortSignal })
 
-    for await (const event of stream) {
-        if (event.type === 'content_block_delta') {
-            const delta = event.delta as any
-            const deltaType = delta?.type
-
-            if (deltaType === 'text_delta') {
-                const text = delta.text ?? ''
+            for await (const event of stream) {
+                if (
+                    event.type === 'message_start'
+                    && event.message.usage
+                )
+                    accounting.observe(
+                        {
+                            promptTokens: event.message.usage.input_tokens + (event.message.usage.cache_read_input_tokens ?? 0) + (event.message.usage.cache_creation_input_tokens ?? 0),
+                            cachedTokens: event.message.usage.cache_read_input_tokens ?? 0,
+                        },
+                        event.message.id,
+                    )
 
                 if (
-                    text
-                    && args.onTextChunk
+                    event.type === 'message_delta'
+                    && event.usage
                 )
-                    args.onTextChunk(text)
-            } else if (deltaType === 'thinking_delta') {
-                const text = delta.thinking ?? ''
+                    accounting.observe({ completionTokens: event.usage.output_tokens })
 
-                if (
-                    text
-                    && args.onTextChunk
-                )
-                    args.onTextChunk(text)
+                if (event.type === 'content_block_delta') {
+                    const delta = event.delta as any
+                    const deltaType = delta?.type
+
+                    if (deltaType === 'text_delta') {
+                        const text = delta.text ?? ''
+
+                        if (
+                            text
+                            && args.onTextChunk
+                        )
+                            args.onTextChunk(text)
+                    } else if (deltaType === 'thinking_delta') {
+                        const text = delta.thinking ?? ''
+
+                        if (
+                            text
+                            && args.onTextChunk
+                        )
+                            args.onTextChunk(text)
+                    }
+                }
             }
-        }
-    }
 
-    const finalMessage = await stream.finalMessage()
+            const finalMessage = await stream.finalMessage()
+
+            if (finalMessage.usage)
+                accounting.observe(
+                    {
+                        promptTokens: finalMessage.usage.input_tokens + (finalMessage.usage.cache_read_input_tokens ?? 0) + (finalMessage.usage.cache_creation_input_tokens ?? 0),
+                        completionTokens: finalMessage.usage.output_tokens,
+                        cachedTokens: finalMessage.usage.cache_read_input_tokens ?? 0,
+                    },
+                    finalMessage.id,
+                )
+
+            return finalMessage
+        },
+        args.billingIdentity,
+    )
 
     let parsed: T | undefined
     let rawText = ''
@@ -677,8 +729,6 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     // so the wire cap carries the same answer+thinking headroom as elsewhere.
     requestArgs.max_output_tokens = budget.wireMaxTokens
 
-    const stream = await client.responses.create(requestArgs as any, { signal: args.abortSignal })
-
     let rawText = ''
     let finalText = ''
     let modelName = args.modelVersion
@@ -686,53 +736,71 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     let completionTokens = 0
     let incompleteByCap = false
 
-    for await (const event of stream as any) {
-        switch (event?.type) {
-            case 'response.output_text.delta': {
-                const delta: string = event.delta ?? ''
+    await ProviderCallAccounting.run(
+        args.modelVersion,
+        estimateInputTokens(requestArgs).inputTokens + budget.wireMaxTokens,
+        async accounting => {
+            const stream = await client.responses.create(requestArgs as any, { signal: args.abortSignal })
 
-                if (delta) {
-                    rawText += delta
+            for await (const event of stream as any) {
+                switch (event?.type) {
+                    case 'response.output_text.delta': {
+                        const delta: string = event.delta ?? ''
 
-                    if (
-                        args.onTextChunk
-                        && !usesClosedSchemaEnvelope
-                    )
-                        args.onTextChunk(delta)
+                        if (delta) {
+                            rawText += delta
+
+                            if (
+                                args.onTextChunk
+                                && !usesClosedSchemaEnvelope
+                            )
+                                args.onTextChunk(delta)
+                        }
+
+                        break
+                    }
+                    case 'response.completed':
+                    case 'response.incomplete': {
+                        const response = event.response
+
+                        if (response?.model)
+                            modelName = response.model
+
+                        if (response?.incomplete_details?.reason === 'max_output_tokens')
+                            incompleteByCap = true
+
+                        if (
+                            typeof response?.output_text === 'string'
+                            && response.output_text
+                        )
+                            finalText = response.output_text
+
+                        if (response?.usage) {
+                            promptTokens = response.usage.input_tokens ?? promptTokens
+                            completionTokens = response.usage.output_tokens ?? completionTokens
+                            accounting.observe(
+                                {
+                                    promptTokens,
+                                    completionTokens,
+                                    cachedTokens: response.usage.input_tokens_details?.cached_tokens ?? 0,
+                                    reasoningTokens: response.usage.output_tokens_details?.reasoning_tokens ?? 0,
+                                },
+                                response.id,
+                            )
+                        }
+
+                        break
+                    }
+                    case 'response.failed': {
+                        const message = event.response?.error?.message ?? 'unknown error'
+
+                        throw new Error(`OpenAI ${args.modelVersion} response failed: ${message}`)
+                    }
                 }
-
-                break
             }
-            case 'response.completed':
-            case 'response.incomplete': {
-                const response = event.response
-
-                if (response?.model)
-                    modelName = response.model
-
-                if (response?.incomplete_details?.reason === 'max_output_tokens')
-                    incompleteByCap = true
-
-                if (
-                    typeof response?.output_text === 'string'
-                    && response.output_text
-                )
-                    finalText = response.output_text
-
-                if (response?.usage) {
-                    promptTokens = response.usage.input_tokens ?? promptTokens
-                    completionTokens = response.usage.output_tokens ?? completionTokens
-                }
-
-                break
-            }
-            case 'response.failed': {
-                const message = event.response?.error?.message ?? 'unknown error'
-
-                throw new Error(`OpenAI ${args.modelVersion} response failed: ${message}`)
-            }
-        }
-    }
+        },
+        args.billingIdentity,
+    )
 
     const outputText = finalText || rawText
 
@@ -841,16 +909,24 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     let promptTokens = 0
     let completionTokens = 0
     let finishReason = ''
+    let measured = false
+    let cachedTokens = 0
+    let reasoningTokens = 0
+    let responseId: string | undefined
 
     const collectUsage = (usageMetadata: any): void => {
         if (!usageMetadata)
             return
 
         promptTokens = usageMetadata.promptTokenCount ?? promptTokens
-        completionTokens = usageMetadata.candidatesTokenCount ?? completionTokens
+        measured = true
+        reasoningTokens = usageMetadata.thoughtsTokenCount ?? reasoningTokens
+        cachedTokens = usageMetadata.cachedContentTokenCount ?? cachedTokens
+        completionTokens = (usageMetadata.candidatesTokenCount ?? 0) + reasoningTokens
     }
 
     const collectResponseText = (response: any): void => {
+        responseId = response?.responseId ?? responseId
         collectUsage(response?.usageMetadata)
 
         if (!finishReason) {
@@ -893,24 +969,47 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         }
     }
 
-    if (args.onTextChunk) {
-        const stream = await client.models.generateContentStream({
-            model: args.modelVersion,
+    await ProviderCallAccounting.run(
+        args.modelVersion,
+        estimateInputTokens({
             contents,
             config,
-        } as any)
+        }).inputTokens + budget.wireMaxTokens,
+        async accounting => {
+            try {
+                if (args.onTextChunk) {
+                    const stream = await client.models.generateContentStream({
+                        model: args.modelVersion,
+                        contents,
+                        config,
+                    } as any)
 
-        for await (const chunk of stream as any) {
-            collectResponseText(chunk)
-        }
-    } else {
-        const response = await client.models.generateContent({
-            model: args.modelVersion,
-            contents,
-            config,
-        } as any)
-        collectResponseText(response)
-    }
+                    for await (const chunk of stream as any) {
+                        collectResponseText(chunk)
+                    }
+                } else {
+                    const response = await client.models.generateContent({
+                        model: args.modelVersion,
+                        contents,
+                        config,
+                    } as any)
+                    collectResponseText(response)
+                }
+            } finally {
+                if (measured)
+                    accounting.observe(
+                        {
+                            promptTokens,
+                            completionTokens,
+                            cachedTokens,
+                            reasoningTokens,
+                        },
+                        responseId,
+                    )
+            }
+        },
+        args.billingIdentity,
+    )
 
     const truncated = /MAX_TOKENS/i.test(finishReason)
 

@@ -208,7 +208,7 @@ export class StabilityProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
-        const settleUsage = this.prepareUsageSettlement(state)
+        const settleUsage = await this.prepareUsageSettlement(state)
 
         if (!state.enableImageGeneration)
             throw new Error('Stability AI is an image-only provider and requires enableImageGeneration=true')

@@ -23,6 +23,7 @@ import {
 } from '../../llm/media-descriptor.ts'
 import { settings } from '../../settings.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
+import { ProviderCallAccounting } from '../../services/provider-call-accounting.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
 import { deriveDepictionMedium } from '../../services/asset-subject-identity-service.ts'
@@ -225,24 +226,38 @@ export const mediaDescriptorSubjects = createNatsSubscriptions(
                     if (!blob)
                         return { error: 'BLOB_NOT_FOUND' }
 
-                    descriptor = await describeMediaStill({
-                        provider: provider as ProviderName,
-                        modelVersion: modelVersion!,
-                        inferenceCapabilities,
-                        imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
-                        natsService,
-                        maxTokens,
-                    })
+                    descriptor = await ProviderCallAccounting.inScope(
+                        {
+                            organizationId: asset.organizationId,
+                            userId,
+                            workspaceId: data.workspaceId,
+                        },
+                        async () => await describeMediaStill({
+                            provider: provider as ProviderName,
+                            modelVersion: modelVersion!,
+                            inferenceCapabilities,
+                            imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
+                            natsService,
+                            maxTokens,
+                        }),
+                    )
                 } else {
-                    descriptor = await describeTextContent({
-                        provider: provider as ProviderName,
-                        modelVersion: modelVersion!,
-                        inferenceCapabilities,
-                        text: await loadAssetText(asset),
-                        title: asset.title,
-                        natsService,
-                        maxTokens,
-                    })
+                    descriptor = await ProviderCallAccounting.inScope(
+                        {
+                            organizationId: asset.organizationId,
+                            userId,
+                            workspaceId: data.workspaceId,
+                        },
+                        async () => await describeTextContent({
+                            provider: provider as ProviderName,
+                            modelVersion: modelVersion!,
+                            inferenceCapabilities,
+                            text: await loadAssetText(asset),
+                            title: asset.title,
+                            natsService,
+                            maxTokens,
+                        }),
+                    )
                 }
 
                 if (!descriptor.summary.trim())
