@@ -65,7 +65,9 @@
     padding: 12px 14px;
     border-radius: 10px;
     color: tokens.$steelBlue;
-    transition: hoverTransition(background-color), hoverTransition(color);
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(color);
 }
 
 .user-portal-shell .nav-link:hover,
@@ -110,7 +112,10 @@
     line-height: 1.4;
     justify-content: center;
     box-shadow: none;
-    transition: hoverTransition(background-color), hoverTransition(border-color), hoverTransition(color);
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(border-color),
+        hoverTransition(color);
 
     &:hover:not(:disabled) {
         background: #edf1e9;
@@ -153,7 +158,9 @@
     color: tokens.$nightBlue;
     font-size: 16px;
     box-shadow: none;
-    transition: hoverTransition(border-color), hoverTransition(box-shadow);
+    transition:
+        hoverTransition(border-color),
+        hoverTransition(box-shadow);
 
     &:focus {
         border-color: tokens.$aiGreen;
