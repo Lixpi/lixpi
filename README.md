@@ -78,6 +78,8 @@ For an image rebuild, use `./rebuild-containers.sh <service>`. The helper stops 
 
 The avatar at the bottom of the left sidebar opens the account menu. **Profile** opens the configured user portal in a new tab. **Sign out** ends the application's Auth0 session and returns to the configured login page, where you can choose another login method.
 
+The welcome page renders before Auth0 session checks. Canvas, editor and workspace services load after a session is available, with a progress view while they start. A workspace startup failure offers a reload without sending an authenticated user back through sign-in.
+
 Deployments with the private billing portal can enable `VITE_BILLING_ONBOARDING_ENABLED=true`. After Auth0 login, the app asks billing whether the organization has completed onboarding and sends new owners to the portal to choose free access or purchase AI credits. Free access requires no card and excludes AI generation; the API enforces the organization balance with `METRICS_ENABLED=true` and fail-closed usage authorization.
 
 ---
