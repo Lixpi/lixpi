@@ -76,7 +76,7 @@ start.bat
 
 For an image rebuild, use `./rebuild-containers.sh <service>`. The helper stops on the first failed Docker command and returns a nonzero exit status; its completion message appears only after every requested rebuild succeeds.
 
-The avatar at the bottom of the left sidebar opens the account menu. **Profile** opens the configured user portal in a new tab. **Sign out** ends the application's Auth0 session and returns to the configured login page, where you can choose another login method.
+The avatar at the bottom of the left sidebar opens the account menu. Navigation menus mount outside the sidebar and render above its surface and backdrop. **Profile** opens the configured user portal in a new tab. **Sign out** ends the application's Auth0 session and returns to the configured login page, where you can choose another login method.
 
 Startup displays a neutral UI-kit loading indicator while Auth0 checks the session and authenticated workspace modules load. The sign-in page appears only when authentication is required, so authenticated reloads do not flash a login screen. Canvas and editor code loads after a session is available. A workspace startup failure offers a reload without sending an authenticated user back through sign-in.
 
