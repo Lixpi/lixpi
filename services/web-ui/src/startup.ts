@@ -4,6 +4,10 @@ import {
     type AuthClientSession,
 } from '@lixpi/auth-client'
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
+import {
+    createLoadingPlaceholder,
+    type LoadingPlaceholderInstance,
+} from '@lixpi/ui-kit/components/loading-placeholder'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import {
     type WebClientServiceInstance,
@@ -28,13 +32,13 @@ type StartupConfig = {
 export class WebUiStartup {
     private readonly signIn: AuthenticationFailure
     private panel?: AuthPanel
+    private loading?: LoadingPlaceholderInstance
     private application?: WebClientServiceInstance
     private startup?: Promise<void>
     private destroyed = false
-    private redirecting = false
 
     constructor(private readonly config: StartupConfig) {
-        this.signIn = new AuthenticationFailure(() => this.login(), () => this.login('signup'))
+        this.signIn = new AuthenticationFailure(() => config.auth.login(true), () => config.auth.login(true, 'signup'))
     }
 
     start(): Promise<void> {
@@ -44,31 +48,29 @@ export class WebUiStartup {
     }
 
     private async initialize(): Promise<void> {
-        this.showSignIn()
+        this.loading = createLoadingPlaceholder({
+            label: 'Loading Lixpi',
+            withOverlay: false,
+        })
+        this.config.target.replaceChildren(this.loading.dom)
         let session: AuthClientSession | null
 
         try {
             session = await this.config.auth.initializeSession()
         } catch {
+            this.showSignIn()
+
             return
         }
 
-        if (
-            !session
-            || this.destroyed
-            || this.redirecting
-        )
+        if (this.destroyed)
             return
 
-        this.clearView()
-        this.panel = new AuthPanel({
-            brand: 'Lixpi',
-            logo: lixpiLogo,
-            title: 'Opening your workspace',
-            description: 'Getting your workspace ready.',
-            actions: [],
-        })
-        this.config.target.replaceChildren(this.panel.dom)
+        if (!session) {
+            this.showSignIn()
+
+            return
+        }
 
         try {
             const application = await this.config.loadWorkspace({
@@ -92,20 +94,10 @@ export class WebUiStartup {
         }
     }
 
-    private async login(screenHint?: 'signup'): Promise<void> {
-        this.redirecting = true
-
-        try {
-            await this.config.auth.login(true, screenHint)
-        } catch (error) {
-            this.redirecting = false
-
-            throw error
-        }
-    }
-
     private clearView(): void {
         this.signIn.destroy()
+        this.loading?.destroy()
+        this.loading = undefined
         this.panel?.destroy()
         this.panel = undefined
     }

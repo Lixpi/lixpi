@@ -1,6 +1,7 @@
 import { createAuthClient } from '@lixpi/auth-client'
 import '@lixpi/web-client-service-factory/styles/foundation'
 import '@lixpi/ui-kit/styles/auth-panel'
+import '@lixpi/ui-kit/styles/loading-placeholder'
 import { WebUiStartup } from './startup.ts'
 
 const auth = createAuthClient({

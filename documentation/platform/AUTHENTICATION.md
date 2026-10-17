@@ -11,7 +11,7 @@ The main SPA and user portal share identity behavior through `@lixpi/auth-client
 
 Auth0 must list the portal in Allowed Callback URLs, Allowed Logout URLs, and Allowed Web Origins. NATS WebSocket `allowed_origins` must include both clients; Pulumi adds both origins for AWS stacks.
 
-The main application's public entry renders the branded sign-in page before awaiting Auth0. It imports the canvas, editor and workspace services only after receiving a session, and displays progress while those modules and services load. Workspace startup failures offer a reload; they do not clear the authenticated session or display a sign-in prompt.
+The main application's public entry displays a neutral UI-kit loading indicator while Auth0 resolves the session, including redirect callbacks and cached sessions. It imports the canvas, editor and workspace services only after receiving a session, keeping the same indicator until the workspace mounts. The branded sign-in page appears only when authentication is required. Workspace startup failures offer a reload; they do not clear the authenticated session or display a sign-in prompt.
 
 Denied, cancelled or malformed callbacks stop protected startup and leave the sign-in page available. The SDK validates callback state and exchanges codes; the client removes callback parameters even on failure and restores only a validated same-origin destination. Automatic recovery has a per-tab guard that resets after successful current-user loading. A rejected callback cannot start an endless authorization loop. The app and portal remove protected views before displaying sign-in.
 

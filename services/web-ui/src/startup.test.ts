@@ -6,6 +6,7 @@ import {
     vi,
 } from 'vitest'
 import {
+    AuthenticationFailure,
     createAuthClient,
     type AuthClientSession,
 } from '@lixpi/auth-client'
@@ -64,7 +65,35 @@ afterEach(async () => {
 })
 
 describe('public web UI startup', () => {
-    it('renders usable sign-in before authentication settles and does not load the editor', async () => {
+    it('keeps a neutral loader throughout authenticated startup without ever showing sign-in', async () => {
+        const showSignIn = vi.spyOn(AuthenticationFailure.prototype, 'show')
+        const {
+            startup,
+            auth,
+            pending,
+            loadWorkspace,
+            application,
+        } = harness()
+        const modules = Promise.withResolvers<WebClientServiceInstance>()
+        loadWorkspace.mockReturnValue(modules.promise)
+        const started = startup.start()
+        const loading = document.querySelector('[role="status"]')!
+        expect(loading.getAttribute('aria-label')).toBe('Loading Lixpi')
+        expect(document.querySelector('button')).toBeNull()
+        expect(document.querySelector('h1')).toBeNull()
+        expect(loadWorkspace).not.toHaveBeenCalled()
+        pending.resolve(session)
+        await vi.waitFor(() => expect(loadWorkspace).toHaveBeenCalledOnce())
+        expect(document.querySelector('[role="status"]')).toBe(loading)
+        application.start.mockImplementation(async () => loadWorkspace.mock.calls[0][0].onReady())
+        modules.resolve(application)
+        await started
+        expect(showSignIn).not.toHaveBeenCalled()
+        expect(auth.login).not.toHaveBeenCalled()
+        expect(document.body.children).toHaveLength(0)
+    })
+
+    it('offers sign-in and signup only after the session check confirms no session', async () => {
         const {
             startup,
             auth,
@@ -72,29 +101,30 @@ describe('public web UI startup', () => {
             loadWorkspace,
         } = harness()
         const started = startup.start()
-        expect(document.querySelector('h1')?.textContent).toBe('Welcome to Lixpi')
-        const button = document.querySelector('button')!
-        expect(button.textContent).toBe('Sign in')
-        expect(button.disabled).toBe(false)
-        expect(loadWorkspace).not.toHaveBeenCalled()
-        button.click()
-        expect(auth.login).toHaveBeenCalledWith(true, undefined)
-        pending.resolve(session)
+        pending.resolve(null)
         await started
+        expect(document.querySelector('[role="status"]')).toBeNull()
+        expect(document.querySelector('h1')?.textContent).toBe('Welcome to Lixpi')
+        const buttons = document.querySelectorAll('button')
+        expect(Array.from(buttons, button => button.textContent)).toEqual(['Sign in', 'Create an account'])
+        buttons[0].click()
+        await vi.waitFor(() => expect(buttons[0].disabled).toBe(false))
+        expect(auth.login).toHaveBeenCalledWith(true)
+        buttons[1].click()
+        expect(auth.login).toHaveBeenCalledWith(true, 'signup')
         expect(loadWorkspace).not.toHaveBeenCalled()
     })
 
-    it('keeps signup usable while silent authentication is pending', async () => {
+    it('does not flash sign-in when a cached session resolves immediately', async () => {
+        const showSignIn = vi.spyOn(AuthenticationFailure.prototype, 'show')
         const {
             startup,
-            auth,
             pending,
         } = harness()
-        const started = startup.start()
-        document.querySelectorAll('button')[1].click()
-        expect(auth.login).toHaveBeenCalledWith(true, 'signup')
-        pending.resolve(null)
-        await started
+        pending.resolve(session)
+        await startup.start()
+        expect(showSignIn).not.toHaveBeenCalled()
+        expect(document.querySelector('button')).toBeNull()
     })
 
     it('loads the private workspace only after a session and releases the startup view before mounting', async () => {
@@ -109,7 +139,7 @@ describe('public web UI startup', () => {
         const started = startup.start()
         pending.resolve(session)
         await vi.waitFor(() => expect(loadWorkspace).toHaveBeenCalledOnce())
-        expect(document.querySelector('h1')?.textContent).toBe('Opening your workspace')
+        expect(document.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Loading Lixpi')
         expect(application.start).not.toHaveBeenCalled()
         const config = loadWorkspace.mock.calls[0][0]
         application.start.mockImplementation(async () => config.onReady())
@@ -130,8 +160,23 @@ describe('public web UI startup', () => {
         const started = startup.start()
         pending.reject(new Error('access_denied'))
         await started
+        expect(document.querySelector('[role="status"]')).toBeNull()
         expect(document.querySelector('button')?.textContent).toBe('Sign in')
         expect(loadWorkspace).not.toHaveBeenCalled()
+    })
+
+    it('does not show sign-in when a session check fails after shutdown', async () => {
+        const showSignIn = vi.spyOn(AuthenticationFailure.prototype, 'show')
+        const {
+            startup,
+            pending,
+        } = harness()
+        const started = startup.start()
+        await startup.destroy()
+        pending.reject(new Error('access_denied'))
+        await started
+        expect(showSignIn).not.toHaveBeenCalled()
+        expect(document.body.children).toHaveLength(0)
     })
 
     it('shows a workspace retry rather than signing the user out after a module or service failure', async () => {
