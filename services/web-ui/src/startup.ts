@@ -4,16 +4,19 @@ import {
     type AuthClientSession,
 } from '@lixpi/auth-client'
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
+import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components-lixpi-specific/frontend/loading'
+import { createLixpiCanvasSettings } from '@lixpi/canvas-components-lixpi-specific/frontend/settings'
 import {
-    createLoadingPlaceholder,
-    type LoadingPlaceholderInstance,
-} from '@lixpi/ui-kit/components/loading-placeholder'
+    type LoadingLayer,
+    type LoadingLease,
+} from '@lixpi/canvas-components/loading'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import {
     type WebClientServiceInstance,
 } from '@lixpi/web-client-service-factory'
 
 type WorkspaceConfig = {
+    loadingLayer: LoadingLayer
     auth: AuthClientInstance
     session: AuthClientSession
     onAuthRequired: () => void
@@ -32,7 +35,8 @@ type StartupConfig = {
 export class WebUiStartup {
     private readonly signIn: AuthenticationFailure
     private panel?: AuthPanel
-    private loading?: LoadingPlaceholderInstance
+    private loading?: LoadingLease
+    private loadingLayer?: LoadingLayer
     private application?: WebClientServiceInstance
     private startup?: Promise<void>
     private destroyed = false
@@ -48,11 +52,14 @@ export class WebUiStartup {
     }
 
     private async initialize(): Promise<void> {
-        this.loading = createLoadingPlaceholder({
-            label: 'Loading Lixpi',
-            withOverlay: false,
+        this.loadingLayer = createWorkspaceLoadingLayer({
+            paneEl: this.config.target,
+            settings: createLixpiCanvasSettings(),
         })
-        this.config.target.replaceChildren(this.loading.dom)
+        this.loading = this.loadingLayer.acquire({
+            label: 'Loading Lixpi',
+            visible: true,
+        })
         let session: AuthClientSession | null
 
         try {
@@ -74,6 +81,7 @@ export class WebUiStartup {
 
         try {
             const application = await this.config.loadWorkspace({
+                loadingLayer: this.loadingLayer,
                 auth: this.config.auth,
                 session,
                 onAuthRequired: () => this.showSignIn(),
@@ -136,5 +144,6 @@ export class WebUiStartup {
         this.destroyed = true
         this.clearView()
         await this.application?.destroy()
+        this.loadingLayer?.destroy()
     }
 }

@@ -6,6 +6,9 @@ import { createWebClientService } from '@lixpi/web-client-service-factory'
 import NatsService from '@lixpi/nats-service'
 import { getNatsUserInboxPrefix } from '@lixpi/constants'
 import {
+    type LoadingLayer,
+} from '@lixpi/canvas-components/loading'
+import {
     AccessRecovery,
     type AuthClientInstance,
     type AuthClientSession,
@@ -50,6 +53,7 @@ type WebUiDependencies = {
 }
 
 export const createWorkspaceApplication = (config: {
+    loadingLayer: LoadingLayer
     auth: AuthClientInstance
     session: AuthClientSession
     onAuthRequired: () => void
@@ -125,6 +129,7 @@ export const createWorkspaceApplication = (config: {
                 nats,
             })
             servicesStore.setDataValues({
+                loadingLayer: config.loadingLayer,
                 nats,
                 aiModelService,
                 assetService,

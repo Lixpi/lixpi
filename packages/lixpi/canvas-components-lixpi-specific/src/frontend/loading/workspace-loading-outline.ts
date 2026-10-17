@@ -4,7 +4,10 @@ import {
     type BoundedZoomScalingOptions,
 } from '@lixpi/canvas-engine/shared'
 import {
-    LoadingOverlay,
+    LoadingLayer,
+    type LoadingLease,
+} from '@lixpi/canvas-components/loading/layer'
+import {
     type LoadingOverlayOptions,
 } from '@lixpi/canvas-components/loading'
 import { getRoundedOutlinePerimeter } from '@lixpi/canvas-components/effects/outline'
@@ -44,11 +47,15 @@ export type WorkspaceLoadingOutlineConfig = {
     settings: WorkspaceLoadingSettings
     onRetry?: () => void
     onError?: (error: unknown) => void
+    layer?: LoadingLayer
 }
 
-export type WorkspaceLoadingOutlineInstance = Pick<LoadingOverlay, 'setVisible' | 'setErrorMessage' | 'destroy'>
+export type WorkspaceLoadingOutlineInstance = LoadingLease
 
-export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettings): Pick<LoadingOverlayOptions, 'outline' | 'errorTitle' | 'retryLabel'> => {
+export const getWorkspaceLoadingPresentation = (
+    settings: WorkspaceLoadingSettings,
+    diameter?: number,
+): Pick<LoadingOverlayOptions, 'outline' | 'errorTitle' | 'retryLabel'> => {
     const animation = settings.mediaNode.inProgressOutlineAnimation
     const generatedMediaSize = settings.mediaBranchLineage.generatedMediaSize
     const configuredScale = Number(animation.preFrameCircleScale)
@@ -61,7 +68,7 @@ export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettin
         && configuredDiameter > 0
         ? configuredDiameter
         : 1
-    const size = Math.max(1, Math.max(1, generatedMediaSize * scale) * diameterScale)
+    const size = diameter ?? Math.max(1, Math.max(1, generatedMediaSize * scale) * diameterScale)
     const getStrokeScale = () => scaleCanvasChromeWorldSizeForZoom(
         1,
         1,
@@ -114,11 +121,25 @@ export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettin
     }
 }
 
-export const createWorkspaceLoadingOutline = (config: WorkspaceLoadingOutlineConfig): WorkspaceLoadingOutlineInstance => {
-    return new LoadingOverlay({
-        root: config.paneEl,
-        ...getWorkspaceLoadingPresentation(config.settings),
-        onRetry: config.onRetry,
+export const createWorkspaceLoadingLayer = (config: Pick<WorkspaceLoadingOutlineConfig, 'paneEl' | 'settings' | 'onError'>): LoadingLayer =>
+    new LoadingLayer({
+        root: config.paneEl.ownerDocument.body,
+        ...getWorkspaceLoadingPresentation(config.settings, 100),
         onError: config.onError ?? (error => console.error('Failed to initialize workspace loading outline:', error)),
     })
+
+export const createWorkspaceLoadingOutline = (config: WorkspaceLoadingOutlineConfig): WorkspaceLoadingOutlineInstance => {
+    const layer = config.layer ?? createWorkspaceLoadingLayer(config)
+    const lease = layer.acquire({ onRetry: config.onRetry })
+
+    return {
+        setVisible: lease.setVisible,
+        setErrorMessage: lease.setErrorMessage,
+        destroy: () => {
+            lease.destroy()
+
+            if (!config.layer)
+                layer.destroy()
+        },
+    }
 }

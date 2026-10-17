@@ -14,6 +14,8 @@ The package may depend on canvas-engine, [UI Primitives](../ui-primitives/README
 
 `/loading` exports `LoadingOverlay`, which owns its drawing surface, outline, resize observation, error message and retry action. Pass the circle size, animation settings, error title, retry label and callbacks. Import `/styles/loading-overlay` to style it. The overlay exposes `setVisible`, `setErrorMessage`, and `destroy`; disposal during renderer initialization cannot mount a late canvas. Its stylesheet supports reduced transparency and the `--canvas-loading-text-color`, `--canvas-loading-retry-background`, and `--canvas-loading-retry-color` theme properties.
 
+`/loading/layer` exports `LoadingLayer` for application-wide feedback. Create one owner at the application root and pass it to consumers. Each `acquire()` call returns an independent loading/error lease; destroying one lease leaves other pending work visible. The owner renders one fixed layer above application content, routes retry to the failed lease, and loads the GPU overlay lazily. Destroy the owner during application teardown. Use the direct layer entrypoint to keep the rendering backend outside the initial application bundle.
+
 Shared DOM, SVG, gradients, easing and transition helpers come from UI Primitives. Canvas Components owns the effects that compose canvas drawing resources, including glass refraction and traveling outlines.
 
 `/media` exports `ImageSurface` and `createImageNodeRegistration`. Register any node type with a geometry policy and a `getMedia(node)` adapter; the engine does not reserve an image type or inspect component data. Image surfaces retain displayed content until a replacement arrives, discard cancelled or superseded results, upgrade previews to the visible footprint, and release active leases when culled. They retain their mesh allocation while hidden. `fit` supports stretch, contain and cover without changing node dimensions. Missing image renditions remain unloaded; failed requests require a retry or new content identity.
@@ -28,7 +30,7 @@ Consumers import TypeScript source directly through the package export map. Styl
 
 `/effects/glass` exports glass material bakers for traveling strips, closed borders and circular surfaces. `bake()` returns RGBA pixels that can be passed to a drawing scope's `createTexture()`. It does not allocate GPU resources or require a DOM. Circular surfaces also provide `bakeDataUrl()` for DOM backgrounds, using the same pixel shading through a canvas 2D context. Colors and material coefficients are supplied by the caller.
 
-Generic panels, menus, tooltips, video controls, footers, preview popovers and DOM loading placeholders belong to [UI Kit](../ui-kit/README.md). Using them beside a canvas does not make them canvas components. They have no canvas package dependency; Lixpi workspace surfaces compose them with the canvas packages.
+Generic panels, menus, tooltips, video controls, footers, preview popovers and DOM error placeholders belong to [UI Kit](../ui-kit/README.md). Using them beside a canvas does not make them canvas components. They have no canvas package dependency; Lixpi workspace surfaces compose them with the canvas packages.
 
 ## Using the source package
 

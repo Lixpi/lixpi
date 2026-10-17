@@ -1,4 +1,7 @@
 import {
+    type LoadingLayer,
+} from '@lixpi/canvas-components/loading/layer'
+import {
     type Asset,
     type AssetDocumentRole,
     type CanvasGeometryUpdate,
@@ -165,6 +168,7 @@ export type WorkspaceCanvasGenerationPorts = {
 }
 
 export type WorkspaceCanvasHost = {
+    loadingLayer?: LoadingLayer
     createId: () => string
     openExternalUrl: (url: string) => void
     onOpenCapabilityLibrary?: (callback: (workspaceId?: string) => void) => () => void

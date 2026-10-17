@@ -1,4 +1,7 @@
 import {
+    type LoadingLayer,
+} from '@lixpi/canvas-components/loading/layer'
+import {
     type WorkspaceCanvasHost,
 } from './workspace-canvas-host.ts'
 import {
@@ -137,6 +140,7 @@ import {
 } from '@lixpi/canvas-components-lixpi-specific/frontend/media'
 import {
     createWorkspaceLoadingOutline,
+    createWorkspaceLoadingLayer,
     type WorkspaceLoadingOutlineInstance,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/loading'
 import { WorkspaceCanvasLibraries } from './workspace-canvas-libraries.ts'
@@ -210,6 +214,7 @@ export class LixpiWorkspaceCanvas {
     private connectionManager: CanvasConnectionControls | null
     private canvasMediaLayer: WorkspaceMediaLayer | null
     private workspaceLoadingOutline: WorkspaceLoadingOutlineInstance | null
+    private loadingLayer?: LoadingLayer
     private viewportBridge: ViewportBridge | null
     private lastWorkspaceLoadingStatus
     private renderedWorkspaceId: string | null
@@ -311,6 +316,10 @@ export class LixpiWorkspaceCanvas {
         try {
             this.editors = host.editors
             this.paneEl = this.options.paneEl
+            this.loadingLayer = host.loadingLayer ?? createWorkspaceLoadingLayer({
+                paneEl: this.paneEl,
+                settings: host.settings,
+            })
             this.html = createDocumentHtml(this.paneEl.ownerDocument)
             this.window = this.paneEl.ownerDocument.defaultView ?? window
             this.viewportMount = this.options.viewportEl
@@ -423,6 +432,7 @@ export class LixpiWorkspaceCanvas {
                 this.nodeShells,
                 {
                     mountEditor: this.mountDocumentEditor,
+                    beginLoading: () => this.loadingLayer!.acquire({ visible: true }),
                     onError: (error, nodeId) => console.error(
                         'Failed to create document editor:',
                         {
@@ -1154,6 +1164,7 @@ export class LixpiWorkspaceCanvas {
                 },
             })
             this.workspaceLoadingOutline = createWorkspaceLoadingOutline({
+                layer: this.loadingLayer,
                 paneEl: this.paneEl,
                 settings: this.host.settings,
                 onRetry: () => {
@@ -3288,6 +3299,7 @@ export class LixpiWorkspaceCanvas {
             this.nodeShells,
             {
                 ensureStyles: this.host.capabilities.ensureStyles,
+                beginLoading: () => this.loadingLayer!.acquire({ visible: true }),
                 getAsset: assetId => this.host.assets.read(assetId),
                 getDocument: assetId => this.host.assets.readDocument(assetId, 'capabilityArtifact'),
                 refreshAsset: assetId => this.host.assets.refresh(assetId, this.workspaceId),
@@ -3749,6 +3761,10 @@ export class LixpiWorkspaceCanvas {
             () => this.documentNodes?.destroy(),
             () => void (this.workspaceLoadingOutline = null),
             () => this.workspaceLoadingOutline?.destroy(),
+            () => {
+                if (!this.host.loadingLayer)
+                    this.loadingLayer?.destroy()
+            },
             () => void (this.canvasMediaLayer = null),
             () => this.canvasMediaLayer?.destroy(),
             () => void (this.mediaChromeViewportEl = null),

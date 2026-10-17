@@ -19,6 +19,14 @@ vi.mock('@lixpi/ui-primitives/gradients', () => ({
     createShiftingGradientBackground: () => ({ destroy: vi.fn() }),
 }))
 
+vi.mock('@lixpi/canvas-components/loading/overlay', () => ({
+    LoadingOverlay: class {
+        setVisible() {}
+        setErrorMessage() {}
+        destroy() {}
+    },
+}))
+
 const startups: WebUiStartup[] = []
 const session: AuthClientSession = {
     accessToken: 'test-token',
@@ -65,6 +73,35 @@ afterEach(async () => {
 })
 
 describe('public web UI startup', () => {
+    it('shares one overlay with canvas and document loading outside the application content', async () => {
+        const {
+            startup,
+            pending,
+            loadWorkspace,
+        } = harness()
+        const content = document.createElement('main')
+        document.body.append(content)
+        const started = startup.start()
+        const overlay = document.querySelector('.canvas-loading-layer')!
+        expect(content.contains(overlay)).toBe(false)
+        pending.resolve(session)
+        await vi.waitFor(() => expect(loadWorkspace).toHaveBeenCalledOnce())
+        const {
+            loadingLayer,
+            onReady,
+        } = loadWorkspace.mock.calls[0][0]
+        const canvas = loadingLayer.acquire({ visible: true })
+        const documentLoad = loadingLayer.acquire({ visible: true })
+        await started
+        onReady()
+        expect(document.querySelectorAll('.canvas-loading-layer')).toHaveLength(1)
+        expect(document.querySelector('.canvas-loading-layer')).toBe(overlay)
+        canvas.destroy()
+        expect(overlay.isConnected).toBe(true)
+        documentLoad.destroy()
+        expect(overlay.isConnected).toBe(false)
+        expect(content.isConnected).toBe(true)
+    })
     it('keeps a neutral loader throughout authenticated startup without ever showing sign-in', async () => {
         const showSignIn = vi.spyOn(AuthenticationFailure.prototype, 'show')
         const {

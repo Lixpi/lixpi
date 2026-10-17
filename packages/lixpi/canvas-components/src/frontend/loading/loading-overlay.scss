@@ -1,5 +1,12 @@
 @use "@lixpi/ui-primitives/styles/transitions" as transitions;
 
+.canvas-loading-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    pointer-events: auto;
+}
+
 .canvas-loading-overlay {
     position: absolute;
     inset: 0;

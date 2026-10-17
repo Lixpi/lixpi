@@ -10,6 +10,8 @@
         "./effects/glass": "./src/frontend/effects/glass/index.ts",
         "./effects/outline": "./src/frontend/effects/outline/index.ts",
         "./loading": "./src/frontend/loading/index.ts",
+        "./loading/layer": "./src/frontend/loading/loading-layer.ts",
+        "./loading/overlay": "./src/frontend/loading/loading-overlay.ts",
         "./media": "./src/frontend/media/index.ts",
         "./styles/loading-overlay": {
             "types": "./src/styles.d.ts",
