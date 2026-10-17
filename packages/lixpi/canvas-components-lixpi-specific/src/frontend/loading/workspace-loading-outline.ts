@@ -15,7 +15,7 @@ import {
     type GlassMaterialStyle,
 } from '@lixpi/canvas-components/effects/glass'
 
-const LOADING_LAP_DURATION_MS = 1500
+const LOADING_LAP_DURATION_MS = 1000
 const LOADING_TRAIL_FRACTION = 0.6
 
 export type WorkspaceLoadingSettings = {
