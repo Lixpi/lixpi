@@ -325,6 +325,15 @@ export type Settings = LixpiCanvasSettings & {
 
 export const settings: Settings = {
     ...createLixpiCanvasSettings(colorPalette),
+    // Shared by startup, workspace switches, and pending document/artifact content.
+    workspaceLoadingOutline: {
+        // Screen-pixel diameter of the loading circle.
+        diameter: 100,
+        // Milliseconds for one complete lap.
+        animationDurationMs: 600,
+        // Fraction of the circle's circumference occupied by the trail.
+        snakeLengthFraction: 0.6,
+    },
     // Model selector dropdown behavior settings.
     modelSelectorDropdown: {
         // Hide or reveal modality filter chips inside model selector dropdowns.

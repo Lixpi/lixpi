@@ -5,7 +5,6 @@ import {
 } from '@lixpi/auth-client'
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
 import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components-lixpi-specific/frontend/loading'
-import { createLixpiCanvasSettings } from '@lixpi/canvas-components-lixpi-specific/frontend/settings'
 import {
     type LoadingLayer,
     type LoadingLease,
@@ -14,6 +13,7 @@ import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import {
     type WebClientServiceInstance,
 } from '@lixpi/web-client-service-factory'
+import { settings } from './settings.ts'
 
 type WorkspaceConfig = {
     loadingLayer: LoadingLayer
@@ -54,7 +54,7 @@ export class WebUiStartup {
     private async initialize(): Promise<void> {
         this.loadingLayer = createWorkspaceLoadingLayer({
             paneEl: this.config.target,
-            settings: createLixpiCanvasSettings(),
+            settings,
         })
         this.loading = this.loadingLayer.acquire({
             label: 'Loading Lixpi',

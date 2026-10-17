@@ -28,6 +28,7 @@ describe('Lixpi canvas presets', () => {
         first.mediaNode.generatedMediaChrome.zoomScaling.minZoom += 1
         first.canvasChrome.glassBorder.materialColors.push('#000000')
         first.workspacePersistence.debounceMs += 100
+        first.workspaceLoadingOutline.animationDurationMs += 100
         expect(second).toEqual(original)
         expect(createLixpiCanvasSettings()).toEqual(original)
     })

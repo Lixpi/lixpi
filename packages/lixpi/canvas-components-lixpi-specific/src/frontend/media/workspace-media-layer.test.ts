@@ -126,7 +126,11 @@ vi.mock('@lixpi/canvas-components/effects/glass', async importOriginal => {
 const settings = (): WorkspaceMediaLayerOptions['settings'] => {
     return {
         mediaBranchLineage: { generatedMediaSize: 300 },
-        workspaceLoadingOutline: { diameterScale: 1 },
+        workspaceLoadingOutline: {
+            diameter: 100,
+            animationDurationMs: 600,
+            snakeLengthFraction: 0.6,
+        },
         connector: createWorkspaceConnectorSettings({ lineDefaultColor: '#000000' }),
         mediaNode: {
             styles: { borderRadius: 12 },

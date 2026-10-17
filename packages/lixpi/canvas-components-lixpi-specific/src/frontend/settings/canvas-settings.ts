@@ -328,8 +328,12 @@ export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> =
         },
 
         workspaceLoadingOutline: {
-            // Relative to the generated-media pending circle. 0.6 makes the workspace-switch spinner 40% smaller in diameter.
-            diameterScale: 0.6,
+            // Screen-pixel diameter of the application loading circle.
+            diameter: 100,
+            // Milliseconds for one complete lap.
+            animationDurationMs: 600,
+            // Fraction of this circle's circumference occupied by the trail.
+            snakeLengthFraction: 0.6,
         },
 
         mediaBranchLineage: {

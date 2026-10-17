@@ -13,7 +13,13 @@ import {
 import {
     type WebClientServiceInstance,
 } from '@lixpi/web-client-service-factory'
+import {
+    type LoadingOverlayOptions,
+} from '@lixpi/canvas-components/loading'
 import { WebUiStartup } from './startup.ts'
+import { settings } from './settings.ts'
+
+const overlayOptions = vi.hoisted(() => [] as LoadingOverlayOptions[])
 
 vi.mock('@lixpi/ui-primitives/gradients', () => ({
     createShiftingGradientBackground: () => ({ destroy: vi.fn() }),
@@ -21,6 +27,9 @@ vi.mock('@lixpi/ui-primitives/gradients', () => ({
 
 vi.mock('@lixpi/canvas-components/loading/overlay', () => ({
     LoadingOverlay: class {
+        constructor(options: LoadingOverlayOptions) {
+            overlayOptions.push(options)
+        }
         setVisible() {}
         setErrorMessage() {}
         destroy() {}
@@ -69,10 +78,38 @@ afterEach(async () => {
         await startup.destroy()
 
     document.body.replaceChildren()
+    overlayOptions.length = 0
     vi.restoreAllMocks()
 })
 
 describe('public web UI startup', () => {
+    it('uses application loading settings instead of fresh canvas defaults', async () => {
+        const original = settings.workspaceLoadingOutline
+        settings.workspaceLoadingOutline = {
+            diameter: 144,
+            animationDurationMs: 875,
+            snakeLengthFraction: 0.55,
+        }
+        const {
+            startup,
+            pending,
+        } = harness()
+        const started = startup.start()
+
+        try {
+            await vi.waitFor(() => expect(overlayOptions).toHaveLength(1))
+            expect(overlayOptions[0].outline).toMatchObject({
+                size: settings.workspaceLoadingOutline.diameter,
+                durationMs: settings.workspaceLoadingOutline.animationDurationMs,
+                snakeLengthFraction: settings.workspaceLoadingOutline.snakeLengthFraction,
+            })
+        } finally {
+            pending.resolve(null)
+            await started
+            settings.workspaceLoadingOutline = original
+        }
+    })
+
     it('shares one overlay with canvas and document loading outside the application content', async () => {
         const {
             startup,

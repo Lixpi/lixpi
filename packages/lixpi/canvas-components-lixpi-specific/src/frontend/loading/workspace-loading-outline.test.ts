@@ -30,7 +30,11 @@ vi.mock('@lixpi/canvas-components/effects/glass', () => ({
 const settings = (): WorkspaceLoadingSettings => {
     return {
         mediaBranchLineage: { generatedMediaSize: 300 },
-        workspaceLoadingOutline: { diameterScale: 2 },
+        workspaceLoadingOutline: {
+            diameter: 140,
+            animationDurationMs: 875,
+            snakeLengthFraction: 0.55,
+        },
         mediaNode: {
             styles: { borderRadius: 12 },
             inProgressOutlineAnimation: {
@@ -56,31 +60,37 @@ const settings = (): WorkspaceLoadingSettings => {
 }
 
 describe('workspace loading presentation', () => {
-    it('uses a 100px application circle with a 600ms lap and a trail just over half its circumference', () => {
-        const presentation = getWorkspaceLoadingPresentation(settings(), 100)
-        expect(presentation.outline.size).toBe(40 * 2.5)
+    it('reads the circle diameter, lap duration, and trail length from loading settings', () => {
+        const config = settings()
+        const presentation = getWorkspaceLoadingPresentation(config)
+        expect(presentation.outline.size).toBe(config.workspaceLoadingOutline.diameter)
         expect(presentation.outline.style.snakeHeadWidth).toBe(4)
         expect(presentation.outline.texture.kind).toBe('pixels')
-        expect(presentation.outline.durationMs).toBe(600)
-        expect(presentation.outline.snakeLengthFraction).toBe(0.6)
+        expect(presentation.outline.durationMs).toBe(config.workspaceLoadingOutline.animationDurationMs)
+        expect(presentation.outline.snakeLengthFraction).toBe(config.workspaceLoadingOutline.snakeLengthFraction)
     })
     it('preserves the lap duration and proportional gap when the circle size changes', () => {
-        const presentation = getWorkspaceLoadingPresentation(settings())
+        const config = settings()
+        config.workspaceLoadingOutline.diameter = 200
+        const presentation = getWorkspaceLoadingPresentation(config)
         expect(presentation.outline.size).toBe(200)
-        expect(presentation.outline.durationMs).toBe(600)
-        expect(presentation.outline.style.durationMs).toBe(600)
-        expect(presentation.outline.snakeLengthFraction).toBe(0.6)
-        expect(presentation.outline.style.snakeLengthFraction).toBe(0.6)
+        expect(presentation.outline.durationMs).toBe(config.workspaceLoadingOutline.animationDurationMs)
+        expect(presentation.outline.style.durationMs).toBe(config.workspaceLoadingOutline.animationDurationMs)
+        expect(presentation.outline.snakeLengthFraction).toBe(config.workspaceLoadingOutline.snakeLengthFraction)
+        expect(presentation.outline.style.snakeLengthFraction).toBe(config.workspaceLoadingOutline.snakeLengthFraction)
         expect(presentation.errorTitle).toBe('Workspace failed to load')
         expect(presentation.retryLabel).toBe('Retry')
     })
 
-    it('preserves invalid-scale fallbacks and limits the pre-frame circle to the media size', () => {
+    it('does not derive loading dimensions or timing from generated media settings', () => {
         const config = settings()
-        config.mediaNode.inProgressOutlineAnimation.preFrameCircleScale = Number.NaN
-        config.workspaceLoadingOutline.diameterScale = -1
-        expect(getWorkspaceLoadingPresentation(config).outline.size).toBe(100)
-        config.mediaNode.inProgressOutlineAnimation.preFrameCircleScale = 10
-        expect(getWorkspaceLoadingPresentation(config).outline.size).toBe(300)
+        config.mediaBranchLineage.generatedMediaSize = 1200
+        config.mediaNode.inProgressOutlineAnimation.preFrameCircleScale = 0.9
+        config.mediaNode.inProgressOutlineAnimation.animationDurationMs = 4000
+        config.mediaNode.inProgressOutlineAnimation.snakeLengthFraction = 0.9
+        const presentation = getWorkspaceLoadingPresentation(config)
+        expect(presentation.outline.size).toBe(config.workspaceLoadingOutline.diameter)
+        expect(presentation.outline.durationMs).toBe(config.workspaceLoadingOutline.animationDurationMs)
+        expect(presentation.outline.snakeLengthFraction).toBe(config.workspaceLoadingOutline.snakeLengthFraction)
     })
 })
