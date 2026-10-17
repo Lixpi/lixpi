@@ -1,8 +1,8 @@
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
 
-// Optional error UI. The application mounts it after protected views have been
-// removed; it never renders provider errors, user profiles or callback values.
+// Sign-in entry when protected views are unavailable. A missing session or
+// stopped automatic redirect does not establish that a sign-in attempt failed.
 export class AuthenticationFailure {
     private view?: AuthPanel
     private busy = false
@@ -18,11 +18,10 @@ export class AuthenticationFailure {
             brand: 'Lixpi',
             logo: lixpiLogo,
             title: 'Welcome to Lixpi',
-            description: 'Bring your ideas together in one creative workspace.',
-            message: 'Your sign-in could not be completed. Sign in again to continue.',
+            description: 'Sign in to continue to your workspace.',
             actions: [
                 {
-                    label: 'Sign in again',
+                    label: 'Sign in',
                     onClick: () => void this.signIn(this.retry),
                 },
                 ...(this.signup ? [{
@@ -56,7 +55,7 @@ export class AuthenticationFailure {
         try {
             await action()
         } catch {
-            // Keep the same generic outcome, including on a denied callback.
+            // Leave sign-in available without exposing provider diagnostics.
         } finally {
             if (this.view === view) {
                 this.busy = false

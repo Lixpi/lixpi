@@ -9,7 +9,7 @@ afterEach(() => {
     vi.clearAllMocks()
 })
 
-describe('authentication failure recovery', () => {
+describe('sign-in entry', () => {
     it('offers explicit signup and blocks both actions while a redirect is pending', async () => {
         const pending = Promise.withResolvers<void>()
         const retry = vi.fn()
@@ -35,7 +35,9 @@ describe('authentication failure recovery', () => {
         view.show(document.body)
         expect(retry).not.toHaveBeenCalled()
         const button = document.querySelector('button')!
-        expect(button.textContent).toBe('Sign in again')
+        expect(button.textContent).toBe('Sign in')
+        expect(document.querySelector('.auth-panel-description')?.textContent).toBe('Sign in to continue to your workspace.')
+        expect(document.querySelector('[role="status"]')).toBeNull()
         button.click()
         button.click()
         expect(retry).toHaveBeenCalledTimes(1)
