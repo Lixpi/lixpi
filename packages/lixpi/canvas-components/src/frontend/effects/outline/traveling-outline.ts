@@ -211,7 +211,8 @@ export class TravelingOutline {
         else {
             this.animation?.()
             this.animation = null
-            this.elapsed = 0
+            // Keep the phase when loading leases hand off between renders.
+            // Hidden outlines pause; only a new instance starts a new clock.
         }
     }
 

@@ -93,7 +93,6 @@ const createOutline = (surface: CanvasDrawingSurface) => {
             },
             rgba: new Uint8Array([255, 255, 255, 255]),
         },
-        ease: value => value,
     })
 }
 
@@ -135,7 +134,7 @@ describe('TravelingOutline', () => {
         outline.destroy()
     })
 
-    it('retains hidden entries and restarts animation when visibility returns', () => {
+    it('retains hidden entries and resumes animation when visibility returns', () => {
         const {
             surface,
             resources,
@@ -156,6 +155,66 @@ describe('TravelingOutline', () => {
         expect(frames.size).toBe(1)
         outline.destroy()
     })
+
+    it.each(['sync', 'visibility'] as const)(
+        'completes a full loading-circle lap through repeated %s handoffs',
+        mode => {
+            const interrupted = createSurface()
+            const uninterrupted = createSurface()
+            const outline = createOutline(interrupted.surface)
+            const reference = createOutline(uninterrupted.surface)
+            const circle: TravelingOutlineDatum = {
+                ...datum,
+                width: 100,
+                height: 100,
+                radius: 50,
+                durationMs: 3200,
+            }
+            const positions = (meshes: Map<ResourceHandle, MeshData>) =>
+                Array.from(meshes.values())[0].positions
+            outline.sync([circle])
+            reference.sync([circle])
+            const initial = positions(interrupted.meshes)
+
+            try {
+                for (let elapsed = 200; elapsed <= 3200; elapsed += 200) {
+                    for (const frame of interrupted.frames) frame(200)
+
+                    for (const frame of uninterrupted.frames) frame(200)
+
+                    if (mode === 'sync')
+                        outline.sync([])
+                    else
+                        outline.setVisible(circle.id, false)
+
+                    expect(interrupted.frames.size).toBe(0)
+
+                    if (mode === 'sync')
+                        outline.sync([circle])
+                    else
+                        outline.setVisible(circle.id, true)
+
+                    expect(interrupted.frames.size).toBe(1)
+                    const actual = positions(interrupted.meshes)
+                    const expected = positions(uninterrupted.meshes)
+                    expect(
+                        actual.every((value, index) => value === expected[index]),
+                        `The outline must retain its position after ${elapsed}ms of visible animation`,
+                    ).toBe(true)
+                    expect(
+                        actual.every((value, index) => value === initial[index]),
+                        'The outline must return to its starting point only after the complete 3200ms lap',
+                    ).toBe(elapsed === 3200)
+                }
+
+                expect(interrupted.resources.createMesh).toHaveBeenCalledOnce()
+                expect(interrupted.resources.release).not.toHaveBeenCalled()
+            } finally {
+                outline.destroy()
+                reference.destroy()
+            }
+        },
+    )
 
     it('paints live geometry updates without changing per-target animation options', () => {
         const {

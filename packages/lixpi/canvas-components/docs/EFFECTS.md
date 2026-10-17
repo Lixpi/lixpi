@@ -15,7 +15,7 @@ The effect samples a rounded perimeter into a continuous tapered strip with a ro
 
 Motion uses the loop-safe traveling-outline easing by default. A caller can supply another easing function and stroke scale. Circular placeholders can scale duration to perimeter to retain a similar path speed as a larger rectangle. Node state and that duration choice belong to the consumer.
 
-Hidden datums retain allocations for reuse. The frame subscription stops when no active visible outline remains. Destroying the effect or its scope releases animation and resources without stopping another effect.
+Hidden datums retain allocations for reuse. The frame subscription stops when no active visible outline remains, preserving the elapsed animation time. Resuming after that pause continues the lap at its saved position, including when loading requests release and reacquire their shared overlay during a render. Destroying the effect or its scope releases animation and resources without stopping another effect.
 
 ## Glass borders
 
