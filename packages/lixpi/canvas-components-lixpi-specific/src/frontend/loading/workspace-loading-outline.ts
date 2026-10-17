@@ -97,7 +97,8 @@ export const getWorkspaceLoadingPresentation = (
         retryLabel: 'Retry',
         outline: {
             size,
-            durationMs: validPerimeters ? animation.animationDurationMs * (circlePerimeter / nodePerimeter) : undefined,
+            // A smaller loading circle keeps the full lap duration.
+            durationMs: animation.animationDurationMs,
             snakeLengthFraction: validPerimeters ? Math.min(0.98, animation.snakeLengthFraction * (nodePerimeter / circlePerimeter)) : undefined,
             getStrokeScale,
             style: {

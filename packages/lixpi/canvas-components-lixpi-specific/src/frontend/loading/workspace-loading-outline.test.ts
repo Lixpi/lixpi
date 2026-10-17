@@ -56,19 +56,19 @@ const settings = (): WorkspaceLoadingSettings => {
 }
 
 describe('workspace loading presentation', () => {
-    it('uses a 100px application circle with the existing canvas material and speed', () => {
+    it('uses a 100px application circle without shortening the configured lap duration', () => {
         const presentation = getWorkspaceLoadingPresentation(settings(), 100)
         expect(presentation.outline.size).toBe(40 * 2.5)
         expect(presentation.outline.style.snakeHeadWidth).toBe(4)
         expect(presentation.outline.texture.kind).toBe('pixels')
-        expect(presentation.outline.durationMs).toBeGreaterThan(0)
+        expect(presentation.outline.durationMs).toBe(1000)
     })
-    it('sizes the circle from the generated-output envelope and preserves its lap speed', () => {
+    it('sizes the circle from the generated-output envelope and preserves its lap duration', () => {
         const presentation = getWorkspaceLoadingPresentation(settings())
         const nodePerimeter = 2 * (310 + 310 - 4 * 17) + 2 * Math.PI * 17
         const circlePerimeter = 2 * Math.PI * 105
         expect(presentation.outline.size).toBe(200)
-        expect(presentation.outline.durationMs).toBeCloseTo(1000 * circlePerimeter / nodePerimeter)
+        expect(presentation.outline.durationMs).toBe(1000)
         expect(presentation.outline.snakeLengthFraction).toBe(Math.min(0.98, 0.8 * nodePerimeter / circlePerimeter))
         expect(presentation.errorTitle).toBe('Workspace failed to load')
         expect(presentation.retryLabel).toBe('Retry')
