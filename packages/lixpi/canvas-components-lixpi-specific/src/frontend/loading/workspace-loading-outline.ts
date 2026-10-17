@@ -10,11 +10,13 @@ import {
 import {
     type LoadingOverlayOptions,
 } from '@lixpi/canvas-components/loading'
-import { getRoundedOutlinePerimeter } from '@lixpi/canvas-components/effects/outline'
 import {
     TravelingSnakeGlassMaterial,
     type GlassMaterialStyle,
 } from '@lixpi/canvas-components/effects/glass'
+
+const LOADING_LAP_DURATION_MS = 1500
+const LOADING_TRAIL_FRACTION = 0.6
 
 export type WorkspaceLoadingSettings = {
     mediaBranchLineage: { generatedMediaSize: number }
@@ -74,32 +76,15 @@ export const getWorkspaceLoadingPresentation = (
         1,
         getAdaptiveBoundedZoomScalingOptions(animation.zoomScaling ?? { minZoom: 0 }),
     )
-    const outset = ((animation.gap ?? 0) + animation.snakeWidth / 2) * getStrokeScale()
-    const configuredRadius = settings.mediaNode.styles.borderRadius
-    const radius = Number.isFinite(configuredRadius)
-        && configuredRadius > 0
-        ? Math.min(configuredRadius, generatedMediaSize / 2)
-        : 0
-    const nodePerimeter = getRoundedOutlinePerimeter(
-        generatedMediaSize + outset * 2,
-        generatedMediaSize + outset * 2,
-        radius + outset,
-    )
-    const circlePerimeter = getRoundedOutlinePerimeter(
-        size + outset * 2,
-        size + outset * 2,
-        size / 2 + outset,
-    )
-    const validPerimeters = nodePerimeter > 0 && circlePerimeter > 0
 
     return {
         errorTitle: 'Workspace failed to load',
         retryLabel: 'Retry',
         outline: {
             size,
-            // A smaller loading circle keeps the full lap duration.
-            durationMs: animation.animationDurationMs,
-            snakeLengthFraction: validPerimeters ? Math.min(0.98, animation.snakeLengthFraction * (nodePerimeter / circlePerimeter)) : undefined,
+            durationMs: LOADING_LAP_DURATION_MS,
+            // Measure the trail against this circle, not the larger media node.
+            snakeLengthFraction: LOADING_TRAIL_FRACTION,
             getStrokeScale,
             style: {
                 radius: animation.radius,
@@ -108,10 +93,10 @@ export const getWorkspaceLoadingPresentation = (
                 snakeTailWidthFraction: animation.snakeTailWidthFraction ?? 0.18,
                 snakeTailThinLengthFraction: animation.snakeTailThinLengthFraction,
                 snakeWidthTaperPower: animation.snakeWidthTaperPower,
-                snakeLengthFraction: animation.snakeLengthFraction,
+                snakeLengthFraction: LOADING_TRAIL_FRACTION,
                 snakeHeadRoundLengthFraction: animation.snakeHeadRoundLengthFraction,
                 edgeFeatherFraction: animation.styles.glassMaterial.edgeFeatherFraction,
-                durationMs: animation.animationDurationMs,
+                durationMs: LOADING_LAP_DURATION_MS,
             },
             texture: new TravelingSnakeGlassMaterial(
                 animation.styles.snakeColors,
