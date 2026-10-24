@@ -1,0 +1,54 @@
+// Catalog grid for the UI-kit icon artwork.
+
+.design-system-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: var(--space-2);
+    width: 100%;
+}
+
+.design-system-icon-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3) var(--space-2);
+    border: 1px solid var(--border-color-light);
+    border-radius: var(--radius);
+}
+
+.design-system-icon-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+
+    svg {
+        max-width: 100%;
+        max-height: 100%;
+    }
+}
+
+.design-system-icon-name {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.design-system-icon-grid-compact .design-system-icon-tile {
+    border-color: rgb(255 255 255 / 12%);
+}
+
+.design-system-icon-grid-compact .design-system-icon-name {
+    color: rgb(244 246 250 / 70%);
+}
+
+.design-system-animated-icon {
+    width: 24px;
+    height: 24px;
+}

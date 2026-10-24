@@ -1,0 +1,151 @@
+# Browser clients. Each one is a Vite SPA built on
+# @lixpi/web-client-service-factory and the shared UI packages, served from its
+# own container with the host packages synced in read-only.
+
+services:
+
+    lixpi-web-ui:
+        container_name: lixpi-web-ui
+        profiles: ["main"]
+        image: lixpi/web-ui
+        build:
+            dockerfile: services/web-ui/Dockerfile
+            context: .
+        environment:
+            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
+            VITE_API_URL: ${VITE_API_URL}
+            VITE_AUTH0_LOGIN_URL: ${VITE_AUTH0_LOGIN_URL}
+            VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+            VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+            VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+            VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
+            VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
+            VITE_ACCOUNT_ONBOARDING_ENABLED: ${VITE_ACCOUNT_ONBOARDING_ENABLED:-false}
+            VITE_NATS_SERVER: ${VITE_NATS_SERVER}
+        volumes:
+            - ./services/web-ui/Dockerfile:/usr/src/service/Dockerfile:cached
+            - ./services/web-ui/index.html:/usr/src/service/index.html:cached
+            - ./services/web-ui/jsconfig.json:/usr/src/service/jsconfig.json:cached
+            - ./services/web-ui/package.json:/usr/src/service/package.json:cached
+
+            # NOT mounted: pnpm@12 rewrites pnpm-workspace.yaml during install (write-temp + atomic
+            # rename), which fails EBUSY against a single-file bind mount on Docker Desktop/Windows.
+            # The image bakes this file (services/web-ui/Dockerfile), so the container uses the baked
+            # copy and pnpm's rewrite lands in the writable layer. Rebuild the image to pick up edits.
+            # - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
+
+            - ./services/web-ui/public:/usr/src/service/public:cached
+            # - ./services/web-ui/dist:/usr/src/service/dist:cached    # Build output directory
+
+            - ./services/web-ui/src:/usr/src/service/src:cached
+
+            - ./services/web-ui/vite.config.ts:/usr/src/service/vite.config.ts:cached
+
+
+            - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
+
+
+            # Host packages, mounted READ-ONLY and outside the pnpm workspace root. The
+            # copy the service actually uses lives in the container's writable layer at
+            # /usr/src/service/packages/lixpi and is rsynced from here every second, so
+            # host edits reach a running service without a restart and pnpm can write
+            # each package's node_modules without ever touching the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
+
+            # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
+
+        networks:
+            - nats
+
+        working_dir: /usr/src/service
+        # making sure we install the packages before running the dev server
+        # command: >
+        #     pnpm run build-and-serve
+        # --config.confirm-modules-purge=false: let pnpm purge+reinstall a stale node_modules
+        # non-interactively (no TTY in the container) instead of aborting. Narrower than CI=true,
+        # which would also force --frozen-lockfile.
+        command: >
+            /usr/local/bin/workspace-package-sync.sh run
+            sh -c "pnpm i --config.confirm-modules-purge=false
+            && pnpm run dev"
+        stop_signal: SIGTERM
+        ports:
+            - 3001:5173
+        # depends_on:
+        #     lixpi-api:
+        #         condition: service_healthy
+        #         restart: true
+        #     lixpi-nex-1:
+        #         condition: service_healthy
+        #         restart: true
+
+    lixpi-web-ui-user-portal:
+        container_name: lixpi-web-ui-user-portal
+        profiles: ["main"]
+        image: lixpi/web-ui-user-portal
+        build:
+            dockerfile: services/web-ui-user-portal/Dockerfile
+            context: .
+        environment:
+            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
+            VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+            VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+            VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+            VITE_AUTH0_REDIRECT_URI: ${VITE_USER_PORTAL_URL}
+            VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
+            VITE_NATS_SERVER: ${VITE_NATS_SERVER}
+        volumes:
+            - ./services/web-ui-user-portal/Dockerfile:/usr/src/service/Dockerfile:cached
+            - ./services/web-ui-user-portal/index.html:/usr/src/service/index.html:cached
+            - ./services/web-ui-user-portal/package.json:/usr/src/service/package.json:cached
+            - ./services/web-ui-user-portal/src:/usr/src/service/src:cached
+            - ./services/web-ui-user-portal/vite.config.ts:/usr/src/service/vite.config.ts:cached
+            - ./services/web-ui-user-portal/tsconfig.json:/usr/src/service/tsconfig.json:cached
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
+        networks:
+            - nats
+        working_dir: /usr/src/service
+        command: >
+            /usr/local/bin/workspace-package-sync.sh run
+            sh -c "pnpm i --config.confirm-modules-purge=false
+            && pnpm run dev"
+        stop_signal: SIGTERM
+        ports:
+            - 3002:5173
+
+    # Design system: every shared UI package component in one browsable SPA,
+    # with a Components mode and a Canvas mode. It has no backend dependency,
+    # so it can run on its own with `--profile design-system`.
+    lixpi-design-system:
+        container_name: lixpi-design-system
+        profiles: ["main", "design-system"]
+        image: lixpi/design-system
+        build:
+            dockerfile: services/design-system/Dockerfile
+            context: .
+        volumes:
+            - ./services/design-system/Dockerfile:/usr/src/service/Dockerfile:cached
+            - ./services/design-system/index.html:/usr/src/service/index.html:cached
+            - ./services/design-system/package.json:/usr/src/service/package.json:cached
+            - ./services/design-system/src:/usr/src/service/src:cached
+            - ./services/design-system/vite.config.ts:/usr/src/service/vite.config.ts:cached
+            - ./services/design-system/tsconfig.json:/usr/src/service/tsconfig.json:cached
+            # NOT mounted: pnpm-workspace.yaml, for the same EBUSY reason as web-ui.
+            # The image bakes it, so a change there needs a rebuild.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
+        networks:
+            - nats
+        working_dir: /usr/src/service
+        command: >
+            /usr/local/bin/workspace-package-sync.sh run
+            sh -c "pnpm i --config.confirm-modules-purge=false
+            && pnpm run dev"
+        stop_signal: SIGTERM
+        ports:
+            - 3003:5173

@@ -1,0 +1,10 @@
+// Contains a nested application shell inside the page.
+
+.design-system-shell-frame {
+    width: 100%;
+    height: 360px;
+    overflow: hidden;
+    transform: translateZ(0);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}

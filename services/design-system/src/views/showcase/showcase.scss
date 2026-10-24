@@ -1,0 +1,95 @@
+// Layout around the components on a design-system page. The components keep
+// their own styles; these rules only frame and space them, using the Gentelella
+// theme tokens so the frames follow the light and dark themes.
+
+.design-system-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.design-system-page-description {
+    max-width: 72ch;
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.design-system-section-description {
+    max-width: 72ch;
+    margin: 0 0 var(--space-4);
+    color: var(--text-muted);
+}
+
+.design-system-specimen-grid {
+    align-items: stretch;
+}
+
+.design-system-specimen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+    margin: 0;
+}
+
+.design-system-specimen-stage {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 72px;
+    padding: var(--space-4);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius);
+}
+
+.design-system-specimen-stage-plain {
+    background: var(--bg-surface);
+}
+
+// Some Lixpi controls are drawn for the dark canvas chrome.
+.design-system-specimen-stage-dark {
+    background: #1a2744;
+    color: #f4f6fa;
+}
+
+.design-system-specimen-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.design-system-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.design-system-svg-stage {
+    display: inline-flex;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.design-system-svg-stage-root {
+    overflow: visible;
+}
+
+// Canvas hosts are positioned with an explicit size; the engine fills them.
+.design-system-canvas-stage {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+}
+
+.design-system-canvas-stage-light {
+    background: #f5f3f3;
+}
+
+.design-system-canvas-stage-dark {
+    background: #1a2744;
+}

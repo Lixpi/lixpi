@@ -5,7 +5,7 @@ description: How Lixpi browser applications share dependency-neutral startup, ro
 
 # Using the Web Client Service Factory
 
-`@lixpi/web-client-service-factory` creates the browser runtime used by `web-ui`, `web-ui-user-portal`, and the AI Model Registry client. Applications supply route definitions, their root layout, product services, UI-kit resources, and any runtime dependencies.
+`@lixpi/web-client-service-factory` creates the browser runtime used by `web-ui`, `web-ui-user-portal`, `design-system`, and the AI Model Registry client. Applications supply route definitions, their root layout, product services, UI-kit resources, and any runtime dependencies.
 
 ## Runtime startup
 

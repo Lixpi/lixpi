@@ -22,6 +22,7 @@ Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm mono
 | **api** | Node.js / TypeScript | `services/api/` | Gateway + in-process LLM orchestration (LangGraph), JWT auth, CRUD, DynamoDB |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for local dev |
+| **design-system** | TypeScript | `services/design-system/` | Development SPA showing every shared UI and canvas component, in Components and Canvas modes |
 | **ai-model-registry** | Node.js / TypeScript | `services/ai-model-registry/` | Owns the model catalog: per-model rule files, provider and models.dev fetch, merge, drift reporting, and the `AI_MODELS_LIST` DynamoDB write. Also the parameter registry and its review UI |
 
 The LLM orchestration workflow (validate → stream → image gen → usage → cleanup) lives at `services/api/src/llm/` and uses [`@langchain/langgraph`](https://github.com/langchain-ai/langgraphjs). It used to be a separate Python `services/llm-api/` Fargate task; for the internal-service NATS auth pattern that Python service used, see [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).

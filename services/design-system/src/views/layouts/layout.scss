@@ -1,0 +1,18 @@
+// Design-system controls inside the package-owned Gentelella sidebar footer.
+
+.design-system-layout {
+    min-height: 100%;
+}
+
+.design-system-sidebar-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.design-system-sidebar-label {
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--sidebar-text);
+}

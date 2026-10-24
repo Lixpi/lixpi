@@ -1,0 +1,41 @@
+{
+    "name": "lixpi-design-system",
+    "private": true,
+    "version": "0.0.1",
+    "type": "module",
+    "scripts": {
+        "dev": "vite --host 0.0.0.0 --mode dev",
+        "build": "vite build --mode production",
+        "serve": "http-server ./dist -p 5173",
+        "build-and-serve": "pnpm run build && pnpm run serve",
+        "preview": "vite preview",
+        "test": "vitest",
+        "test:ui": "vitest --ui",
+        "test:run": "vitest run"
+    },
+    "dependencies": {
+        "@lixpi/canvas-components": "workspace:*",
+        "@lixpi/canvas-components-lixpi-specific": "workspace:*",
+        "@lixpi/canvas-engine": "workspace:*",
+        "@lixpi/capability-system": "workspace:*",
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
+        "@lixpi/ui-kit-gentelella": "workspace:*",
+        "@lixpi/ui-primitives": "workspace:*",
+        "@lixpi/web-client-service-factory": "workspace:*",
+        "d3-selection": "3.0.0",
+        "d3-transition": "3.0.1"
+    },
+    "devDependencies": {
+        "@types/d3-selection": "3.0.12",
+        "@types/d3-transition": "3.0.9",
+        "@vitest/ui": "5.0.1",
+        "happy-dom": "20.14.5",
+        "http-server": "14.1.1",
+        "sass": "1.104.1",
+        "typescript": "7.0.2",
+        "vite": "8.3.0",
+        "vitest": "5.0.1"
+    },
+    "packageManager": "pnpm@12.5.1"
+}

@@ -1,0 +1,8 @@
+// The sidebar navigation uses the theme sidebar colors, so it needs their surface.
+
+.design-system-sidebar-frame {
+    width: 260px;
+    padding: var(--space-3);
+    border-radius: var(--radius);
+    background: var(--sidebar-bg);
+}

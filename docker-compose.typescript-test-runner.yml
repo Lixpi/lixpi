@@ -236,6 +236,62 @@ services:
             - typescript-test-runner-node-modules-web-ui-user-portal-user-portal:/usr/src/service/web-ui-user-portal/packages/lixpi/user-portal/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-web-client-service-factory:/usr/src/service/web-ui-user-portal/packages/lixpi/web-client-service-factory/node_modules
 
+            # --- design-system domain ---
+            - ./services/design-system/package.json:/usr/src/service/design-system/package.json:cached
+            - ./services/design-system/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/design-system/pnpm-workspace.yaml:ro,cached
+            - ./services/design-system/index.html:/usr/src/service/design-system/index.html:cached
+            - ./services/design-system/vitest.config.ts:/usr/src/service/design-system/vitest.config.ts:cached
+            - ./services/design-system/tsconfig.json:/usr/src/service/design-system/tsconfig.json:ro,cached
+            - ./services/design-system/src:/usr/src/service/design-system/src:cached
+            - ./packages/lixpi/canvas-components/package.json:/usr/src/service/design-system/packages/lixpi/canvas-components/package.json:ro,cached
+            - ./packages/lixpi/canvas-components/src:/usr/src/service/design-system/packages/lixpi/canvas-components/src:ro,cached
+            - typescript-test-runner-node-modules-design-system-canvas-components:/usr/src/service/design-system/packages/lixpi/canvas-components/node_modules
+            - ./packages/lixpi/canvas-components-lixpi-specific/package.json:/usr/src/service/design-system/packages/lixpi/canvas-components-lixpi-specific/package.json:ro,cached
+            - ./packages/lixpi/canvas-components-lixpi-specific/src:/usr/src/service/design-system/packages/lixpi/canvas-components-lixpi-specific/src:ro,cached
+            - typescript-test-runner-node-modules-design-system-canvas-components-lixpi-specific:/usr/src/service/design-system/packages/lixpi/canvas-components-lixpi-specific/node_modules
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/design-system/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/design-system/packages/lixpi/canvas-engine/src:ro,cached
+            - typescript-test-runner-node-modules-design-system-canvas-engine:/usr/src/service/design-system/packages/lixpi/canvas-engine/node_modules
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/design-system/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/design-system/packages/lixpi/capability-system/src:ro,cached
+            - typescript-test-runner-node-modules-design-system-capability-system:/usr/src/service/design-system/packages/lixpi/capability-system/node_modules
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/design-system/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/design-system/packages/lixpi/prosemirror/src:ro,cached
+            - typescript-test-runner-node-modules-design-system-prosemirror:/usr/src/service/design-system/packages/lixpi/prosemirror/node_modules
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/design-system/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/design-system/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/asset-types.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/account-admission.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/design-system/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/design-system/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/design-system/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/design-system/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/ui-kit-gentelella/package.json:/usr/src/service/design-system/packages/lixpi/ui-kit-gentelella/package.json:ro,cached
+            - ./packages/lixpi/ui-kit-gentelella/src:/usr/src/service/design-system/packages/lixpi/ui-kit-gentelella/src:ro,cached
+            - ./packages/lixpi/ui-kit-gentelella/styles:/usr/src/service/design-system/packages/lixpi/ui-kit-gentelella/styles:ro,cached
+            - ./packages/lixpi/ui-kit/package.json:/usr/src/service/design-system/packages/lixpi/ui-kit/package.json:ro,cached
+            - ./packages/lixpi/ui-kit/src:/usr/src/service/design-system/packages/lixpi/ui-kit/src:ro,cached
+            - ./packages/lixpi/ui-kit/styles:/usr/src/service/design-system/packages/lixpi/ui-kit/styles:ro,cached
+            - ./packages/lixpi/test-utils/package.json:/usr/src/service/design-system/packages/lixpi/test-utils/package.json:ro,cached
+            - ./packages/lixpi/test-utils/src:/usr/src/service/design-system/packages/lixpi/test-utils/src:ro,cached
+            - ./packages/lixpi/ui-primitives/package.json:/usr/src/service/design-system/packages/lixpi/ui-primitives/package.json:ro,cached
+            - ./packages/lixpi/ui-primitives/src:/usr/src/service/design-system/packages/lixpi/ui-primitives/src:ro,cached
+            - ./packages/lixpi/web-client-service-factory/package.json:/usr/src/service/design-system/packages/lixpi/web-client-service-factory/package.json:ro,cached
+            - ./packages/lixpi/web-client-service-factory/src:/usr/src/service/design-system/packages/lixpi/web-client-service-factory/src:ro,cached
+            - ./packages/lixpi/web-client-service-factory/styles:/usr/src/service/design-system/packages/lixpi/web-client-service-factory/styles:ro,cached
+            - typescript-test-runner-node-modules-design-system:/usr/src/service/design-system/node_modules
+            - typescript-test-runner-node-modules-design-system-constants-ts:/usr/src/service/design-system/packages/lixpi/constants/ts/node_modules
+            - typescript-test-runner-node-modules-design-system-debug-tools-ts:/usr/src/service/design-system/packages/lixpi/debug-tools/ts/node_modules
+            - typescript-test-runner-node-modules-design-system-ui-kit-gentelella:/usr/src/service/design-system/packages/lixpi/ui-kit-gentelella/node_modules
+            - typescript-test-runner-node-modules-design-system-ui-kit:/usr/src/service/design-system/packages/lixpi/ui-kit/node_modules
+            - typescript-test-runner-node-modules-design-system-ui-primitives:/usr/src/service/design-system/packages/lixpi/ui-primitives/node_modules
+            - typescript-test-runner-node-modules-design-system-web-client-service-factory:/usr/src/service/design-system/packages/lixpi/web-client-service-factory/node_modules
+
             # --- ai-model-registry domain ---
             - ./services/ai-model-registry/package.json:/usr/src/service/ai-model-registry/package.json:cached
             - ./services/ai-model-registry/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/ai-model-registry/pnpm-workspace.yaml:ro,cached
@@ -470,6 +526,18 @@ volumes:
     typescript-test-runner-node-modules-web-ui-user-portal-auth-client:
     typescript-test-runner-node-modules-web-ui-user-portal-user-portal:
     typescript-test-runner-node-modules-web-ui-user-portal-web-client-service-factory:
+    typescript-test-runner-node-modules-design-system-canvas-components:
+    typescript-test-runner-node-modules-design-system-canvas-components-lixpi-specific:
+    typescript-test-runner-node-modules-design-system-canvas-engine:
+    typescript-test-runner-node-modules-design-system-capability-system:
+    typescript-test-runner-node-modules-design-system-prosemirror:
+    typescript-test-runner-node-modules-design-system:
+    typescript-test-runner-node-modules-design-system-constants-ts:
+    typescript-test-runner-node-modules-design-system-debug-tools-ts:
+    typescript-test-runner-node-modules-design-system-ui-kit-gentelella:
+    typescript-test-runner-node-modules-design-system-ui-kit:
+    typescript-test-runner-node-modules-design-system-ui-primitives:
+    typescript-test-runner-node-modules-design-system-web-client-service-factory:
     typescript-test-runner-node-modules-ai-model-registry:
     typescript-test-runner-node-modules-ai-model-registry-constants-ts:
     typescript-test-runner-node-modules-ai-model-registry-debug-tools-ts:

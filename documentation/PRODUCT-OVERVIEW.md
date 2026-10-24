@@ -213,6 +213,7 @@ graph TB
 |---------|----------|------|
 | **web-ui** | TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction. Vanilla TypeScript DOM components with Nano Stores for state |
 | **web-ui-user-portal** | TypeScript | Account-management SPA at `user-portal.<domain>` with Gentelella UI backed by the shared browser auth, routing, and user Nano Stores |
+| **design-system** | TypeScript | Development SPA that renders the shared UI-primitives, UI-kit, Gentelella and canvas components in a Components mode and a Canvas mode |
 | **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — Asset/Blob authority, JWT auth, DynamoDB persistence, pipeline events, Asset-document steps, generation and provenance |
 | **nats** | Go (initially 3 nodes) | Embedded broker/auth, pub/sub, request/reply, JetStream replay and work queues, organization Blob Object Stores and NEX control state |
 | **nex** | Node.js / TypeScript | NATS NEX workloads — AI-models sync and heavy file conversion/frame extraction |

@@ -179,6 +179,9 @@ run_domain() {
         web-ui-user-portal)
             run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/web-ui-user-portal","targetDirectory":"services/web-ui-user-portal/src"}]' services/web-ui-user-portal/index.html services/web-ui-user-portal/src services/web-ui-user-portal/vite.config.ts services/web-ui-user-portal/vitest.config.ts
             ;;
+        design-system)
+            run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/design-system","targetDirectory":"services/design-system/src"}]' services/design-system/index.html services/design-system/src services/design-system/vite.config.ts services/design-system/vitest.config.ts
+            ;;
         api)
             run_action "$action" '[]' services/api/src services/api/vitest.config.ts
             ;;
@@ -210,7 +213,7 @@ run_domain() {
 # the quality boundary accidentally through a broad repository glob.
 run_all() {
     action="${1:-validate}"
-    run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/web-ui","targetDirectory":"services/web-ui/src"},{"specifierPrefix":"$src","importerScope":"services/web-ui-user-portal","targetDirectory":"services/web-ui-user-portal/src"},{"specifierPrefix":"$src","importerScope":"services/ai-model-registry","targetDirectory":"services/ai-model-registry/src/client"}]' \
+    run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/web-ui","targetDirectory":"services/web-ui/src"},{"specifierPrefix":"$src","importerScope":"services/web-ui-user-portal","targetDirectory":"services/web-ui-user-portal/src"},{"specifierPrefix":"$src","importerScope":"services/design-system","targetDirectory":"services/design-system/src"},{"specifierPrefix":"$src","importerScope":"services/ai-model-registry","targetDirectory":"services/ai-model-registry/src/client"}]' \
         services/web-ui/src \
         services/web-ui/index.html \
         services/web-ui/vite.config.ts \
@@ -219,6 +222,10 @@ run_all() {
         services/web-ui-user-portal/index.html \
         services/web-ui-user-portal/vite.config.ts \
         services/web-ui-user-portal/vitest.config.ts \
+        services/design-system/src \
+        services/design-system/index.html \
+        services/design-system/vite.config.ts \
+        services/design-system/vitest.config.ts \
         services/api/src \
         services/api/vitest.config.ts \
         services/nex/workloads \
@@ -261,7 +268,7 @@ cd "$repository_dir"
 # that root. The self-test remains a separate explicit action from normal validation.
 domain="${1:-}"
 if [ -z "$domain" ]; then
-    echo "Usage: run-quality.sh {web-ui|web-ui-user-portal|api|nex|ai-model-registry|infrastructure|random-useful-things|quality-runner|shared|all|self-test|files} [package] [validate|fix|lint|lint-fix|format|validate-formatting] [file paths]" >&2
+    echo "Usage: run-quality.sh {web-ui|web-ui-user-portal|design-system|api|nex|ai-model-registry|infrastructure|random-useful-things|quality-runner|shared|all|self-test|files} [package] [validate|fix|lint|lint-fix|format|validate-formatting] [file paths]" >&2
     exit 1
 fi
 shift
@@ -282,7 +289,7 @@ case "$domain" in
     self-test)
         sh "$runner_dir/test-quality.sh"
         ;;
-    web-ui|web-ui-user-portal|api|nex|ai-model-registry|infrastructure|random-useful-things|quality-runner)
+    web-ui|web-ui-user-portal|design-system|api|nex|ai-model-registry|infrastructure|random-useful-things|quality-runner)
         run_domain "$domain" "${1:-validate}"
         ;;
     *)

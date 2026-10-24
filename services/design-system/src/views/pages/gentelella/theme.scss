@@ -1,0 +1,21 @@
+// Samples for the theme token table and the applied-theme subtree.
+
+.design-system-token-sample {
+    display: inline-block;
+    min-width: 32px;
+    height: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.design-system-theme-applied {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    width: 100%;
+}
+
+.design-system-theme-manual-card {
+    margin-top: var(--space-3);
+    padding: var(--space-4);
+}

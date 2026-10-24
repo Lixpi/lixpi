@@ -1,0 +1,25 @@
+// Hosts for the video player and badge demonstrations.
+
+.design-system-video-player {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
+}
+
+.design-system-video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--radius);
+    background: #0f1623;
+    object-fit: cover;
+}
+
+.design-system-video-controls {
+    width: 100%;
+}
+
+.design-system-badge-host {
+    min-height: 24px;
+}

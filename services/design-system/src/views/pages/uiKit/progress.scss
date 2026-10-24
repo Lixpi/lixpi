@@ -1,0 +1,18 @@
+// Hosts for the progress and error demonstrations.
+
+.design-system-progress-view-state {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.design-system-progress-ripple {
+    width: 40px;
+    height: 40px;
+}
+
+.design-system-error-host {
+    position: relative;
+    width: 100%;
+    min-height: 160px;
+}
