@@ -41,9 +41,20 @@ ENV RUSTFLAGS='--cfg getrandom_backend="wasm_js"'
 ENV CARGO_BUILD_JOBS=2
 RUN --mount=type=tmpfs,target=/source/web/target \
     --mount=type=tmpfs,target=/usr/local/cargo/registry \
-    trunk build --locked --release --dist /frontend \
+    set -eu; \
+    frontend_revision="$( \
+        { \
+            find . -type f -not -path './target/*' -exec sha256sum {} \; | LC_ALL=C sort; \
+            rustc --version; \
+            trunk --version; \
+        } | sha256sum | cut -d ' ' -f 1 \
+    )"; \
+    frontend_path="/frontend/frontend/${frontend_revision}"; \
+    trunk build --locked --release --public-url "/frontend/${frontend_revision}/" --dist "$frontend_path" \
+    && cp "$frontend_path/index.html" "$frontend_path/sw.js" /frontend/ \
+    && cp -r "$frontend_path/assets" /frontend/assets \
     && grep -q 'type="module"' /frontend/index.html \
-    && find /frontend -maxdepth 1 -name '*.wasm' | grep -q .
+    && find "$frontend_path" -maxdepth 1 -name '*.wasm' | grep -q .
 
 # Stage 1: Prepare scripts with Alpine
 FROM ${ALPINE_IMAGE_REFERENCE} AS builder

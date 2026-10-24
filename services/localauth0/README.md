@@ -20,7 +20,7 @@ When `VITE_MOCK_AUTH=true` and `MOCK_AUTH0=true` are set in your local environme
    - Default test user (`test@local.dev`)
    - Profile fields and the fixed admission claim
    - Permissions for the API audience
-3. **Web-UI redirects** to LocalAuth0 instead of real Auth0 for authentication
+3. **The shared Lixpi Sign in button redirects** to LocalAuth0 for authentication; signed-out visits and logout stay on the application's login screen
 4. **API service validates** JWTs using LocalAuth0's JWKS endpoint
 5. **Authentication works offline** after the images are built
 
@@ -28,7 +28,7 @@ When `VITE_MOCK_AUTH=true` and `MOCK_AUTH0=true` are set in your local environme
 
 The image loads `localauth0.toml` through `LOCALAUTH0_CONFIG_PATH`. It fixes the issuer to `http://localhost:3000/` and subject to `local|test-user-001`. Its admission claim is `https://lixpi.ai/admission: { v: 1, epoch: 1 }`. A small patch adds JSON-valued custom claims to the pinned upstream release; existing string/list claims keep their format. The Docker build compiles the server and browser frontend from that release with their Cargo lockfiles. The frontend patch declares Trunk's Rust entry point, enables the WebAssembly randomness features, and makes its JavaScript redirect return the promise expected by Rust. The build rejects output without a module loader or WebAssembly binary. Trunk's version comes from the version registry. When updating the upstream image version, update the source commit and review both patches in the same change. `init-localauth0.sh` is an optional API configuration helper; the image does not run or include it.
 
-Both compilers use two jobs and BuildKit memory mounts for Cargo downloads and intermediate outputs. Those temporary files consume build memory instead of accumulating in Docker's disk cache. The [API's opt-in local authentication test](../api/README.md) checks the served frontend assets and authenticated application requests against the running mock.
+Both compilers use two jobs and BuildKit memory mounts for Cargo downloads and intermediate outputs. Those temporary files consume build memory instead of accumulating in Docker's disk cache. The frontend's source files and compiler versions determine its URL prefix, including the generated JavaScript snippets. Rebuilding changed sources gives the browser a different asset URL, so cached snippets cannot conflict with the page's integrity hashes. The [API's opt-in local authentication test](../api/README.md) checks those versioned URLs, served asset hashes and authenticated application requests against the running mock.
 
 The public DynamoDB initializer loads the matching account fixture after preparing application tables. It belongs to the `main` and `deploy` profiles, and Compose waits for its successful exit before starting the API. Compose defaults `LOCAL_DYNAMODB_FORCE_RECREATE` to `false`, so repeated setup preserves existing tables. The fixture creates the fixed user, personal organization, owner membership, and `Account-Admission-<ORG_NAME>-<STAGE>` row in one conditional transaction. A coherent older mock account keeps its existing personal organization. Repeated loading validates the records and does not rewrite them. Partial or ambiguous records fail with a repair instruction.
 
