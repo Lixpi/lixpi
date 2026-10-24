@@ -99,9 +99,9 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(canvasSource, 'libraries: this.libraries,')
     })
 
-    it('supplies the package chrome with the Media Library toggle', () => {
+    it('keeps the Media Library toggle out of the package chrome', () => {
         expectSourceToContain(workspaceCanvasViewSource, 'new WorkspaceCanvasChrome(settings, {')
-        expectSourceToContain(workspaceCanvasViewSource, 'toggleMediaLibrary: () => this.renderer?.toggleMediaLibrary()')
+        expectSourceNotToContain(workspaceCanvasViewSource, 'toggleMediaLibrary:')
     })
 
     it('inserts catalog Assets through the existing centered insertion path', () => {

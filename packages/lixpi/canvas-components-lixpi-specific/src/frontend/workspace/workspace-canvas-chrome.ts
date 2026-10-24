@@ -8,7 +8,6 @@ import {
 import {
     createNewFileIcon,
     imageIcon,
-    mediaFoloderIcon,
 } from '@lixpi/ui-kit/svg'
 import {
     type LixpiCanvasPalette,
@@ -40,7 +39,6 @@ export type WorkspaceCanvasChromePorts = {
     createDocument: () => Promise<void>
     uploadFile: (file: File) => Promise<void>
     importUrl: (url: string) => Promise<void>
-    toggleMediaLibrary: () => void
     reportError: (error: unknown) => void
 }
 
@@ -105,20 +103,6 @@ export class WorkspaceCanvasChrome {
                 ${this.imageWrapper}
             </div>
         ` as HTMLDivElement
-        const library = html`
-            <div className="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
-                <button
-                    className="workspace-floating-toolbar-button"
-                    aria-label="Media Library"
-                    data-help-tooltip="aria-label"
-                    onclick=${() => {
-                        if (!this.disposed)
-                            ports.toggleMediaLibrary()
-                    }}
-                    innerHTML=${mediaFoloderIcon}
-                ></button>
-            </div>
-        ` as HTMLDivElement
         const controls = html`
             <div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">
                 <div
@@ -132,7 +116,7 @@ export class WorkspaceCanvasChrome {
         controls.style.setProperty('--ai-prompt-model-menu-trigger-active-background', settings.modelMenuHoverBackground)
         this.element = html`
             <div className="workspace-canvas">
-                <div className="workspace-canvas-left-control-rail">${actions}${library}</div>
+                <div className="workspace-canvas-left-control-rail">${actions}</div>
                 ${controls}${this.fileInput}${this.zoomIndicator}${this.pane}
             </div>
         ` as HTMLElement
@@ -140,10 +124,6 @@ export class WorkspaceCanvasChrome {
             {
                 id: 'workspace-action-panel-left',
                 element: actions,
-            },
-            {
-                id: 'workspace-media-library-panel',
-                element: library,
             },
             {
                 id: 'workspace-right-control-rail',

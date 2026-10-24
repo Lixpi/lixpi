@@ -53,12 +53,6 @@
     -webkit-user-select: none;
 }
 
-// Single-icon panel collapses to a circle the same diameter as its height.
-.workspace-canvas-action-panel-single {
-    width: var(--workspace-canvas-action-panel-size);
-    padding: 0;
-}
-
 .workspace-canvas-left-control-rail {
     position: absolute;
     right: calc(50% + min(380px, (100% - 48px) / 2) + var(--workspace-canvas-action-panel-gap));
@@ -71,8 +65,7 @@
     pointer-events: auto;
 }
 
-.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left,
-.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel {
+.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left {
     position: relative;
     right: auto;
     bottom: auto;

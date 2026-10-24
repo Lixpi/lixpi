@@ -122,7 +122,6 @@ export type WorkspaceCanvasRenderer = {
         conversations: WorkspaceCanvasConversation[],
         workspaceId: string,
     ) => void
-    toggleMediaLibrary: () => void
     destroy: () => void
 }
 
@@ -254,7 +253,6 @@ export class WorkspaceCanvasSurface {
                 createDocument: () => this.actions.createDocument(),
                 uploadFile: file => this.actions.uploadFile(file),
                 importUrl: url => this.actions.importUrl(url),
-                toggleMediaLibrary: () => this.renderer?.toggleMediaLibrary(),
                 reportError: error => ports.reportError('[CANVAS] Toolbar action failed:', error),
             },
         )

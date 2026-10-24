@@ -181,7 +181,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## Workspace Surfaces
 
-The package-owned workspace composer mounts this plugin through the host editor port in the bottom-center canvas composer. One pill in the right control rail contains the Image / Video switch followed by the current model-configuration control. The Media Library and upload/image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
+The package-owned workspace composer mounts this plugin through the host editor port in the bottom-center canvas composer. One pill in the right control rail contains the Image / Video switch followed by the current model-configuration control. The New Document and Add Image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
 
 ## Styling
 
