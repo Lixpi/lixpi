@@ -55,6 +55,8 @@ The update command does not treat a publisher's newest version as automatically 
 
 Catalog keys use the dependency's published identity. npm packages use exact package names, Go modules use exact module paths, container images use repository names, Actions use repository names, and tools use their upstream names such as `fnm`, `nex`, `pulumi`, and `trunk`. The surrounding catalog and section already establish that the value is a version, so keys do not add aliases or a `Version` suffix.
 
+Pulumi resource plugins use their executable identity, such as `pulumi-resource-aws`, in the tools catalog. A provisioning container can read that catalog to select a compatibility-pinned local plugin independently of its cloud SDK dependency. The publisher and release-history lookup for the AWS resource plugin use `pulumi/pulumi-aws`.
+
 Only values that select a release belong here. Unversioned distribution package names such as `curl`, `jq`, `ffmpeg`, and `libreoffice` remain in the Dockerfile where the operating-system distribution and package repository are visible. Application schemas, protocol revisions, deployment identifiers, AI model IDs, provider parameters, and prices remain with the code that defines their compatibility rules.
 
 Catalog values can derive one release from another. For example, Node.js container tags derive from the selected Node.js runtime, and AWS Lambda derives its runtime major from the same value. [Configuration](documentation/CONFIGURATION.md) defines the catalog sections, reference syntax, transforms, and Docker build-argument adapter.
