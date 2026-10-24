@@ -1842,14 +1842,14 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceNotToContain(ts, "zIndex: '9990',")
     })
 
-    it('places the media library on the left and the icon switch plus model control on the composer’s right', () => {
+    it('places document and upload controls on the left and the icon switch plus model control on the composer’s right', () => {
         const ts = loadTs()
         const scss = loadScss()
         const workspaceCanvasViewSource = loadWorkspaceCanvasView()
         const canvasMediaLayer = loadPixiMediaLayer()
         const leftRailItems = extractBlockContainingSelector(
             scss,
-            '.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel',
+            '.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left',
         )
         const rightRail = extractBlock(scss, '.workspace-canvas-right-control-rail')
         const modelMenuHoverBackground = extractBlock(scss, '.workspace-canvas-model-menu-hover-background')
@@ -1869,9 +1869,9 @@ describe('Right side panel — TS infrastructure', () => {
         const rightRailMarkup = workspaceCanvasViewSource.slice(rightRailStart, rightRailEnd)
         const screenGlassTargets = workspaceCanvasViewSource
 
-        expectSourceToContain(
+        expectSourceNotToContain(
             workspaceCanvasViewSource,
-            'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single',
+            'workspace-canvas-media-library-panel',
         )
         expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-right-control-rail')
         expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-model-menu-hover-background"')
@@ -1888,7 +1888,7 @@ describe('Right side panel — TS infrastructure', () => {
 
         expectSourceToContain(
             scss,
-            '.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel',
+            '.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left',
         )
         expectExcerptToContain(leftRailItems, 'right: auto;', 'left control rail')
         expectExcerptToContain(rightRail, 'left: calc(', 'right control rail')
@@ -1923,7 +1923,7 @@ describe('Right side panel — TS infrastructure', () => {
             ts,
             'mountModelMenuControl: controlElement => this.options.modelMenuControlMountEl.replaceChildren(controlElement),',
         )
-        expectSourceToContain(screenGlassTargets, "id: 'workspace-media-library-panel'")
+        expectSourceNotToContain(screenGlassTargets, "id: 'workspace-media-library-panel'")
         expectSourceNotToContain(screenGlassTargets, "id: 'workspace-action-panel-right'")
     })
 
@@ -2074,9 +2074,9 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
         expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
         expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
-        expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-media-library-panel workspace-canvas-action-panel-single')
+        expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-media-library-panel')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel-right')
-        expectSourceToContain(workspaceCanvasViewSource, 'mediaFoloderIcon')
+        expectSourceNotToContain(workspaceCanvasViewSource, 'mediaFoloderIcon')
         expectSourceToContain(workspaceCanvasViewSource, 'workspace-zoom-indicator')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-utility-capsule')
         expectSourceToContain(scss, '.workspace-canvas-right-side-panel-open .workspace-zoom-indicator')

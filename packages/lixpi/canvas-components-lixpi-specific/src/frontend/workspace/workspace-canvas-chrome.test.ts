@@ -44,7 +44,6 @@ const setup = (palette = {
         createDocument: vi.fn(async () => {}),
         uploadFile: vi.fn(async () => {}),
         importUrl: vi.fn(async () => {}),
-        toggleMediaLibrary: vi.fn(),
         reportError: vi.fn(),
     }
     const owner = new WorkspaceCanvasChrome(settings, ports)
@@ -83,17 +82,16 @@ describe('workspace canvas chrome', () => {
         expect(owner.pane.contains(owner.viewportMount)).toBe(true)
         expect(owner.element.contains(owner.mediaModeSwitchMount)).toBe(true)
         expect(owner.element.contains(owner.modelMenuControlMount)).toBe(true)
-        expect(owner.glassTargets).toHaveLength(3)
+        expect(owner.glassTargets).toHaveLength(2)
 
         for (const target of owner.glassTargets) expect(owner.element.contains(target.element)).toBe(true)
 
         button('New Document').click()
-        button('Media Library').click()
         expect(ports.createDocument).toHaveBeenCalledOnce()
-        expect(ports.toggleMediaLibrary).toHaveBeenCalledOnce()
-        expect(button('Media Library').dataset.helpTooltip).toBe('aria-label')
-        expect(button('Media Library').closest('.workspace-canvas-left-control-rail')).not.toBeNull()
-        expect(button('Media Library').closest('.workspace-canvas-right-control-rail')).toBeNull()
+        expect(owner.element.querySelector('[aria-label="Media Library"]')).toBeNull()
+        expect(button('New Document').dataset.helpTooltip).toBe('aria-label')
+        expect(button('New Document').closest('.workspace-canvas-left-control-rail')).not.toBeNull()
+        expect(button('Add Image').closest('.workspace-canvas-left-control-rail')).not.toBeNull()
     })
 
     it('keeps zoom, panel state and color configuration local to each canvas', () => {
@@ -178,12 +176,13 @@ describe('workspace canvas chrome', () => {
         ports.createDocument = vi.fn(() =>
             new Promise((_resolve, reject) => void (fail = reject))
         )
-        button('New Document').click()
+        const createDocumentButton = button('New Document')
+        createDocumentButton.click()
         owner.destroy()
-        button('Media Library').click()
+        createDocumentButton.click()
         fail(new Error('late'))
         await vi.advanceTimersByTimeAsync(0)
-        expect(ports.toggleMediaLibrary).not.toHaveBeenCalled()
+        expect(ports.createDocument).toHaveBeenCalledOnce()
         expect(ports.reportError).not.toHaveBeenCalled()
     })
 })

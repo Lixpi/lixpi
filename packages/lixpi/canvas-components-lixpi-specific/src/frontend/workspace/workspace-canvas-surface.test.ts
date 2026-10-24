@@ -138,7 +138,6 @@ const setup = (options: {
         commitTransientCanvasNodeInsertion: vi.fn(),
         markUploadPlaceholderFailed: vi.fn(),
         render: vi.fn(state => void (currentState = state)),
-        toggleMediaLibrary: vi.fn(),
         destroy: vi.fn(),
     }
     const ports: WorkspaceCanvasSurfacePorts = {
