@@ -90,6 +90,19 @@ Run the startup script and select an environment when prompted:
 start.bat
 ```
 
+## AWS sign-in
+
+Containers that call AWS locally, such as `api` for Bedrock inference and `pulumi` for deployments, read your AWS SSO session from the `lixpi-aws-config` Docker volume mounted at `/root/.aws`. The profiles come from `.aws/config`, which the setup wizard writes from `dev-tools/config-utils/templates/aws-config.template`. Sign in, or refresh an expired session, with:
+
+```bash
+./aws-sso-login.sh              # pick a .env.* stage and use its AWS_PROFILE
+./aws-sso-login.sh <profile>    # sign in as a named profile from .aws/config
+```
+
+The login runs in the standalone `lixpi-aws-cli` container from [`docker-compose.aws-cli.yml`](../../docker-compose.aws-cli.yml), its own Compose project, so it never starts the application stack. The CLI prints a URL and a code, and you approve the code in the browser on your host. Restart running containers afterwards.
+
+The volume has a fixed name rather than a Compose-project prefix, so other repositories share the same session. Their Compose files declare an `aws-config` volume named `lixpi-aws-config`, mount it at `/root/.aws`, and bind-mount this checkout's `.aws/config` over `/root/.aws/config`. They sign in by running this repository's `aws-sso-login.sh` with their profile name. The Pulumi image keeps its own AWS CLI because deployments need it.
+
 ## Dependency versions
 
 Inspect a dependency update and its complete upstream release information before applying it:

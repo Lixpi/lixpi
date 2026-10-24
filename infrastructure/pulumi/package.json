@@ -3,7 +3,6 @@
     "main": "src/cli.ts",
     "type": "module",
     "scripts": {
-        "aws-login": "aws sso login --use-device-code --sso-session=lixpi",
         "cli": "node src/cli.ts",
         "init": "node src/cli.ts init --stack=${STAGE} --region=${AWS_REGION}",
         "preview": "node src/cli.ts preview",

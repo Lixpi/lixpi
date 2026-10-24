@@ -15,8 +15,7 @@
         "dev": "nodemon -L",
         "test:run": "vitest run",
         "test": "vitest",
-        "migrate:unified-media-reference": "node ./src/debug-tools/migrate-unified-media-reference.ts",
-        "aws-login": "aws sso login --use-device-code --sso-session=lixpi"
+        "migrate:unified-media-reference": "node ./src/debug-tools/migrate-unified-media-reference.ts"
     },
     "dependencies": {
         "adm-zip": "0.6.1",
