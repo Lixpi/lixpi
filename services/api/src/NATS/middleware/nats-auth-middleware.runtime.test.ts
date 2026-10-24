@@ -28,9 +28,18 @@ vi.mock('@lixpi/debug-tools', () => ({
 // =============================================================================
 
 describe.runIf(process.env.LIXPI_NATS_RUNTIME_TEST === 'true')('local NATS authentication', () => {
-    it('serves the login loader and its intact JavaScript and WebAssembly resources', async () => {
+    it('serves versioned login assets with intact JavaScript and WebAssembly resources', async () => {
         const origin = 'http://lixpi-localauth0:3000'
-        const response = await fetch(`${origin}/authorize`, { signal: AbortSignal.timeout(5000) })
+        const authorization = new URL('/authorize', origin)
+        authorization.search = new URLSearchParams({
+            client_id: 'mock-client-id',
+            audience: process.env.VITE_AUTH0_AUDIENCE!,
+            redirect_uri: process.env.VITE_AUTH0_REDIRECT_URI!,
+            scope: 'openid profile email',
+            response_type: 'token',
+            bypass: 'true',
+        }).toString()
+        const response = await fetch(authorization, { signal: AbortSignal.timeout(5000) })
         expect(response.status).toBe(200)
         const html = await response.text()
         expect(html.includes('<script type="module">')).toBe(true)
@@ -40,11 +49,14 @@ describe.runIf(process.env.LIXPI_NATS_RUNTIME_TEST === 'true')('local NATS authe
 
         expect(resources.some(link => link.includes('.wasm'))).toBe(true)
         expect(resources.some(link => link.includes('.js'))).toBe(true)
+        expect(resources.some(link => link.includes('/snippets/'))).toBe(true)
+        const assetPrefixes = new Set<string>()
 
         for (const link of resources) {
             const path = link.match(/href="([^"]+)"/)?.[1]
             const integrity = link.match(/integrity="([^"]+)"/)?.[1]
-            expect(path?.startsWith('/')).toBe(true)
+            expect(path).toMatch(/^\/frontend\/[a-f0-9]{64}\//)
+            assetPrefixes.add(path!.match(/^\/frontend\/[a-f0-9]{64}\//)![0])
             const asset = await fetch(new URL(path!, origin), { signal: AbortSignal.timeout(5000) })
             expect(asset.status).toBe(200)
             const bytes = new Uint8Array(await asset.arrayBuffer())
@@ -56,6 +68,8 @@ describe.runIf(process.env.LIXPI_NATS_RUNTIME_TEST === 'true')('local NATS authe
             } else
                 expect(asset.headers.get('content-type')).toMatch(/javascript/)
         }
+
+        expect(assetPrefixes.size).toBe(1)
     })
 
     it('rejects bad connection credentials, authenticates a user, and enforces request tokens', async () => {

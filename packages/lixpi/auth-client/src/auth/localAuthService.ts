@@ -58,6 +58,7 @@ class LocalAuthService implements WebClientAuthService {
                 this.store.setMetaValues({
                     isLoading: false,
                     isAuthenticated: true,
+                    isRedirecting: false,
                 })
                 this.store.setDataValues({
                     user: {
@@ -69,17 +70,16 @@ class LocalAuthService implements WebClientAuthService {
 
                 return
             }
-        } catch {
-            localStorage.removeItem(this.storageKey)
-        }
+        } catch {}
 
-        this.setLoggedOut()
+        await this.clearSession()
     }
 
     private setLoggedOut(): void {
         this.store.setMetaValues({
             isLoading: false,
             isAuthenticated: false,
+            isRedirecting: false,
         })
         this.store.setDataValues({ user: null })
     }
@@ -102,7 +102,11 @@ class LocalAuthService implements WebClientAuthService {
         window.location.href = this.config.logoutReturnTo
     }
 
-    recoverAccess = (): Promise<void> => this.login()
+    recoverAccess = async (): Promise<void> => {
+        await this.clearSession()
+
+        throw new Error('Authentication requires an explicit sign-in')
+    }
 
     confirmAccess = (): void => {}
 
@@ -213,9 +217,14 @@ class LocalAuthService implements WebClientAuthService {
     async getTokenSilently(forceRefresh = false): Promise<string | false> {
         const token = localStorage.getItem(this.storageKey)
 
+        if (!token) {
+            this.setLoggedOut()
+
+            return false
+        }
+
         if (
             !forceRefresh
-            && token
             && !this.isTokenExpired(token)
         )
             return token
@@ -223,7 +232,7 @@ class LocalAuthService implements WebClientAuthService {
         try {
             return await this.refreshTokenViaIframe()
         } catch {
-            await this.login()
+            await this.clearSession()
 
             return false
         }
