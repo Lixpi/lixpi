@@ -57,7 +57,7 @@ services:
 
         volumes:
             - aws-config:/root/.aws:cached    # AWS SSO credentials
-            - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
+            - ./.aws/config:/root/.aws/config:cached    # AWS SSO profile definitions
             - caddy-certs:/opt/nex/certs:ro    # Cluster CA (only needed when 4222 uses TLS, e.g. AWS)
             - nex-1-data:/data                 # Persistent nex resource/config dir across restarts
             - nex-workloads:/opt/nex/private-workloads:ro # Private repos place native workload binaries here

@@ -2240,7 +2240,7 @@ const main = async (): Promise<void> => {
     debugLog(`  1. Run ${c.cyan(`docker compose --env-file ${envFileName} up`)}`)
 
     if (config.configureAwsSso)
-        debugLog(`  2. Run ${c.cyan('pnpm run aws-login')} to authenticate with AWS`)
+        debugLog(`  2. Run ${c.cyan('./aws-sso-login.sh')} to sign in to AWS SSO`)
 
     debugLog()
 }

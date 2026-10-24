@@ -1,0 +1,30 @@
+---
+# Standalone AWS CLI for signing in to AWS SSO. It is its own Compose project,
+# so a login never starts or touches the application stack, and any repository
+# can run it straight from this checkout:
+#
+#   docker compose -f ${LIXPI_REPOSITORY_PATH}/docker-compose.aws-cli.yml run --rm lixpi-aws-cli sso login --profile <profile> --use-device-code
+#
+# ./aws-sso-login.sh wraps that command. The SSO token cache lands in the
+# lixpi-aws-config volume, which every container that calls AWS mounts at
+# /root/.aws, in this repository and in the others that share it, so one login
+# covers all of them. The profiles come from .aws/config beside this file.
+#
+# The Pulumi image keeps its own AWS CLI, which it needs for deployments.
+name: lixpi-aws-cli
+
+services:
+
+    # No container_name: this service is invoked via `docker compose run --rm`
+    # (never `up`/`exec`), so concurrent invocations never collide on a fixed name.
+    lixpi-aws-cli:
+        image: amazon/aws-cli:2.36.46
+        volumes:
+            - aws-config:/root/.aws    # AWS SSO credentials
+            - ./.aws/config:/root/.aws/config:ro,cached    # AWS SSO profile definitions
+
+volumes:
+    # Fixed name instead of the project-scoped default, so every Compose project
+    # that declares the same name shares one SSO token cache.
+    aws-config:
+        name: lixpi-aws-config

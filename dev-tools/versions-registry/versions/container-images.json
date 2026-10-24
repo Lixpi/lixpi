@@ -7,6 +7,7 @@
     "alpine": "3.24.2",
     "rust": "1.88.0-alpine",
     "public.ecr.aws/primaassicurazioni/localauth0": "0.9.1",
+    "amazon/aws-cli": "2.36.46",
     "amazon/dynamodb-local": "3.3.1",
     "aaronshaf/dynamodb-admin": "5.3.4",
     "natsio/nats-box": "0.19.7"
