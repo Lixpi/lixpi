@@ -251,6 +251,9 @@ export class LatestReleaseResolver {
         if (name === 'nex')
             return this.githubTool(name, 'synadia-io/nex')
 
+        if (name === 'trunk')
+            return this.githubTool(name, 'trunk-rs/trunk')
+
         if (name === 'pulumi')
             return this.releases.releaseVersion(
                 'tools',

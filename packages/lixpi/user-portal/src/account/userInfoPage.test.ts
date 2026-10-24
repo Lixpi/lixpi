@@ -8,6 +8,7 @@ import {
     describe,
     expect,
     it,
+    vi,
 } from 'vitest'
 
 import { createUserInfoPage } from './userInfoPage.ts'
@@ -30,21 +31,34 @@ describe('userInfoPage', () => {
 
     it('renders loading, user, and error states from the shared store', () => {
         const store = createUserStore()
-        const page = createUserInfoPage({ store })
+        const loading = {
+            setVisible: vi.fn(),
+            setErrorMessage: vi.fn(),
+            destroy: vi.fn(),
+        }
+        const page = createUserInfoPage({
+            store,
+            loadingLayer: { acquire: () => loading },
+        })
         document.body.append(page.el)
 
-        expect(page.el.textContent).toContain('Loading user information')
+        expect(loading.setVisible).toHaveBeenLastCalledWith(true)
 
         store.setDataValues(userFixture)
         store.setMetaValues({ loadingStatus: LoadingStatus.success })
 
         expect(page.el.textContent).toContain('Alex Rivera')
+        expect(loading.setVisible).toHaveBeenLastCalledWith(false)
         expect(page.el.textContent).toContain('alex@example.com')
-        expect(page.el.textContent).toContain('organization-123')
+        expect(page.el.textContent).not.toContain('organization-123')
+        expect(page.el.textContent).not.toContain('user-123')
+        expect(page.el.querySelector('details')).toBeNull()
 
         store.setMetaValues({ loadingStatus: LoadingStatus.error })
 
         expect(page.el.textContent).toContain('User information could not be loaded')
+        expect(loading.setVisible).toHaveBeenLastCalledWith(false)
         page.destroy()
+        expect(loading.destroy).toHaveBeenCalledOnce()
     })
 })

@@ -26,6 +26,8 @@ The image uses an Alpine Node.js base and builds a static `nex` binary from the 
 
 State is intentionally **not** persisted (`--state kv` omitted): the entrypoint re-deploys the workloads on every boot (idempotent), so there is exactly one instance of each per node and no orphaned KV buckets. See the proposal's "Re-evaluation notes" for the full rationale.
 
+With `ACCOUNT_ADMISSION_ENABLED=true`, conversion and fidelity requests must carry the account context created by the API after authentication. The workers ask the private API policy to recheck the original identity, epoch and token expiry before starting work, accessing object storage, or starting a subprocess. Policy leases last at most 30 seconds and renew during work. Account changes and connection loss abort active jobs; subprocesses receive `SIGKILL`. Native image or ONNX calls can finish internally after cancellation, but their late results cannot proceed to storage or replies. Queued rendition retries retain the original epoch and expiry.
+
 ## Run it locally
 
 The commands below assume `.env` is symlinked to your `.env.<stage>` file via `./set-env.sh` at the repo root (Docker Compose only auto-loads a file literally named `.env`) — run it once, or add `--env-file .env.<stage>` to each command instead.

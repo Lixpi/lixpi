@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lixpi/lixpi/services/nats/internal/admission"
+	"github.com/lixpi/lixpi/services/nats/internal/auth"
 	"github.com/lixpi/lixpi/services/nats/internal/maintenance"
 	"github.com/lixpi/lixpi/services/nats/internal/policy"
 	"github.com/nats-io/nats-server/v2/server"
@@ -22,6 +23,8 @@ import (
 )
 
 type RuntimeConfig struct {
+	Deployment          *maintenance.DeploymentIdentity
+	ApplicationPolicy   *auth.ApplicationPolicy
 	Registration        *RegistrationConfig
 	Options             *server.Options
 	Admission           admission.Settings
@@ -34,8 +37,10 @@ type RuntimeConfig struct {
 }
 
 type Runtime struct {
+	browserControls    *browserControls
 	Registry           *policy.Store
 	registryConnection *nats.Conn
+	policyConnections  []*nats.Conn
 	Server             *server.Server
 	config             RuntimeConfig
 	options            *server.Options
@@ -104,12 +109,25 @@ func StartRuntime(ctx context.Context, config RuntimeConfig) (*Runtime, error) {
 	}
 
 	r.Server = instance
+
+	r.browserControls = newBrowserControls(ctx, instance)
+
+	r.browserControls.deployment = config.Deployment
 	if err := r.startRegistry(ctx); err != nil {
 		instance.Shutdown()
 		instance.WaitForShutdown()
 
 		return nil, fmt.Errorf("start registration store: %w", err)
 	}
+
+	if err := r.startApplicationPolicy(); err != nil {
+		instance.Shutdown()
+		instance.WaitForShutdown()
+
+		return nil, fmt.Errorf("start application policy connections: %w", err)
+	}
+
+	r.browserControls.followPolicy(r.Registry) //nolint:contextcheck // The watcher stops with the owned browser-control runtime.
 
 	if err := r.startDispatcher(ctx); err != nil {
 		instance.Shutdown()
@@ -155,6 +173,10 @@ func (r *Runtime) startDispatcher(ctx context.Context) error {
 	}
 
 	settings.Connection = connection
+
+	if r.config.ApplicationPolicy != nil {
+		settings.Accept = r.browserControls.accept
+	}
 
 	dispatcher, err := admission.Start(ctx, settings)
 	if err != nil {
@@ -337,6 +359,10 @@ func (r *Runtime) close(ctx context.Context) (result error) {
 		return nil
 	}
 
+	if r.browserControls != nil {
+		r.browserControls.stop()
+	}
+
 	d := r.dispatcher.Load()
 	if d != nil {
 		d.Withdraw()
@@ -371,6 +397,10 @@ func (r *Runtime) close(ctx context.Context) (result error) {
 
 	if r.registryConnection != nil {
 		r.registryConnection.Close()
+	}
+
+	for _, connection := range r.policyConnections {
+		connection.Close()
 	}
 
 	if r.health != nil {

@@ -1,0 +1,248 @@
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+@use "../../styles/tokens" as tokens;
+@import url("https://fonts.cdnfonts.com/css/herculanum-lt-pro");
+
+.auth-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: 100dvh;
+    width: 100%;
+    color: tokens.$nightBlue;
+    background: #faf9f7;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.auth-panel-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 80px 40px;
+}
+
+.auth-panel-content {
+    width: min(100%, 380px);
+}
+
+.auth-panel-mobile-brand {
+    display: none;
+}
+
+.auth-panel-eyebrow {
+    margin: 0 0 20px;
+    color: tokens.$steelBlue;
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 2px;
+}
+
+.auth-panel-title {
+    margin: 0 0 16px;
+    color: tokens.$nightBlue;
+    font-size: clamp(30px, 3vw, 42px);
+    font-weight: 550;
+    letter-spacing: -1.4px;
+    line-height: 1.15;
+}
+
+.auth-panel-description {
+    margin: 0 0 30px;
+    color: tokens.$steelBlue;
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+.auth-panel-notice {
+    padding: 14px 16px;
+    margin: 0 0 24px;
+    border: 1px solid #dce4d9;
+    border-radius: 10px;
+    background: #f0f4ed;
+    color: #4e624f;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.auth-panel-actions {
+    display: grid;
+    gap: 12px;
+}
+
+.auth-panel-button {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 20px;
+    border: 1px solid tokens.$nightBlue;
+    border-radius: 12px;
+    background: tokens.$nightBlue;
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 550;
+    cursor: pointer;
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(border-color),
+        hoverTransition(color);
+
+    &:hover:not(:disabled) {
+        background: tokens.$steelBlue;
+        border-color: tokens.$steelBlue;
+    }
+
+    &:focus-visible {
+        outline: 3px solid #87a97a;
+        outline-offset: 4px;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: wait;
+    }
+}
+
+.auth-panel-button-secondary {
+    color: tokens.$nightBlue;
+    background: transparent;
+    border-color: #d7ddd4;
+
+    &:hover:not(:disabled) {
+        background: #eef2eb;
+        border-color: #b6c4b0;
+    }
+}
+
+.auth-panel-footer {
+    position: absolute;
+    bottom: 30px;
+    margin: 0;
+    font-size: 12px;
+    color: #859084;
+}
+
+.auth-panel-brand {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-height: 100%;
+    color: tokens.$nightBlue;
+    background: #6e9860;
+    isolation: isolate;
+
+    &::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 100%);
+    }
+
+    &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.28), inset 0 -1px 2px rgba(255, 255, 255, 0.14);
+    }
+}
+
+.auth-panel-brand .shifting-gradient-canvas {
+    opacity: 0.92;
+}
+
+.auth-panel-brand-content {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    font-size: 16px;
+    line-height: normal;
+    width: 100%;
+    box-sizing: border-box;
+    // Preserve the website's 16px-root dimensions in hosts with a different root font size.
+    padding: 96px 32px 64px;
+}
+
+.auth-panel-brand-mark {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 40px;
+    user-select: none;
+}
+
+.auth-panel .auth-panel-logo {
+    display: block;
+    width: 190px;
+    height: 190px;
+    flex: none;
+    fill: currentColor;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+    }
+}
+
+.auth-panel .auth-panel-wordmark {
+    font-family: "Herculanum LT Pro", sans-serif;
+    font-size: clamp(57.6px, 7.5vw, 88px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.72);
+    margin: 0;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    user-select: none;
+}
+
+.auth-panel-brand-caption {
+    margin: 0 0 8px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: clamp(16px, 2.5vw, 19.2px);
+    font-weight: 400;
+    letter-spacing: 0.015em;
+    text-align: center;
+}
+
+@media (max-width: 760px) {
+    .auth-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .auth-panel-main {
+        padding: 104px 28px 88px;
+    }
+
+    .auth-panel-brand {
+        display: none;
+    }
+
+    .auth-panel-mobile-brand {
+        display: block;
+        position: absolute;
+        top: 28px;
+        left: 28px;
+        font-family: "Herculanum LT Pro", sans-serif;
+        font-size: 28px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+    }
+}

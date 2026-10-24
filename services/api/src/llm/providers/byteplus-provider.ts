@@ -95,6 +95,7 @@ export class BytePlusProvider extends BaseProvider {
     // VIDEO_COMPLETE on success (or VIDEO_ERROR + throw on failure, which the
     // streamImpl catch in BaseProvider converts to update.error).
     private async runSeedanceGeneration(state: ProviderState): Promise<VideoUsage & { responseId?: string }> {
+        const settleUsage = await this.prepareUsageSettlement(state)
         const modelVersion = state.modelVersion
         // VideoRouter passes the final prompt as the first user message's content.
         const first = state.messages[0]
@@ -235,6 +236,17 @@ export class BytePlusProvider extends BaseProvider {
 
                 throw new BytePlusModelArkError(`Seedance task ${taskId} ${task.status}: ${detail}`, { code: task.error?.code })
             }
+
+            await settleUsage({
+                aiVendorRequestId: `byteplus-${taskId}`,
+                videoUsage: {
+                    durationSeconds: Number(task.duration ?? state.videoDurationSeconds) || 0,
+                    resolution: task.resolution ?? state.videoResolution ?? '',
+                    aspectRatio: task.ratio ?? state.videoAspectRatio ?? '',
+                    completionTokens: task.usage?.completion_tokens,
+                    totalTokens: task.usage?.total_tokens,
+                },
+            })
 
             const videoUrl = task.content?.video_url
 

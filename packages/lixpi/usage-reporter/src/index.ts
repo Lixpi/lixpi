@@ -7,6 +7,7 @@ export {
     providerUsageOptionsFromEnv,
     type ProviderUsageOptions,
     type ProviderUsageTransport,
+    type ProviderUsageOutbox,
 } from './provider-usage-client.ts'
 
 export {
@@ -54,6 +55,8 @@ export type {
     ProviderRequestAuthorizationReason,
     ProviderUsageRecordRequest,
     ProviderUsageRecordResult,
+    ProviderRequestCompletionRequest,
+    ProviderRequestCompletionResult,
     UsageUnit,
     MeteredModality,
     MeasuredUsage,

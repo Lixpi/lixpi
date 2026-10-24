@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # How to use:
 # ./rebuild-containers.sh lixpi-nats-1 lixpi-nats-2 lixpi-nats-3

@@ -62,6 +62,8 @@ Application subject names and permissions belong to [constants](../../packages/l
 
 The authority's private signing key stays with deployment tooling. Possessing the bootstrap password lets a service deliver a signed declaration; it cannot change the declared grants. Another application can register different identities, accounts and subjects through the same protocol using the same broker image. [Architecture](documentation/ARCHITECTURE.md#runtime-registration) explains that boundary and the first-start sequence.
 
+With account admission enabled, each broker replays the signed application's restriction stream before accepting browser sessions. The feed starts even when the broker has no browser connections. Its durable consumer identifies that broker process and its Compose container or ECS task; inactivity does not delete it. An account disable closes affected browser sockets before acknowledgement. Deployment inventory in the external account service distinguishes a stopped container from a silent or disconnected broker, so a replacement broker cannot acknowledge on behalf of its predecessor.
+
 ## What the container needs
 
 The serving process needs its authentication settings, a writable JetStream volume, readable certificate/key files and a writable directory for installed certificates. Node name, placement zone and advertised address come from explicit settings or a supplied JSON file. The broker reads these inputs directly; it does not discover an EC2 host or fetch certificates from a cloud service.
@@ -69,6 +71,8 @@ The serving process needs its authentication settings, a writable JetStream volu
 Local Compose supplies certificate files through its Caddy volume. Deployment tooling can supply the same files in another environment. Certificate issuance, DNS, host lifecycle and off-host snapshot transport sit outside this service. The broker's maintenance code deals with NATS, PEM files and directories, with no S3 or cloud SDK dependency.
 
 The binary has separate command paths. `serve` runs the broker; `health` and `fence` contact a running local process. `backup` and `restore` are NATS clients that exchange native snapshots with a mounted directory. Shipping those commands together keeps their protocol and format versions aligned, but running a backup does not start another broker.
+
+The authenticated `/metrics` health endpoint includes account-admission readiness for each signed browser policy. Each entry identifies its issuer, application-registration digest and control stream. Readiness requires a replayed, connected control feed and a ready broker. The release checker uses this evidence on every serving broker; general dispatcher health alone does not establish that account restrictions are loaded.
 
 ## Reading and changing the service
 

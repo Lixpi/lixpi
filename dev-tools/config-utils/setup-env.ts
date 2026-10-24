@@ -46,6 +46,7 @@ type EnvConfig = {
 
     // Authentication
     useLocalAuth0Mock: boolean
+    auth0UseDeveloperKeys?: boolean
     auth0Domain: string
     auth0ClientId: string
     auth0Audience: string
@@ -106,7 +107,6 @@ type EnvConfig = {
     // When true, stableDiffusionApiKey is ignored and inference goes through AWS Bedrock.
     stabilityUseAwsBedrockInference: boolean
     arkApiKey: string
-    stripePublicKey: string
 }
 
 type CliArgs = {
@@ -125,7 +125,8 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     useLocalDynamoDB: ['DYNAMODB_ENDPOINT'],
     dynamodbEndpoint: ['DYNAMODB_ENDPOINT'],
     useLocalAuth0Mock: ['MOCK_AUTH0', 'VITE_MOCK_AUTH', 'MOCK_AUTH0_DOMAIN', 'MOCK_AUTH0_JWKS_URI', 'VITE_MOCK_AUTH0_DOMAIN'],
-    auth0Domain: ['AUTH0_DOMAIN', 'VITE_AUTH0_DOMAIN'],
+    auth0Domain: ['AUTH0_TENANT_DOMAIN', 'AUTH0_DOMAIN', 'VITE_AUTH0_DOMAIN'],
+    auth0UseDeveloperKeys: ['AUTH0_USE_DEVELOPER_KEYS', 'AUTH0_DOMAIN', 'VITE_AUTH0_DOMAIN'],
     auth0ClientId: ['VITE_AUTH0_CLIENT_ID'],
     auth0Audience: ['AUTH0_API_IDENTIFIER', 'VITE_AUTH0_AUDIENCE'],
     natsAuthNkeySeed: ['NATS_AUTH_NKEY_ISSUER_SEED'],
@@ -165,7 +166,6 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     stableDiffusionApiKey: ['STABLE_DIFFUSION_API_KEY'],
     stabilityUseAwsBedrockInference: ['STABILITY_USE_AWS_BEDROCK_INFERENCE'],
     arkApiKey: ['ARK_API_KEY'],
-    stripePublicKey: ['VITE_STRIPE_PUBLIC_KEY'],
 }
 
 class SetupCancelled extends Error {}
@@ -189,6 +189,15 @@ class WizardFields {
             if (Object.hasOwn(values, variables[0]))
                 this.stored.set(field as keyof EnvConfig, values[variables[0]])
         }
+
+        if (
+            !values.AUTH0_TENANT_DOMAIN
+            && values.AUTH0_DOMAIN?.endsWith('.auth0.com')
+        )
+            this.stored.set(
+                'auth0Domain',
+                values.AUTH0_DOMAIN.replace('https://', ''),
+            )
 
         if (
             values.STAGE
@@ -481,6 +490,22 @@ class WizardFields {
                         generated.get(name),
                     )
             }
+        }
+
+        if (
+            config.natsAiModelRegistryNkeyPublic
+            && !updates.getValues().get('NATS_AI_MODEL_REGISTRY_USER_ID')
+        )
+            updates.setValue('NATS_AI_MODEL_REGISTRY_USER_ID', generated.get('NATS_AI_MODEL_REGISTRY_USER_ID')!)
+
+        if (
+            !config.useLocalAuth0Mock
+            && ['environment', 'domainName', 'useLocalAuth0Mock', 'auth0Domain', 'auth0UseDeveloperKeys'].some(
+                field => this.changed.has(field as keyof EnvConfig),
+            )
+        ) {
+            for (const name of ['AUTH0_TENANT_DOMAIN', 'AUTH0_DOMAIN', 'VITE_AUTH0_DOMAIN', 'AUTH0_USE_DEVELOPER_KEYS'])
+                updates.setValue(name, generated.get(name)!)
         }
 
         return updates.render()
@@ -1095,13 +1120,50 @@ const collectConfiguration = async (
     let auth0Domain = fields.read('auth0Domain', '')
     let auth0ClientId = fields.read('auth0ClientId', '')
     let auth0Audience = fields.read('auth0Audience', 'http://localhost:3005')
+    const auth0UseDeveloperKeys = isLocal
+        && !useLocalAuth0Mock
+        ? await fields.confirm(
+            'auth0UseDeveloperKeys',
+            {
+                message: 'Use Auth0 shared Google development keys (local only)?',
+                initialValue: true,
+            },
+        )
+        : isLocal && fields.read('auth0UseDeveloperKeys', true)
+
+    if (prompts.isCancel(auth0UseDeveloperKeys)) {
+        prompts.cancel('Setup cancelled')
+
+        return null
+    }
 
     if (!useLocalAuth0Mock) {
+        if (isLocal) {
+            const localDomain = await fields.text(
+                'domainName',
+                {
+                    message: 'Domain name for real Auth0 (DOMAIN_NAME)',
+                    placeholder: `${developerName}-local.lixpi.dev`,
+                    validate: value => value?.trim() ? undefined : 'A domain is required for real Auth0, including local development',
+                },
+            )
+
+            if (prompts.isCancel(localDomain)) {
+                prompts.cancel('Setup cancelled')
+
+                return null
+            }
+
+            domainName = localDomain
+        }
+
         const domain = await fields.text(
             'auth0Domain',
             {
-                message: 'Auth0 domain (e.g., https://your-tenant.us.auth0.com)',
-                placeholder: 'https://your-tenant.us.auth0.com',
+                message: 'Canonical Auth0 tenant hostname (Management API)',
+                placeholder: 'your-tenant.us.auth0.com',
+                validate: value =>
+                    /^[a-z0-9-]+(?:\.[a-z]{2})?\.auth0\.com$/.test(value?.trim() ?? '') ? undefined : 'Enter the tenant hostname without https://',
             },
         )
 
@@ -1112,6 +1174,12 @@ const collectConfiguration = async (
         }
 
         auth0Domain = domain as string
+
+        prompts.log.info(
+            auth0UseDeveloperKeys
+                ? `Local login uses https://${auth0Domain} with Auth0's shared Google development keys. No Google client credentials are needed. These keys cannot use a custom login domain or silent login. Staging and production require your own provider credentials.`
+                : `Real Auth0 uses https://auth.${domainName}. Provision and verify this custom domain in your identity-provider deployment before starting real authentication.`,
+        )
 
         const clientId = await fields.text(
             'auth0ClientId',
@@ -1691,27 +1759,6 @@ const collectConfiguration = async (
         return null
     }
 
-    // Only ask for Stripe key if not using LocalAuth0 mock (real Auth0 = real payments)
-    let stripePublicKey = fields.read('stripePublicKey', '')
-
-    if (!useLocalAuth0Mock) {
-        const stripeKey = await fields.text(
-            'stripePublicKey',
-            {
-                message: 'Stripe Public Key',
-                placeholder: 'pk_test_...',
-            },
-        )
-
-        if (prompts.isCancel(stripeKey)) {
-            prompts.cancel('Setup cancelled')
-
-            return null
-        }
-
-        stripePublicKey = stripeKey as string
-    }
-
     return {
         edits: partial ? fields : undefined,
         envFilePath,
@@ -1724,6 +1771,7 @@ const collectConfiguration = async (
         useLocalDynamoDB: useLocalDynamoDB as boolean,
         dynamodbEndpoint,
         useLocalAuth0Mock: useLocalAuth0Mock as boolean,
+        auth0UseDeveloperKeys: auth0UseDeveloperKeys as boolean,
         auth0Domain,
         auth0ClientId,
         auth0Audience,
@@ -1770,7 +1818,6 @@ const collectConfiguration = async (
         stableDiffusionApiKey: (stableDiffusionApiKey as string) || '',
         stabilityUseAwsBedrockInference: stabilityUseAwsBedrockInference as boolean,
         arkApiKey: (arkApiKey as string) || '',
-        stripePublicKey: (stripePublicKey as string) || '',
     }
 }
 
@@ -1794,6 +1841,25 @@ const withNatsRegistration = (content: string): string => {
 const generateEnvFileContent = (config: EnvConfig): string => {
     const stageName = `${config.developerName}-${config.environment}`
     const isLocal = config.environment === 'local'
+    const canonicalAuth0Domain = config.auth0Domain ? `https://${config.auth0Domain.replace('https://', '')}` : ''
+    const developerKeys = config.auth0UseDeveloperKeys ?? isLocal
+
+    if (
+        developerKeys
+        && !isLocal
+    )
+        throw new Error('Auth0 development keys are allowed only for local environments')
+
+    const auth0Domain = config.useLocalAuth0Mock
+        || developerKeys
+        ? canonicalAuth0Domain
+        : `https://auth.${config.domainName}`
+
+    if (
+        !config.useLocalAuth0Mock
+        && !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(config.domainName)
+    )
+        throw new Error('Real Auth0 requires a DNS hostname in DOMAIN_NAME, including local development')
 
     const template = fs.readFileSync(
         path.join(TEMPLATES_DIR, 'env.template'),
@@ -1810,6 +1876,7 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{AWS_PROFILE}}': config.edits
             ? config.awsProfileName
             : isLocal
+                && config.useLocalAuth0Mock
                 ? ''
                 : (config.awsProfileName || `${config.developerName}-dev`),
         '{{AWS_REGION}}': config.awsRegion,
@@ -1846,7 +1913,9 @@ const generateEnvFileContent = (config: EnvConfig): string => {
             : `["https://${config.domainName}","https://user-portal.${config.domainName}"]`,
         '{{ORIGIN_HOST_URL}}': isLocal ? 'http://localhost:3001' : `https://${config.domainName}`,
         '{{API_HOST_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
-        '{{AUTH0_DOMAIN}}': config.auth0Domain,
+        '{{AUTH0_TENANT_DOMAIN}}': config.auth0Domain.replace('https://', ''),
+        '{{AUTH0_USE_DEVELOPER_KEYS}}': String(developerKeys),
+        '{{AUTH0_DOMAIN}}': auth0Domain,
         '{{AUTH0_AUDIENCE}}': config.auth0Audience,
         '{{MOCK_AUTH0}}': String(config.useLocalAuth0Mock),
         '{{MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
@@ -1865,12 +1934,11 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
         '{{VITE_API_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
         '{{VITE_AUTH0_LOGIN_URL}}': isLocal ? 'http://localhost:3001/login' : `https://${config.domainName}/login`,
-        '{{VITE_AUTH0_DOMAIN}}': config.auth0Domain.replace('https://', ''),
+        '{{VITE_AUTH0_DOMAIN}}': auth0Domain.replace('https://', ''),
         '{{VITE_AUTH0_CLIENT_ID}}': config.auth0ClientId,
         '{{VITE_AUTH0_AUDIENCE}}': config.auth0Audience,
         '{{VITE_AUTH0_REDIRECT_URI}}': isLocal ? 'http://localhost:3001' : `https://${config.domainName}`,
         '{{VITE_USER_PORTAL_URL}}': isLocal ? 'http://localhost:3002' : `https://user-portal.${config.domainName}`,
-        '{{VITE_STRIPE_PUBLIC_KEY}}': config.stripePublicKey,
         '{{VITE_NATS_SERVER}}': isLocal ? 'wss://localhost:9222' : `wss://nats.${config.domainName}`,
         '{{CLOUDWATCH_LOG_RETENTION_DAYS}}': String(config.cloudwatchLogRetentionDays),
         '{{CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED}}': String(config.cloudwatchContainerInsightsEnabled),
@@ -2005,6 +2073,19 @@ export const writeFiles = async (config: EnvConfig): Promise<void> => {
 // ============================================================================
 
 const main = async (): Promise<void> => {
+    const [command, filename, ...extra] = process.argv.slice(2)
+
+    if (
+        ['preview-local-account-auth', 'setup-local-account-auth'].includes(command)
+        && filename
+        && !extra.length
+    ) {
+        const { LocalAccountAuthConfiguration } = await import('./account-auth-configuration.ts')
+        LocalAccountAuthConfiguration.run(command as 'preview-local-account-auth' | 'setup-local-account-auth', filename)
+
+        return
+    }
+
     const args = parseCliArgs()
 
     if (args.help) {
@@ -2090,7 +2171,6 @@ const main = async (): Promise<void> => {
             googleVeoPersonGenerationProfile: 'standard',
             stableDiffusionApiKey: '',
             arkApiKey: '',
-            stripePublicKey: '',
         }
 
         await writeFiles(config)
@@ -2151,6 +2231,12 @@ const main = async (): Promise<void> => {
         c.bold('Next steps:'),
     )
     const envFileName = config.envFilePath ? path.basename(config.envFilePath) : `.env.${stageName}`
+
+    if (!config.useLocalAuth0Mock)
+        debugLog(
+            `  Before starting services, provision the Auth0 custom domain configured in ${c.cyan(envFileName)}. DNS verification and HTTPS discovery must succeed.`,
+        )
+
     debugLog(`  1. Run ${c.cyan(`docker compose --env-file ${envFileName} up`)}`)
 
     if (config.configureAwsSso)

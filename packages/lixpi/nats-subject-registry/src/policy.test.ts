@@ -35,4 +35,11 @@ describe('application permission declarations', () => {
         expect(authPolicy.browser.flatMap(policy => [...(policy.pub?.allow ?? []), ...(policy.sub?.allow ?? [])])
             .some(subject => subject.startsWith('$TRANSPORT.'))).toBe(false)
     })
+
+    it('restricts metering and its durable outbox to the API service', () => {
+        expect(builtInPermissions.API.pub.allow).toContain('provider-usage.outbox')
+        expect(builtInPermissions.API.pub.allow).toContain('metrics.provider.request.complete')
+        const browserSubjects = authPolicy.browser.flatMap(policy => [...(policy.pub?.allow ?? []), ...(policy.sub?.allow ?? [])])
+        expect(browserSubjects.some(subject => subject.startsWith('metrics.') || subject.startsWith('provider-usage.'))).toBe(false)
+    })
 })

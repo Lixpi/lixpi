@@ -9,9 +9,9 @@ import {
     err,
 } from '@lixpi/debug-tools'
 
-import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
 import { NatsRegistrationClient } from '@lixpi/nats-service/registration'
+import { AccountControlStream } from './services/account-control-stream.ts'
 import {
     policyDigest,
     policySchemaVersion,
@@ -48,9 +48,16 @@ import providerVerificationRoutes from './routes/provider-verification-routes.ts
 
 import { createLlmModule } from './llm/index.ts'
 import { startAssetMaintenanceWorker } from './services/asset-maintenance-worker.ts'
+import { DurableProviderUsageOutbox } from './services/provider-usage-outbox.ts'
+import { ProviderCallAccounting } from './services/provider-call-accounting.ts'
 import { CapabilityRunEventRelay } from './services/capability-run-event-log.ts'
 import { getCapabilityDispatcher } from './capability-system/capability-runtime.ts'
 import { asCapabilityArguments } from './capability-system/capability-state-resolver.ts'
+import { AccountAdmissionRuntime } from './services/account-admission-runtime.ts'
+import { AccountRequestContext } from './services/account-request-context.ts'
+import { AccountWorkPolicy } from './services/account-work-policy.ts'
+import { AccountDatabaseService } from './services/account-database-service.ts'
+import { getDynamoDbTableStageName } from '@lixpi/constants'
 
 import {
     ProviderUsageClient,
@@ -76,11 +83,55 @@ if (
 }
 
 // Set the global DynamoDB service instance to be used across the application for database operations
-global.dynamoDBService = new DynamoDBService({
-    region: env.AWS_REGION,
-    ssoProfile: env.AWS_PROFILE,
-    ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }), // For local development only
-})
+global.dynamoDBService = new AccountDatabaseService(
+    {
+        region: env.AWS_REGION,
+        ssoProfile: env.AWS_PROFILE,
+        ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }), // For local development only
+    },
+    getDynamoDbTableStageName(
+        'ACCOUNT_ADMISSION',
+        env.ORG_NAME,
+        env.STAGE,
+    ),
+    {
+        [getDynamoDbTableStageName(
+            'ORGANIZATIONS_ACCESS_LIST',
+            env.ORG_NAME,
+            env.STAGE,
+        )]: 'userId',
+        [getDynamoDbTableStageName(
+            'WORKSPACES_ACCESS_LIST',
+            env.ORG_NAME,
+            env.STAGE,
+        )]: 'userId',
+        [getDynamoDbTableStageName(
+            'ASSETS_ACCESS_LIST',
+            env.ORG_NAME,
+            env.STAGE,
+        )]: 'principalId',
+        [getDynamoDbTableStageName(
+            'CAPABILITIES_ACCESS_LIST',
+            env.ORG_NAME,
+            env.STAGE,
+        )]: 'principalId',
+    },
+    new Set(
+        [
+            'ORGANIZATIONS',
+            'WORKSPACES',
+            'ASSETS',
+            'CAPABILITIES',
+            'MEDIA_GENERATION_REQUESTS',
+        ].map(
+            table => getDynamoDbTableStageName(
+                table,
+                env.ORG_NAME,
+                env.STAGE,
+            ),
+        ),
+    ),
+)
 
 // AI models synchronization runs hourly on the NATS NEX execution-engine node
 // (services/nex). The API reads the AI_MODELS_LIST table live (model::AiModel
@@ -121,7 +172,26 @@ const apiNatsService = await NATS_Service.init({
         jwtAuthMiddleware, // global middleware, applies to all subscriptions
     ],
     subscriptions,
+    requestScope: (data, operation) => AccountRequestContext.runPayload(data, operation),
+    publicationGuard: () => AccountRequestContext.assertActive(),
 })
+
+if (env.ACCOUNT_ADMISSION_STREAM)
+    await new AccountControlStream(apiNatsService).prepare(
+        env.ACCOUNT_ADMISSION_STREAM,
+        Number(env.NATS_STREAM_REPLICAS || 3),
+    )
+
+const accountAdmissionRuntime = env.ACCOUNT_ADMISSION_ENABLED === 'true'
+    ? new AccountAdmissionRuntime(
+        apiNatsService,
+        global.dynamoDBService,
+        env,
+    )
+    : undefined
+await accountAdmissionRuntime?.start()
+const accountWorkPolicy = accountAdmissionRuntime ? new AccountWorkPolicy(apiNatsService) : undefined
+accountWorkPolicy?.start()
 
 await startAssetMaintenanceWorker(apiNatsService)
 new CapabilityRunEventRelay(apiNatsService).start()
@@ -140,10 +210,22 @@ const providerUsageTransport: ProviderUsageTransport = {
         timeoutMs,
     ),
 }
+const providerUsageOptions = providerUsageOptionsFromEnv()
+const providerUsageOutbox = providerUsageOptions.enabled
+    ? new DurableProviderUsageOutbox(
+        providerUsageConnection,
+        providerUsageTransport,
+        Number(env.NATS_STREAM_REPLICAS || 3),
+    )
+    : undefined
+await providerUsageOutbox?.prepare()
+providerUsageOutbox?.start()
 const providerUsage = new ProviderUsageClient(
     providerUsageTransport,
-    providerUsageOptionsFromEnv(),
+    providerUsageOptions,
+    providerUsageOutbox,
 )
+ProviderCallAccounting.configure(providerUsage)
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
@@ -212,12 +294,15 @@ app.use('/api/provider-verification', providerVerificationRoutes)
 // Health check endpoint
 app.get('/health-check', (req, res) => {
     // Perform other necessary health checks
+    const admission = accountAdmissionRuntime?.status()
     const isHealthy = httpServer.listening
+        && (!accountAdmissionRuntime || admission?.ready === true)
 
     if (isHealthy)
         res.json({
             status: 'healthy',
             services: { httpServer: 'running' },
+            accountAdmission: admission ?? { ready: false },
         })
     else
         res.status(503).json({
@@ -241,6 +326,8 @@ httpServer.listen(
 
 // Graceful shutdown (for your application termination handlers)
 process.on('SIGINT', async () => {
+    accountWorkPolicy?.stop()
+    accountAdmissionRuntime?.stop()
     log('Shutting down...')
 
     try {
@@ -249,11 +336,14 @@ process.on('SIGINT', async () => {
         err('LLM module shutdown failed:', e)
     }
 
+    await providerUsageOutbox?.stop()
     await await NATS_Service.getInstance()!.drain() // Drains subscriptions and closes connection
     process.exit(0)
 })
 
 process.on('SIGTERM', () => {
+    accountWorkPolicy?.stop()
+    accountAdmissionRuntime?.stop()
     log('Nuke request received, shutting down immediately...')
     process.exit(0)
 })

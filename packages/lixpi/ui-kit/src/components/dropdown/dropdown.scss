@@ -51,6 +51,17 @@
     );
 
     // Theme variants
+    &.custom-trigger .dropdown-trigger-button {
+        height: auto;
+        min-height: 32px;
+        padding: 4px;
+        gap: 6px;
+
+        .title:empty {
+            display: none;
+        }
+    }
+
     &.theme-light {
         @include tagPillDropdownLightTheme();
     }

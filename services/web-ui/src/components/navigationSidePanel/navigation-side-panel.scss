@@ -26,7 +26,8 @@
     position: fixed;
 }
 
-.info-bubble-wrapper[data-bubble-id^="dropdown-navigation-side-panel-workspace-menu-"] {
+// Body-mounted navigation menus must sit above the panel and its backdrop.
+.info-bubble-wrapper[data-bubble-id^="dropdown-navigation-side-panel-"] {
     z-index: 10050;
 }
 
@@ -219,9 +220,13 @@
     background: var(--navigation-side-panel-section-separator-gradient);
 }
 
-.navigation-side-panel-avatar {
+.navigation-side-panel-account-menu {
     display: flex;
     justify-content: flex-end;
+}
+
+.navigation-side-panel-avatar {
+    display: flex;
     align-items: center;
 }
 

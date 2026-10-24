@@ -1,4 +1,8 @@
-import { createAuthClient } from '@lixpi/auth-client'
+import {
+    AuthenticationFailure,
+    createAuthClient,
+    type AuthClientInstance,
+} from '@lixpi/auth-client'
 import { getNatsUserInboxPrefix } from '@lixpi/constants'
 import {
     accountPortalModule,
@@ -8,12 +12,16 @@ import NatsService from '@lixpi/nats-service'
 
 import '@lixpi/web-client-service-factory/styles/foundation'
 import '@lixpi/user-portal/styles'
+import '@lixpi/ui-kit/styles/auth-panel'
 
 const portalUrl = import.meta.env.VITE_USER_PORTAL_URL
+let auth: AuthClientInstance | undefined
+const authenticationFailure = new AuthenticationFailure(async () => void (await auth?.login(true)))
 const application = createUserPortal({
     modules: [accountPortalModule],
+    isRedirecting: () => auth?.authStore.getMeta('isRedirecting') ?? false,
     createDependencies: async () => {
-        const auth = createAuthClient({
+        auth = createAuthClient({
             auth: {
                 audience: import.meta.env.VITE_AUTH0_AUDIENCE,
                 clientId: import.meta.env.VITE_AUTH0_CLIENT_ID,
@@ -51,7 +59,15 @@ const application = createUserPortal({
             nats,
         }
     },
-    onError: error => console.error('User portal failed to start', error),
+    onError: () => {
+        if (auth?.authStore.getMeta('isRedirecting'))
+            return
+
+        const target = document.getElementById('app')
+
+        if (target)
+            authenticationFailure.show(target)
+    },
 })
 
 void application.start()

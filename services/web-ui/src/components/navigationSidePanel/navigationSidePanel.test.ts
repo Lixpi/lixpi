@@ -32,10 +32,12 @@ const mocks = vi.hoisted(() => ({
     deleteWorkspace: vi.fn().mockResolvedValue(undefined),
     getWorkspace: vi.fn().mockResolvedValue(undefined),
     getTokenSilently: vi.fn(),
+    logout: vi.fn().mockResolvedValue(undefined),
     loadWorkspaceAssets: vi.fn().mockResolvedValue(undefined),
     dropdownInstances: [] as Array<{
-        dom: HTMLDivElement
+        dom: HTMLElement
         destroy: () => void
+        setErrorState: ReturnType<typeof vi.fn>
         config: any
     }>,
 }))
@@ -43,20 +45,38 @@ const mocks = vi.hoisted(() => ({
 // The dropdown is a fully separate, already-tested component. NavigationSidePanel's
 // own responsibility is *what it configures the dropdown with* (options, onSelect
 // routing) — that's what these tests exercise, via the captured config.
-vi.mock('@lixpi/ui-kit/components/dropdown', () => ({
+vi.mock('@lixpi/ui-kit/components/dropdown', async importOriginal => {
+    const actual = await importOriginal<typeof import('@lixpi/ui-kit/components/dropdown')>()
+
+    return {
     createPureDropdown: vi.fn((config: any) => {
+        if (config.id === 'navigation-side-panel-account-menu') {
+            const dropdown = actual.createPureDropdown(config)
+            const instance = {
+                ...dropdown,
+                destroy: vi.fn(dropdown.destroy),
+                setErrorState: vi.fn(dropdown.setErrorState),
+                config,
+            }
+            mocks.dropdownInstances.push(instance)
+
+            return instance
+        }
+
         const dom = document.createElement('div')
         dom.className = 'mock-dropdown'
         const instance = {
             dom,
             destroy: vi.fn(),
+            setErrorState: vi.fn(),
             config,
         }
         mocks.dropdownInstances.push(instance)
 
         return instance
     }),
-}))
+    }
+})
 
 import {
     createNavigationSidePanel,
@@ -91,7 +111,9 @@ const setCurrentWorkspaceId = (workspaceId: string | undefined): void => {
 const authStore = createAuthStore()
 const auth = {
     authStore,
+    createSessionHandoffUrl: (destination: string) => `${destination}/?auth=continue&auth_account=prepared`,
     getTokenSilently: mocks.getTokenSilently,
+    logout: mocks.logout,
 }
 
 const mount = (): {
@@ -147,6 +169,7 @@ beforeEach(() => {
     mocks.deleteWorkspace.mockClear()
     mocks.getWorkspace.mockClear()
     mocks.getTokenSilently.mockReset()
+    mocks.logout.mockReset().mockResolvedValue(undefined)
     mocks.loadWorkspaceAssets.mockClear()
 
     workspacesStore.resetStore()
@@ -338,18 +361,86 @@ describe('NavigationSidePanel — avatar', () => {
         instance.destroy()
     })
 
-    it('opens the configured user portal in a new tab', () => {
+    it('opens the account menu from the avatar and opens Profile in the configured portal', () => {
+        const open = vi.spyOn(window, 'open').mockReturnValue(null)
         const {
             paneEl,
             instance,
         } = mount()
-        const avatar = paneEl.querySelector<HTMLAnchorElement>('.navigation-side-panel-avatar')
+        const avatar = paneEl.querySelector<HTMLElement>('.navigation-side-panel-avatar')!
+        avatar.click()
 
-        expect(avatar?.href).toBe(`${USER_PORTAL_URL}/`)
-        expect(avatar?.target).toBe('_blank')
-        expect(avatar?.rel).toBe('noopener noreferrer')
+        expect(open).not.toHaveBeenCalled()
+        expect(avatar.closest('button')?.getAttribute('aria-expanded')).toBe('true')
+        const menu = document.querySelector('#dropdown-menu-navigation-side-panel-account-menu')!
+        const items = menu.querySelectorAll<HTMLElement>('[role="menuitem"]')
+        expect(Array.from(items, item => item.textContent?.trim())).toEqual(['Profile', 'Sign out'])
+        items[0].click()
+        expect(open).toHaveBeenCalledWith(`${USER_PORTAL_URL}/?auth=continue&auth_account=prepared`, '_blank', 'noopener,noreferrer')
+        expect(mocks.logout).not.toHaveBeenCalled()
 
         instance.destroy()
+        open.mockRestore()
+    })
+
+    it('signs out through Auth0 when the menu item is activated with the keyboard', () => {
+        const {
+            paneEl,
+            instance,
+        } = mount()
+        const trigger = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-account-menu button')!
+        trigger.focus()
+        trigger.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowUp',
+            bubbles: true,
+        }))
+        expect(document.activeElement?.textContent?.trim()).toBe('Sign out')
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+        }))
+        expect(mocks.logout).toHaveBeenCalledOnce()
+        expect(trigger.getAttribute('aria-expanded')).toBe('false')
+        instance.destroy()
+        expect(document.querySelector('#dropdown-menu-navigation-side-panel-account-menu')).toBeNull()
+    })
+
+    it('prevents duplicate sign-out requests and lets the user retry a failed logout', async () => {
+        const pending = Promise.withResolvers<void>()
+        mocks.logout.mockReturnValueOnce(pending.promise)
+        const {
+            paneEl,
+            instance,
+        } = mount()
+        const trigger = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-account-menu button')!
+        const signOut = document.querySelectorAll<HTMLElement>('#dropdown-menu-navigation-side-panel-account-menu [role="menuitem"]')[1]
+        trigger.click()
+        signOut.click()
+        trigger.click()
+        signOut.click()
+        expect(mocks.logout).toHaveBeenCalledOnce()
+        pending.reject(new Error('logout unavailable'))
+        await pending.promise.catch(() => undefined)
+        expect(paneEl.querySelector('[role="status"]')?.textContent).toBe('Sign out failed. Try again.')
+        trigger.click()
+        signOut.click()
+        expect(mocks.logout).toHaveBeenCalledTimes(2)
+        expect(paneEl.querySelector('[role="status"]')?.textContent).toBe('')
+        instance.destroy()
+    })
+
+    it('does not update a disposed account menu after logout fails', async () => {
+        const pending = Promise.withResolvers<void>()
+        mocks.logout.mockReturnValueOnce(pending.promise)
+        const { instance } = mount()
+        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
+        menu.config.onSelect({ action: 'logout' })
+        instance.destroy()
+        menu.setErrorState.mockClear()
+        pending.reject(new Error('logout unavailable'))
+        await pending.promise.catch(() => undefined)
+        expect(menu.setErrorState).not.toHaveBeenCalled()
+        expect(menu.destroy).toHaveBeenCalledOnce()
     })
 })
 

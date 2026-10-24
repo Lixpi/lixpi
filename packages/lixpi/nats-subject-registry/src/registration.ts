@@ -1,5 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import {
+    ACCOUNT_ADMISSION_CLAIM,
+    ACCOUNT_ADMISSION_CHECK_SUBJECT,
+} from '@lixpi/constants'
+import {
     createAccount,
     fromPublic,
     fromSeed,
@@ -80,6 +84,19 @@ export const applicationManifest = (
         })
 
     const mock = env.MOCK_AUTH0 === 'true'
+    const admissionEnabled = env.ACCOUNT_ADMISSION_ENABLED === 'true'
+
+    if (
+        admissionEnabled
+        && !/^[A-Za-z0-9_-]{1,128}$/.test(env.ACCOUNT_ADMISSION_STREAM ?? '')
+    )
+        throw new Error('ACCOUNT_ADMISSION_STREAM is required when account admission is enabled')
+
+    if (
+        env.ACCOUNT_ADMISSION_ENABLED
+        && !['true', 'false'].includes(env.ACCOUNT_ADMISSION_ENABLED)
+    )
+        throw new Error('ACCOUNT_ADMISSION_ENABLED must be true or false')
 
     if (
         mock
@@ -139,6 +156,11 @@ export const applicationManifest = (
             jwksUrl,
             account: 'AUTH',
             permissions: [browserPermissions],
+            ...(admissionEnabled ? { admission: {
+                subject: ACCOUNT_ADMISSION_CHECK_SUBJECT,
+                claim: ACCOUNT_ADMISSION_CLAIM,
+                stream: env.ACCOUNT_ADMISSION_STREAM,
+            } } : {}),
         }],
     }
 }

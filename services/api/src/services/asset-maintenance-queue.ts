@@ -1,4 +1,5 @@
 import NATS_Service from '@lixpi/nats-service'
+import { AccountRequestContext } from './account-request-context.ts'
 import {
     NATS_SUBJECTS,
     type MediaGenerationRunMeta,
@@ -85,7 +86,14 @@ export const enqueueRenditionRetry = async (payload: {
     organizationId: string
     assetId: string
     retryAttempt: number
-}): Promise<void> => void (await getNatsService().publishJetStream(NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.RETRY_RENDITION, payload))
+}): Promise<void> =>
+    void (await getNatsService().publishJetStream(
+        NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.RETRY_RENDITION,
+        {
+            ...payload,
+            accountContext: AccountRequestContext.workContext(),
+        },
+    ))
 
 export const enqueueProjectionRepair = async (payload: {
     organizationId: string

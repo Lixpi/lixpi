@@ -889,7 +889,7 @@ describe('media generation request terminal settlement', () => {
         expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
     })
 
-    it('fails a pending durable run and projects an actionable problem before request completion', async () => {
+    it.each([true, false])('projects a pending run failure with or without a created output Asset (created: %s)', async assetCreated => {
         const request = {
             ...deferredRequest(),
             runs: [pendingRun()],
@@ -901,6 +901,12 @@ describe('media generation request terminal settlement', () => {
         }
         mocks.mediaRequestModel.get.mockResolvedValue(request)
         mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+        mocks.canvasProjection.settleFailed.mockResolvedValueOnce(assetCreated
+            ? {
+                layoutRevision: 2,
+                nodes: [],
+            }
+            : null)
 
         const result = await new MediaGenerationRequestService(eventLog as never).failUnfinishedRuns({
             generationRequestId: request.generationRequestId,
@@ -937,7 +943,18 @@ describe('media generation request terminal settlement', () => {
                 variantIndex: 0,
             }),
         }))
-        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+
+        if (assetCreated)
+            expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+        else
+            expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
+                workspaceId: request.workspaceId,
+                operationNodeId: request.runs[0].operationNodeId,
+                generationRequestId: request.generationRequestId,
+                status: 'failed',
+                requestRevision: 2,
+            }))
+
         expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
             event: expect.objectContaining({
                 status: 'MEDIA_GENERATION_PROBLEM',

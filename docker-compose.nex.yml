@@ -15,6 +15,7 @@ services:
             ORG_NAME: ${ORG_NAME}
             STAGE: ${STAGE}
             ENVIRONMENT: ${ENVIRONMENT}
+            ACCOUNT_ADMISSION_ENABLED: ${ACCOUNT_ADMISSION_ENABLED:-false}
 
             # AWS credentials, used only for local development
             AWS_REGION: ${AWS_REGION}

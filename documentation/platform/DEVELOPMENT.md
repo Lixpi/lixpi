@@ -40,7 +40,7 @@ For CI/automation (non-interactive), see [`dev-tools/config-utils/README.md`](..
 
 The shared configuration runner writes the ignored repository metadata file `env.lixpi` before the wizard starts, then creates or updates the selected `.env.<stage-name>` file. Repository-specific behavior and templates are mounted into the shared runner; the mount contract is documented in the config-utils README.
 
-`env.lixpi` also sets `CODING_AGENTS_TEST_EXECUTION_MODE` and `CODING_AGENTS_TEST_LINTER_MODE`. Agents read these values before choosing test and quality checks; the [code-quality skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) defines what `true`, `false`, and `auto` mean.
+`env.lixpi` also sets `CODING_AGENTS_TEST_EXECUTION_MODE` and `CODING_AGENTS_TEST_LINTER_MODE`. Agents read these values before writing, modifying, or running tests and before formatting and lint checks; the [code-quality skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) defines what `true`, `false`, and `auto` mean. Test-file edits have no separate permission gate when the test mode is `true` or `auto`.
 
 ### 2. Point Docker Compose at your environment file
 

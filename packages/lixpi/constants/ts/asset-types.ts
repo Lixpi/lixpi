@@ -1,4 +1,7 @@
 import {
+    type AccountWorkContext,
+} from './account-admission.ts'
+import {
     type AccessLevel,
     type ContentDescriptor,
     type ProviderName,
@@ -179,6 +182,7 @@ export type AssetEditLease = {
     leaseId: string
     holders: Array<{
         holderId: string
+        userId?: string
         expiresAt: number
     }>
     acquiredAt: number
@@ -343,6 +347,7 @@ export const ASSET_REQUIRED_RENDITIONS: Readonly<Record<AssetMediaKind, readonly
 }
 
 export type GenerateRenditionsRequest = {
+    accountContext?: AccountWorkContext
     jobId: string
     jobKey: string
     organizationId: string

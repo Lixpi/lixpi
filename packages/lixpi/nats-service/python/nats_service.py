@@ -154,9 +154,12 @@ class NatsServiceConfig:
         reply_middleware: Optional[List[Callable]] = None,
         get_token: Optional[Callable[[], Any]] = None,
         on_auth_error: Optional[Callable[[Exception], Any]] = None,
+        on_access_denied: Optional[Callable[[], Any]] = None,
         stream_replicas: int = DEFAULT_STREAM_REPLICAS,
         initial_connect_max_attempts: int = DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS,
         inbox_prefix: Optional[str] = None,
+        request_scope: Optional[Callable[[Any, Callable], Awaitable[None]]] = None,
+        publication_guard: Optional[Callable[[], None]] = None,
     ):
         """
         Initialize NATS service configuration.
@@ -199,8 +202,11 @@ class NatsServiceConfig:
         self.subscriptions = subscriptions or []
         self.middleware = middleware or []
         self.reply_middleware = reply_middleware or []
+        self.request_scope = request_scope
+        self.publication_guard = publication_guard
         self.get_token = get_token
         self.on_auth_error = on_auth_error
+        self.on_access_denied = on_access_denied
         self.stream_replicas = stream_replicas
         self.initial_connect_max_attempts = initial_connect_max_attempts
         self.inbox_prefix = inbox_prefix
@@ -239,6 +245,7 @@ class NatsService:
         # Set during graceful disconnect()/drain() so the close callback does not
         # try to reconnect after an intentional close.
         self._intentional_close = False
+        self._auth_rejected = False
 
     @classmethod
     def get_instance(cls) -> Optional['NatsService']:
@@ -300,6 +307,8 @@ class NatsService:
         Args:
             delay: Delay in seconds before reconnection attempt (defaults to exponential backoff)
         """
+        if self._auth_rejected or self._intentional_close:
+            return
         if self._reconnect_timer:
             self._reconnect_timer.cancel()
 
@@ -436,15 +445,16 @@ class NatsService:
         Prefers the async provider, then regenerates the self-issued JWT (which
         expires hourly), then falls back to the static token.
         """
+        if self._auth_rejected:
+            raise ConnectionError('NATS -> authorization denied')
         if self.config.get_token:
-            try:
-                fresh = self.config.get_token()
-                if asyncio.iscoroutine(fresh):
-                    fresh = await fresh
-                if fresh:
-                    self._current_token = fresh
-            except Exception as error:
-                err(f"NATS -> failed to refresh auth token: {error}")
+            self._current_token = None
+            fresh = self.config.get_token()
+            if asyncio.iscoroutine(fresh):
+                fresh = await fresh
+            if not fresh:
+                raise ConnectionError('NATS -> authentication token unavailable')
+            self._current_token = fresh
         elif self.config.nkey_seed and self.config.user_id:
             self._current_token = generate_self_issued_jwt(
                 nkey_seed=self.config.nkey_seed,
@@ -462,7 +472,15 @@ class NatsService:
         try:
             result = self.config.on_auth_error(error)
             if asyncio.iscoroutine(result):
-                await result
+                result = await result
+            if result is False:
+                self._auth_rejected = True
+                self._current_token = None
+                self._intentional_close = True
+                if self._reconnect_timer:
+                    self._reconnect_timer.cancel()
+                if self.nc and not self.nc.is_closed:
+                    await self.nc.close()
         except Exception as cb_error:
             err(f"NATS -> on_auth_error handler failed: {cb_error}")
 
@@ -542,7 +560,7 @@ class NatsService:
         Args:
             initial_connect_timeout: Timeout for each connection attempt in seconds
         """
-        if self._is_connecting or self.is_connected():
+        if self._auth_rejected or self._is_connecting or self.is_connected():
             return
 
         self._is_connecting = True
@@ -580,6 +598,9 @@ class NatsService:
                 except Exception as error:
                     await self._report_connect_error(error)
 
+                    if self._auth_rejected:
+                        raise ConnectionError('NATS -> authorization denied') from error
+
                     if attempt == max_attempts:
                         raise ConnectionError(
                             f"NATS -> first connect failed after {max_attempts} attempts"
@@ -591,6 +612,9 @@ class NatsService:
 
     async def disconnect(self) -> None:
         """Disconnect from NATS server."""
+        self._intentional_close = True
+        if self._reconnect_timer:
+            self._reconnect_timer.cancel()
         if self.nc and not self.nc.is_closed:
             self._intentional_close = True
             if self._reconnect_timer:
@@ -623,6 +647,8 @@ class NatsService:
             subject: NATS subject to publish to
             data: Data to publish (will be JSON encoded)
         """
+        if self.config.publication_guard:
+            self.config.publication_guard()
         if not self.nc:
             err("NATS client is not connected.")
             return
@@ -670,13 +696,16 @@ class NatsService:
                     result = await self._apply_middleware(data, msg, middleware_chain)
                     data = result["data"]
 
-                # Call handler
-                await handler(data, msg)
+                async def execute(assert_active):
+                    assert_active()
+                    await handler(data, msg)
+                    assert_active()
+
+                await self._run_request_scope(data, execute)
 
             except Exception as error:
                 err(f"Error processing message on subject {subject}", {
                     "error": error,
-                    "messageData": msg.data.decode() if msg.data else "no data",
                     "subject": msg.subject,
                     "payloadType": payload_type
                 })
@@ -714,7 +743,15 @@ class NatsService:
             return None
 
         response = await self.nc.request(subject, encode(data, 'json'), timeout=timeout)
-        return json.loads(response.data.decode())
+        result = json.loads(response.data.decode())
+        if isinstance(result, dict) and result.get('error') == 'ACCOUNT_ADMISSION_DENIED' and self.config.on_access_denied:
+            self._auth_rejected = True
+            self._current_token = None
+            notification = self.config.on_access_denied()
+            await self.disconnect()
+            if asyncio.iscoroutine(notification):
+                await notification
+        return result
 
     async def reply(
         self,
@@ -756,11 +793,13 @@ class NatsService:
                     result = await self._apply_middleware(data, msg, middleware_chain)
                     data = result["data"]
 
-                # Call handler to get reply
-                result = await handler(data, msg)
+                async def execute(assert_active):
+                    assert_active()
+                    result = await handler(data, msg)
+                    assert_active()
+                    await msg.respond(encode(result, payload_type))
 
-                # Encode and send reply
-                await msg.respond(encode(result, payload_type))
+                await self._run_request_scope(data, execute)
 
             except Exception as error:
                 err(f"Reply error on subject {subject}", error)
@@ -776,6 +815,12 @@ class NatsService:
         self._subscriptions[subject] = subscription
 
         return subscription
+
+    async def _run_request_scope(self, data, operation) -> None:
+        if self.config.request_scope:
+            await self.config.request_scope(data, operation)
+        else:
+            await operation(lambda: None)
 
     async def unsubscribe_all(self) -> None:
         """Unsubscribe from all subscriptions."""
@@ -822,6 +867,12 @@ class NatsService:
 
     async def _error_callback(self, e: Exception) -> None:
         """Handle NATS errors."""
+        # A broker admission lease may expire before the OAuth token does.
+        # The next connection still verifies the token and current admission.
+        if str(e).lower().removeprefix('nats: ').strip("'") == 'user authentication expired':
+            await self._refresh_token()
+            return
+
         err(f"NATS -> connection error: {e}")
         # If the server rejected our credentials (expired token or rotated signing
         # key), refresh them so the next reconnect presents valid credentials.
@@ -1082,6 +1133,8 @@ class NatsService:
         options: Optional[Dict[str, Any]] = None
     ) -> Any:
         """Publish JSON or bytes to JetStream with optional expectations."""
+        if self.config.publication_guard:
+            self.config.publication_guard()
         options = options or {}
         payload = (
             bytes(data)
@@ -1108,11 +1161,14 @@ class NatsService:
             if header_name is None:
                 raise ValueError(f"Unsupported JetStream expectation: {key}")
             headers[header_name] = str(value)
-        return await self._get_jetstream().publish(
+        result = await self._get_jetstream().publish(
             subject,
             payload,
             headers=headers or None
         )
+        if self.config.publication_guard:
+            self.config.publication_guard()
+        return result
 
     async def ensure_jetstream_consumer(
         self,

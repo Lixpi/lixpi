@@ -1,12 +1,12 @@
-import { html } from '@lixpi/ui-primitives/dom'
 import {
-    CanvasRenderer,
-    type CanvasDrawingScope,
-} from '@lixpi/canvas-engine/frontend/rendering'
+    applyStyle,
+    html,
+} from '@lixpi/ui-primitives/dom'
+import { Easing } from '@lixpi/ui-primitives/animation'
 import {
-    TravelingOutline,
     type TravelingOutlineOptions,
 } from '../effects/outline/index.ts'
+import { bakeLoadingOutline } from './loading-outline-bitmap.ts'
 
 export type LoadingOverlayOptions = {
     root: HTMLElement
@@ -24,20 +24,22 @@ export type LoadingOverlayOptions = {
 export class LoadingOverlay {
     readonly dom: HTMLDivElement
     private readonly message: HTMLDivElement
-    private readonly renderer: CanvasRenderer
-    private readonly scope: CanvasDrawingScope
-    private readonly outline: TravelingOutline
-    private readonly resizeObserver: ResizeObserver
+    private readonly canvas: HTMLCanvasElement
+    private frame?: number
+    private previousFrame?: number
+    private elapsed = 0
     private visible = false
     private destroyed = false
 
     constructor(private readonly options: LoadingOverlayOptions) {
         this.message = html`<div className="canvas-loading-error-message"></div>` as HTMLDivElement
+        this.canvas = html`<canvas className="canvas-loading-outline"></canvas>` as HTMLCanvasElement
         this.dom = html`
             <div
                 className="canvas-loading-overlay"
                 aria-hidden="true"
             >
+                ${this.canvas}
                 <div
                     className="canvas-loading-error"
                     role="status"
@@ -53,27 +55,71 @@ export class LoadingOverlay {
             </div>
         ` as HTMLDivElement
         options.root.appendChild(this.dom)
-        this.renderer = new CanvasRenderer({
-            root: this.dom,
-            onError: options.onError,
-        })
-        this.scope = this.renderer.createScope()
 
         try {
-            this.outline = new TravelingOutline({
-                ...options.outline,
-                surface: this.scope,
-                space: 'screen',
-            })
+            this.paintOutline()
         } catch (error) {
-            this.renderer.destroy()
             this.dom.remove()
 
             throw error
         }
+    }
 
-        this.resizeObserver = new ResizeObserver(() => this.syncOutline())
-        this.resizeObserver.observe(this.dom)
+    private paintOutline(): void {
+        const context = this.canvas.getContext('2d')
+
+        if (!context)
+            throw new Error('Loading outline requires a canvas context')
+
+        let texture = this.options.outline.texture
+
+        if (texture.kind === 'image') {
+            this.canvas.width = texture.source.width
+            this.canvas.height = texture.source.height
+            context.drawImage(
+                texture.source,
+                0,
+                0,
+            )
+            texture = {
+                kind: 'pixels',
+                size: {
+                    width: this.canvas.width,
+                    height: this.canvas.height,
+                },
+                rgba: context.getImageData(
+                    0,
+                    0,
+                    this.canvas.width,
+                    this.canvas.height,
+                ).data,
+            }
+        }
+
+        const bitmap = bakeLoadingOutline(
+            this.options.outline,
+            texture,
+            Math.max(
+                2,
+                Math.min(window.devicePixelRatio || 1, 3),
+            ),
+        )
+        this.canvas.width = bitmap.size
+        this.canvas.height = bitmap.size
+        applyStyle(
+            this.canvas,
+            {
+                width: `${bitmap.displaySize}px`,
+                height: `${bitmap.displaySize}px`,
+            },
+        )
+        const image = context.createImageData(bitmap.size, bitmap.size)
+        image.data.set(bitmap.rgba)
+        context.putImageData(
+            image,
+            0,
+            0,
+        )
     }
 
     setVisible(visible: boolean): void {
@@ -105,48 +151,37 @@ export class LoadingOverlay {
         this.dom.classList.toggle('is-visible', this.visible || hasError)
         this.dom.classList.toggle('is-loading', this.visible && !hasError)
         this.dom.classList.toggle('is-error', hasError)
-        this.syncOutline()
+        this.syncAnimation()
     }
 
-    private syncOutline(): void {
+    private syncAnimation(): void {
+        if (
+            this.visible
+            && !this.message.textContent
+        )
+            this.frame ??= requestAnimationFrame(this.tick)
+        else {
+            if (this.frame !== undefined)
+                cancelAnimationFrame(this.frame)
+
+            this.frame = undefined
+            this.previousFrame = undefined
+        }
+    }
+
+    private tick = (timestamp: number): void => {
         if (this.destroyed)
             return
 
-        if (
-            !this.visible
-            || this.message.textContent
-        ) {
-            this.outline.sync([])
+        if (this.previousFrame !== undefined)
+            this.elapsed += timestamp - this.previousFrame
 
-            return
-        }
-
-        const bounds = this.dom.getBoundingClientRect()
-        const width = this.dom.clientWidth
-            || this.options.root.clientWidth
-            || bounds.width
-            || window.innerWidth
-        const height = this.dom.clientHeight
-            || this.options.root.clientHeight
-            || bounds.height
-            || window.innerHeight
-        const {
-            size,
-            durationMs,
-            snakeLengthFraction,
-        } = this.options.outline
-        this.outline.sync([{
-            id: 'loading',
-            x: (width - size) / 2,
-            y: (height - size) / 2,
-            width: size,
-            height: size,
-            radius: size / 2,
-            visible: true,
-            direction: 'clockwise',
-            durationMs,
-            snakeLengthFraction,
-        }])
+        this.previousFrame = timestamp
+        const duration = this.options.outline.durationMs ?? this.options.outline.style.durationMs
+        const progress = duration > 0 ? (this.elapsed % duration) / duration : 0
+        const rotation = (this.options.outline.ease ?? Easing.travelingOutlineTransition)(progress) * 360
+        this.canvas.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`
+        this.frame = requestAnimationFrame(this.tick)
     }
 
     private retry = (event: Event): void => {
@@ -162,10 +197,10 @@ export class LoadingOverlay {
             return
 
         this.destroyed = true
-        this.resizeObserver.disconnect()
-        this.outline.destroy()
-        this.scope.destroy()
-        this.renderer.destroy()
+
+        if (this.frame !== undefined)
+            cancelAnimationFrame(this.frame)
+
         this.dom.remove()
     }
 }

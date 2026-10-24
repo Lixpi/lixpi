@@ -58,6 +58,24 @@ func ConfigureRegistration(options *server.Options, config RegistrationConfig, i
 		options.Accounts = append(options.Accounts, account)
 		if account.Name == policy.RegistryAccount {
 			registry = account
+		} else {
+			internal := &server.User{
+				Username: "browser_policy_" + account.Name, Password: internalPassword, Account: account,
+				AllowedConnectionTypes: map[string]struct{}{jwt.ConnectionTypeInProcess: {}},
+				Permissions: &server.Permissions{
+					Publish: &server.SubjectPermission{Allow: []string{
+						policy.BrowserAdmissionSubject,
+						"$JS.API.STREAM.INFO.*",
+						"$JS.API.CONSUMER.CREATE.*.*." + browserChangedSubject,
+						"$JS.API.CONSUMER.INFO.*.*",
+						"$JS.API.CONSUMER.MSG.NEXT.*.*",
+						"$JS.ACK.>",
+					}},
+					Subscribe: &server.SubjectPermission{Allow: []string{policy.BrowserAdmissionInbox + "." + account.Name + ".>"}},
+				},
+			}
+			options.Users = append(options.Users, internal)
+			options.AuthCallout.AuthUsers = append(options.AuthCallout.AuthUsers, internal.Username)
 		}
 	}
 
@@ -78,6 +96,39 @@ func ConfigureRegistration(options *server.Options, config RegistrationConfig, i
 	}
 	options.Users = append(options.Users, bootstrap, internal)
 	options.AuthCallout.AuthUsers = append(options.AuthCallout.AuthUsers, bootstrap.Username, internal.Username)
+
+	return nil
+}
+
+func (r *Runtime) startApplicationPolicy() error {
+	if r.config.Registration == nil || r.config.ApplicationPolicy == nil {
+		return nil
+	}
+
+	seen := map[string]bool{}
+
+	for _, authority := range r.config.Registration.Trust.Authorities {
+		for _, account := range authority.Accounts {
+			if seen[account] {
+				continue
+			}
+
+			seen[account] = true
+
+			connection, err := nats.Connect("", nats.InProcessServer(r.Server),
+				nats.UserInfo("browser_policy_"+account, r.config.Password),
+				nats.CustomInboxPrefix(policy.BrowserAdmissionInbox+"."+account), nats.NoReconnect(), nats.Timeout(time.Second),
+				nats.DisconnectErrHandler(func(_ *nats.Conn, _ error) { r.browserControls.unavailable(account) }),
+				nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, _ error) { r.browserControls.unavailable(account) }))
+			if err != nil {
+				return fmt.Errorf("connect application policy for account %q: %w", account, err)
+			}
+
+			r.policyConnections = append(r.policyConnections, connection)
+			r.config.ApplicationPolicy.Register(account, connection)
+			r.browserControls.register(account, connection)
+		}
+	}
 
 	return nil
 }

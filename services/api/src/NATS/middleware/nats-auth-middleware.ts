@@ -3,6 +3,7 @@ import {
 } from '@lixpi/nats-service'
 import { authenticateTokenOnRequest } from '../../helpers/auth.ts'
 import { NATS_SUBJECTS } from '@lixpi/constants'
+import { AccountRequestContext } from '../../services/account-request-context.ts'
 
 // JWT Authentication Middleware for NATS
 export const jwtAuthMiddleware: NatsMiddleware = async (
@@ -27,6 +28,9 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
             requireFreshVerification: msg.subject === NATS_SUBJECTS.ORGANIZATION_SUBJECTS.GET_MEMBERSHIP,
         })
 
+        if (error === 'ACCOUNT_ADMISSION_DENIED')
+            throw new Error('ACCOUNT_ADMISSION_DENIED')
+
         if (
             error
             || typeof decoded?.sub !== 'string'
@@ -37,6 +41,7 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
             throw new Error('Invalid or expired token')
 
         // Add decoded user info to each subject payload
+        AccountRequestContext.remember(data, decoded)
         data.user = {
             userId: decoded.sub,
         }
@@ -49,6 +54,9 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
             msg,
         }
     } catch (error: any) {
+        if (error.message === 'ACCOUNT_ADMISSION_DENIED')
+            throw error
+
         throw new Error(`Authentication failed: ${error.message}`)
     }
 }

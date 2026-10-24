@@ -476,6 +476,8 @@ export class GoogleProvider extends BaseProvider {
         }
 
         const update: Partial<ProviderState> = {}
+        let settleUsage: Awaited<ReturnType<GoogleProvider['prepareUsageSettlement']>> | undefined
+        let usageMetadata: any = null
 
         try {
             if (
@@ -483,8 +485,6 @@ export class GoogleProvider extends BaseProvider {
                 && !effectiveVideoGen
             )
                 this.publisher.start()
-
-            let usageMetadata: any = null
 
             if (effectiveVideoGen) {
                 // Native video-generation path (called via VideoRouter). Async
@@ -497,6 +497,7 @@ export class GoogleProvider extends BaseProvider {
                     aspectRatio: state.videoAspectRatio ?? '',
                 }
             } else if (effectiveImageGen) {
+                settleUsage = await this.prepareUsageSettlement(state)
                 // Native image-generation path (called via ImageRouter).
                 const inputImageCount = contents.reduce(
                     (acc, c) =>
@@ -586,6 +587,15 @@ export class GoogleProvider extends BaseProvider {
                     }
                 }
 
+                await settleUsage({
+                    ...googleUsageUpdate(usageMetadata, `google-${state.workspaceId}-${state.aiChatThreadId}`),
+                    ...(imageParts.length ? { imageUsage: {
+                        generatedCount: 1,
+                        size: imageSize,
+                        quality: 'high',
+                    } } : {}),
+                })
+
                 if (textChunks.length > 0)
                     this.publisher.chunk(
                         textChunks.join(''),
@@ -656,94 +666,106 @@ export class GoogleProvider extends BaseProvider {
                             config: effectiveStreamConfig,
                         },
                     })
-                    // Submit only — the drain below publishes as it goes.
-                    const stream = await this.retryTransport(
-                        'stream',
-                        async () =>
-                            await this.client.models.generateContentStream({
-                                model: modelVersion,
-                                contents: contents as any,
-                                config: effectiveStreamConfig as any,
-                            }),
-                    )
-                    let detectedImage: string | undefined
-                    let detectedVideo: VideoToolCall | undefined
-                    const capabilityCalls: Array<{
-                        callId: string
-                        name: string
-                        arguments: Record<string, any>
-                        part: any
-                    }> = []
+                    const settleRound = await this.prepareUsageSettlement(state)
                     let streamUsageMetadata: any = null
-                    let textCharacterCount = 0
-                    const finishReasons = new Set<string>()
-                    const functionCallNames = new Set<string>()
+                    let completed = false
 
-                    for await (const chunk of stream) {
-                        if (this.shouldStop)
-                            break
+                    try {
+                        // Submit only — the drain below publishes as it goes.
+                        const stream = await this.retryTransport(
+                            'stream',
+                            async () =>
+                                await this.client.models.generateContentStream({
+                                    model: modelVersion,
+                                    contents: contents as any,
+                                    config: effectiveStreamConfig as any,
+                                }),
+                        )
+                        let detectedImage: string | undefined
+                        let detectedVideo: VideoToolCall | undefined
+                        const capabilityCalls: Array<{
+                            callId: string
+                            name: string
+                            arguments: Record<string, any>
+                            part: any
+                        }> = []
+                        let textCharacterCount = 0
+                        const finishReasons = new Set<string>()
+                        const functionCallNames = new Set<string>()
 
-                        if (chunk.usageMetadata)
-                            streamUsageMetadata = chunk.usageMetadata
+                        for await (const chunk of stream) {
+                            if (this.shouldStop)
+                                break
 
-                        for (const candidate of chunk.candidates ?? []) {
-                            if (typeof candidate.finishReason === 'string')
-                                finishReasons.add(candidate.finishReason)
+                            if (chunk.usageMetadata)
+                                streamUsageMetadata = chunk.usageMetadata
 
-                            if (!candidate.content?.parts)
-                                continue
+                            for (const candidate of chunk.candidates ?? []) {
+                                if (typeof candidate.finishReason === 'string')
+                                    finishReasons.add(candidate.finishReason)
 
-                            for (const part of candidate.content.parts) {
-                                const fnCall = (part as any).functionCall ?? (part as any).function_call
+                                if (!candidate.content?.parts)
+                                    continue
 
-                                if (typeof fnCall?.name === 'string')
-                                    functionCallNames.add(fnCall.name)
+                                for (const part of candidate.content.parts) {
+                                    const fnCall = (part as any).functionCall ?? (part as any).function_call
 
-                                if (
-                                    fnCall
-                                    && fnCall.name === TOOL_NAME
-                                )
-                                    detectedImage = (fnCall.args ?? {}).prompt ?? ''
-                                else if (
-                                    fnCall
-                                    && fnCall.name === VIDEO_TOOL_NAME
-                                ) {
-                                    const args = fnCall.args ?? {}
-                                    detectedVideo = {
-                                        prompt: args.prompt ?? '',
-                                        ...(typeof args.negativePrompt === 'string'
-                                            && args.negativePrompt.length > 0
-                                            ? { negativePrompt: args.negativePrompt }
-                                            : {}),
+                                    if (typeof fnCall?.name === 'string')
+                                        functionCallNames.add(fnCall.name)
+
+                                    if (
+                                        fnCall
+                                        && fnCall.name === TOOL_NAME
+                                    )
+                                        detectedImage = (fnCall.args ?? {}).prompt ?? ''
+                                    else if (
+                                        fnCall
+                                        && fnCall.name === VIDEO_TOOL_NAME
+                                    ) {
+                                        const args = fnCall.args ?? {}
+                                        detectedVideo = {
+                                            prompt: args.prompt ?? '',
+                                            ...(typeof args.negativePrompt === 'string'
+                                                && args.negativePrompt.length > 0
+                                                ? { negativePrompt: args.negativePrompt }
+                                                : {}),
+                                        }
+                                    } else if (
+                                        fnCall
+                                        && capabilityToolExecutor?.recognizes(fnCall.name)
+                                    ) {
+                                        capabilityCalls.push({
+                                            callId: fnCall.id ?? `${fnCall.name}-${capabilityCalls.length}`,
+                                            name: fnCall.name,
+                                            arguments: fnCall.args ?? {},
+                                            part,
+                                        })
+                                    } else if (typeof (part as any).text === 'string') {
+                                        textCharacterCount += (part as any).text.length
+
+                                        if (publishText)
+                                            this.publisher.chunk((part as any).text)
                                     }
-                                } else if (
-                                    fnCall
-                                    && capabilityToolExecutor?.recognizes(fnCall.name)
-                                ) {
-                                    capabilityCalls.push({
-                                        callId: fnCall.id ?? `${fnCall.name}-${capabilityCalls.length}`,
-                                        name: fnCall.name,
-                                        arguments: fnCall.args ?? {},
-                                        part,
-                                    })
-                                } else if (typeof (part as any).text === 'string') {
-                                    textCharacterCount += (part as any).text.length
-
-                                    if (publishText)
-                                        this.publisher.chunk((part as any).text)
                                 }
                             }
                         }
-                    }
 
-                    return {
-                        detectedImage,
-                        detectedVideo,
-                        capabilityCalls,
-                        usageMetadata: streamUsageMetadata,
-                        textCharacterCount,
-                        finishReasons: [...finishReasons],
-                        functionCallNames: [...functionCallNames],
+                        completed = !this.shouldStop
+
+                        return {
+                            detectedImage,
+                            detectedVideo,
+                            capabilityCalls,
+                            usageMetadata: streamUsageMetadata,
+                            textCharacterCount,
+                            finishReasons: [...finishReasons],
+                            functionCallNames: [...functionCallNames],
+                        }
+                    } finally {
+                        await settleRound(
+                            googleUsageUpdate(streamUsageMetadata, 'google'),
+                            completed,
+                        )
                     }
                 }
 
@@ -917,6 +939,7 @@ export class GoogleProvider extends BaseProvider {
                     warn(`Google did not emit generate_video tool call for ${this.instanceKey}`)
             } else {
                 // Pure text streaming
+                settleUsage = await this.prepareUsageSettlement(state)
                 assessProviderInputBudget({
                     state,
                     request: {
@@ -955,26 +978,9 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
 
-            if (usageMetadata) {
-                const promptTokens = usageMetadata.promptTokenCount ?? 0
-                const reasoningTokens = usageMetadata.thoughtsTokenCount ?? 0
-                // Gemini reports thinking (thoughts) separately from candidates but
-                // bills it as output. Fold reasoning into completionTokens so the
-                // contract invariant holds (completionTokens INCLUDES reasoning, like
-                // OpenAI's output_tokens) and the metering backend charges it; keep the subset in
-                // completionReasoningTokens for reference.
-                const completionTokens = (usageMetadata.candidatesTokenCount ?? 0) + reasoningTokens
-                update.usage = {
-                    promptTokens,
-                    promptAudioTokens: 0,
-                    promptCachedTokens: usageMetadata.cachedContentTokenCount ?? 0,
-                    completionTokens,
-                    completionAudioTokens: 0,
-                    completionReasoningTokens: reasoningTokens,
-                    totalTokens: usageMetadata.totalTokenCount ?? (promptTokens + completionTokens),
-                }
-                update.aiVendorRequestId = `google-${state.workspaceId}-${state.aiChatThreadId}`
-            }
+            const measured = googleUsageUpdate(usageMetadata, `google-${state.workspaceId}-${state.aiChatThreadId}`)
+            update.usage = measured.usage
+            update.aiVendorRequestId = measured.aiVendorRequestId
 
             if (
                 effectiveImageGen
@@ -1004,6 +1010,11 @@ export class GoogleProvider extends BaseProvider {
                 this.publisher.error(update.error)
                 this.publisher.end()
             }
+        } finally {
+            await settleUsage?.(
+                googleUsageUpdate(usageMetadata, `google-${state.workspaceId}-${state.aiChatThreadId}`),
+                !update.error && !this.shouldStop,
+            )
         }
 
         return update
@@ -1053,6 +1064,7 @@ export class GoogleProvider extends BaseProvider {
     // via state.videoFirstFrameImage (start) followed by state.videoReferenceImages
     // (the optional stop frame), populated by the structured VLM resolver.
     private async runVeoGeneration(state: ProviderState): Promise<void> {
+        const settleUsage = await this.prepareUsageSettlement(state)
         const modelVersion = state.modelVersion
         // VideoRouter passes the prompt as the first user message's string content.
         const first = state.messages[0]
@@ -1310,6 +1322,14 @@ export class GoogleProvider extends BaseProvider {
                     buildVeoNoVideoError(terminalSummary),
                 )
 
+            await settleUsage({
+                aiVendorRequestId: typeof operation.name === 'string' ? operation.name : undefined,
+                videoUsage: {
+                    durationSeconds: Number(state.videoDurationSeconds) || 0,
+                    resolution: state.videoResolution ?? '',
+                    aspectRatio: state.videoAspectRatio ?? '',
+                },
+            })
             const videoBuffer = await this.fetchVideoBytes(video)
 
             if (
@@ -1459,6 +1479,32 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
         }
+    }
+}
+
+const googleUsageUpdate = (
+    usage: any,
+    requestId: string,
+): Partial<ProviderState> => {
+    if (!usage)
+        return {}
+
+    const promptTokens = usage.promptTokenCount ?? 0
+    const reasoningTokens = usage.thoughtsTokenCount ?? 0
+    // Gemini bills thoughts separately from candidates, but both are output.
+    const completionTokens = (usage.candidatesTokenCount ?? 0) + reasoningTokens
+
+    return {
+        aiVendorRequestId: requestId,
+        usage: {
+            promptTokens,
+            promptAudioTokens: 0,
+            promptCachedTokens: usage.cachedContentTokenCount ?? 0,
+            completionTokens,
+            completionAudioTokens: 0,
+            completionReasoningTokens: reasoningTokens,
+            totalTokens: usage.totalTokenCount ?? (promptTokens + completionTokens),
+        },
     }
 }
 

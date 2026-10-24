@@ -6,12 +6,12 @@ import {
     it,
 } from 'vitest'
 
-const mainSource = readFileSync(resolve(process.cwd(), 'src/main.ts'), 'utf8')
+const workspaceSource = readFileSync(resolve(process.cwd(), 'src/workspaceApplication.ts'), 'utf8')
 
 const getImportPosition = (specifier: string): number => {
-    const position = mainSource.indexOf(specifier)
+    const position = workspaceSource.indexOf(specifier)
 
-    expect(position, `main.ts should import ${specifier}`).toBeGreaterThanOrEqual(0)
+    expect(position, `workspaceApplication.ts should import ${specifier}`).toBeGreaterThanOrEqual(0)
 
     return position
 }
@@ -38,8 +38,8 @@ describe('web-ui user portal configuration', () => {
         const expectedConfiguration = 'userPortalUrl: import.meta.env.VITE_USER_PORTAL_URL'
 
         expect(
-            mainSource.includes(expectedConfiguration),
-            `main.ts should contain:\n${expectedConfiguration}`,
+            workspaceSource.includes(expectedConfiguration),
+            `workspaceApplication.ts should contain:\n${expectedConfiguration}`,
         ).toBe(true)
     })
 })

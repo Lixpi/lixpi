@@ -25,7 +25,6 @@ services:
             VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
             VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
-            VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
         volumes:
             - ./infrastructure:/usr/src/infrastructure-source:ro,cached
@@ -63,6 +62,7 @@ services:
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/api/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/api/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/api/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/api/packages/lixpi/constants/ts/account-admission.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/api/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -129,6 +129,7 @@ services:
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/account-admission.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -176,11 +177,27 @@ services:
             - ./services/web-ui-user-portal/vitest.config.ts:/usr/src/service/web-ui-user-portal/vitest.config.ts:cached
             - ./services/web-ui-user-portal/tsconfig.json:/usr/src/service/web-ui-user-portal/tsconfig.json:ro,cached
             - ./services/web-ui-user-portal/src:/usr/src/service/web-ui-user-portal/src:cached
+            - ./packages/lixpi/canvas-components/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-components/package.json:ro,cached
+            - ./packages/lixpi/canvas-components/src:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-components/src:ro,cached
+            - typescript-test-runner-node-modules-web-ui-user-portal-canvas-components:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-components/node_modules
+            - ./packages/lixpi/canvas-components-lixpi-specific/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-components-lixpi-specific/package.json:ro,cached
+            - ./packages/lixpi/canvas-components-lixpi-specific/src:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-components-lixpi-specific/src:ro,cached
+            - typescript-test-runner-node-modules-web-ui-user-portal-canvas-components-lixpi-specific:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-components-lixpi-specific/node_modules
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-engine/src:ro,cached
+            - typescript-test-runner-node-modules-web-ui-user-portal-canvas-engine:/usr/src/service/web-ui-user-portal/packages/lixpi/canvas-engine/node_modules
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/web-ui-user-portal/packages/lixpi/capability-system/src:ro,cached
+            - typescript-test-runner-node-modules-web-ui-user-portal-capability-system:/usr/src/service/web-ui-user-portal/packages/lixpi/capability-system/node_modules
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror/src:ro,cached
+            - typescript-test-runner-node-modules-web-ui-user-portal-prosemirror:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror/node_modules
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/account-admission.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -194,6 +211,11 @@ services:
             - ./packages/lixpi/ui-kit-gentelella/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/src:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/src:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/styles:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/styles:ro,cached
+            - ./packages/lixpi/ui-kit/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit/package.json:ro,cached
+            - ./packages/lixpi/ui-kit/src:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit/src:ro,cached
+            - ./packages/lixpi/ui-kit/styles:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit/styles:ro,cached
+            - ./packages/lixpi/test-utils/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/test-utils/package.json:ro,cached
+            - ./packages/lixpi/test-utils/src:/usr/src/service/web-ui-user-portal/packages/lixpi/test-utils/src:ro,cached
             - ./packages/lixpi/ui-primitives/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-primitives/package.json:ro,cached
             - ./packages/lixpi/ui-primitives/src:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-primitives/src:ro,cached
             - ./packages/lixpi/auth-client/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/auth-client/package.json:ro,cached
@@ -208,6 +230,7 @@ services:
             - typescript-test-runner-node-modules-web-ui-user-portal-debug-tools-ts:/usr/src/service/web-ui-user-portal/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-nats-service-ts:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-ui-kit-gentelella:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/node_modules
+            - typescript-test-runner-node-modules-web-ui-user-portal-ui-kit:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-ui-primitives:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-primitives/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-auth-client:/usr/src/service/web-ui-user-portal/packages/lixpi/auth-client/node_modules
             - typescript-test-runner-node-modules-web-ui-user-portal-user-portal:/usr/src/service/web-ui-user-portal/packages/lixpi/user-portal/node_modules
@@ -223,6 +246,7 @@ services:
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/account-admission.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -267,6 +291,7 @@ services:
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/nex/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/nex/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/nex/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/nex/packages/lixpi/constants/ts/account-admission.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/nex/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -324,6 +349,8 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.test.ts:/usr/src/service/shared/constants/ts/asset-types.test.ts:cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/shared/constants/ts/asset-types.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
+            - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/shared/constants/ts/account-admission.ts:cached
+            - ./packages/lixpi/constants/ts/account-admission.test.ts:/usr/src/service/shared/constants/ts/account-admission.test.ts:ro,cached
             - ./packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/service/shared/constants/ts/nats-subject-path.test.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-progress.test.ts:/usr/src/service/shared/constants/ts/media-generation-progress.test.ts:cached
@@ -390,6 +417,11 @@ services:
         working_dir: /usr/src/service
 
 volumes:
+    typescript-test-runner-node-modules-web-ui-user-portal-canvas-components:
+    typescript-test-runner-node-modules-web-ui-user-portal-canvas-components-lixpi-specific:
+    typescript-test-runner-node-modules-web-ui-user-portal-canvas-engine:
+    typescript-test-runner-node-modules-web-ui-user-portal-capability-system:
+    typescript-test-runner-node-modules-web-ui-user-portal-prosemirror:
     typescript-test-runner-node-modules-api-nats-subject-registry:
     typescript-test-runner-node-modules-shared-nats-subject-registry:
     typescript-test-runner-pnpm-store: # Shared pnpm content store for ephemeral test-runner containers
@@ -433,6 +465,7 @@ volumes:
     typescript-test-runner-node-modules-web-ui-user-portal-debug-tools-ts:
     typescript-test-runner-node-modules-web-ui-user-portal-nats-service-ts:
     typescript-test-runner-node-modules-web-ui-user-portal-ui-kit-gentelella:
+    typescript-test-runner-node-modules-web-ui-user-portal-ui-kit:
     typescript-test-runner-node-modules-web-ui-user-portal-ui-primitives:
     typescript-test-runner-node-modules-web-ui-user-portal-auth-client:
     typescript-test-runner-node-modules-web-ui-user-portal-user-portal:

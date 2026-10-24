@@ -35,6 +35,5 @@
 		"./node_modules/**",
 	],
 	"globals": {
-		"Stripe": "readonly",    // Imported in the root index.html file from https://js.stripe.com/v3/ to remain PCI compliant
 	}
 }

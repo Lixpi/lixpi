@@ -1,0 +1,63 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AuthenticationFailure } from './authenticationFailure.ts'
+
+const gradient = vi.hoisted(() => ({ destroy: vi.fn() }))
+vi.mock('@lixpi/ui-primitives/gradients', () => ({ createShiftingGradientBackground: () => gradient }))
+
+afterEach(() => {
+    document.body.replaceChildren()
+    vi.clearAllMocks()
+})
+
+describe('sign-in entry', () => {
+    it('offers one sign-in entry and blocks repeated clicks while a redirect is pending', async () => {
+        const pending = Promise.withResolvers<void>()
+        const retry = vi.fn(() => pending.promise)
+        const view = new AuthenticationFailure(retry)
+        view.show(document.body)
+        const buttons = [...document.querySelectorAll('button')]
+        expect(buttons).toHaveLength(1)
+        expect(buttons[0].textContent).toBe('Sign in')
+        buttons[0].click()
+        buttons[0].click()
+        expect(retry).toHaveBeenCalledTimes(1)
+        expect(buttons.every(button => button.disabled)).toBe(true)
+        pending.resolve()
+        await vi.waitFor(() => expect(buttons.every(button => !button.disabled)).toBe(true))
+        view.destroy()
+        expect(gradient.destroy).toHaveBeenCalledOnce()
+    })
+
+    it('requires a button press, prevents concurrent retries and remains usable after a rejected retry', async () => {
+        const pending = Promise.withResolvers<void>()
+        const retry = vi.fn(() => pending.promise)
+        const view = new AuthenticationFailure(retry)
+        view.show(document.body)
+        expect(retry).not.toHaveBeenCalled()
+        const button = document.querySelector('button')!
+        expect(button.textContent).toBe('Sign in')
+        expect(document.querySelector('.auth-panel-description')?.textContent).toBe('Sign in to continue to your workspace.')
+        expect(document.querySelector('[role="status"]')).toBeNull()
+        button.click()
+        button.click()
+        expect(retry).toHaveBeenCalledTimes(1)
+        expect(button.disabled).toBe(true)
+        pending.reject(new Error('private provider diagnostics'))
+        await vi.waitFor(() => expect(document.querySelector('button')?.disabled).toBe(false))
+        expect(document.querySelector('[role="status"]')?.textContent).toBe('Sign-in could not be completed. Please try again.')
+        expect(document.body.textContent).not.toContain('private provider diagnostics')
+        view.destroy()
+        expect(document.body.textContent).toBe('')
+    })
+
+    it('does not restore a destroyed view when a pending redirect fails', async () => {
+        const pending = Promise.withResolvers<void>()
+        const view = new AuthenticationFailure(() => pending.promise)
+        view.show(document.body)
+        document.querySelector('button')!.click()
+        view.destroy()
+        pending.reject(new Error('private callback details'))
+        await pending.promise.catch(() => {})
+        expect(document.body.textContent).toBe('')
+    })
+})

@@ -8,6 +8,7 @@ import {
 const mocks = vi.hoisted(() => {
     const state: {
         portalConfig?: unknown
+        retrySignIn?: () => Promise<void>
         started: boolean
     } = { started: false }
     const session = {
@@ -17,8 +18,10 @@ const mocks = vi.hoisted(() => {
         userId: 'user-123',
     }
     const auth = {
+        authStore: { getMeta: vi.fn(() => false) },
         features: { currentUser: true },
         initializeSession: vi.fn(async () => session),
+        login: vi.fn(async () => undefined),
         userStore: {},
     }
     const nats = {}
@@ -32,6 +35,7 @@ const mocks = vi.hoisted(() => {
         application,
         auth,
         createAuthClient: vi.fn(() => auth),
+        showAuthenticationFailure: vi.fn(),
         createUserPortal: vi.fn((config: unknown) => {
             state.portalConfig = config
 
@@ -46,6 +50,13 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@lixpi/auth-client', () => ({
+    AuthenticationFailure: class {
+        show = mocks.showAuthenticationFailure
+
+        constructor(retry: () => Promise<void>) {
+            mocks.state.retrySignIn = retry
+        }
+    },
     createAuthClient: mocks.createAuthClient,
 }))
 
@@ -90,5 +101,28 @@ describe('user portal application composition', () => {
         await shutdownApplication()
 
         expect(mocks.application.destroy).toHaveBeenCalledOnce()
+    })
+
+    it('keeps the sign-in panel hidden during a redirect and allows retry after failure', async () => {
+        const config = mocks.state.portalConfig as {
+            createDependencies: () => Promise<unknown>
+            onError: () => void
+        }
+        await config.createDependencies()
+        const target = document.createElement('div')
+        target.id = 'app'
+        document.body.replaceChildren(target)
+        mocks.auth.authStore.getMeta.mockReturnValue(true)
+
+        config.onError()
+
+        expect(mocks.showAuthenticationFailure).not.toHaveBeenCalled()
+
+        mocks.auth.authStore.getMeta.mockReturnValue(false)
+        config.onError()
+
+        expect(mocks.showAuthenticationFailure).toHaveBeenCalledWith(target)
+        await mocks.state.retrySignIn?.()
+        expect(mocks.auth.login).toHaveBeenCalledWith(true)
     })
 })

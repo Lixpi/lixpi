@@ -74,4 +74,10 @@ func TestRuntimeBrowserUsesPinnedRegistration(t *testing.T) {
 	if _, err := verifier.Evaluate(pinned, request); err != nil {
 		t.Fatal("pinned request changed during registration update", err)
 	}
+
+	snapshot.Browsers[0].Admission = &policy.BrowserAdmission{Subject: policy.BrowserAdmissionSubject, Claim: "https://example.com/admission"}
+
+	if _, err := verifier.Evaluate(pinned, request); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("required application policy was bypassed", err)
+	}
 }

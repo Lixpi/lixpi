@@ -462,6 +462,7 @@ describe('services/api server startup', () => {
         expect(res.json).toHaveBeenCalledWith({
             status: 'healthy',
             services: { httpServer: 'running' },
+            accountAdmission: { ready: false },
         })
 
         expect(mocks.httpServer.listen).toHaveBeenCalledWith(3000, '0.0.0.0', expect.any(Function))

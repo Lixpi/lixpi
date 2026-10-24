@@ -1,5 +1,6 @@
 x-nats-auth-environment: &nats-auth-environment
     ENVIRONMENT: ${ENVIRONMENT}
+    ACCOUNT_ADMISSION_ENABLED: ${ACCOUNT_ADMISSION_ENABLED:-false}
     NATS_AUTH_NKEY_ISSUER_SEED: ${NATS_AUTH_NKEY_ISSUER_SEED}
     NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
     NATS_REGISTRATION_AUTHORITIES: ${NATS_REGISTRATION_AUTHORITIES}
@@ -12,6 +13,9 @@ services:
 
     lixpi-nats-1:
         container_name: lixpi-nats-1
+        labels:
+            lixpi.account-enforcement.scope: ${ORG_NAME}/${STAGE}
+            lixpi.account-enforcement.role: broker
         profiles: ["main"]
         image: lixpi/nats
         build:
@@ -62,6 +66,9 @@ services:
 
     lixpi-nats-2:
         container_name: lixpi-nats-2
+        labels:
+            lixpi.account-enforcement.scope: ${ORG_NAME}/${STAGE}
+            lixpi.account-enforcement.role: broker
         profiles: ["main"]
         image: lixpi/nats-2
         pull_policy: never
@@ -109,6 +116,9 @@ services:
 
     lixpi-nats-3:
         container_name: lixpi-nats-3
+        labels:
+            lixpi.account-enforcement.scope: ${ORG_NAME}/${STAGE}
+            lixpi.account-enforcement.role: broker
         profiles: ["main"]
         image: lixpi/nats-3
         pull_policy: never

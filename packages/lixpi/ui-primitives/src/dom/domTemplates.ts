@@ -101,7 +101,9 @@ class DOMTemplateBuilder {
     }
 
     getTemplateFunction() {
-        return (htm as unknown as typeof htm.default).bind(this.createElement)
+        const template = htm as unknown as typeof htm extends { default: infer Template } ? Template : typeof htm
+
+        return template.bind(this.createElement)
     }
 
     getCreateElementFunction() {

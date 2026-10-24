@@ -26,6 +26,7 @@ import {
     ensureCapabilityStyles,
 } from '$src/installed-capabilities.ts'
 import { settings } from '$src/settings.ts'
+import { servicesStore } from '$src/stores/servicesStore.ts'
 import {
     type AssetService,
 } from '$src/services/asset-service.ts'
@@ -72,6 +73,7 @@ export const createWorkspaceCanvasHost = ({
             return () => window.removeEventListener('lixpi:open-capability-library', listener)
         },
         settings,
+        loadingLayer: servicesStore.getData('loadingLayer') ?? undefined,
         editors: createWorkspaceCanvasEditors({
             assetService,
             auth,

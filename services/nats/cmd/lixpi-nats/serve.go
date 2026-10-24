@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -193,8 +194,10 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 		return fmt.Errorf("parse NATS_AUTH_WORKERS: %w", err)
 	}
 
+	applicationPolicy := &auth.ApplicationPolicy{}
+
 	worker, err := admission.NewWorker(
-		&auth.RuntimeVerifier{},
+		&auth.RuntimeVerifier{ApplicationPolicy: applicationPolicy},
 		capacity,
 	)
 	if err != nil {
@@ -226,7 +229,31 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 		return nil
 	}
 
+	var deployment *maintenance.DeploymentIdentity
+
+	if os.Getenv("ACCOUNT_ADMISSION_ENABLED") == "true" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return fmt.Errorf("read broker container hostname: %w", err)
+		}
+
+		value, err := maintenance.ReadDeploymentIdentity(
+			ctx,
+			os.Getenv("ENVIRONMENT"),
+			hostname,
+			os.Getenv("ECS_CONTAINER_METADATA_URI_V4"),
+			&http.Client{},
+		)
+		if err != nil {
+			return fmt.Errorf("identify admission broker deployment: %w", err)
+		}
+
+		deployment = &value
+	}
+
 	runtime, err := broker.StartRuntime(ctx, broker.RuntimeConfig{
+		Deployment:          deployment,
+		ApplicationPolicy:   applicationPolicy,
 		Registration:        registration,
 		Options:             options,
 		Admission:           settings,

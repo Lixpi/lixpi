@@ -4,18 +4,23 @@ import {
     type BoundedZoomScalingOptions,
 } from '@lixpi/canvas-engine/shared'
 import {
-    LoadingOverlay,
+    LoadingLayer,
+    type LoadingLease,
+} from '@lixpi/canvas-components/loading/layer'
+import {
     type LoadingOverlayOptions,
 } from '@lixpi/canvas-components/loading'
-import { getRoundedOutlinePerimeter } from '@lixpi/canvas-components/effects/outline'
 import {
     TravelingSnakeGlassMaterial,
     type GlassMaterialStyle,
 } from '@lixpi/canvas-components/effects/glass'
+import {
+    type WorkspaceLoadingOutlineSettings,
+} from '../settings/types.ts'
 
 export type WorkspaceLoadingSettings = {
     mediaBranchLineage: { generatedMediaSize: number }
-    workspaceLoadingOutline: { diameterScale: number }
+    workspaceLoadingOutline: WorkspaceLoadingOutlineSettings
     mediaNode: {
         styles: { borderRadius: number }
         inProgressOutlineAnimation: {
@@ -44,54 +49,28 @@ export type WorkspaceLoadingOutlineConfig = {
     settings: WorkspaceLoadingSettings
     onRetry?: () => void
     onError?: (error: unknown) => void
+    layer?: LoadingLayer
 }
 
-export type WorkspaceLoadingOutlineInstance = Pick<LoadingOverlay, 'setVisible' | 'setErrorMessage' | 'destroy'>
+export type WorkspaceLoadingOutlineInstance = LoadingLease
 
 export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettings): Pick<LoadingOverlayOptions, 'outline' | 'errorTitle' | 'retryLabel'> => {
     const animation = settings.mediaNode.inProgressOutlineAnimation
-    const generatedMediaSize = settings.mediaBranchLineage.generatedMediaSize
-    const configuredScale = Number(animation.preFrameCircleScale)
-    const scale = Number.isFinite(configuredScale)
-        && configuredScale > 0
-        ? Math.min(1, configuredScale)
-        : 1 / 3
-    const configuredDiameter = Number(settings.workspaceLoadingOutline.diameterScale)
-    const diameterScale = Number.isFinite(configuredDiameter)
-        && configuredDiameter > 0
-        ? configuredDiameter
-        : 1
-    const size = Math.max(1, Math.max(1, generatedMediaSize * scale) * diameterScale)
+    const loading = settings.workspaceLoadingOutline
     const getStrokeScale = () => scaleCanvasChromeWorldSizeForZoom(
         1,
         1,
         getAdaptiveBoundedZoomScalingOptions(animation.zoomScaling ?? { minZoom: 0 }),
     )
-    const outset = ((animation.gap ?? 0) + animation.snakeWidth / 2) * getStrokeScale()
-    const configuredRadius = settings.mediaNode.styles.borderRadius
-    const radius = Number.isFinite(configuredRadius)
-        && configuredRadius > 0
-        ? Math.min(configuredRadius, generatedMediaSize / 2)
-        : 0
-    const nodePerimeter = getRoundedOutlinePerimeter(
-        generatedMediaSize + outset * 2,
-        generatedMediaSize + outset * 2,
-        radius + outset,
-    )
-    const circlePerimeter = getRoundedOutlinePerimeter(
-        size + outset * 2,
-        size + outset * 2,
-        size / 2 + outset,
-    )
-    const validPerimeters = nodePerimeter > 0 && circlePerimeter > 0
 
     return {
         errorTitle: 'Workspace failed to load',
         retryLabel: 'Retry',
         outline: {
-            size,
-            durationMs: validPerimeters ? animation.animationDurationMs * (circlePerimeter / nodePerimeter) : undefined,
-            snakeLengthFraction: validPerimeters ? Math.min(0.98, animation.snakeLengthFraction * (nodePerimeter / circlePerimeter)) : undefined,
+            size: loading.diameter,
+            durationMs: loading.animationDurationMs,
+            // Measure the trail against this circle, not the larger media node.
+            snakeLengthFraction: loading.snakeLengthFraction,
             getStrokeScale,
             style: {
                 radius: animation.radius,
@@ -100,10 +79,10 @@ export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettin
                 snakeTailWidthFraction: animation.snakeTailWidthFraction ?? 0.18,
                 snakeTailThinLengthFraction: animation.snakeTailThinLengthFraction,
                 snakeWidthTaperPower: animation.snakeWidthTaperPower,
-                snakeLengthFraction: animation.snakeLengthFraction,
+                snakeLengthFraction: loading.snakeLengthFraction,
                 snakeHeadRoundLengthFraction: animation.snakeHeadRoundLengthFraction,
                 edgeFeatherFraction: animation.styles.glassMaterial.edgeFeatherFraction,
-                durationMs: animation.animationDurationMs,
+                durationMs: loading.animationDurationMs,
             },
             texture: new TravelingSnakeGlassMaterial(
                 animation.styles.snakeColors,
@@ -114,11 +93,25 @@ export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettin
     }
 }
 
-export const createWorkspaceLoadingOutline = (config: WorkspaceLoadingOutlineConfig): WorkspaceLoadingOutlineInstance => {
-    return new LoadingOverlay({
-        root: config.paneEl,
+export const createWorkspaceLoadingLayer = (config: Pick<WorkspaceLoadingOutlineConfig, 'paneEl' | 'settings' | 'onError'>): LoadingLayer =>
+    new LoadingLayer({
+        root: config.paneEl.ownerDocument.body,
         ...getWorkspaceLoadingPresentation(config.settings),
-        onRetry: config.onRetry,
         onError: config.onError ?? (error => console.error('Failed to initialize workspace loading outline:', error)),
     })
+
+export const createWorkspaceLoadingOutline = (config: WorkspaceLoadingOutlineConfig): WorkspaceLoadingOutlineInstance => {
+    const layer = config.layer ?? createWorkspaceLoadingLayer(config)
+    const lease = layer.acquire({ onRetry: config.onRetry })
+
+    return {
+        setVisible: lease.setVisible,
+        setErrorMessage: lease.setErrorMessage,
+        destroy: () => {
+            lease.destroy()
+
+            if (!config.layer)
+                layer.destroy()
+        },
+    }
 }

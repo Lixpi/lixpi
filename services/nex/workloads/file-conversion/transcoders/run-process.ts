@@ -5,6 +5,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { AccountWorkScope } from '../../account-work.ts'
 
 // Spawn a CLI tool (ffmpeg, soffice, pdftoppm, …) and resolve when it exits 0.
 // stdio is fully ignored — transcoders communicate via temp files, never stdin/
@@ -15,11 +16,16 @@ export const runProcess = async (
     args: string[],
     { timeoutMs = 120000 }: { timeoutMs?: number } = {},
 ): Promise<void> => {
+    await AccountWorkScope.check()
     await new Promise<void>((resolve, reject) => {
         const child = spawn(
             command,
             args,
-            { stdio: ['ignore', 'ignore', 'ignore'] },
+            {
+                stdio: ['ignore', 'ignore', 'ignore'],
+                signal: AccountWorkScope.signal(),
+                killSignal: 'SIGKILL',
+            },
         )
         const timer = setTimeout(() => {
             child.kill('SIGKILL')
@@ -42,6 +48,7 @@ export const runProcess = async (
                 )
         })
     })
+    AccountWorkScope.assertActive()
 }
 
 // Run `fn` inside a freshly created temp dir, always cleaning it up afterwards.

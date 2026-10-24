@@ -32,8 +32,14 @@ export type AuthStateStore = BaseStore<AuthStoreMeta, AuthStoreData>
 export type WebClientAuthService = {
     getTokenSilently: (forceRefresh?: boolean) => Promise<string | false>
     init: () => Promise<void>
-    login: () => Promise<void>
+    login: (
+        forceFresh?: boolean,
+        screenHint?: 'signup',
+    ) => Promise<void>
     logout: () => Promise<void>
+    clearSession: () => Promise<void>
+    recoverAccess: () => Promise<void>
+    confirmAccess: () => void
 }
 
 export type AuthTokenProvider = Pick<WebClientAuthService, 'getTokenSilently'>

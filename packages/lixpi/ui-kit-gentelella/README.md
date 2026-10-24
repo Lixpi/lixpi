@@ -39,7 +39,7 @@ Buttons attach their spinner only while `setBusy(true)` is active and remove it 
 
 - `components/*` covers the complete reusable component vocabulary from the upstream production demos: foundation, navigation, layouts, feedback, forms, tables, charts and maps, widgets, app surfaces, commerce, admin, auth, media, marketing, theme controls, and overlays. It does not copy complete demo pages.
 - `class-names` exposes the stable theme class contract and class-name builders for dynamic markup that does not need a component instance.
-- `runtime/*` re-exports each Gentelella v4 runtime module. The package supplies explicit types for the upstream product image and mockup modules, which Gentelella ships without declarations. Consumers import one module at a time so unrelated browser initializers do not enter their bundle.
+- `runtime/*` re-exports each Gentelella v4 runtime module. The package supplies explicit types for product images and mockups, and ambient declarations for the modal, menu and toast imports that Gentelella 4.2 publishes as unresolved module augmentations. Consumers import one module at a time so unrelated browser initializers do not enter their bundle.
 - `styles/theme` compiles the complete Gentelella v4 Sass theme.
 - `styles/tokens`, `styles/layout`, `styles/components`, `styles/forms`, `styles/widgets`, `styles/pages`, `styles/rtl`, `styles/datatable`, `styles/auth`, and `styles/apps` expose the upstream Sass modules separately. Each focused entrypoint loads the design tokens it needs, so applications can mix modules without importing the complete theme.
 - `styles/application-shell` adds the package-owned layout rules used by `createGentelellaApplicationShell()`.

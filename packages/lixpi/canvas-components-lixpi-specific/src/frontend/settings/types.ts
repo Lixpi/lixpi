@@ -113,8 +113,9 @@ export type MediaNodeSettings = {
 }
 
 export type WorkspaceLoadingOutlineSettings = {
-    // Diameter of the workspace-switch loading circle relative to the generated-media pending circle.
-    diameterScale: number
+    diameter: number
+    animationDurationMs: number
+    snakeLengthFraction: number
 }
 
 export type MediaBranchLineageColorMixSettings = {

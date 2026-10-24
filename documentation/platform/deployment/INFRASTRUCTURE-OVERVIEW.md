@@ -151,6 +151,8 @@ infrastructure/pulumi/src/
 
 ### Dockerized Pulumi Runner
 
+`createHostedZone`, `createDelegationRecord`, and `createDnsRecords` can be reused by separately deployed services. Reference an existing application zone by ID without importing it into another stack. If a separate deployment creates the developer zone first, set `AWS_ROUTE53_HOSTED_ZONE_ID` to that zone ID before deploying the application. LocalAuth0 setup needs no public DNS.
+
 Developers never run `pulumi` directly. [`infrastructure/pulumi/Dockerfile`](../../../infrastructure/pulumi/Dockerfile) packages the CLI, AWS tools, and Node runtime. The image mounts the repo, reads the `.env.<name>-<environment>` file, and runs a single command:
 
 ```bash
@@ -376,7 +378,7 @@ Some things to note:
 
 ## DynamoDB
 
-[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines the application tables through a shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas stay aligned. Existing local tables are force-recreated from the current definitions by default (interactive runs are prompted; `LOCAL_DYNAMODB_FORCE_RECREATE=true|false` overrides), and each recreation logs the table's item count so any local data loss is explicit — see [`local-dynamodb-table-reconciler.ts`](../../../infrastructure/pulumi/src/local-dynamodb-table-reconciler.ts).
+[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines the application tables through a shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas stay aligned. Compose sets `LOCAL_DYNAMODB_FORCE_RECREATE=false` by default to preserve existing tables and account fixtures. Explicitly setting it to `true` recreates application tables and deletes their records; each recreation logs the table's item count. Without that setting, the standalone [table reconciler](../../../infrastructure/pulumi/src/local-dynamodb-table-reconciler.ts) retains its interactive prompt and noninteractive recreation behavior. The [fixed mock account loader](../../../services/localauth0/README.md#automatic-initialization) runs after table preparation only in local mock mode. It creates its admission table when absent and never resets it.
 
 Highlights:
 

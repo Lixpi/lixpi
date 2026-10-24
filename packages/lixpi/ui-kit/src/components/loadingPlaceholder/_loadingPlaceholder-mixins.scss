@@ -4,12 +4,7 @@
 // =============================
 // Loading Placeholder Component
 // =============================
-// A reusable loading spinner component for indicating content loading state.
-// Used for lazy-loaded canvas nodes and other async operations.
-//
-// Structure:
-//   .loading-placeholder (container with optional overlay)
-//     .loader (animated spinner element)
+// Error and retry surfaces for asynchronous content.
 
 // 1) Placement - Container positioning and sizing
 // ------------------------------------------------
@@ -53,82 +48,6 @@
             &.theme-dark {
                 background: map-get($s, overlayBgDark);
             }
-        }
-    }
-}
-
-// 3) Spinner - Animated loader styling
-// -------------------------------------
-@mixin loadingPlaceholderSpinner($config: ()) {
-    $defaults: (
-        primaryColor: #1e3a5f, // nightBlue
-        secondaryColor: #ff6b6b, // redPink
-        borderWidth: 4px,
-        animationDurationOuter: 1500ms,
-        animationDurationInner: 500ms
-    );
-
-    $s: map-merge($defaults, $config);
-
-    .loader {
-        position: relative;
-        border-radius: 50%;
-        display: inline-block;
-        border-top: map-get($s, borderWidth) solid map-get($s, primaryColor);
-        border-right: map-get($s, borderWidth) solid transparent;
-        box-sizing: border-box;
-        animation: loading-placeholder-rotation map-get($s, animationDurationOuter) linear infinite;
-
-        &::after {
-            content: "";
-            box-sizing: border-box;
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            border-left: map-get($s, borderWidth) solid map-get($s, secondaryColor);
-            border-bottom: map-get($s, borderWidth) solid transparent;
-            animation: loading-placeholder-rotation map-get($s, animationDurationInner) linear infinite reverse;
-        }
-    }
-
-    @keyframes loading-placeholder-rotation {
-        0% {
-            transform: rotate(0deg);
-        }
-        100% {
-            transform: rotate(360deg);
-        }
-    }
-}
-
-// 4) Sizes - Spinner size variants
-// ---------------------------------
-@mixin loadingPlaceholderSizes($config: ()) {
-    $defaults: (
-        sizeSmall: 24px,
-        sizeMedium: 40px,
-        sizeLarge: 60px
-    );
-
-    $s: map-merge($defaults, $config);
-
-    .loading-placeholder {
-        &.size-small .loader {
-            width: map-get($s, sizeSmall);
-            height: map-get($s, sizeSmall);
-        }
-
-        &.size-medium .loader {
-            width: map-get($s, sizeMedium);
-            height: map-get($s, sizeMedium);
-        }
-
-        &.size-large .loader {
-            width: map-get($s, sizeLarge);
-            height: map-get($s, sizeLarge);
         }
     }
 }
@@ -202,7 +121,5 @@
 @mixin loadingPlaceholder($config: ()) {
     @include loadingPlaceholderPlacement($config);
     @include loadingPlaceholderOverlay($config);
-    @include loadingPlaceholderSpinner($config);
-    @include loadingPlaceholderSizes($config);
     @include loadingPlaceholderError($config);
 }

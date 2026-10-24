@@ -13,6 +13,7 @@ The container starts `/usr/local/bin/lixpi-caddy`. Configuration comes from envi
 |---|---|
 | No arguments | Uses the Lambda runtime when `AWS_LAMBDA_RUNTIME_API` is set; otherwise selects local mode through `CADDY_LOCAL_MODE` or runs public maintenance once |
 | `local` | Issues and exports the local `localhost` certificate, then exits |
+| `serve-local` | Serves configured application HTTPS origins using the existing local CA until shutdown |
 | `maintain` | Runs public maintenance, or enters the Lambda invocation loop when the runtime API is present |
 | `version` | Prints the embedded Caddy version and exits |
 
@@ -24,8 +25,11 @@ The explicit `local` command selects local issuance. Lambda invocation handling 
 |---|---|---|
 | `CADDY_LOCAL_MODE` | Selects local mode outside Lambda when equal to `true` | Public maintenance |
 | `CADDY_CERTIFICATES_DIR` | Writable Caddy state and exported certificate directory | `/certificates` |
+| `CADDY_LOCAL_ROUTES` | JSON object mapping exact HTTPS origins to fixed local `host:port` upstreams | Required by `serve-local` |
 
-Local mode issues for `localhost` and has a one-minute deadline. It does not require `DOMAINS`, email or AWS settings. Compose mounts the shared `caddy-certs` volume at `/certificates`; NATS and the local web UI consume the exported files from that volume.
+Local issuance creates the `localhost` certificate and has a one-minute deadline. It does not require `DOMAINS`, email or AWS settings. Compose mounts the shared `caddy-certs` volume at `/certificates`; NATS consumes its exported serving files. The local HTTPS gateway shares the same volume and CA. Application web roots must not mount this volume because it contains private keys.
+
+The `local-https` Compose profile publishes loopback ports 3443, 3444 and 3445 for the workspace, Profile and API. Each origin has its own HTTPS listener, so all three use the browser's existing `localhost` resolution. Caddy reaches `lixpi-web-ui:5173`, the selected portal and `lixpi-api:3000` through Docker's `nats` network. `CADDY_USER_PORTAL_UPSTREAM` selects the portal upstream and defaults to `lixpi-web-ui-user-portal:5173`. Neither frontend receives certificate keys. Browser certificate storage is `/certificates/https`; CA storage and NATS exports remain at the shared root.
 
 ## Public settings
 

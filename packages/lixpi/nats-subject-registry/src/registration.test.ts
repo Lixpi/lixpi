@@ -13,6 +13,27 @@ const fixture = () => ({
 })
 
 describe('deployment registration signing', () => {
+    it('binds admission to the signed browser profile only for the coordinated release', () => {
+        const env = fixture()
+        expect(applicationManifest(env, 1).browsers[0].admission).toBeUndefined()
+        const enabled = applicationManifest({
+            ...env,
+            ACCOUNT_ADMISSION_ENABLED: 'true',
+            ACCOUNT_ADMISSION_STREAM: 'ACCOUNTS',
+        }, 1)
+        expect(enabled.browsers[0].admission).toEqual({
+            subject: 'accounts.admission.check.v1',
+            claim: 'https://lixpi.ai/admission',
+            stream: 'ACCOUNTS',
+        })
+        expect(enabled.browsers[0].permissions).toEqual(applicationManifest(env, 1).browsers[0].permissions)
+        expect(enabled.services.find(service => service.userId === 'svc:api')?.permissions.sub.allow).toContain('accounts.admission.check.v1')
+        expect(() => applicationManifest({
+            ...env,
+            ACCOUNT_ADMISSION_ENABLED: 'yes',
+        }, 1)).toThrow('ACCOUNT_ADMISSION_ENABLED')
+        expect(enabled.browsers[0].permissions[0].pub.allow?.some(subject => subject.includes('admission'))).toBe(false)
+    })
     it('signs application permissions and advances the version only when declarations change', () => {
         const env = fixture()
         const generated = registrationEnvironment(env)
@@ -47,6 +68,22 @@ describe('deployment registration signing', () => {
             ...env,
             NATS_API_NKEY_PUBLIC: '',
         }, 1)).toThrow('NATS_API_NKEY_PUBLIC')
+    })
+
+    it('restricts worker admission decisions and invalidations to service identities', () => {
+        const manifest = applicationManifest(fixture(), 1)
+
+        for (const userId of ['svc:file-conversion', 'svc:character-fidelity']) {
+            const permissions = manifest.services.find(service => service.userId === userId)!.permissions
+            expect(permissions.pub.allow).toContain('accounts.admission.work.v1')
+            expect(permissions.sub.allow).toContain('accounts.admission.changed.v1')
+            expect(permissions.pub.allow).not.toContain('accounts.admission.changed.v1')
+        }
+
+        expect(manifest.services.find(service => service.userId === 'svc:api')!.permissions.sub.allow).toContain('accounts.admission.work.v1')
+
+        for (const browser of manifest.browsers)
+            expect(JSON.stringify(browser.permissions)).not.toContain('accounts.admission.')
     })
 
     it('limits raw browser identity interpolation and keeps missing directions denied', () => {

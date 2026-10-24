@@ -100,6 +100,7 @@ export class ReleaseNotesSourceResolver {
                 fnm: 'Schniz/fnm',
                 nex: 'synadia-io/nex',
                 pulumi: 'pulumi/pulumi',
+                trunk: 'trunk-rs/trunk',
             } as const
             const repository = repositories[name as keyof typeof repositories]
 

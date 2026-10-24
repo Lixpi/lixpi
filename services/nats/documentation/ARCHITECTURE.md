@@ -137,7 +137,7 @@ sequenceDiagram
     end
 ```
 
-There are two different JWTs in this flow. The browser presents its identity-provider JWT to prove who it is. Lixpi then creates a NATS user JWT that binds the selected account and subject permissions to this connection's user NKey. The server validates that answer before admitting the connection. The session JWT has no expiry, so an established connection is not periodically forced to reconnect by this mechanism. The API still checks request tokens and resource access when it handles application requests.
+There are two different JWTs in this flow. The browser presents its identity-provider JWT to prove who it is. Lixpi then creates a NATS user JWT that binds the selected account and subject permissions to this connection's user NKey. The server validates that answer before admitting the connection. A browser session JWT expires at the earlier of the presented token's expiry and a 60-second lease; reconnect requires admission again. Service sessions retain their separate policy. The API still checks request tokens and resource access when it handles application requests.
 
 The callout itself is also authenticated. `auth.Protocol` verifies the broker signature, server identity, intended issuer, protocol type/version, connection user NKey, signed XKey binding and time claims. Those checks stop an answer from being attached to a different connection or an expired request. [Credential verification](MODULES.md#credential-verification) explains the three credential forms and their decision order.
 

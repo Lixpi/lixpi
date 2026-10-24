@@ -36,6 +36,7 @@ export type MainApiServiceArgs = {
 
     // Resource bindings
     resourceBindings: {
+        accountAdmissionTableArn?: pulumi.Input<string>
         tables?: {
             [key: string]: aws.dynamodb.Table
         }
@@ -56,6 +57,8 @@ export type MainApiServiceArgs = {
         API_HOST_URL: string
         AUTH0_DOMAIN: string
         AUTH0_API_IDENTIFIER: string
+        ACCOUNT_ADMISSION_ENABLED: string
+        ACCOUNT_ADMISSION_STREAM: string
         SAVE_LLM_RESPONSES_TO_DEBUG_DIR: string
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
@@ -195,6 +198,26 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
                                 Resource: arns.flatMap(arn => [arn, `${arn}/index/*`]),
                             }],
                         }),
+                ),
+            },
+        )
+
+    // The external account service owns this table. The API can read receipts and condition its own
+    // transactions on them, but cannot provision or change account state.
+    if (resourceBindings.accountAdmissionTableArn)
+        new aws.iam.RolePolicy(
+            `${formattedServiceName}-account-admission-policy`,
+            {
+                role: taskRole.name,
+                policy: pulumi.output(resourceBindings.accountAdmissionTableArn).apply(
+                    arn => JSON.stringify({
+                        Version: '2012-10-17',
+                        Statement: [{
+                            Effect: 'Allow',
+                            Action: ['dynamodb:GetItem', 'dynamodb:ConditionCheckItem'],
+                            Resource: [arn],
+                        }],
+                    }),
                 ),
             },
         )
@@ -406,6 +429,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
 
         // Outputs
         outputs: {
+            containerName: formattedServiceName,
             serviceName: ecsService.name,
             serviceArn: ecsService.id,
             containerPort,

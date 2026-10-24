@@ -70,7 +70,10 @@ export class AnthropicProvider extends BaseProvider {
             // option, so it signs with the default AWS provider chain — which resolves AWS_PROFILE
             // against the SSO cache mounted into the container locally and the task role on AWS,
             // and refreshes expiring credentials on its own.
-            this.client = new AnthropicBedrock({ awsRegion: bedrockInference.region })
+            this.client = new AnthropicBedrock({
+                awsRegion: bedrockInference.region,
+                maxRetries: deps.providerUsage?.enabled ? 0 : 2,
+            })
 
             return
         }
@@ -80,7 +83,10 @@ export class AnthropicProvider extends BaseProvider {
         if (!apiKey)
             throw new Error('ANTHROPIC_API_KEY environment variable is required')
 
-        this.client = new Anthropic({ apiKey })
+        this.client = new Anthropic({
+            apiKey,
+            maxRetries: deps.providerUsage?.enabled ? 0 : 2,
+        })
     }
 
     // Both clients here are Stainless-generated and raise APIConnectionError.
@@ -236,6 +242,7 @@ export class AnthropicProvider extends BaseProvider {
                 // only surfaces while draining. The drain is therefore retried
                 // too, but only up to the first published token — past that a
                 // restart would replay text the user already saw.
+                const settleUsage = await this.prepareUsageSettlement(state)
                 finalMessage = await this.retryTransport('messages', async ({ markPublished }) => {
                     const stream = this.client.messages.stream(streamArgs as any, { signal: this.signal })
 
@@ -263,6 +270,23 @@ export class AnthropicProvider extends BaseProvider {
                 })
                 promptTokens += finalMessage.usage?.input_tokens ?? 0
                 completionTokens += finalMessage.usage?.output_tokens ?? 0
+
+                if (finalMessage.usage)
+                    await settleUsage({
+                        aiVendorRequestId: finalMessage.id,
+                        usage: {
+                            promptTokens: (finalMessage.usage.input_tokens ?? 0)
+                                + (finalMessage.usage.cache_read_input_tokens ?? 0)
+                                + (finalMessage.usage.cache_creation_input_tokens ?? 0),
+                            promptAudioTokens: 0,
+                            promptCachedTokens: finalMessage.usage.cache_read_input_tokens ?? 0,
+                            completionTokens: finalMessage.usage.output_tokens ?? 0,
+                            completionAudioTokens: 0,
+                            completionReasoningTokens: 0,
+                            totalTokens: (finalMessage.usage.input_tokens ?? 0) + (finalMessage.usage.output_tokens ?? 0),
+                        },
+                    })
+
                 const capabilityCalls = (finalMessage.content ?? []).flatMap((block: any) => {
                     if (
                         block?.type !== 'tool_use'

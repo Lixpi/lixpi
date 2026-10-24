@@ -1,6 +1,7 @@
 import { Router } from 'express'
 
 import { jwtVerifier } from '../helpers/auth.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import CapabilityModel from '../models/capability.ts'
 import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
 
@@ -29,7 +30,12 @@ const authenticateRequest = async (
         return res.status(401).json({ error: 'Invalid or expired token' })
 
     req.user = { userId: decoded.sub }
-    next()
+    await AccountRequestContext.runHttp(
+        decoded,
+        req,
+        res,
+        next,
+    )
 }
 
 router.get(

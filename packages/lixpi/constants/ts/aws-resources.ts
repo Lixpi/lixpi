@@ -1,5 +1,6 @@
 export const DYNAMODB_TABLES: Record<string, string> = {
     USERS: 'Users',
+    ACCOUNT_ADMISSION: 'Account-Admission',
     ORGANIZATIONS: 'Organizations',
     ORGANIZATIONS_ACCESS_LIST: 'Organizations-Access-List',
     WORKSPACES: 'Workspaces',

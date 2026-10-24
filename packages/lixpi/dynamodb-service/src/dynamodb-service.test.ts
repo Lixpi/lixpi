@@ -53,6 +53,58 @@ describe('DynamoDBService', () => {
 
     it('throws when region is missing', () => void expect(() => new DynamoDBService({ region: '' })).toThrow('AWS region must be provided.'))
 
+    describe('transactRead', () => {
+        it('keeps missing-record positions and passes the cancellation signal', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const send = vi.fn().mockResolvedValue({ Responses: [{ Item: { userId: 'u1' } }, {}] })
+            setDocumentClientSend(service, send)
+            const controller = new AbortController()
+            const items = [{
+                tableName: 'users',
+                key: { userId: 'u1' },
+            }, {
+                tableName: 'users',
+                key: { userId: 'missing' },
+            }]
+            await expect(service.transactRead({
+                items,
+                abortSignal: controller.signal,
+            })).resolves.toEqual([{ userId: 'u1' }, undefined])
+            expect(send.mock.calls[0][0].input).toEqual({ TransactItems: items.map(item => ({ Get: {
+                TableName: item.tableName,
+                Key: item.key,
+            } })) })
+            expect(send.mock.calls[0][1]).toEqual({ abortSignal: controller.signal })
+        })
+
+        it('does not turn an incomplete or failed read into account absence', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const send = vi.fn().mockResolvedValue({ Responses: [] })
+            setDocumentClientSend(service, send)
+            const items = [{
+                tableName: 'users',
+                key: { userId: 'u1' },
+            }]
+            await expect(service.transactRead({ items })).rejects.toThrow('incomplete response')
+            send.mockRejectedValue(new Error('database unavailable'))
+            await expect(service.transactRead({ items })).rejects.toThrow('database unavailable')
+        })
+
+        it('refuses cancelled reads before sending', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const send = vi.fn()
+            setDocumentClientSend(service, send)
+            await expect(service.transactRead({
+                items: [{
+                    tableName: 'users',
+                    key: { userId: 'u1' },
+                }],
+                abortSignal: AbortSignal.abort(),
+            })).rejects.toThrow()
+            expect(send).not.toHaveBeenCalled()
+        })
+    })
+
     // =============================================================================
     // prepareAttributes
     // =============================================================================
@@ -826,6 +878,68 @@ describe('DynamoDBService', () => {
     // =============================================================================
 
     describe('transactWrite', () => {
+        it('keeps condition checks atomic with mutations and forwards cancellation', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const controller = new AbortController()
+            const sendMock = vi.fn().mockResolvedValue({})
+            setDocumentClientSend(service, sendMock)
+            await service.transactWrite({
+                operations: [
+                    {
+                        type: 'check',
+                        tableName: 'admission',
+                        key: { identityKey: 'identity' },
+                        conditionExpression: '#epoch = :epoch',
+                        expressionAttributeNames: { '#epoch': 'epoch' },
+                        expressionAttributeValues: { ':epoch': 7 },
+                    },
+                    {
+                        type: 'put',
+                        tableName: 'workspaces',
+                        item: { workspaceId: 'workspace' },
+                    },
+                ],
+                abortSignal: controller.signal,
+            })
+            expect(sendMock).toHaveBeenCalledOnce()
+            expect(sendMock.mock.calls[0][0].input.TransactItems[0]).toEqual({ ConditionCheck: {
+                TableName: 'admission',
+                Key: { identityKey: 'identity' },
+                ConditionExpression: '#epoch = :epoch',
+                ExpressionAttributeNames: { '#epoch': 'epoch' },
+                ExpressionAttributeValues: { ':epoch': 7 },
+            } })
+            expect(sendMock.mock.calls[0][1]).toEqual({ abortSignal: controller.signal })
+        })
+
+        it('does not send an already cancelled write or accept a late acknowledgement', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const before = new AbortController()
+            before.abort(new Error('revoked'))
+            const sendMock = vi.fn()
+            setDocumentClientSend(service, sendMock)
+            const operations = [{
+                type: 'put' as const,
+                tableName: 'workspaces',
+                item: { workspaceId: 'workspace' },
+            }]
+            await expect(service.transactWrite({
+                operations,
+                abortSignal: before.signal,
+            })).rejects.toThrow('revoked')
+            expect(sendMock).not.toHaveBeenCalled()
+            const during = new AbortController()
+            sendMock.mockImplementationOnce(async () => {
+                during.abort(new Error('revoked'))
+
+                return {}
+            })
+            await expect(service.transactWrite({
+                operations,
+                abortSignal: during.signal,
+            })).rejects.toThrow('revoked')
+        })
+
         it('throws when no operations are provided', async () => {
             const service = new DynamoDBService({ region: 'us-east-1' })
             const sendMock = vi.fn()

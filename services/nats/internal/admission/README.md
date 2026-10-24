@@ -11,6 +11,8 @@ If the local worker is full or an attempt cannot finish, the dispatcher can ask 
 
 Before verification, the dispatcher reads and pins the authoritative registration snapshot. A peer must resolve that same revision before evaluating the request. A changed or unavailable registry prevents admission, even if a parsed snapshot is cached locally.
 
+An allowed peer result includes the application's browser grant inside the signed reply. The accepting dispatcher checks it against its pinned profile and local invalidation state before releasing the encrypted auth response. Connection tracking stays on that accepting broker, including when a peer performs credential verification.
+
 The limits matter because authentication shares CPU and memory with messaging and storage. A timed-out verifier retains its worker slot until it actually returns, preventing repeated timeouts from accumulating unlimited goroutines. Signed peer messages also identify the node instance and exact attempt so an old reply cannot finish another request.
 
 [Admission coordination](../../documentation/MODULES.md#admission-coordination) explains the worker, dispatcher, membership and wire code. [Capacity and peer selection](../../documentation/ARCHITECTURE.md#capacity-and-peer-selection) shows the retry flow and timing limits.

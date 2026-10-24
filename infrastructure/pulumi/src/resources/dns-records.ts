@@ -15,7 +15,8 @@ export type DnsRecordConfig = {
     ttl?: number
 
     // For simple records
-    records?: string[]
+    records?: pulumi.Input<pulumi.Input<string>[]>
+    allowOverwrite?: boolean
 
     // For alias records
     alias?: {
@@ -34,7 +35,7 @@ export type DnsRecordConfig = {
 export type DnsRecordsArgs = {
     orgName: string
     stage: string
-    hostedZoneId: string
+    hostedZoneId: pulumi.Input<string>
     records: DnsRecordConfig[]
     serviceName: string
     dnsProvider?: aws.Provider
@@ -65,7 +66,7 @@ export const createDnsRecords = async (args: DnsRecordsArgs) => {
             zoneId: hostedZoneId,
             type: record.type,
             // Allow overwrite so we don't create duplicate record sets if they already exist
-            allowOverwrite: true,
+            allowOverwrite: record.allowOverwrite ?? true,
         }
 
         // Configure record based on type
@@ -122,6 +123,7 @@ export type CreateHostedZoneArgs = {
     stage: string
     domainName: string // e.g., "firstName-dev.lixpi.dev" or production|staging|dev as a root
     serviceName: string // logical name prefix
+    protect?: boolean
 }
 
 export const createHostedZone = async (args: CreateHostedZoneArgs) => {
@@ -138,6 +140,7 @@ export const createHostedZone = async (args: CreateHostedZoneArgs) => {
             // Never want Pulumi to destroy and recreate a public hosted zone automatically
             // (manual registrar updates depend on stability of NS set)
         },
+        { protect: args.protect },
     )
 
     return {

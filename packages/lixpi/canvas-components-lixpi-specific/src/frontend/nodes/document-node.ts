@@ -2,10 +2,7 @@ import {
     type DocumentCanvasNode,
 } from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
-import {
-    createErrorPlaceholder,
-    createLoadingPlaceholder,
-} from '@lixpi/ui-kit/components/loading-placeholder'
+import { createErrorPlaceholder } from '@lixpi/ui-kit/components/loading-placeholder'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     type WorkspaceNodeShells,
@@ -31,6 +28,7 @@ export type WorkspaceDocumentEditorOptions = {
     onLeaseStateChange: (state: WorkspaceDocumentLeaseState) => void
 }
 export type WorkspaceDocumentNodesOptions = {
+    beginLoading: () => { destroy: () => void }
     mountEditor: (options: WorkspaceDocumentEditorOptions) => { destroy: () => void }
     onError: (
         error: unknown,
@@ -149,9 +147,8 @@ class WorkspaceDocumentNode {
         this.container.replaceChildren()
 
         if (document?.content === undefined) {
-            const loading = createLoadingPlaceholder({ document: this.element.ownerDocument })
+            const loading = this.options.beginLoading()
             this.contentLifetime.own(() => loading.destroy())
-            this.container.append(loading.dom)
 
             return
         }

@@ -35,6 +35,7 @@ const dynamo = {
     getItem: vi.fn(),
     queryItems: vi.fn(),
     transactWrite: vi.fn(),
+    updateItem: vi.fn(),
 }
 
 const asset: Asset = {
@@ -119,6 +120,54 @@ beforeEach(() => {
     ;(globalThis as any).dynamoDBService = dynamo
     dynamo.queryItems.mockResolvedValue({ items: [] })
     dynamo.transactWrite.mockResolvedValue(undefined)
+    dynamo.updateItem.mockResolvedValue(undefined)
+})
+
+describe('Asset lease account ownership', () => {
+    it('records the authenticated editor and preserves it during renewal', async () => {
+        const editable = {
+            ...asset,
+            states: {
+                ...asset.states,
+                lifecycle: 'active',
+            },
+        }
+        dynamo.getItem.mockResolvedValue(editable)
+        const acquired = await AssetModel.acquireLease({
+            assetId: asset.assetId,
+            workspaceId: 'workspace-1',
+            holderId: 'browser-tab',
+            requester,
+        })
+        expect(acquired).not.toHaveProperty('error')
+
+        if (
+            !acquired
+            || 'error' in acquired
+        )
+            throw new Error('Lease acquisition failed')
+
+        expect(acquired.holders).toEqual([expect.objectContaining({
+            holderId: 'browser-tab',
+            userId: requester.userId,
+        })])
+        dynamo.getItem.mockResolvedValue({
+            ...editable,
+            editLease: acquired,
+        })
+        const renewed = await AssetModel.renewLease({
+            assetId: asset.assetId,
+            workspaceId: 'workspace-1',
+            holderId: 'browser-tab',
+            leaseId: acquired.leaseId,
+        })
+        expect(renewed).toMatchObject({
+            holders: [expect.objectContaining({
+                holderId: 'browser-tab',
+                userId: requester.userId,
+            })],
+        })
+    })
 })
 
 describe('Asset.attachWorkspaceReference', () => {

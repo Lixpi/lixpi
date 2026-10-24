@@ -104,7 +104,7 @@ describe('shared grouped wizard', () => {
         'STAGE=Test-local',
         'ENVIRONMENT=local',
         'ORG_NAME=Existing',
-        'DOMAIN_NAME=',
+        'DOMAIN_NAME=test-local.example.com',
         'CERTIFICATE_VALIDATION_EMAIL=',
         'STATE_STORAGE_URL=file:///var/opt/lixpi/.pulumi-local-state',
         'PULUMI_CONFIG_PASSPHRASE=""',
@@ -365,19 +365,45 @@ describe('shared grouped wizard', () => {
             groups.add('Authentication Configuration')
             selects.set('Use LocalAuth0 mock (for local development)?', 'override')
             confirms.set('Use LocalAuth0 mock (for local development)?', false)
-            const domainPrompt = 'Auth0 domain (e.g., https://your-tenant.us.auth0.com)'
+            const domainPrompt = 'Canonical Auth0 tenant hostname (Management API)'
             selects.set(domainPrompt, 'override')
-            texts.set(domainPrompt, 'https://tenant.auth.test')
+            texts.set(domainPrompt, 'tenant.us.auth0.com')
             await writeFiles(await collect())
             const after = readRegistration(savedContent())
             expect(after.manifest.version).toBe(before.manifest.version + 1)
             expect(after.manifest.browsers[0]).toMatchObject({
-                issuer: 'https://tenant.auth.test/',
-                jwksUrl: 'https://tenant.auth.test/.well-known/jwks.json',
+                issuer: 'https://tenant.us.auth0.com/',
+                jwksUrl: 'https://tenant.us.auth0.com/.well-known/jwks.json',
                 audience: before.env.AUTH0_API_IDENTIFIER,
             })
             expect(after.env.NATS_API_NKEY_SEED).toBe(before.env.NATS_API_NKEY_SEED)
             expect(after.env.NATS_REGISTRATION_AUTHORITY_SEED).toBe(before.env.NATS_REGISTRATION_AUTHORITY_SEED)
+        })
+
+        it('updates both issuers and re-signs the browser grant when the local auth domain changes', async () => {
+            await saveExistingRegistration()
+            groups.add('Authentication Configuration')
+            selects.set('Use LocalAuth0 mock (for local development)?', 'override')
+            confirms.set('Use LocalAuth0 mock (for local development)?', false)
+            selects.set('Use Auth0 shared Google development keys (local only)?', 'override')
+            confirms.set('Use Auth0 shared Google development keys (local only)?', false)
+            texts.set('Canonical Auth0 tenant hostname (Management API)', 'tenant.us.auth0.com')
+            await writeFiles(await collect())
+            original = savedContent()
+            write.mockClear()
+            const before = readRegistration(original)
+            selects.set('Domain name for real Auth0 (DOMAIN_NAME)', 'override')
+            texts.set('Domain name for real Auth0 (DOMAIN_NAME)', 'another-local.example.com')
+            await writeFiles(await collect())
+            const after = readRegistration(savedContent())
+
+            expect(after.env).toMatchObject({
+                AUTH0_TENANT_DOMAIN: 'tenant.us.auth0.com',
+                AUTH0_DOMAIN: 'https://auth.another-local.example.com',
+                VITE_AUTH0_DOMAIN: 'auth.another-local.example.com',
+            })
+            expect(after.manifest.version).toBe(before.manifest.version + 1)
+            expect(after.manifest.browsers[0].issuer).toBe('https://auth.another-local.example.com/')
         })
 
         it('does not write a partial update when the existing registration cannot be verified', async () => {
@@ -490,18 +516,37 @@ describe('shared grouped wizard', () => {
         expect(write).not.toHaveBeenCalled()
     })
 
+    it('retains a valid unused canonical issuer when generating mock configuration', async () => {
+        const config = await collect()
+        config.edits = undefined
+        config.auth0Domain = 'tenant.us.auth0.com'
+        await writeFiles(config)
+        const content = write.mock.calls.find(([file]) => file === envPath)![1] as string
+
+        expect(parseEnv(content)).toMatchObject({
+            MOCK_AUTH0: 'true',
+            AUTH0_TENANT_DOMAIN: 'tenant.us.auth0.com',
+            AUTH0_DOMAIN: 'https://tenant.us.auth0.com',
+            VITE_AUTH0_DOMAIN: 'tenant.us.auth0.com',
+        })
+    })
+
     it('opens the real Auth0 child prompts when mock authentication is disabled', async () => {
         groups.add('Authentication Configuration')
         selects.set('Use LocalAuth0 mock (for local development)?', 'override')
         confirms.set('Use LocalAuth0 mock (for local development)?', false)
-        const domainPrompt = 'Auth0 domain (e.g., https://your-tenant.us.auth0.com)'
+        const domainPrompt = 'Canonical Auth0 tenant hostname (Management API)'
         selects.set(domainPrompt, 'override')
-        texts.set(domainPrompt, 'https://tenant.auth.test')
+        texts.set(domainPrompt, 'tenant.us.auth0.com')
         const config = await collect()
         const result = config.edits!.render(config)
         expect(result).toContain('MOCK_AUTH0 = false')
-        expect(result).toContain('AUTH0_DOMAIN = https://tenant.auth.test')
-        expect(result).toContain('VITE_AUTH0_DOMAIN = tenant.auth.test')
+        expect(parseEnv(result)).toMatchObject({
+            AUTH0_TENANT_DOMAIN: 'tenant.us.auth0.com',
+            AUTH0_USE_DEVELOPER_KEYS: 'true',
+            AUTH0_DOMAIN: 'https://tenant.us.auth0.com',
+            VITE_AUTH0_DOMAIN: 'tenant.us.auth0.com',
+        })
         expect(prompts.select).toHaveBeenCalledWith(expect.objectContaining({ message: 'Auth0 Client ID' }))
         assertNoKeysGenerated()
     })
@@ -516,11 +561,11 @@ describe('shared grouped wizard', () => {
         expect(write).not.toHaveBeenCalled()
     })
 
-    it('does not ask for inactive provider credentials or Stripe with LocalAuth0', async () => {
+    it('does not ask for inactive provider credentials with LocalAuth0', async () => {
         groups.add('API Keys')
         await writeFiles(await collect())
 
-        for (const message of ['Anthropic API Key', 'Stable Diffusion API Key', 'Stripe Public Key'])
+        for (const message of ['Anthropic API Key', 'Stable Diffusion API Key'])
             expect(prompts.select).not.toHaveBeenCalledWith(expect.objectContaining({ message }))
 
         expect(prompts.text).not.toHaveBeenCalled()
@@ -602,6 +647,32 @@ describe('shared grouped wizard', () => {
         expect(rendered.get('NATS_AI_MODEL_REGISTRY_USER_ID')).toBe('svc:ai-model-registry')
         expect(rendered.get('NATS_NEX_NODE_NKEY_SEED')).toBe('SUnex')
         expect(rendered.get('NATS_LLM_SERVICE_NKEY_SEED')).toBe('SUllm')
+    })
+
+    it('adds a complete AI Model Registry identity to configurations that predate it', async () => {
+        original = fixture.replace(/^NATS_AI_MODEL_REGISTRY_[^\n]*\n/gm, '')
+        groups.add('NATS Configuration')
+        const config = await collect()
+        const rendered = new EnvFileUpdates(config.edits!.render(config)).getValues()
+        const pair = nkeys.fromSeed(new TextEncoder().encode(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_SEED')))
+        expect(pair.getPublicKey()).toBe(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC'))
+        pair.clear()
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_USER_ID')).toBe('svc:ai-model-registry')
+        expect(rendered.get('NATS_API_NKEY_SEED')).toBe('SUAPI')
+        expect(rendered.get('NATS_NEX_NODE_NKEY_SEED')).toBe('SUnex')
+        expect(nkeys.createUser).toHaveBeenCalledTimes(1)
+        expect(nkeys.createAccount).not.toHaveBeenCalled()
+        expect(nkeys.createCurve).not.toHaveBeenCalled()
+    })
+
+    it('restores a missing registry user ID without rotating existing keys', async () => {
+        original = fixture.replace('NATS_AI_MODEL_REGISTRY_USER_ID=svc:ai-model-registry\n', '')
+        const config = await collect()
+        const rendered = new EnvFileUpdates(config.edits!.render(config)).getValues()
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_USER_ID')).toBe('svc:ai-model-registry')
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_SEED')).toBe('SUregistry')
+        expect(rendered.get('NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC')).toBe('Uregistry')
+        assertNoKeysGenerated()
     })
 
     it('derives the AI Model Registry public key from its existing seed', async () => {

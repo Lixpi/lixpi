@@ -17,6 +17,8 @@ import { createShiftingGradientBackground } from '@lixpi/ui-primitives/gradients
 
 `html` and `createEl` create real elements in the current document. They attach event handlers, append child nodes and apply class, style, data and attribute values. `applyStyle` updates several style properties on an existing HTML or SVG element. These helpers do not mount elements or own their cleanup.
 
+The DOM template bindings support consumers using either NodeNext or Bundler TypeScript module resolution. Both use the same `htm/mini` runtime binding.
+
 `createDocumentHtml(document)` binds a template to a supplied browser document, including detached documents without a window. `createDocumentEl(document)` provides the same document-bound behavior as an element factory for components whose tag name is selected dynamically. Both support nested child arrays, numeric text, boolean attributes, `textContent` and trusted `innerHTML`; null, undefined and false attributes are omitted. They keep document-local rendering independent of the global document.
 
 `getElementBorderRadius(element, width, height)` resolves a circular corner radius from the element's computed pixel or percentage radii, clamped to its box. It uses the element's document and does not discover or cache DOM targets.

@@ -1,12 +1,10 @@
-// DO NOT DELETE ANY OF THE COMMENTED OUT CODE IN THIS FILE
-
 import process from 'process'
-
 import {
     createJwtVerifier,
     type JwtVerificationResult,
 } from '@lixpi/auth-service'
-import RegistrationService from '../services/registration-service.ts'
+import { AccountAdmission } from '../services/account-admission.ts'
+import { AccountAdmissionRuntime } from '../services/account-admission-runtime.ts'
 
 const {
     AUTH0_API_IDENTIFIER,
@@ -15,90 +13,55 @@ const {
     MOCK_AUTH0_DOMAIN,
     MOCK_AUTH0_JWKS_URI,
 } = process.env
-
-const registrationService = new RegistrationService()
-
 const isMockAuthEnabled = MOCK_AUTH0 === 'true'
-
-const jwksUri = isMockAuthEnabled
-    ? MOCK_AUTH0_JWKS_URI!
-    : `${AUTH0_DOMAIN}/.well-known/jwks.json`
-
-const jwtIssuer = isMockAuthEnabled
-    ? `http://${MOCK_AUTH0_DOMAIN}/`
-    : `${AUTH0_DOMAIN}/`
-
-// Create a single JWT verifier instance for the API
-const jwtVerifier = createJwtVerifier({
-    jwksUri,
+const signatureVerifier = createJwtVerifier({
+    jwksUri: isMockAuthEnabled ? MOCK_AUTH0_JWKS_URI! : `${AUTH0_DOMAIN}/.well-known/jwks.json`,
     audience: AUTH0_API_IDENTIFIER!,
-    issuer: jwtIssuer,
+    issuer: isMockAuthEnabled ? `http://${MOCK_AUTH0_DOMAIN}/` : `${AUTH0_DOMAIN}/`,
     algorithms: ['RS256'],
 })
 
-const AUTH_REQUEST_CACHE_MS = 5000
-const AUTH_EXPIRY_SKEW_MS = 1000
-const authRequestCache = new Map<string, {
-    expiresAt: number
-    result: JwtVerificationResult
-}>()
+// Authentication reads completed registration on every request. Account creation
+// belongs to hosted provisioning, or the explicit local fixture initializer.
+export const jwtVerifier = {
+    verify: async (token: string): Promise<JwtVerificationResult> => {
+        let result: JwtVerificationResult
 
-// Export the verifier for use in HTTP endpoints (e.g., image upload/proxy)
-export { jwtVerifier }
+        try {
+            result = await signatureVerifier.verify(token)
+        } catch {
+            return { error: 'Invalid or expired token' }
+        }
 
-const getAuthRequestCacheKey = (
-    token: string,
-    eventName?: string,
-): string => `${eventName ?? '*'}:${token}`
+        if (
+            result.error
+            || !result.decoded
+        )
+            return result
 
-const getCachedAuthResult = (cacheKey: string): JwtVerificationResult | null => {
-    const cached = authRequestCache.get(cacheKey)
+        try {
+            if (process.env.ACCOUNT_ADMISSION_ENABLED === 'true') {
+                const runtime = AccountAdmissionRuntime.current()
+                await runtime.admission.admitVerifiedToken(result.decoded)
+                AccountAdmissionRuntime.current()
+            } else {
+                if (
+                    !isMockAuthEnabled
+                    || process.env.ENVIRONMENT !== 'local'
+                )
+                    return { error: 'ACCOUNT_ADMISSION_DENIED' }
 
-    if (!cached)
-        return null
+                await AccountAdmission.forEnvironment(global.dynamoDBService, process.env).admitVerifiedToken(result.decoded)
+            }
 
-    if (cached.expiresAt <= Date.now()) {
-        authRequestCache.delete(cacheKey)
-
-        return null
-    }
-
-    return cached.result
+            return result
+        } catch {
+            return { error: 'ACCOUNT_ADMISSION_DENIED' }
+        }
+    },
 }
 
-const cacheSuccessfulAuthResult = (
-    cacheKey: string,
-    result: JwtVerificationResult,
-): void => {
-    const expiresAt = getAuthCacheExpiresAt(result.decoded)
-
-    if (expiresAt <= Date.now())
-        return
-
-    authRequestCache.set(
-        cacheKey,
-        {
-            expiresAt,
-            result,
-        },
-    )
-}
-
-const getAuthCacheExpiresAt = (decoded: JwtVerificationResult['decoded']): number => {
-    const now = Date.now()
-    const maxCacheExpiresAt = now + AUTH_REQUEST_CACHE_MS
-    const tokenExpiresAt = typeof decoded?.exp === 'number'
-        ? (decoded.exp * 1000) - AUTH_EXPIRY_SKEW_MS
-        : maxCacheExpiresAt
-
-    return Math.min(maxCacheExpiresAt, tokenExpiresAt)
-}
-
-export const authenticateTokenOnRequest = async ({
-    token,
-    eventName,
-    requireFreshVerification = false,
-}: {
+export const authenticateTokenOnRequest = async ({ token }: {
     token: string
     eventName?: string
     requireFreshVerification?: boolean
@@ -106,47 +69,5 @@ export const authenticateTokenOnRequest = async ({
     if (!token)
         return { error: 'No token provided' }
 
-    if (requireFreshVerification)
-        return jwtVerifier.verify(token)
-
-    const cacheKey = getAuthRequestCacheKey(token, eventName)
-    const cached = getCachedAuthResult(cacheKey)
-
-    if (cached)
-        return cached
-
-    try {
-        const {
-            decoded,
-            error,
-        } = await jwtVerifier.verify(token)
-
-        if (error)
-            return { error }
-
-        if (decoded) {
-            // TODO: Remove this temporary hack
-            await registrationService.verifyRegistration({
-                decodedToken: decoded,
-                accessToken: token,
-            })
-            // DO NOT DELETE ANY OF THE COMMENTED OUT CODE IN THIS FILE
-            //             err(`
-            // calling  await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }) in the authenticateTokenOnRequest method.'
-            // this is wrong and very quick hack just to make it work temporarily'
-            // it used to be called on the connection-auth path in the previous transport, but with NATS it makes no sense'
-            // the issue must be addressed when registration flow is complete'
-            // const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
-            //             `)
-
-            const result = { decoded }
-            cacheSuccessfulAuthResult(cacheKey, result)
-
-            return result
-        }
-
-        return { error: 'Token verification failed' }
-    } catch (e: any) {
-        return { error: e.error || e.message }
-    }
+    return jwtVerifier.verify(token)
 }

@@ -4,6 +4,10 @@ TypeScript dependency declarations are generated from [the version registry](../
 
 Shared NATS client implementations for Lixpi services. The TypeScript package is used by the live app; the Python package is preserved for legacy tooling and future internal-service splits.
 
+Returning `false` from `onAuthError` (`on_auth_error` in Python) permanently closes that client instance and stops reconnect attempts. A failed token refresh discards the previous credential. Browser applications use `onAccessDenied` (`on_access_denied`) to clear protected state when an API reply contains `ACCOUNT_ADMISSION_DENIED`; installing that callback also closes the denied connection. Network failures still use ordinary reconnect behavior.
+
+An established connection's `user authentication expired` event renews the broker lease through the normal token provider without calling `onAuthError`. The provider can reuse a valid OAuth token or refresh an expired one. The broker rechecks admission on reconnect; an authorization rejection still invokes the application's bounded recovery and denial path. Lease renewal does not force an Auth0 token exchange every minute.
+
 Provides a unified API for NATS messaging with support for:
 - Connection management with automatic reconnection
 - Publish/subscribe patterns
@@ -145,6 +149,8 @@ Thrown request/reply handler failures are transported as `{ error: message }` fo
 `onReconnect(listener)` (`on_reconnect` in Python) returns a function that removes the listener. Listeners run after configured subscriptions are initialized on a recovered connection, including replacement of a closed connection. Dynamic subscriptions must be rebound by their owner when the underlying connection is replaced. Module pages use this hook to rebind their subscriptions and refetch authoritative state; they remove the listener during teardown. Python listeners may be asynchronous.
 
 The embedded Go broker uses `nats.go` and an in-process connection for callout dispatch. This TypeScript lifecycle serves application clients; application JWT middleware is separate from connection admission.
+
+An application may provide `requestScope` (`request_scope` in Python) to wrap execution after middleware has verified a message. The scope receives the verified payload and an operation callback. It supplies `assertActive` to that callback, keeping both handler execution and the final reply within the same lifetime. `publicationGuard` (`publication_guard`) checks ordinary and durable publication; durable publication checks again after acknowledgement. The shared client does not interpret account state or import application authorization code. Authentication failures log the subject and error without logging the original token-bearing payload.
 
 ### JetStream Object Store (TypeScript)
 

@@ -731,7 +731,7 @@ const BlobModel = {
         const deletionClaim = `${claimTime}-${crypto.randomUUID()}`
 
         try {
-            await dynamoDBService.updateItem({
+            await updateAccountItem({
                 tableName: blobsTableName(),
                 key: { blobKey: blob.blobKey },
                 updateExpression: 'SET #status = :deleting, #deletionClaim = :deletionClaim, #updatedAt = :updatedAt',
@@ -761,7 +761,7 @@ const BlobModel = {
 
         const releaseDeletionClaim = async (): Promise<void> => {
             try {
-                await dynamoDBService.updateItem({
+                await updateAccountItem({
                     tableName: blobsTableName(),
                     key: { blobKey: blob.blobKey },
                     updateExpression: 'SET #updatedAt = :updatedAt REMOVE #deletionClaim',
@@ -847,7 +847,7 @@ const BlobModel = {
         for (const blob of candidates) {
             try {
                 if (blob.status === 'staging') {
-                    await dynamoDBService.updateItem({
+                    await updateAccountItem({
                         tableName: blobsTableName(),
                         key: { blobKey: blob.blobKey },
                         updateExpression: 'SET #status = :deleting, #updatedAt = :updatedAt',
@@ -885,3 +885,4 @@ const BlobModel = {
 }
 
 export default BlobModel
+import { updateAccountItem } from '../services/account-model-update.ts'

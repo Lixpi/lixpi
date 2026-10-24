@@ -7,7 +7,7 @@ description: Shared TypeScript test commands, infrastructure, and test-writing c
 
 This guide owns TypeScript testing across services and shared packages. A service does not get another testing guide just to repeat its domain name, Vitest environment, or runner command.
 
-Read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) first. Its `CODING_AGENTS_TEST_EXECUTION_MODE` rule controls when agents run tests. Writing or modifying test files requires an explicit request in the active thread.
+Read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) first. Its `CODING_AGENTS_TEST_EXECUTION_MODE` rule controls writing, modifying, and running tests. `true` and `auto` permit relevant test changes without a separate request; `false` requires explicit authorization. Formatting and lint checks follow the independent `CODING_AGENTS_TEST_LINTER_MODE` value.
 
 ## Test Runner Container
 

@@ -158,7 +158,10 @@ export class OpenAIProvider extends BaseProvider {
         if (!apiKey)
             throw new Error('OPENAI_API_KEY environment variable is required')
 
-        this.client = new OpenAI({ apiKey })
+        this.client = new OpenAI({
+            apiKey,
+            maxRetries: deps.providerUsage?.enabled ? 0 : 2,
+        })
     }
 
     // The OpenAI SDK wraps every socket failure in APIConnectionError.
@@ -376,6 +379,7 @@ export class OpenAIProvider extends BaseProvider {
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         const caps = args.state.aiModelMetaInfo.inferenceCapabilities
+        const settleUsage = await this.prepareUsageSettlement(args.state)
         const requestKwargs: Record<string, any> = {
             model: args.modelVersion,
             input: args.inputMessages,
@@ -531,6 +535,18 @@ export class OpenAIProvider extends BaseProvider {
                             totalTokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
                         }
                     }
+
+                    const completedImages = args.enableImageGeneration
+                        ? (response.output ?? []).filter((item: any) => item.type === 'image_generation_call' && item.result).length
+                        : 0
+                    await settleUsage({
+                        ...update,
+                        ...(completedImages > 0 ? { imageUsage: {
+                            generatedCount: completedImages,
+                            size: args.state.imageSize ?? 'auto',
+                            quality: args.state.imageGenerationConfig?.quality ?? 'auto',
+                        } } : {}),
+                    })
 
                     const capabilityCalls = (response.output ?? []).flatMap((item: any) => {
                         if (
@@ -734,6 +750,7 @@ export class OpenAIProvider extends BaseProvider {
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         let prompt = ''
+        const settleUsage = await this.prepareUsageSettlement(args.state)
         const resolvedReferences = args.state.resolvedImageGenerationReferences ?? []
         const referenceFiles = await buildOpenAIImageReferenceFiles(resolvedReferences)
 
@@ -902,12 +919,6 @@ export class OpenAIProvider extends BaseProvider {
             const revisedPrompt = finalImage.revised_prompt ?? ''
 
             if (imageB64) {
-                await this.imagePub.complete({
-                    imageBase64: imageB64,
-                    responseId: '',
-                    revisedPrompt,
-                    imageModelId: args.modelVersion,
-                })
                 update.generatedImages = [imageB64]
                 update.imageUsage = {
                     generatedCount: 1,
@@ -930,6 +941,16 @@ export class OpenAIProvider extends BaseProvider {
                 }
                 update.aiVendorRequestId = `openai-image-${args.workspaceId}`
             }
+
+            await settleUsage(update)
+
+            if (imageB64)
+                await this.imagePub.complete({
+                    imageBase64: imageB64,
+                    responseId: '',
+                    revisedPrompt,
+                    imageModelId: args.modelVersion,
+                })
         }
 
         return update

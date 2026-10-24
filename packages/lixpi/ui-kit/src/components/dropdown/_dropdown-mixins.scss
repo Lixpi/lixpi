@@ -128,9 +128,12 @@
             }
 
             &:focus {
-                outline: none !important;
-                box-shadow: none !important;
-                border: none !important;
+                outline: none;
+            }
+
+            &:focus-visible {
+                outline: 2px solid currentColor;
+                outline-offset: 2px;
             }
         }
 
@@ -240,7 +243,8 @@
                     opacity: 0;
                 }
 
-                &:hover {
+                &:hover,
+                &:focus-visible {
                     background-image: $shiftingGradientSimple;
                     background-repeat: no-repeat;
                     background-size: 100% 100%;

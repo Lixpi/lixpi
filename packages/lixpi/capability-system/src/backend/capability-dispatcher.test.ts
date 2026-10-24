@@ -104,7 +104,10 @@ const makePlan = (): SealedResolvedCapabilityPlan => {
 }
 
 describe('CapabilityDispatcher detached runs', () => {
-    it('returns after durable creation and stops only the owning active run', async () => {
+    it.each(['owner', 'host'])('returns after durable creation and cancels through the %s', async mode => {
+        const host = new AbortController()
+        const finished = Promise.withResolvers<void>()
+        let executing = false
         const registry = new CapabilityActionRegistry()
         registry.register({
             key: 'test.wait',
@@ -125,6 +128,16 @@ describe('CapabilityDispatcher detached runs', () => {
             registry,
             search: async () => ({ items: [] }),
             createEventStreamName: run => `capability-run-${run.workspaceId}-${run.runId}`,
+            runDetached: async operation => {
+                executing = true
+
+                try {
+                    return await operation(host.signal)
+                } finally {
+                    executing = false
+                    finished.resolve()
+                }
+            },
             createPersistence: () => ({
                 createRun: async run => void runs.push(structuredClone(run)),
                 updateRun: async run => void runs.push(structuredClone(run)),
@@ -151,9 +164,17 @@ describe('CapabilityDispatcher detached runs', () => {
 
         expect(created.status).toBe('pending')
         expect(runs[0]?.status).toBe('pending')
+        expect(executing).toBe(true)
         expect(dispatcher.stopDetached(created, 'other-user')).toBe(false)
-        expect(dispatcher.stopDetached(created, 'user-1')).toBe(true)
+
+        if (mode === 'owner')
+            expect(dispatcher.stopDetached(created, 'user-1')).toBe(true)
+        else
+            host.abort(new Error('Account disabled'))
+
         await cancellation
+        await finished.promise
+        expect(executing).toBe(false)
         expect(runs.at(-1)?.status).toBe('cancelled')
         expect(events.at(-1)?.eventType).toBe('RUN_CANCELLED')
     })

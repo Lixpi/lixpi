@@ -2329,6 +2329,7 @@ const AssetModel = {
                     : uuid(),
                 holders: [...activeHolders, {
                     holderId,
+                    userId: requester.userId,
                     expiresAt,
                 }],
                 acquiredAt: current?.workspaceId === workspaceId
@@ -2340,7 +2341,7 @@ const AssetModel = {
             }
 
             try {
-                await dynamoDBService.updateItem({
+                await updateAccountItem({
                     tableName: assetsTableName(),
                     key: { assetId },
                     updateExpression: 'SET #editLease = :editLease',
@@ -2395,6 +2396,7 @@ const AssetModel = {
             const holderExpiresAt = now + ASSET_EDIT_LEASE_DURATION_MS
             const holders = current.holders.filter(holder => holder.expiresAt > now && holder.holderId !== holderId)
                 .concat({
+                    ...current.holders.find(holder => holder.holderId === holderId),
                     holderId,
                     expiresAt: holderExpiresAt,
                 })
@@ -2406,7 +2408,7 @@ const AssetModel = {
             }
 
             try {
-                await dynamoDBService.updateItem({
+                await updateAccountItem({
                     tableName: assetsTableName(),
                     key: { assetId },
                     updateExpression: 'SET #editLease = :editLease',
@@ -2460,7 +2462,7 @@ const AssetModel = {
             const holders = current.holders.filter(holder => holder.holderId !== holderId && holder.expiresAt > now)
 
             try {
-                await dynamoDBService.updateItem({
+                await updateAccountItem({
                     tableName: assetsTableName(),
                     key: { assetId },
                     updateExpression: holders.length > 0 ? 'SET #editLease = :editLease' : 'REMOVE #editLease',
@@ -3825,3 +3827,4 @@ const AssetModel = {
 }
 
 export default AssetModel
+import { updateAccountItem } from '../services/account-model-update.ts'

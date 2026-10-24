@@ -31,6 +31,7 @@ import {
 
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
 import { jwtVerifier } from '../helpers/auth.ts'
+import { AccountRequestContext } from '../services/account-request-context.ts'
 import AssetModel, { buildAssetScopeAndOwnerKey } from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
 import Organization from '../models/organization.ts'
@@ -101,7 +102,12 @@ const authenticateRequest = async (
         return res.status(401).json({ error: 'Invalid or expired token' })
 
     req.user = { userId: decoded.sub }
-    next()
+    await AccountRequestContext.runHttp(
+        decoded,
+        req,
+        res,
+        next,
+    )
 }
 
 const validateWorkspaceAccess = async (

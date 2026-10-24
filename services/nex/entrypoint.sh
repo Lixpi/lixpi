@@ -197,9 +197,9 @@ deploy_workload() {
 # Workloads use their own registered service identities in AUTH.
 # Each workload receives its own seed for access to organization Blob Object Stores.
 FILE_CONVERSION_ENTRY="${SERVICE_DIR}/workloads/file-conversion/index.ts"
-FILE_CONVERSION_KEYS="NATS_SERVERS NATS_FILE_CONVERSION_NKEY_SEED"
+FILE_CONVERSION_KEYS="NATS_SERVERS NATS_FILE_CONVERSION_NKEY_SEED ACCOUNT_ADMISSION_ENABLED"
 CHARACTER_FIDELITY_ENTRY="${SERVICE_DIR}/workloads/character-fidelity/index.ts"
-CHARACTER_FIDELITY_KEYS="NATS_SERVERS NATS_CHARACTER_FIDELITY_NKEY_SEED"
+CHARACTER_FIDELITY_KEYS="NATS_SERVERS NATS_CHARACTER_FIDELITY_NKEY_SEED ACCOUNT_ADMISSION_ENABLED"
 
 # shellcheck disable=SC2086  # intentional word-splitting of the key lists
 deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" \

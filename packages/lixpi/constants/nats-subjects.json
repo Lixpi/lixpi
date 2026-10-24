@@ -157,6 +157,7 @@
 	},
 	"METRICS_SUBJECTS": {
 		"PROVIDER_REQUEST_AUTHORIZE": "metrics.provider.request.authorize",
-		"PROVIDER_USAGE_RECORD": "metrics.provider.usage.record"
+		"PROVIDER_USAGE_RECORD": "metrics.provider.usage.record",
+		"PROVIDER_REQUEST_COMPLETE": "metrics.provider.request.complete"
 	}
 }

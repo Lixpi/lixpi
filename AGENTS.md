@@ -61,7 +61,7 @@ Start at the documentation index, then read [Maintaining Documentation](document
 ## Conventions
 
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
-- Test execution and formatting and lint checks follow the two `CODING_AGENTS_*` modes in this repository's `env.lixpi` and the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md).
+- Writing, modifying, and running tests follow `CODING_AGENTS_TEST_EXECUTION_MODE` in this repository's `env.lixpi`. Formatting and lint checks follow the independent `CODING_AGENTS_TEST_LINTER_MODE`. Apply the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md); `true` and `auto` do not require a separate request to edit tests.
 - Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. When the test execution mode permits web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/code-quality/testing/TYPESCRIPT.md`.
 - Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review or permitted automated test commands.
 - Never use `cat` to edit files.

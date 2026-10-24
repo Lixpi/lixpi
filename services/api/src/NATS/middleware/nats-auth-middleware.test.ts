@@ -42,6 +42,11 @@ describe('jwtAuthMiddleware', () => {
         })
     })
 
+    it('preserves the admission denial code for client session teardown', async () => {
+        authenticateTokenOnRequestMock.mockResolvedValue({ error: 'ACCOUNT_ADMISSION_DENIED' })
+        await expect(jwtAuthMiddleware({ token: 'verified-but-blocked' }, { subject: 'user.get' } as never)).rejects.toThrow(/^ACCOUNT_ADMISSION_DENIED$/)
+    })
+
     it.each([
         '$SYS.REQ.USER.AUTH',
         membershipSubject,

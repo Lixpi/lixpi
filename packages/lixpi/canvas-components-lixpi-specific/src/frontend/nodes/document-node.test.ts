@@ -78,7 +78,10 @@ const createFixture = () => {
         return editor
     })
     const onError = vi.fn()
+    const loading = { destroy: vi.fn() }
+    const beginLoading = vi.fn(() => loading)
     const nodes = new WorkspaceDocumentNodes(shells, {
+        beginLoading,
         mountEditor,
         onError,
     })
@@ -90,6 +93,8 @@ const createFixture = () => {
         mountEditor,
         onError,
         editors,
+        beginLoading,
+        loading,
     }
 }
 
@@ -98,10 +103,11 @@ describe('WorkspaceDocumentNodes', () => {
         const fixture = createFixture()
         const element = fixture.nodes.create(node, undefined)
         document.body.append(element)
-        expect(element.querySelector('[role="status"]')).not.toBeNull()
+        expect(fixture.beginLoading).toHaveBeenCalledOnce()
+        expect(fixture.loading.destroy).not.toHaveBeenCalled()
         expect(fixture.mountEditor).not.toHaveBeenCalled()
         fixture.nodes.syncDocuments([loaded])
-        expect(element.querySelector('[role="status"]')).toBeNull()
+        expect(fixture.loading.destroy).toHaveBeenCalledOnce()
         fixture.nodes.syncDocuments([{
             ...loaded,
             title: 'Authority handles this update',

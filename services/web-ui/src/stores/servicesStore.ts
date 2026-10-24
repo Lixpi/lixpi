@@ -1,11 +1,15 @@
 import { LoadingStatus } from '@lixpi/constants'
 import { createStore } from '@lixpi/web-client-service-factory'
+import {
+    type LoadingLayer,
+} from '@lixpi/canvas-components/loading'
 
 type Meta = {
     loadingStatus: LoadingStatus
 }
 
 export type Services = {
+    loadingLayer: LoadingLayer | null
     nats: any
     aiModelService: any
     projectService: any
@@ -22,6 +26,7 @@ const initialState: {
         loadingStatus: LoadingStatus.idle,
     },
     data: {
+        loadingLayer: null,
         nats: null,
         aiModelService: null,
         projectService: null,

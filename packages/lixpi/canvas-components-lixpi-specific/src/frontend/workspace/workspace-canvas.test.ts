@@ -132,6 +132,10 @@ vi.mock('@lixpi/canvas-components-lixpi-specific/frontend/loading', async import
         setErrorMessage: vi.fn(),
         destroy: vi.fn(),
     }),
+    createWorkspaceLoadingLayer: () => ({
+        acquire: () => ({ destroy: vi.fn() }),
+        destroy: vi.fn(),
+    }),
 }))
 
 const libraryMounts = vi.hoisted(() => [] as {

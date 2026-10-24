@@ -1,4 +1,10 @@
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    ACCOUNT_ADMISSION_CHECK_SUBJECT,
+    ACCOUNT_ADMISSION_REPLY_PREFIX,
+    ACCOUNT_ADMISSION_CHANGED_SUBJECT,
+    ACCOUNT_WORK_ADMISSION_SUBJECT,
+} from '@lixpi/constants'
 import { activeContracts } from './contracts.ts'
 import {
     type ServicePermissions,
@@ -56,16 +62,20 @@ export const builtInPermissions = {
     API: {
         pub: {
             allow: [
+                `${ACCOUNT_ADMISSION_REPLY_PREFIX}.AUTH.>`,
                 ...storagePublish,
                 ...events,
                 ...Object.values(ASSET_MAINTENANCE_SUBJECTS),
                 ...Object.values(METRICS_SUBJECTS),
+                'provider-usage.outbox',
                 BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS,
                 CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL,
             ],
         },
         sub: {
             allow: [
+                ACCOUNT_ADMISSION_CHECK_SUBJECT,
+                ACCOUNT_WORK_ADMISSION_SUBJECT,
                 ...storageSubscribe,
                 ...activeContracts.map(contract => contract.subject),
                 ...events,
@@ -74,12 +84,13 @@ export const builtInPermissions = {
         },
     },
     FILE_CONVERSION: {
-        pub: { allow: storagePublish },
-        sub: { allow: [...storageSubscribe, BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS] },
+        pub: { allow: [...storagePublish, ACCOUNT_WORK_ADMISSION_SUBJECT] },
+        sub: { allow: [...storageSubscribe, BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS, ACCOUNT_ADMISSION_CHANGED_SUBJECT] },
     },
     CHARACTER_FIDELITY: {
         pub: {
             allow: [
+                ACCOUNT_WORK_ADMISSION_SUBJECT,
                 JETSTREAM.INFO,
                 JETSTREAM.STREAM_INFO,
                 JETSTREAM.CONSUMER,
@@ -90,7 +101,7 @@ export const builtInPermissions = {
                 PROTOCOL_SUBJECTS.INBOX,
             ],
         },
-        sub: { allow: [...storageSubscribe, CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL] },
+        sub: { allow: [...storageSubscribe, CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL, ACCOUNT_ADMISSION_CHANGED_SUBJECT] },
     },
     BACKUP: {
         pub: {

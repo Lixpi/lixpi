@@ -3,12 +3,14 @@ import {
     warn as debugWarn,
 } from '@lixpi/debug-tools'
 import * as process from 'node:process'
+import { AccountRequestContext } from './account-request-context.ts'
 
 import type NATS_Service from '@lixpi/nats-service'
 import {
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
     type MediaGenerationRunMeta,
+    type AccountWorkContext,
 } from '@lixpi/constants'
 
 import BlobModel from '../models/blob.ts'
@@ -55,6 +57,7 @@ const listOrganizationIds = async (): Promise<string[]> => {
 }
 
 type AssetMaintenanceMessage = {
+    accountContext?: AccountWorkContext
     organizationId: string
     assetId?: string
     blobHash?: string
@@ -261,11 +264,19 @@ const dispatchMaintenanceMessage = async ({
             throw new Error('ASSET_TENANT_MISMATCH')
 
         try {
-            await AssetRenditionService.process({
-                assetId: data.assetId,
-                retryAttempt: data.retryAttempt ?? 1,
-            })
+            await AccountRequestContext.resumeWork(
+                data.accountContext!,
+                async () => await AssetRenditionService.process({
+                    assetId: data.assetId,
+                    retryAttempt: data.retryAttempt ?? 1,
+                }),
+            )
         } catch (error) {
+            // A revoked or expired job is terminal. It cannot resume under the
+            // account's later epoch or become an unscoped maintenance write.
+            if ((error as Error)?.message === 'ACCOUNT_ADMISSION_DENIED')
+                return
+
             // The file-conversion workload is not listening yet (NEX still deploying,
             // or the node is restarting). Redeliver without consuming a retry attempt.
             if ((error as { message?: string })?.message !== RENDITION_WORKER_UNAVAILABLE)

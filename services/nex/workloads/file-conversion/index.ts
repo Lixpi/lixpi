@@ -28,11 +28,16 @@ import {
 } from '@lixpi/constants'
 
 import { generateAssetRenditions } from './asset-renditions.ts'
+import {
+    AccountWorkScopes,
+    AccountWorkStorage,
+} from '../account-work.ts'
 
 const { BLOB_PROCESSING_SUBJECTS } = NATS_SUBJECTS
 
 const servers = process.env.NATS_SERVERS
 const nkeySeed = process.env.NATS_FILE_CONVERSION_NKEY_SEED
+const scopes = new AccountWorkScopes(process.env.ACCOUNT_ADMISSION_ENABLED === 'true')
 
 if (
     !servers
@@ -56,7 +61,10 @@ const fileConvertSubjects = [
             let result: GenerateRenditionsResponse
 
             try {
-                result = await generateAssetRenditions(data, service)
+                result = await generateAssetRenditions(
+                    data,
+                    new AccountWorkStorage(service),
+                )
             } catch (error) {
                 const candidate = error as {
                     code?: string
@@ -93,11 +101,14 @@ const service = await NatsService.init({
     nkeySeed,
     userId: 'svc:file-conversion',
     subscriptions: fileConvertSubjects,
+    requestScope: async (data, operation) => await scopes.run(data, operation),
 })
+scopes.start(service)
 
 info(`nex-entry file-conversion up; listening on ${BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS}`)
 
 const shutdown = async (signal: string): Promise<void> => {
+    scopes.stop()
     warn(`nex-entry received ${signal}; shutting down file-conversion`)
 
     try {

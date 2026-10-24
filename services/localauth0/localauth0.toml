@@ -1,7 +1,6 @@
-# LocalAuth0 Configuration
-# Mock Auth0 service for local development
-
+# Fixed local identity; it cannot supply admission for a real Auth0 issuer.
 issuer = "http://localhost:3000/"
+subject = "local|test-user-001"
 
 [user_info]
 subject = "local|test-user-001"
@@ -10,36 +9,18 @@ name = "Test User"
 given_name = "Test"
 family_name = "User"
 email_verified = true
-picture = "https://via.placeholder.com/150"
+picture = ""
 
-[[custom_claims]]
-name = "stripe_customer_id"
-value = "cus_mock_stripe_test"
+[access_token]
+custom_claims = [
+    { name = "https://lixpi.ai/admission", value = { Json = { v = 1, epoch = 1 } } },
+    { name = "email", value = { String = "test@local.dev" } },
+    { name = "name", value = { String = "Test User" } },
+    { name = "given_name", value = { String = "Test" } },
+    { name = "family_name", value = { String = "User" } },
+    { name = "email_verified", value = { Json = true } },
+]
 
-[[custom_claims]]
-name = "email"
-value = "test@local.dev"
-
-[[custom_claims]]
-name = "name"
-value = "Test User"
-
-[[custom_claims]]
-name = "given_name"
-value = "Test"
-
-[[custom_claims]]
-name = "family_name"
-value = "User"
-
-[[custom_claims]]
-name = "picture"
-value = "https://via.placeholder.com/150"
-given_name = "Test"
-family_name = "User"
-email_verified = true
-picture = "https://via.placeholder.com/150"
-
-[[custom_claims]]
-name = "stripe_customer_id"
-value = "cus_mock_stripe_test"
+[[audience]]
+name = "http://localhost:3005"
+permissions = ["user:read", "user:write", "subscription:read", "subscription:write", "ai:chat", "ai:models", "document:read", "document:write", "organization:read", "organization:write"]

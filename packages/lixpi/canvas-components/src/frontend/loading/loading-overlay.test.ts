@@ -9,39 +9,6 @@ import {
     vi,
 } from 'vitest'
 
-const outlineRendererInstances = vi.hoisted(() =>
-    [] as Array<{
-        sync: ReturnType<typeof vi.fn>
-        destroy: ReturnType<typeof vi.fn>
-    }>
-)
-
-vi.mock('@lixpi/canvas-engine/frontend/rendering', () => ({
-    CanvasRenderer: class {
-        ready = Promise.resolve(true)
-        controller = new AbortController()
-        createScope() {
-            return {
-                signal: this.controller.signal,
-                destroy: () => this.controller.abort(),
-            }
-        }
-        destroy() {
-            this.controller.abort()
-        }
-    },
-}))
-
-vi.mock('../effects/outline/index.ts', () => ({
-    TravelingOutline: class {
-        sync = vi.fn()
-        destroy = vi.fn()
-        constructor() {
-            outlineRendererInstances.push(this)
-        }
-    },
-}))
-
 import {
     LoadingOverlay,
     type LoadingOverlayOptions,
@@ -82,35 +49,43 @@ const createOverlay = (root: HTMLElement, onRetry?: () => void) => {
     })
 }
 
-class FakeResizeObserver {
-    public observe = vi.fn()
-    public disconnect = vi.fn()
-}
+let nextFrame: FrameRequestCallback
+const paint = vi.fn()
 
 describe('LoadingOverlay', () => {
     beforeEach(() => {
         document.body.innerHTML = ''
-        outlineRendererInstances.length = 0
-        vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+        paint.mockClear()
+        vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+            createImageData: (width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+            putImageData: paint,
+        } as unknown as CanvasRenderingContext2D)
+        vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+            nextFrame = callback
+
+            return 1
+        }))
+        vi.stubGlobal('cancelAnimationFrame', vi.fn())
     })
 
-    afterEach(() => void vi.unstubAllGlobals())
+    afterEach(() => {
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
+    })
 
-    it('shows the loading outline while loading and clears it when an error is shown', async () => {
+    it('paints the outline synchronously and hides it when an error is shown', () => {
         const paneEl = document.createElement('div')
         document.body.appendChild(paneEl)
         const outline = createOverlay(paneEl)
 
         outline.setVisible(true)
-        await vi.waitFor(() => expect(outlineRendererInstances).toHaveLength(1))
+        expect(paint).toHaveBeenCalledOnce()
+        expect(paint.mock.calls[0][0].data.some((value: number) => value > 0)).toBe(true)
 
         const hostEl = paneEl.querySelector<HTMLDivElement>('.canvas-loading-overlay')
         expect(hostEl?.classList.contains('is-visible')).toBe(true)
         expect(hostEl?.classList.contains('is-loading')).toBe(true)
-        expect(outlineRendererInstances[0].sync.mock.calls.at(-1)?.[0]).toHaveLength(1)
-        const datum = outlineRendererInstances[0].sync.mock.calls.at(-1)?.[0][0]
-        expect(datum.width).toBe(128)
-        expect(datum.height).toBe(128)
+        expect(hostEl?.querySelector('canvas')?.width).toBeGreaterThan(128)
 
         outline.setErrorMessage('The connection timed out while loading this workspace.')
 
@@ -118,9 +93,28 @@ describe('LoadingOverlay', () => {
         expect(hostEl?.classList.contains('is-loading')).toBe(false)
         expect(hostEl?.ariaHidden).toBe('false')
         expect(hostEl?.querySelector('.canvas-loading-error-message')?.textContent).toBe('The connection timed out while loading this workspace.')
-        expect(outlineRendererInstances[0].sync.mock.calls.at(-1)?.[0]).toEqual([])
+        expect(cancelAnimationFrame).toHaveBeenCalledOnce()
 
         outline.destroy()
+    })
+
+    it('resumes the same lap after a loading handoff and stops animating on disposal', () => {
+        const overlay = createOverlay(document.body)
+        overlay.setVisible(true)
+        nextFrame(100)
+        nextFrame(350)
+        const canvas = document.querySelector('canvas')!
+        const quarterLap = canvas.style.transform
+        expect(quarterLap).not.toContain('rotate(0deg)')
+        overlay.setVisible(false)
+        overlay.setVisible(true)
+        nextFrame(4000)
+        expect(canvas.style.transform).toBe(quarterLap)
+        nextFrame(4750)
+        expect(canvas.style.transform).toContain('rotate(0deg)')
+        overlay.destroy()
+        expect(cancelAnimationFrame).toHaveBeenCalledTimes(2)
+        expect(canvas.isConnected).toBe(false)
     })
 
     it('fires the retry callback from the error panel', async () => {

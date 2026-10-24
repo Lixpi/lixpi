@@ -1,4 +1,7 @@
 import {
+    type AccountWorkContext,
+} from './account-admission.ts'
+import {
     type AssetSubjectIdentity,
     type DepictionMedium,
 } from './asset-types.ts'
@@ -319,6 +322,7 @@ export type CharacterFidelityObjectCoordinate = {
 }
 
 export type CharacterFidelityAssessmentRequest = {
+    accountContext?: AccountWorkContext
     jobId: string
     organizationId: string
     panelId: string

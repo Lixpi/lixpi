@@ -20,7 +20,10 @@ import {
 } from './resources/dns-records.ts'
 import { createWebUI } from './resources/web-ui.ts'
 import { createWebUIUserPortal } from './resources/web-ui-user-portal.ts'
-import { formatStageResourceName } from '@lixpi/constants'
+import {
+    formatStageResourceName,
+    getDynamoDbTableStageName,
+} from '@lixpi/constants'
 import {
     createLambdaCertificateManager,
     createLambdaCertificateHelper,
@@ -79,7 +82,6 @@ const {
     VITE_AUTH0_AUDIENCE,
     VITE_AUTH0_REDIRECT_URI,
     VITE_USER_PORTAL_URL,
-    VITE_STRIPE_PUBLIC_KEY,
     VITE_NATS_SERVER,
 } = process.env
 
@@ -157,9 +159,14 @@ export const createInfrastructure = async () => {
     let delegationRecord: aws.route53.Record | undefined
 
     if (AWS_ROUTE53_HOSTED_ZONE_ID) {
-        const existing = await aws.route53.getZone({ name: DOMAIN_NAME! }).catch(e => {
-            throw new Error(`Explicit AWS_ROUTE53_HOSTED_ZONE_ID provided but lookup by name failed for ${DOMAIN_NAME}: ${e}`)
-        })
+        const existing = await aws.route53.getZone({ zoneId: AWS_ROUTE53_HOSTED_ZONE_ID })
+
+        if (
+            existing.privateZone
+            || existing.name.replace(/\.$/, '') !== DOMAIN_NAME
+        )
+            throw new Error('AWS_ROUTE53_HOSTED_ZONE_ID must identify the public zone for DOMAIN_NAME')
+
         hostedZoneId = pulumi.output(existing.zoneId)
     } else {
         const zoneResult = await getOrCreateHostedZone({
@@ -330,6 +337,7 @@ export const createInfrastructure = async () => {
         calloutSecretArn: calloutSecret,
         authEnvironment: {
             ENVIRONMENT: ENVIRONMENT!,
+            ACCOUNT_ADMISSION_ENABLED: process.env.ACCOUNT_ADMISSION_ENABLED || 'false',
             NATS_REGISTRATION_AUTHORITIES: process.env.NATS_REGISTRATION_AUTHORITIES!,
             NATS_REGISTRATION_REPLICAS: '3',
         },
@@ -364,6 +372,14 @@ export const createInfrastructure = async () => {
         memory: 1024,
         desiredCount: 1,
         resourceBindings: {
+            accountAdmissionTableArn: dynamoDBtables.usersTable.arn.apply(
+                arn =>
+                    `${arn.slice(0, arn.lastIndexOf('/') + 1)}${getDynamoDbTableStageName(
+                        'ACCOUNT_ADMISSION',
+                        ORG_NAME!,
+                        STAGE!,
+                    )}`,
+            ),
             tables: {
                 usersTable: dynamoDBtables.usersTable,
                 organizationsTable: dynamoDBtables.organizationsTable,
@@ -405,6 +421,8 @@ export const createInfrastructure = async () => {
             API_HOST_URL: API_HOST_URL!,
             AUTH0_DOMAIN: AUTH0_DOMAIN!,
             AUTH0_API_IDENTIFIER: AUTH0_API_IDENTIFIER!,
+            ACCOUNT_ADMISSION_ENABLED: process.env.ACCOUNT_ADMISSION_ENABLED ?? 'false',
+            ACCOUNT_ADMISSION_STREAM: process.env.ACCOUNT_ADMISSION_STREAM ?? '',
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: SAVE_LLM_RESPONSES_TO_DEBUG_DIR!,
             OPENAI_API_KEY: OPENAI_API_KEY!,
             // An api key may be empty when its provider runs through Bedrock and signs with the task role.
@@ -451,6 +469,7 @@ export const createInfrastructure = async () => {
             NATS_NEX_NODE_NKEY_SEED: NATS_NEX_NODE_NKEY_SEED!,
             NATS_FILE_CONVERSION_NKEY_SEED: process.env.NATS_FILE_CONVERSION_NKEY_SEED!,
             NATS_CHARACTER_FIDELITY_NKEY_SEED: process.env.NATS_CHARACTER_FIDELITY_NKEY_SEED!,
+            ACCOUNT_ADMISSION_ENABLED: process.env.ACCOUNT_ADMISSION_ENABLED ?? 'false',
             NATS_JS_DOMAIN: 'lixpi',
             NEX_NAMESPACE: 'system',
             NEX_NODE_NAME: 'lixpi-nex',
@@ -628,7 +647,34 @@ export const createInfrastructure = async () => {
         })
     })
 
+    const accountEnforcementFleet = new aws.ssm.Parameter(
+        formatStageResourceName(
+            'account-enforcement-fleet',
+            ORG_NAME!,
+            STAGE!,
+        ),
+        {
+            name: `/lixpi/${ORG_NAME}/${STAGE}/account-enforcement-fleet`,
+            type: 'String',
+            description: 'Deployment bindings for account enforcement discovery',
+            value: pulumi.jsonStringify({
+                api: {
+                    cluster: ecsCluster.outputs.clusterArn,
+                    arn: mainApiService.outputs.serviceArn,
+                    container: mainApiService.outputs.containerName,
+                },
+                broker: {
+                    cluster: natsEcsCluster.outputs.clusterArn,
+                    arn: natsClusterService.outputs.serviceArn,
+                    container: 'nats',
+                },
+                autoScalingGroup: natsEcsCluster.autoScalingGroup.name,
+            }),
+        },
+    )
+
     return {
+        accountEnforcementFleetParameterArn: accountEnforcementFleet.arn,
         ssmParameters,
         dynamoDBtables,
         networkInfrastructure,

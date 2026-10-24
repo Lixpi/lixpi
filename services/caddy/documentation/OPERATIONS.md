@@ -17,7 +17,7 @@ The service exports the public CA at `/certificates/ca.crt`. To copy it out of a
 docker run --rm -v lixpi_caddy-certs:/certs:ro busybox cat /certs/ca.crt > ca.crt
 ```
 
-The volume's actual name follows the Compose project name. The local web UI also serves this public certificate at `http://localhost:3001/certs/ca.crt`. Export only the public root, never the CA key or serving private key.
+The volume's actual name follows the Compose project name. Export only the public root, never the CA key or serving private key. The certificate volume is not mounted beneath a web root.
 
 Install the CA in the development machine's trusted roots:
 
@@ -28,6 +28,22 @@ Install the CA in the development machine's trusted roots:
 Restart clients after installing trust. A browser with a separate trust store may need an explicit CA import; Firefox exposes this under Settings, Privacy & Security, Certificates, Authorities. This root is for local development and must not be installed as the public deployment's trust anchor.
 
 Local issuance exits nonzero on timeout or invalid material, so dependent Compose services do not treat an incomplete export as ready. If an export fails after some files have been written, rerun local issuance before starting its consumers. The long local lifetimes reduce routine reissuance, but the CA and leaf still have expiry dates.
+
+## Local application HTTPS
+
+The Docker gateway serves the workspace at `https://localhost:3443`, Profile at `https://localhost:3444`, and the API at `https://localhost:3445`. It binds only host loopback and reaches upstream services through Docker's `nats` network. No host mappings, custom local domains or public DNS records are needed. Set the main environment's `VITE_AUTH0_REDIRECT_URI`, `VITE_AUTH0_LOGIN_URL`, `VITE_USER_PORTAL_URL`, `VITE_API_URL`, `ORIGIN_HOST_URL` and `API_HOST_URL` to those HTTPS URLs, with `/login` on the login URL. Keep the existing Auth0 audience identifier. Set `COMPOSE_PROFILES=local-https` to include the shared gateway in ordinary Compose startup.
+
+Direct visits to the frontend HTTP ports (`3001` for workspace and `3002` for Profile) move to the configured HTTPS origin before authentication starts. The shared auth client owns that redirect and preserves normal deep links. Starting an OAuth transaction on HTTP and returning to HTTPS would lose its origin-scoped SDK transaction and fail callback validation.
+
+A separately deployed portal must use the same `VITE_USER_PORTAL_URL` and set `VITE_WORKSPACE_URL` to the HTTPS workspace origin. Set `CADDY_USER_PORTAL_UPSTREAM` to its Docker service and port, and connect it to the same `nats` network. The default upstream is `lixpi-web-ui-user-portal:5173`. Update the Auth0 application's exact callback, logout and web-origin allowlists before switching browser URLs. Configure external services to return to the matching HTTPS portal URL.
+
+With the local certificate issuer completed and application services running, start only the gateway:
+
+```bash
+docker compose --env-file .env.shelby-local --profile local-https up -d --no-deps --build lixpi-local-https
+```
+
+The gateway reuses the trusted CA from NATS and stores its automatically renewed, 12-hour browser certificates under `/certificates/https`. The NATS issuer's certificate cache and exports remain separate. Changing a browser origin creates a separate SDK cache, so its first visit uses Auth0 authentication; Profile and workspace links then continue the authenticated session across origins. Rollback requires restoring the previous app URLs and Auth0 allowlists together, then stopping the gateway. Preserve its certificate volume.
 
 ## Public deployment
 

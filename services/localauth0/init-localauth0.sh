@@ -9,13 +9,17 @@ echo "Configuring LocalAuth0..."
 # Set custom claims
 echo "Setting custom claims..."
 /bin/busybox wget -q -O- --post-data='{
-    "custom_claims": [{
-        "name": "stripe_customer_id",
-        "value": "cus_mock_stripe_test"
-    }]
+    "custom_claims": [
+        { "name": "https://lixpi.ai/admission", "value": { "Json": { "v": 1, "epoch": 1 } } },
+        { "name": "email", "value": { "String": "test@local.dev" } },
+        { "name": "name", "value": { "String": "Test User" } },
+        { "name": "given_name", "value": { "String": "Test" } },
+        { "name": "family_name", "value": { "String": "User" } },
+        { "name": "email_verified", "value": { "Json": true } }
+    ]
 }' \
     --header="Content-Type: application/json" \
-    "$LOCALAUTH0_URL/oauth/token/custom_claims" > /dev/null || echo "Warning: Failed to set custom claims (may already be set)"
+    "$LOCALAUTH0_URL/oauth/token/custom_claims" > /dev/null
 
 # Set user info
 echo "Setting user info..."
@@ -26,10 +30,10 @@ echo "Setting user info..."
     "family_name": "User",
     "email": "test@local.dev",
     "email_verified": true,
-    "picture": "https://via.placeholder.com/150"
+    "picture": ""
 }' \
     --header="Content-Type: application/json" \
-    "$LOCALAUTH0_URL/oauth/token/user_info" > /dev/null || echo "Warning: Failed to set user info (may already be set)"
+    "$LOCALAUTH0_URL/oauth/token/user_info" > /dev/null
 
 # Set permissions for the API audience
 echo "Setting permissions for audience: $AUDIENCE..."
@@ -49,6 +53,6 @@ echo "Setting permissions for audience: $AUDIENCE..."
     ]
 }" \
     --header="Content-Type: application/json" \
-    "$LOCALAUTH0_URL/permissions" > /dev/null || echo "Warning: Failed to set permissions (may already be set)"
+    "$LOCALAUTH0_URL/permissions" > /dev/null
 
 echo "LocalAuth0 configuration complete!"

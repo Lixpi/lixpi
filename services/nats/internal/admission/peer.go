@@ -147,6 +147,7 @@ func (d *Dispatcher) receiveWork(message *nats.Msg) {
 			result.Status = "deny"
 		case err == nil:
 			result.Status = "allow"
+			result.Admission = identity.Admission
 		}
 
 		if result.Status == "allow" || result.Status == "deny" {

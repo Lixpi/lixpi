@@ -5,6 +5,7 @@
     "golangci/golangci-lint": "{{go.tools.golangci-lint}}",
     "pulumi/pulumi": "{{tools.pulumi}}",
     "alpine": "3.24.2",
+    "rust": "1.88.0-alpine",
     "public.ecr.aws/primaassicurazioni/localauth0": "0.9.1",
     "amazon/dynamodb-local": "3.3.1",
     "aaronshaf/dynamodb-admin": "5.3.4",

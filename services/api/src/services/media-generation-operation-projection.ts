@@ -650,6 +650,7 @@ export const updateMediaGenerationOperationNode = async ({
     generationRequestId,
     generationRun,
     clearAction = false,
+    removeOperationWhenOutputProjected = false,
 }: {
     workspaceId: string
     operationNodeId: string
@@ -664,6 +665,7 @@ export const updateMediaGenerationOperationNode = async ({
     generationRequestId?: string
     generationRun?: number
     clearAction?: boolean
+    removeOperationWhenOutputProjected?: boolean
 }): Promise<void> => {
     await Workspace.mutateCanvasState({
         workspaceId,
@@ -683,6 +685,7 @@ export const updateMediaGenerationOperationNode = async ({
                 ?? operationNode?.progress
                 ?? createDefaultMediaGenerationRunProgress(projectedRunStatus, message)
             let changed = false
+            let removeOperation = false
             let nodes = canvasState.nodes.map(rawNode => {
                 const node = stripLegacyMarkerProgress(rawNode)
 
@@ -736,9 +739,14 @@ export const updateMediaGenerationOperationNode = async ({
                 })
                 nodes = mediaProjection.nodes
                 changed ||= mediaProjection.changed
+                removeOperation = status === 'failed'
+                    && removeOperationWhenOutputProjected
+                    && mediaProjection.changed
             }
 
-            if (status === 'failed')
+            if (removeOperation)
+                nodes = nodes.filter(node => node.nodeId !== operationNodeId)
+            else if (status === 'failed')
                 nodes = centerFailedOperationOverReservedOutput({
                     nodes,
                     operationNodeId,
@@ -749,6 +757,9 @@ export const updateMediaGenerationOperationNode = async ({
                     ? {
                         ...canvasState,
                         nodes,
+                        ...(removeOperation ? {
+                            edges: canvasState.edges.filter(edge => edge.sourceNodeId !== operationNodeId && edge.targetNodeId !== operationNodeId),
+                        } : {}),
                     }
                     : canvasState,
                 changed,

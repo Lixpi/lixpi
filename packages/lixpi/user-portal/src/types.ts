@@ -7,6 +7,9 @@ import {
     type WebClientRouterService,
 } from '@lixpi/web-client-service-factory'
 import type NatsService from '@lixpi/nats-service'
+import {
+    type LoadingLayer,
+} from '@lixpi/canvas-components/loading/layer'
 
 export const USER_PORTAL_MODULE_API_VERSION = 1
 
@@ -20,9 +23,11 @@ export type UserPortalNavigationGroup = {
 }
 
 export type UserPortalModuleContext = {
+    loadingLayer: Pick<LoadingLayer, 'acquire'>
     router: WebClientRouterService
     userStore: UserStateStore
     getToken: () => Promise<string | false>
+    createSessionHandoffUrl: AuthClientInstance['createSessionHandoffUrl']
     nats: Pick<NatsService, 'request' | 'subscribe' | 'onReconnect'>
 }
 

@@ -7,23 +7,20 @@ import {
 } from 'vitest'
 import {
     createErrorPlaceholder,
-    createLoadingPlaceholder,
 } from './pureLoadingPlaceholder.ts'
 
 describe('Loading placeholders', () => {
-    it('mounts loading state in a supplied document and exposes accessible status', () => {
+    it('mounts error state in a supplied document and exposes an accessible alert', () => {
         const target = document.implementation.createHTMLDocument()
-        const placeholder = createLoadingPlaceholder({
+        const placeholder = createErrorPlaceholder({
             document: target,
-            size: 'large',
             theme: 'dark',
-            label: 'Loading document',
+            message: 'Document unavailable',
         })
         target.body.append(placeholder.dom)
         expect(placeholder.dom.ownerDocument).toBe(target)
-        expect(placeholder.dom.getAttribute('role')).toBe('status')
-        expect(placeholder.dom.getAttribute('aria-label')).toBe('Loading document')
-        expect(placeholder.dom.classList.contains('size-large')).toBe(true)
+        expect(placeholder.dom.getAttribute('role')).toBe('alert')
+        expect(placeholder.dom.textContent).toContain('Document unavailable')
         placeholder.hide()
         expect(placeholder.dom.style.display).toBe('none')
         placeholder.show()

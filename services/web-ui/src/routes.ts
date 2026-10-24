@@ -47,3 +47,8 @@ export const routes: RouteViewDefinition<WebUiRouteContext>[] = [
         )),
     },
 ]
+
+export const workspaceRouting = {
+    routes,
+    fallbackPath: INTRO_ROUTE_PATH,
+}

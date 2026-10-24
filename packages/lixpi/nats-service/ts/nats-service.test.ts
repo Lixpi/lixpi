@@ -8,6 +8,7 @@ import {
 } from 'vitest'
 
 import NatsService, { generateSelfIssuedJWT } from './nats-service.ts'
+import { errors } from '@nats-io/nats-core'
 
 const {
     connectMock,
@@ -41,7 +42,8 @@ vi.mock('@nats-io/transport-node', () => ({
     connect: (...args: any[]) => connectMock(...args),
 }))
 
-vi.mock('@nats-io/nats-core', () => ({
+vi.mock('@nats-io/nats-core', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@nats-io/nats-core')>(),
     wsconnect: (...args: any[]) => wsConnectMock(...args),
     tokenAuthenticator: (...args: any[]) => tokenAuthenticatorMock(...args),
 }))
@@ -226,6 +228,37 @@ describe('NatsService', () => {
     // =============================================================================
 
     describe('init and connect', () => {
+        it('stops connection attempts when the application rejects further authentication', async () => {
+            const service = new (NatsService as any)({ onAuthError: async () => false })
+            const schedule = vi.spyOn(service, 'scheduleReconnect')
+            connectMock.mockRejectedValueOnce(new Error('authorization failed'))
+            await service.connect()
+            await service.connect()
+            expect(connectMock).toHaveBeenCalledOnce()
+            expect(service.reconnectTimer).toBeNull()
+            expect(service.currentToken).toBeNull()
+            expect(schedule).toHaveBeenCalledOnce()
+        })
+
+        it('never reuses a rejected token when refresh produces no credential', async () => {
+            const service = new (NatsService as any)({ getToken: async () => false })
+            service.currentToken = 'old-token'
+            await expect(service.refreshToken()).rejects.toThrow('authentication token unavailable')
+            expect(service.currentToken).toBeNull()
+        })
+
+        it('closes the connection and notifies the application on authoritative admission denial', async () => {
+            const onAccessDenied = vi.fn()
+            const service = new (NatsService as any)({ onAccessDenied })
+            service.nc = connectionMock
+            connectionMock.request.mockResolvedValue({ string: () => JSON.stringify({ error: 'ACCOUNT_ADMISSION_DENIED' }) })
+            await service.request('users.get', {})
+            expect(onAccessDenied).toHaveBeenCalledOnce()
+            expect(connectionMock.close).toHaveBeenCalledOnce()
+            await service.connect()
+            expect(connectMock).not.toHaveBeenCalled()
+        })
+
         it('throws only when connection path is configured wrongly and keeps auth retries isolated', async () => {
             const onAuthError = vi.fn()
             const authError: any = new Error('authorization failed')
@@ -493,6 +526,46 @@ describe('NatsService', () => {
             expect(msg.respond).not.toHaveBeenCalledWith('{}')
         })
 
+        it('keeps the reply inside the application scope and rejects a revoked late result', async () => {
+            let active = true
+            let inside = false
+            const msg = {
+                string: () => '{"ping":"ok"}',
+                respond: vi.fn((payload: string) => {
+                    if (!JSON.parse(payload).error)
+                        expect(inside).toBe(true)
+                }),
+            }
+            connectionMock.subscribe = vi.fn().mockReturnValue(createAsyncIterable([msg]))
+            const service = new (NatsService as any)({
+                requestScope: async (_data: unknown, operation: (assertActive: () => void) => Promise<void>) => {
+                    inside = true
+
+                    try {
+                        await operation(() => {
+                            if (!active)
+                                throw new Error('ACCOUNT_ADMISSION_DENIED')
+                        })
+                    } finally {
+                        inside = false
+                    }
+                },
+            })
+            service['nc'] = connectionMock
+            service.reply('inbox', async () => ({ pong: 'ok' }))
+            await flushPending()
+            expect(msg.respond).toHaveBeenCalledWith('{"pong":"ok"}')
+            msg.respond.mockClear()
+            service.reply('inbox', async () => {
+                active = false
+
+                return { private: 'late result' }
+            })
+            await flushPending()
+            expect(msg.respond).toHaveBeenCalledOnce()
+            expect(msg.respond).toHaveBeenCalledWith('{"error":"ACCOUNT_ADMISSION_DENIED"}')
+        })
+
         it('replies with a buffer error message when a buffer reply handler throws', async () => {
             const msg = {
                 string: vi.fn().mockReturnValue('ping'),
@@ -532,6 +605,15 @@ describe('NatsService', () => {
                 { timeout: 1000 },
             )
         })
+
+        it('prevents regular and durable publication from an invalidated request', async () => {
+            const service = new (NatsService as any)({ publicationGuard: () => { throw new Error('ACCOUNT_ADMISSION_DENIED') } })
+            service['nc'] = connectionMock
+            expect(() => service.publish('private.output', { result: 'late' })).toThrow('ACCOUNT_ADMISSION_DENIED')
+            await expect(service.publishJetStream('private.events', { result: 'late' })).rejects.toThrow('ACCOUNT_ADMISSION_DENIED')
+            expect(connectionMock.publish).not.toHaveBeenCalled()
+            expect(jetstreamClientMock.publish).not.toHaveBeenCalled()
+        })
     })
 
     // =============================================================================
@@ -541,6 +623,71 @@ describe('NatsService', () => {
     describe('lifecycle and status hooks', () => {
         const countScheduledReconnects = (spy: ReturnType<typeof vi.spyOn>) =>
             spy.mock.calls.filter(([, delay]) => delay === 500).length
+
+        it('renews expired broker leases without forcing an OAuth refresh', async () => {
+            const getToken = vi.fn(async () => 'still-valid-oauth-token')
+            const onAuthError = vi.fn()
+            const service = new (NatsService as any)({
+                getToken,
+                onAuthError,
+            })
+            service.nc = createMockConnection({
+                status: () => createAsyncIterable([
+                    {
+                        type: 'error',
+                        error: new errors.UserAuthenticationExpiredError('user authentication expired'),
+                    },
+                    { type: 'reconnect' },
+                    {
+                        type: 'error',
+                        error: new errors.UserAuthenticationExpiredError('user authentication expired'),
+                    },
+                    { type: 'reconnect' },
+                ]),
+            })
+            service.subscriptionsInitialized = true
+            const reconnected = vi.fn()
+            service.onReconnect(reconnected)
+
+            service.monitorStatus()
+            await flushPending()
+
+            expect(getToken).toHaveBeenCalledTimes(2)
+            expect(onAuthError).not.toHaveBeenCalled()
+            expect(service.currentToken).toBe('still-valid-oauth-token')
+            expect(reconnected).toHaveBeenCalledTimes(2)
+        })
+
+        it('still rejects access when reconnect after lease expiry is unauthorized', async () => {
+            const getToken = vi.fn(async () => 'cached-token')
+            const onAuthError = vi.fn(async () => false)
+            const service = new (NatsService as any)({
+                getToken,
+                onAuthError,
+            })
+            const denied = new errors.AuthorizationError('authorization violation')
+            service.nc = createMockConnection({
+                status: () => createAsyncIterable([
+                    {
+                        type: 'error',
+                        error: new errors.UserAuthenticationExpiredError('user authentication expired'),
+                    },
+                    {
+                        type: 'error',
+                        error: denied,
+                    },
+                ]),
+            })
+
+            service.monitorStatus()
+            await flushPending()
+
+            expect(onAuthError).toHaveBeenCalledExactlyOnceWith(denied)
+            expect(service.authRejected).toBe(true)
+            expect(service.currentToken).toBeNull()
+            expect(service.nc.close).toHaveBeenCalledOnce()
+            expect(service.reconnectTimer).toBeNull()
+        })
 
         it('monitors every new connection so a second close also schedules a reconnect', async () => {
             const firstConnection = createMockConnection({

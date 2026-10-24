@@ -10,10 +10,7 @@ import {
     type CapabilityArtifactSharedDefinition,
 } from '@lixpi/capability-system/shared'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
-import {
-    createErrorPlaceholder,
-    createLoadingPlaceholder,
-} from '@lixpi/ui-kit/components/loading-placeholder'
+import { createErrorPlaceholder } from '@lixpi/ui-kit/components/loading-placeholder'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     type WorkspaceNodeShells,
@@ -29,6 +26,7 @@ export type WorkspaceCapabilityEditorOptions = EditorRequest & {
     onContentChange: () => void
 }
 export type WorkspaceCapabilityNodePorts = {
+    beginLoading: () => { destroy: () => void }
     ensureStyles: (document: Document) => void
     getAsset: (assetId: string) => Asset | undefined
     getDocument: (assetId: string) => {
@@ -117,9 +115,8 @@ export class WorkspaceCapabilityNode {
             !asset
             || !snapshot
         ) {
-            const loading = createLoadingPlaceholder({ document: this.element.ownerDocument })
+            const loading = this.ports.beginLoading()
             content.own(() => loading.destroy())
-            this.host.append(loading.dom)
 
             return false
         }

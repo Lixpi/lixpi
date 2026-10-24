@@ -103,6 +103,7 @@ const fixture = () => {
     } as unknown as CapabilityArtifactSharedDefinition
     const frontend = { createCanvasNodeView } as unknown as CapabilityArtifactFrontendDefinition
     const ports = {
+        beginLoading: vi.fn(() => ({ destroy: vi.fn() })),
         ensureStyles: vi.fn(),
         getAsset: vi.fn<WorkspaceCapabilityNodePorts['getAsset']>(() => asset),
         getDocument: vi.fn<WorkspaceCapabilityNodePorts['getDocument']>(() => snapshot),
@@ -175,11 +176,11 @@ describe('WorkspaceCapabilityNode', () => {
             ...asset,
             lineage: { sourceAssetIds: ['source'] },
         } as Asset)
-        const view = test.mount()
-        expect(view.element.querySelector('[role="status"]')).not.toBeNull()
+        test.mount()
+        expect(test.ports.beginLoading).toHaveBeenCalledOnce()
         await vi.waitFor(() => expect(test.createCanvasNodeView).toHaveBeenCalledOnce())
         expect(test.ports.ensureAssetsLoaded).toHaveBeenCalledWith(['source'])
-        expect(view.element.querySelector('[role="status"]')).toBeNull()
+        expect(test.ports.beginLoading.mock.results[0].value.destroy).toHaveBeenCalledOnce()
     })
 
     it('ignores an Asset response after shell disposal', async () => {

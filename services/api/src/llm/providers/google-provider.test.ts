@@ -10,6 +10,7 @@ import {
     directCapabilityToolName,
     SealedResolvedCapabilityPlan,
 } from '@lixpi/capability-system/backend'
+import { UsageReporter } from '@lixpi/usage-reporter'
 import {
     type AiModelInferenceCapabilities,
     type CapabilityManifest,
@@ -19,6 +20,7 @@ import {
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
+    infoStr: vi.fn(),
     warn: vi.fn(),
     err: vi.fn(),
 }))
@@ -761,8 +763,20 @@ describe('GoogleProvider internals', () => {
                 tags: ['character'],
             }],
         }))
+        const recordUsage = vi.fn(async () => ({ recorded: true }))
+        const authorizeRequest = vi.fn(async () => ({
+            authorized: true,
+            authorizationId: 'second-round',
+        }))
         const deps = {
             ...createProviderDeps(),
+            usageReporter: new UsageReporter(),
+            providerUsage: {
+                enabled: true,
+                recordUsage,
+                authorizeRequest,
+                completeRequest: vi.fn(),
+            },
             capabilityDispatcher: {
                 search,
                 use: vi.fn(),
@@ -773,6 +787,8 @@ describe('GoogleProvider internals', () => {
 
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
+            workflowId: 'first-round-workflow',
+            requestAuthorizationId: 'first-round',
             eventMeta: {
                 userId: 'user-1',
                 organizationId: 'organization-1',
@@ -780,6 +796,7 @@ describe('GoogleProvider internals', () => {
             capabilityInvocationDepth: 0,
         } as any)
 
+        expect(update.error).toBeUndefined()
         expect(search).toHaveBeenCalledWith(
             expect.objectContaining({ query: 'character' }),
             expect.objectContaining({
@@ -788,6 +805,23 @@ describe('GoogleProvider internals', () => {
             }),
         )
         expect(googleMocks.generateContentStream).toHaveBeenCalledTimes(2)
+        expect(authorizeRequest).toHaveBeenCalledOnce()
+        expect(recordUsage).toHaveBeenCalledTimes(2)
+        expect(recordUsage.mock.calls[0][0]).toMatchObject({
+            authorizationId: 'first-round',
+            usage: {
+                promptTokens: 2,
+                completionTokens: 1,
+            },
+        })
+        expect(recordUsage.mock.calls[1][0]).toMatchObject({
+            authorizationId: 'second-round',
+            usage: {
+                promptTokens: 3,
+                completionTokens: 4,
+            },
+        })
+        expect(recordUsage.mock.calls[0][0].providerRequestId).not.toBe(recordUsage.mock.calls[1][0].providerRequestId)
         expect(googleMocks.generateContentStream.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
             config: expect.objectContaining({
                 tools: [{

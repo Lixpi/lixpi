@@ -38,7 +38,7 @@ const NAVIGATION_SIDE_PANEL_SETTINGS = settings.navigationSidePanel
 
 export type NavigationSidePanelConfig = {
     // Host element the panel/backdrop/overlay/toggle/resize-handle mount into.
-    auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently'>
+    auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently' | 'logout' | 'createSessionHandoffUrl'>
     paneEl: HTMLElement
     router: Pick<WebClientRouterService, 'getCurrentRoute' | 'navigateTo' | 'subscribe'>
     userPortalUrl: string
@@ -61,13 +61,16 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private readonly headerEl: HTMLDivElement
     private readonly listEl: HTMLDivElement
     private readonly footerEl: HTMLDivElement
-    private readonly avatarEl: HTMLAnchorElement
+    private readonly avatarEl: HTMLSpanElement
+    private readonly accountDropdown: ReturnType<typeof createPureDropdown>
     private readonly importFileInput: HTMLInputElement
     private readonly sidePanel: SidePanelInstance
     private readonly auth: NavigationSidePanelConfig['auth']
     private readonly router: NavigationSidePanelConfig['router']
     private readonly workspaceService: NavigationSidePanelConfig['workspaceService']
     private importTargetWorkspaceId: string | null = null
+    private signingOut = false
+    private destroyed = false
 
     constructor(config: NavigationSidePanelConfig) {
         this.auth = config.auth
@@ -78,15 +81,37 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         this.headerEl = html`<div className="navigation-side-panel-header"></div>` as HTMLDivElement
         this.listEl = html`<div className="navigation-side-panel-list"></div>` as HTMLDivElement
         this.footerEl = html`<div className="navigation-side-panel-footer"></div>` as HTMLDivElement
-        this.avatarEl = html`
-            <a
-                className="navigation-side-panel-avatar"
-                aria-label="Account"
-                href=${config.userPortalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-            ></a>
-        ` as HTMLAnchorElement
+        this.avatarEl = html`<span className="navigation-side-panel-avatar"></span>` as HTMLSpanElement
+        this.accountDropdown = createPureDropdown({
+            id: 'navigation-side-panel-account-menu',
+            selectedValue: { title: '' },
+            options: [
+                {
+                    title: 'Profile',
+                    action: 'profile',
+                },
+                {
+                    title: 'Sign out',
+                    action: 'logout',
+                },
+            ],
+            triggerContent: this.avatarEl,
+            triggerLabel: 'Account',
+            theme: 'dark',
+            renderIconForOptions: false,
+            mountToBody: true,
+            onSelect: option => {
+                if (option.action === 'profile')
+                    window.open(
+                        this.auth.createSessionHandoffUrl(config.userPortalUrl),
+                        '_blank',
+                        'noopener,noreferrer',
+                    )
+                else if (option.action === 'logout')
+                    void this.signOut()
+            },
+        })
+        this.accountDropdown.dom.classList.add('navigation-side-panel-account-menu')
         this.importFileInput = html`
             <input
                 type="file"
@@ -99,7 +124,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         this.headerEl.appendChild(
             this.createNewWorkspaceButton(),
         )
-        this.footerEl.append(html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement, this.avatarEl)
+        this.footerEl.append(html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement, this.accountDropdown.dom)
         this.panelEl.append(
             this.headerEl,
             this.listEl,
@@ -204,6 +229,26 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         } else {
             const initial = (user?.given_name || user?.name || 'User').charAt(0).toUpperCase()
             this.avatarEl.appendChild(html`<span className="navigation-side-panel-avatar-initial">${initial}</span>` as HTMLSpanElement)
+        }
+    }
+
+    private signOut = async (): Promise<void> => {
+        if (
+            this.signingOut
+            || this.destroyed
+        )
+            return
+
+        this.signingOut = true
+        this.accountDropdown.setErrorState()
+
+        try {
+            await this.auth.logout()
+        } catch {
+            if (!this.destroyed)
+                this.accountDropdown.setErrorState({ title: 'Sign out failed. Try again.' })
+        } finally {
+            this.signingOut = false
         }
     }
 
@@ -427,6 +472,8 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     }
 
     destroy = (): void => {
+        this.destroyed = true
+        this.accountDropdown.destroy()
         this.importFileInput.removeEventListener('change', this.handleImportFileSelected)
 
         for (const unsubscribe of this.unsubscribers)

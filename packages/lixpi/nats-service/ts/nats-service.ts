@@ -2,6 +2,7 @@ import c from 'chalk'
 import {
     wsconnect,
     tokenAuthenticator,
+    errors,
     type NatsConnection,
     type Msg,
     type Subscription,
@@ -87,10 +88,17 @@ export type NatsServiceConfig = {
     getToken?: () => Promise<string | false>
     // Invoked when the server rejects our credentials (AuthorizationError) so the
     // caller can invalidate any cached token before `getToken` is called again.
-    onAuthError?: (error: unknown) => void | Promise<void>
+    onAuthError?: (error: unknown) => void | boolean | Promise<void | boolean>
+    onAccessDenied?: () => void
+    publicationGuard?: () => void
     subscriptions?: NatsSubjectSubscription[]
     middleware?: NatsMiddleware[] // Middleware for all subscriptions
     replyMiddleware?: ReplyMiddleware[] // Middleware specifically for replies
+    // Wraps verified request execution and its final reply in an application-owned scope.
+    requestScope?: (
+        data: unknown,
+        operation: (assertActive: () => void) => Promise<void>,
+    ) => Promise<void>
     streamReplicas?: number // Replication factor for created stores (defaults to DEFAULT_STREAM_REPLICAS)
     // How many attempts init()'s first connect makes before rejecting (defaults to
     // DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS). Raise it for a caller that starts
@@ -304,6 +312,7 @@ export default class NatsService {
     // Set during graceful disconnect()/drain() so the status monitor does not try
     // to reconnect after an intentional close.
     private intentionalClose = false
+    private authRejected = false
     // Consecutive failed connect attempts, used for exponential backoff so a
     // persistent auth failure does not flood the auth callout / JWKS endpoint.
     private reconnectAttempts = 0
@@ -358,6 +367,12 @@ export default class NatsService {
     }
 
     private scheduleReconnect(delay?: number) {
+        if (
+            this.authRejected
+            || this.intentionalClose
+        )
+            return
+
         if (this.reconnectTimer)
             clearTimeout(this.reconnectTimer)
 
@@ -407,6 +422,16 @@ export default class NatsService {
 
                             break
                         case 'error':
+                            // The broker's admission lease can expire while the
+                            // OAuth token is still valid. Reconnect with the
+                            // provider's current token; the broker checks
+                            // admission again before granting another lease.
+                            if ((status as any).error instanceof errors.UserAuthenticationExpiredError) {
+                                await this.refreshToken()
+
+                                break
+                            }
+
                             err('NATS -> connection error:', status)
 
                             // The client keeps retrying internally (maxReconnectAttempts: -1),
@@ -596,6 +621,9 @@ export default class NatsService {
         // token expiry or signing-key rotation does not keep replaying stale creds.
         await this.refreshToken()
 
+        if (this.authRejected)
+            throw new Error('NATS -> authorization denied')
+
         // Options are rebuilt for every attempt and the client resolves the server
         // hostnames when it opens the socket, so a DNS soft failure (EAI_AGAIN,
         // which is what a Docker cold boot produces) is re-resolved on the next
@@ -635,7 +663,8 @@ export default class NatsService {
     // scheduleReconnect() and monitorStatus()'s close handler both land here.
     async connect(initialConnectTimeout = 2000): Promise<void> {
         if (
-            this.isConnecting
+            this.authRejected
+            || this.isConnecting
             || this.isConnected()
         )
             return
@@ -676,6 +705,9 @@ export default class NatsService {
                 } catch (error) {
                     await this.reportConnectError(error)
 
+                    if (this.authRejected)
+                        throw new Error('NATS -> authorization denied', { cause: error })
+
                     if (attempt === maxAttempts)
                         throw new Error(`NATS -> first connect failed after ${maxAttempts} attempts`, { cause: error })
 
@@ -690,15 +722,17 @@ export default class NatsService {
     // Refresh the token used by the authenticator. Prefers the async provider so
     // credentials can be regenerated on demand; falls back to the static token.
     private async refreshToken(): Promise<void> {
-        if (this.config.getToken) {
-            try {
-                const fresh = await this.config.getToken()
+        if (this.authRejected)
+            throw new Error('NATS -> authorization denied')
 
-                if (fresh)
-                    this.currentToken = fresh
-            } catch (error) {
-                err('NATS -> failed to refresh auth token', error)
-            }
+        if (this.config.getToken) {
+            this.currentToken = null
+            const fresh = await this.config.getToken()
+
+            if (!fresh)
+                throw new Error('NATS -> authentication token unavailable')
+
+            this.currentToken = fresh
         } else if (this.config.token)
             this.currentToken = this.config.token
     }
@@ -707,7 +741,16 @@ export default class NatsService {
     // any cached token before the next refreshToken() call.
     private async handleAuthError(error: unknown): Promise<void> {
         try {
-            await this.config.onAuthError?.(error)
+            if ((await this.config.onAuthError?.(error)) === false) {
+                this.authRejected = true
+                this.currentToken = null
+                this.intentionalClose = true
+
+                if (this.reconnectTimer)
+                    clearTimeout(this.reconnectTimer)
+
+                await this.nc?.close()
+            }
         } catch (cbError) {
             err('NATS -> onAuthError handler failed', cbError)
         }
@@ -801,6 +844,11 @@ export default class NatsService {
     }
 
     async disconnect(): Promise<void> {
+        this.intentionalClose = true
+
+        if (this.reconnectTimer)
+            clearTimeout(this.reconnectTimer)
+
         if (
             this.nc
             && !this.nc.isClosed()
@@ -859,6 +907,8 @@ export default class NatsService {
         subject: string,
         data: T,
     ): void {
+        this.config.publicationGuard?.()
+
         if (!this.nc) {
             err('NATS client is not connected.')
 
@@ -909,13 +959,16 @@ export default class NatsService {
                         data = result.data
                     }
 
-                    await handler(data, msg)
+                    await this.runRequestScope(data, async assertActive => {
+                        assertActive()
+                        await handler(data, msg)
+                        assertActive()
+                    })
                 } catch (error) {
                     err(
                         `Error processing message on subject ${subject}`,
                         {
                             error,
-                            messageData: msg.data ? new TextDecoder().decode(msg.data) : 'no data',
                             messageHeaders: msg.headers ? Object.fromEntries(msg.headers) : 'no headers',
                             subject: msg.subject,
                             payloadType,
@@ -946,9 +999,21 @@ export default class NatsService {
             { timeout },
         )
 
-        return JSON.parse(
+        const result = JSON.parse(
             response.string(),
         ) as R
+
+        if (
+            (result as { error?: unknown })?.error === 'ACCOUNT_ADMISSION_DENIED'
+            && this.config.onAccessDenied
+        ) {
+            this.authRejected = true
+            this.currentToken = null
+            this.config.onAccessDenied?.()
+            await this.disconnect()
+        }
+
+        return result
     }
 
     // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -991,12 +1056,14 @@ export default class NatsService {
                         data = result.data
                     }
 
-                    const result = await handler(data, msg)
-                    // msg.respond(JSON.stringify(result))
-
-                    msg.respond(
-                        encode(result, payloadType),
-                    )
+                    await this.runRequestScope(data, async assertActive => {
+                        assertActive()
+                        const result = await handler(data, msg)
+                        assertActive()
+                        msg.respond(
+                            encode(result, payloadType),
+                        )
+                    })
                 } catch (error) {
                     err(`Reply error on subject ${subject}`, error)
                     msg.respond(
@@ -1015,6 +1082,16 @@ export default class NatsService {
     // ===========================================
     // JetStream Object Store Methods
     // ===========================================
+
+    private async runRequestScope(
+        data: unknown,
+        operation: (assertActive: () => void) => Promise<void>,
+    ): Promise<void> {
+        if (this.config.requestScope)
+            await this.config.requestScope(data, operation)
+        else
+            await operation(() => {})
+    }
 
     private getJetStream(): JetStreamClient {
         if (!this.nc)
@@ -1261,17 +1338,21 @@ export default class NatsService {
         data: T | Uint8Array,
         options: JetStreamPublishOptions = {},
     ): Promise<any> {
+        this.config.publicationGuard?.()
         const payload = data instanceof Uint8Array
             ? data
             : new TextEncoder().encode(
                 JSON.stringify(data),
             )
 
-        return await (this.getJetStream() as any).publish(
+        const result = await (this.getJetStream() as any).publish(
             subject,
             payload,
             options,
         )
+        this.config.publicationGuard?.()
+
+        return result
     }
 
     async ensureJetStreamConsumer(
