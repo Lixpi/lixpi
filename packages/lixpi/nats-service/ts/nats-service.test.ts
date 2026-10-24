@@ -8,6 +8,7 @@ import {
 } from 'vitest'
 
 import NatsService, { generateSelfIssuedJWT } from './nats-service.ts'
+import { errors } from '@nats-io/nats-core'
 
 const {
     connectMock,
@@ -41,7 +42,8 @@ vi.mock('@nats-io/transport-node', () => ({
     connect: (...args: any[]) => connectMock(...args),
 }))
 
-vi.mock('@nats-io/nats-core', () => ({
+vi.mock('@nats-io/nats-core', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@nats-io/nats-core')>(),
     wsconnect: (...args: any[]) => wsConnectMock(...args),
     tokenAuthenticator: (...args: any[]) => tokenAuthenticatorMock(...args),
 }))
@@ -621,6 +623,71 @@ describe('NatsService', () => {
     describe('lifecycle and status hooks', () => {
         const countScheduledReconnects = (spy: ReturnType<typeof vi.spyOn>) =>
             spy.mock.calls.filter(([, delay]) => delay === 500).length
+
+        it('renews expired broker leases without forcing an OAuth refresh', async () => {
+            const getToken = vi.fn(async () => 'still-valid-oauth-token')
+            const onAuthError = vi.fn()
+            const service = new (NatsService as any)({
+                getToken,
+                onAuthError,
+            })
+            service.nc = createMockConnection({
+                status: () => createAsyncIterable([
+                    {
+                        type: 'error',
+                        error: new errors.UserAuthenticationExpiredError('user authentication expired'),
+                    },
+                    { type: 'reconnect' },
+                    {
+                        type: 'error',
+                        error: new errors.UserAuthenticationExpiredError('user authentication expired'),
+                    },
+                    { type: 'reconnect' },
+                ]),
+            })
+            service.subscriptionsInitialized = true
+            const reconnected = vi.fn()
+            service.onReconnect(reconnected)
+
+            service.monitorStatus()
+            await flushPending()
+
+            expect(getToken).toHaveBeenCalledTimes(2)
+            expect(onAuthError).not.toHaveBeenCalled()
+            expect(service.currentToken).toBe('still-valid-oauth-token')
+            expect(reconnected).toHaveBeenCalledTimes(2)
+        })
+
+        it('still rejects access when reconnect after lease expiry is unauthorized', async () => {
+            const getToken = vi.fn(async () => 'cached-token')
+            const onAuthError = vi.fn(async () => false)
+            const service = new (NatsService as any)({
+                getToken,
+                onAuthError,
+            })
+            const denied = new errors.AuthorizationError('authorization violation')
+            service.nc = createMockConnection({
+                status: () => createAsyncIterable([
+                    {
+                        type: 'error',
+                        error: new errors.UserAuthenticationExpiredError('user authentication expired'),
+                    },
+                    {
+                        type: 'error',
+                        error: denied,
+                    },
+                ]),
+            })
+
+            service.monitorStatus()
+            await flushPending()
+
+            expect(onAuthError).toHaveBeenCalledExactlyOnceWith(denied)
+            expect(service.authRejected).toBe(true)
+            expect(service.currentToken).toBeNull()
+            expect(service.nc.close).toHaveBeenCalledOnce()
+            expect(service.reconnectTimer).toBeNull()
+        })
 
         it('monitors every new connection so a second close also schedules a reconnect', async () => {
             const firstConnection = createMockConnection({

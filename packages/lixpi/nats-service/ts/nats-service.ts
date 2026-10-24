@@ -2,6 +2,7 @@ import c from 'chalk'
 import {
     wsconnect,
     tokenAuthenticator,
+    errors,
     type NatsConnection,
     type Msg,
     type Subscription,
@@ -421,6 +422,16 @@ export default class NatsService {
 
                             break
                         case 'error':
+                            // The broker's admission lease can expire while the
+                            // OAuth token is still valid. Reconnect with the
+                            // provider's current token; the broker checks
+                            // admission again before granting another lease.
+                            if ((status as any).error instanceof errors.UserAuthenticationExpiredError) {
+                                await this.refreshToken()
+
+                                break
+                            }
+
                             err('NATS -> connection error:', status)
 
                             // The client keeps retrying internally (maxReconnectAttempts: -1),

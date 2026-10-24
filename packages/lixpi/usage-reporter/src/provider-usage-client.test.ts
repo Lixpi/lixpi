@@ -159,8 +159,8 @@ describe('ProviderUsageClient.authorizeRequest', () => {
         const request = vi.fn().mockResolvedValue({
             authorized: true,
             authorizationId: 'auth_1',
-            estimatedCost: 1000,
-            balance: 5000,
+            internalPolicy: 'synthetic-private-policy',
+            internalContext: { private: true },
         })
         const response = await new ProviderUsageClient(
             stubTransport(request),
@@ -176,8 +176,8 @@ describe('ProviderUsageClient.authorizeRequest', () => {
             authorized: true,
             authorizationId: 'auth_1',
         })
-        expect('balance' in response).toBe(false)
-        expect('estimatedCost' in response).toBe(false)
+        expect('internalContext' in response).toBe(false)
+        expect('internalPolicy' in response).toBe(false)
     })
 
     it('fails closed with a neutral reason when authorization is unavailable', async () => {
@@ -208,7 +208,7 @@ describe('ProviderUsageClient.authorizeRequest', () => {
 })
 
 describe('durable usage delivery', () => {
-    it('persists a charge before the first delivery attempt and surfaces persistence failure', async () => {
+    it('persists usage before the first delivery attempt and surfaces persistence failure', async () => {
         const request = vi.fn().mockResolvedValue({ recorded: true })
         const enqueueUsage = vi.fn().mockRejectedValueOnce(new Error('disk unavailable')).mockResolvedValue(undefined)
         const client = new ProviderUsageClient(stubTransport(request), options(), {
@@ -221,7 +221,7 @@ describe('durable usage delivery', () => {
         expect(enqueueUsage.mock.invocationCallOrder[1]).toBeLessThan(request.mock.invocationCallOrder[0])
     })
 
-    it('keeps completion queued when usage has not reached billing yet', async () => {
+    it('keeps completion queued when usage has not reached the responder yet', async () => {
         const completion = {
             authorizationId: 'auth_1',
             orgId: 'org_1',

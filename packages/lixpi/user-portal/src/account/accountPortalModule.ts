@@ -12,12 +12,18 @@ export const accountPortalModule: UserPortalModule = {
     navigationGroups: [{
         label: 'Account',
         items: [{
-            label: 'User information',
+            label: 'Profile',
             path: USER_INFO_ROUTE_PATH,
         }],
     }],
     routes: [{
         path: USER_INFO_ROUTE_PATH,
-        createView: ({ userStore }) => createUserInfoPage({ store: userStore }),
+        createView: ({
+            userStore,
+            loadingLayer,
+        }) => createUserInfoPage({
+            store: userStore,
+            loadingLayer,
+        }),
     }],
 }

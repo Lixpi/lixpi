@@ -58,7 +58,7 @@ export type AccountAdmissionRecord = {
         subject: string
         connectionId: string
         email: string
-        source: 'database_otp' | 'enterprise_otp' | 'provider' | 'form_otp' | 'local_fixture'
+        source: 'database_otp' | 'passwordless_otp' | 'enterprise_otp' | 'provider' | 'form_otp' | 'local_fixture'
         verifiedAt: number
         providerEmail: string | null
         challengeId?: string

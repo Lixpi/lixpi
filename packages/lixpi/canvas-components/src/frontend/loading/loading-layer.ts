@@ -1,6 +1,6 @@
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
-    type LoadingOverlay,
+    LoadingOverlay,
     type LoadingOverlayOptions,
 } from './loading-overlay.ts'
 
@@ -18,7 +18,6 @@ export class LoadingLayer {
     readonly dom: HTMLDivElement
     private readonly requests = new Map<object, LoadingRequest & { error: string | null }>()
     private overlay?: LoadingOverlay
-    private initializing?: Promise<void>
     private destroyed = false
 
     constructor(private readonly options: LoadingOverlayOptions) {
@@ -84,7 +83,8 @@ export class LoadingLayer {
             if (!this.dom.isConnected)
                 this.options.root.append(this.dom)
 
-            this.initializing ??= this.initialize()
+            if (!this.overlay)
+                this.initialize()
         } else
             this.dom.remove()
 
@@ -94,23 +94,8 @@ export class LoadingLayer {
         this.overlay?.setErrorMessage(error?.error ?? null)
     }
 
-    private async initialize(): Promise<void> {
+    private initialize(): void {
         try {
-            // Keep the GPU backend out of the public application's initial
-            // bundle; the overlay element is already mounted while it loads.
-            const { LoadingOverlay } = await import('./loading-overlay.ts')
-
-            if (this.destroyed)
-                return
-
-            if (!Array.from(
-                this.requests.values(),
-            ).some(request => request.visible || request.error)) {
-                this.initializing = undefined
-
-                return
-            }
-
             this.overlay = new LoadingOverlay({
                 ...this.options,
                 root: this.dom,
@@ -118,7 +103,6 @@ export class LoadingLayer {
                     this.requests.values(),
                 ).find(request => request.error)?.onRetry?.(),
             })
-            this.sync()
         } catch (error) {
             this.options.onError(error)
         }

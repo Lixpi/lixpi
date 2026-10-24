@@ -202,7 +202,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
             },
         )
 
-    // Billing owns this table. The API can read receipts and condition its own
+    // The external account service owns this table. The API can read receipts and condition its own
     // transactions on them, but cannot provision or change account state.
     if (resourceBindings.accountAdmissionTableArn)
         new aws.iam.RolePolicy(

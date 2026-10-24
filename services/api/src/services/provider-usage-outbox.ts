@@ -25,8 +25,8 @@ type PendingUsage =
         request: ProviderRequestCompletionRequest
     }
 
-// Financial measurements have no retention deadline or delivery limit. Billing
-// deduplicates records, including an acknowledgement lost after a committed charge.
+// Usage measurements have no retention deadline or delivery limit. The responder
+// must deduplicate records when an acknowledgement is lost after persistence.
 export class DurableProviderUsageOutbox implements ProviderUsageOutbox {
     private stopped = false
     private worker?: Promise<void>

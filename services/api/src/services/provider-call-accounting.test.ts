@@ -52,7 +52,7 @@ describe('auxiliary provider accounting', () => {
 
     it('does not call a provider without an authorized organization identity', async () => {
         const provider = vi.fn()
-        await expect(ProviderCallAccounting.run('model', 100, provider)).rejects.toThrow('no billing identity')
+        await expect(ProviderCallAccounting.run('model', 100, provider)).rejects.toThrow('no usage identity')
         expect(provider).not.toHaveBeenCalled()
         expect(request).not.toHaveBeenCalled()
     })
@@ -65,7 +65,7 @@ describe('auxiliary provider accounting', () => {
         expect(enqueueUsage).not.toHaveBeenCalled()
     })
 
-    it('persists measured usage and completion when billing goes offline after authorization', async () => {
+    it('persists measured usage and completion when metrics goes offline after authorization', async () => {
         request.mockImplementation(async subject => {
             if (subject.endsWith('.authorize'))
                 return {
@@ -73,7 +73,7 @@ describe('auxiliary provider accounting', () => {
                     authorizationId: 'authorization-1',
                 }
 
-            throw new Error('billing offline')
+            throw new Error('metrics offline')
         })
         await ProviderCallAccounting.run('model', 100, async accounting => void accounting.observe({
             promptTokens: 12,
@@ -96,7 +96,7 @@ describe('auxiliary provider accounting', () => {
         expect(enqueueUsage.mock.invocationCallOrder[0]).toBeLessThan(enqueueCompletion.mock.invocationCallOrder[0])
     })
 
-    it('records a zero-cost receipt and releases funds after a rejected request', async () => {
+    it('records zero usage and completes a rejected request', async () => {
         await expect(ProviderCallAccounting.run('model', 100, async () => {
             const error = new Error('invalid request') as Error & { status: number }
             error.status = 400
@@ -110,7 +110,7 @@ describe('auxiliary provider accounting', () => {
         expect(enqueueCompletion).toHaveBeenCalledOnce()
     })
 
-    it('retains funds when the connection fails without a final usage measurement', async () => {
+    it('leaves a request unresolved when the connection fails without a final usage measurement', async () => {
         await expect(ProviderCallAccounting.run('model', 100, async () => {
             throw new Error('connection lost')
         }, identity)).rejects.toThrow('connection lost')
@@ -118,7 +118,7 @@ describe('auxiliary provider accounting', () => {
         expect(enqueueCompletion).not.toHaveBeenCalled()
     })
 
-    it('records partial measurements without releasing unresolved liability', async () => {
+    it('records partial measurements without completing an unresolved request', async () => {
         await expect(ProviderCallAccounting.run('model', 100, async accounting => {
             accounting.observe({ promptTokens: 12 }, 'partial-response')
 
@@ -155,7 +155,7 @@ describe('auxiliary provider accounting', () => {
         expect(enqueueCompletion).toHaveBeenCalledOnce()
     })
 
-    it('never completes a reservation when usage persistence fails', async () => {
+    it('never completes an authorization when usage persistence fails', async () => {
         enqueueUsage.mockRejectedValue(new Error('outbox disk full'))
         await expect(ProviderCallAccounting.run('model', 100, async accounting => void accounting.observe({ promptTokens: 1 }), identity)).rejects.toThrow('outbox disk full')
         expect(enqueueCompletion).not.toHaveBeenCalled()

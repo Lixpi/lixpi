@@ -37,9 +37,9 @@ Pass colors and coefficients as configuration. Do not copy the shading math into
 
 ## Loading surface
 
-`LoadingOverlay` owns a drawing surface, outline, resize observation, error text and retry action. Supply labels, dimensions and callbacks, then import `@lixpi/canvas-components/styles/loading-overlay`. Its custom properties cover text and retry colors, and the stylesheet handles reduced transparency.
+`LoadingOverlay` owns a circular outline, error text and retry action. It bakes the shared outline mesh and material into a small bitmap synchronously, then rotates it with the configured duration and traveling-outline easing. This keeps the first loading frame independent of GPU initialization and module downloads. CSS centers the bitmap as the viewport resizes. Supply labels, dimensions and callbacks, then import `@lixpi/canvas-components/styles/loading-overlay`. Its custom properties cover text and retry colors, and the stylesheet handles reduced transparency.
 
-Disposal during renderer initialization prevents a late canvas from mounting. Hide/clear state through its public API and destroy it with the enclosing view.
+Hiding the overlay pauses its animation without resetting the lap. Hide/clear state through its public API and destroy it with the enclosing view to cancel its frame callback.
 
 ## Custom effects
 

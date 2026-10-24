@@ -6,7 +6,7 @@ Provider request authorization, upper-bound usage estimates, measured provider u
 
 The API calls `ProviderUsageClient.authorizeRequest()` before provider transport and `recordUsage()` after completion. Disabled integration authorizes requests and discards records without network calls. Enabled integration uses the paired NATS responder's neutral authorization and acknowledgement contracts.
 
-The API supplies a durable outbox for usage and reservation completion. `completeRequest()` releases unused reserved funds after all listed usage receipts exist in billing. The [port documentation](documentation/METERING-PORT.md) covers recovery, unresolved calls and coordinated rollout.
+The API supplies a durable outbox for usage and request completion. `completeRequest()` identifies the measurements that must be recorded before the responder can acknowledge completion. The [port documentation](documentation/METERING-PORT.md) covers delivery, unresolved calls and coordinated rollout.
 
 `UsageReporter` produces `TextProviderUsage`, `ImageProviderUsage`, and `VideoProviderUsage`. It preserves provider request identity and measured dimensions. It performs no monetary arithmetic.
 

@@ -122,7 +122,7 @@ services:
 
     lixpi-caddy:
         container_name: lixpi-caddy
-        profiles: ["deploy", "main"]
+        profiles: ["deploy", "main", "local-https"]
         image: lixpi/caddy-cert-manager
         build:
             dockerfile: services/caddy/Dockerfile
@@ -139,6 +139,34 @@ services:
             - nats
         # Container exits after generating certificates - no ports needed
         restart: "no"
+
+    # Both the workspace and user portal use this Caddy instance and CA.
+    # Localhost ports need no host DNS or hosts-file configuration.
+    lixpi-local-https:
+        container_name: lixpi-local-https
+        profiles: ["local-https"]
+        image: lixpi/caddy-cert-manager
+        build:
+            dockerfile: services/caddy/Dockerfile
+            context: .
+        command: ["serve-local"]
+        environment:
+            CADDY_LOCAL_ROUTES: >-
+                {"${VITE_AUTH0_REDIRECT_URI}":"lixpi-web-ui:5173",
+                 "${VITE_USER_PORTAL_URL}":"${CADDY_USER_PORTAL_UPSTREAM:-lixpi-web-ui-user-portal:5173}",
+                 "${VITE_API_URL}":"lixpi-api:3000"}
+        volumes:
+            - caddy-certs:/certificates
+        ports:
+            - "127.0.0.1:3443:3443"
+            - "127.0.0.1:3444:3444"
+            - "127.0.0.1:3445:3445"
+        networks:
+            - nats
+        depends_on:
+            lixpi-caddy:
+                condition: service_completed_successfully
+        restart: unless-stopped
 
     lixpi-localauth0:
         container_name: lixpi-localauth0
@@ -177,8 +205,7 @@ services:
             VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
             VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
-            VITE_BILLING_ONBOARDING_ENABLED: ${VITE_BILLING_ONBOARDING_ENABLED:-false}
-            VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
+            VITE_ACCOUNT_ONBOARDING_ENABLED: ${VITE_ACCOUNT_ONBOARDING_ENABLED:-false}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
         volumes:
             - ./services/web-ui/Dockerfile:/usr/src/service/Dockerfile:cached
@@ -213,9 +240,6 @@ services:
             - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
-
-            # CA certificate for browser installation
-            - caddy-certs:/usr/src/service/public/certs:ro
 
         networks:
             - nats
@@ -531,7 +555,6 @@ services:
             VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
             VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
-            VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
             NATS_API_NKEY_SEED: ${NATS_API_NKEY_SEED}
             NATS_API_NKEY_PUBLIC: ${NATS_API_NKEY_PUBLIC}

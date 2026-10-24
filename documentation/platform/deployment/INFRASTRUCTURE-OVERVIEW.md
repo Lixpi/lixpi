@@ -151,7 +151,7 @@ infrastructure/pulumi/src/
 
 ### Dockerized Pulumi Runner
 
-The private Auth0 setup in `lixpi-billing` reuses `createHostedZone`, `createDelegationRecord`, and `createDnsRecords` from this Pulumi source tree. It creates `auth.${DOMAIN_NAME}` for real authentication, including local development, and keeps its state in a separate Auth0 domain stack. An existing application zone is referenced without importing it into that stack. If Auth0 setup creates a developer zone first, use its reported zone ID as `AWS_ROUTE53_HOSTED_ZONE_ID` before deploying the full application, so that deployment also references the existing zone. LocalAuth0 setup needs no public DNS.
+`createHostedZone`, `createDelegationRecord`, and `createDnsRecords` can be reused by separately deployed services. Reference an existing application zone by ID without importing it into another stack. If a separate deployment creates the developer zone first, set `AWS_ROUTE53_HOSTED_ZONE_ID` to that zone ID before deploying the application. LocalAuth0 setup needs no public DNS.
 
 Developers never run `pulumi` directly. [`infrastructure/pulumi/Dockerfile`](../../../infrastructure/pulumi/Dockerfile) packages the CLI, AWS tools, and Node runtime. The image mounts the repo, reads the `.env.<name>-<environment>` file, and runs a single command:
 

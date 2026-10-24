@@ -15,20 +15,32 @@ import (
 )
 
 type Engine struct {
-	Email        string
-	Region       string
-	HostedZoneID string
-	Local        bool
+	Email              string
+	Region             string
+	HostedZoneID       string
+	Local              bool
+	LocalLifetime      time.Duration
+	CertificateStorage string
 }
 
 // Configuration uses TLS automation without HTTP servers or an admin listener.
 func (e Engine) Configuration(root string, domains []string) *caddy.Config {
 	policy := &caddytls.AutomationPolicy{SubjectsRaw: domains}
+
+	if e.CertificateStorage != "" {
+		policy.StorageRaw = caddyconfig.JSONModuleObject(fileStorage{Root: e.CertificateStorage}, "module", "lixpi_file_system", nil)
+	}
+
 	apps := caddy.ModuleMap{}
 
 	if e.Local {
+		lifetime := e.LocalLifetime
+		if lifetime == 0 {
+			lifetime = 2500 * 24 * time.Hour
+		}
+
 		policy.IssuersRaw = []json.RawMessage{caddyconfig.JSONModuleObject(
-			caddytls.InternalIssuer{CA: "local", Lifetime: caddy.Duration(2500 * 24 * time.Hour)}, "module", "internal", nil,
+			caddytls.InternalIssuer{CA: "local", Lifetime: caddy.Duration(lifetime)}, "module", "internal", nil,
 		)}
 		installTrust := false
 		apps["pki"] = caddyconfig.JSON(&caddypki.PKI{CAs: map[string]*caddypki.CA{
@@ -57,7 +69,6 @@ func (e Engine) Configuration(root string, domains []string) *caddy.Config {
 	}
 
 	apps["tls"] = caddyconfig.JSON(&caddytls.TLS{
-		CertificatesRaw: caddy.ModuleMap{"automate": caddyconfig.JSON(domains, nil)},
 		Automation: &caddytls.AutomationConfig{
 			Policies: []*caddytls.AutomationPolicy{policy}, RenewCheckInterval: caddy.Duration(time.Minute),
 		},
@@ -71,6 +82,44 @@ func (e Engine) Configuration(root string, domains []string) *caddy.Config {
 	}
 }
 
+// Start certificate jobs after TLS.Start initializes the storage cleaner.
+// Caddy's automate loader starts asynchronous events before that initialization;
+// its value-receiver CaddyModule method then races while copying the TLS fields.
+func start(configuration *caddy.Config, domains []string) (result error) {
+	if err := caddy.Run(configuration); err != nil {
+		return fmt.Errorf("start embedded Caddy: %w", err)
+	}
+
+	defer func() {
+		if result != nil {
+			if err := caddy.Stop(); err != nil {
+				result = errors.Join(result, fmt.Errorf("stop incomplete Caddy startup: %w", err))
+			}
+		}
+	}()
+
+	app, err := caddy.ActiveContext().AppIfConfigured("tls")
+	if err != nil {
+		return fmt.Errorf("load running Caddy TLS app: %w", err)
+	}
+
+	tlsApp, ok := app.(*caddytls.TLS)
+	if !ok {
+		return errors.New("running Caddy TLS app is unavailable")
+	}
+
+	subjects := make(map[string]struct{}, len(domains))
+	for _, domain := range domains {
+		subjects[domain] = struct{}{}
+	}
+
+	if err := tlsApp.Manage(subjects); err != nil {
+		return fmt.Errorf("start certificate management: %w", err)
+	}
+
+	return nil
+}
+
 // Maintain owns Caddy's process-global runtime for one invocation at a time.
 // The caller reserves time after its deadline to persist state even on failure.
 func (e Engine) Maintain(ctx context.Context, root string, domains []string, ready func() error) (result error) {
@@ -78,7 +127,7 @@ func (e Engine) Maintain(ctx context.Context, root string, domains []string, rea
 		return fmt.Errorf("start certificate maintenance: %w", err)
 	}
 
-	if err := caddy.Run(e.Configuration(root, domains)); err != nil {
+	if err := start(e.Configuration(root, domains), domains); err != nil {
 		return fmt.Errorf("start embedded Caddy: %w", err)
 	}
 

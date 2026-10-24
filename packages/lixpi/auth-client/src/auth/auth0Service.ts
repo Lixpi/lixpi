@@ -22,7 +22,10 @@ class Auth0Service implements WebClientAuthService {
                 domain: this.config.domain,
                 clientId: this.config.clientId,
                 useRefreshTokens: true,
-                useRefreshTokensFallback: true,
+                // Cross-origin navigation resumes through a top-level SDK
+                // transaction. Standard tenants must not depend on iframe
+                // cookies or wait for an iframe timeout on signed-out visits.
+                useRefreshTokensFallback: this.usesHostedLogin,
                 cacheLocation: 'localstorage',
                 authorizationParams: {
                     redirect_uri: this.config.redirectUri,
@@ -256,20 +259,8 @@ class Auth0Service implements WebClientAuthService {
 
     async getTokenSilently(forceRefresh = false): Promise<string | false> {
         try {
-            if (
-                !this.usesHostedLogin
-                && !this.store.getMeta('isAuthenticated')
-            ) {
-                // The SDK checks its remembered-session cookie before making
-                // a request. Logout removes that cookie, so this cannot start
-                // authentication again after a deliberate sign-out.
-                await this.getClient().checkSession()
-                await this.updateAuthData()
-
-                if (!this.store.getMeta('isAuthenticated'))
-                    return false
-            }
-
+            // An expired ID token or missing remembered-session cookie does
+            // not invalidate the refresh token in this origin's SDK cache.
             const token = await this.getClient().getTokenSilently(forceRefresh ? { cacheMode: 'off' } : undefined)
 
             if (token)

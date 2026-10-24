@@ -111,6 +111,7 @@ const setCurrentWorkspaceId = (workspaceId: string | undefined): void => {
 const authStore = createAuthStore()
 const auth = {
     authStore,
+    createSessionHandoffUrl: (destination: string) => `${destination}/?auth=continue&auth_account=prepared`,
     getTokenSilently: mocks.getTokenSilently,
     logout: mocks.logout,
 }
@@ -375,7 +376,7 @@ describe('NavigationSidePanel — avatar', () => {
         const items = menu.querySelectorAll<HTMLElement>('[role="menuitem"]')
         expect(Array.from(items, item => item.textContent?.trim())).toEqual(['Profile', 'Sign out'])
         items[0].click()
-        expect(open).toHaveBeenCalledWith(USER_PORTAL_URL, '_blank', 'noopener,noreferrer')
+        expect(open).toHaveBeenCalledWith(`${USER_PORTAL_URL}/?auth=continue&auth_account=prepared`, '_blank', 'noopener,noreferrer')
         expect(mocks.logout).not.toHaveBeenCalled()
 
         instance.destroy()

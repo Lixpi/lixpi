@@ -79,7 +79,7 @@ docker compose --env-file env.lixpi -f docker-compose.config-utils.yml --profile
 docker compose --env-file env.lixpi -f docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils setup-local-account-auth .env.shelby-local
 ```
 
-The setup command requires `ENVIRONMENT=local` and an existing signed registration. It atomically sets `MOCK_AUTH0=false`, `VITE_MOCK_AUTH=false` and `ACCOUNT_ADMISSION_ENABLED=true`, selects the configured Auth0 login hostname and signs the matching browser permissions. It validates the generated account requirement before saving and rejects a stale configuration image. It preserves unrelated values and refuses a concurrent file change. It does not restart services. Run it only after the billing-owned Auth0 resources and account gateway are ready; restart enforcing APIs and brokers before activating the login Action, then restart browser clients. Keep enforcement enabled when recovering a failed release.
+The setup command requires `ENVIRONMENT=local` and an existing signed registration. It atomically sets `MOCK_AUTH0=false`, `VITE_MOCK_AUTH=false` and `ACCOUNT_ADMISSION_ENABLED=true`, selects the configured Auth0 login hostname and signs the matching browser permissions. It validates the generated account requirement before saving and rejects a stale configuration image. It preserves unrelated values and refuses a concurrent file change. It does not restart services. Run it only after the deployment's Auth0 resources and account gateway are ready; restart enforcing APIs and brokers before activating the login Action, then restart browser clients. Keep enforcement enabled when recovering a failed release.
 
 Run from the Lixpi root:
 
@@ -95,7 +95,7 @@ When adding the AI Model Registry identity to an existing configuration, edit th
 
 Local real Auth0 defaults to `AUTH0_USE_DEVELOPER_KEYS=true`. The authentication group explains the shared Google keys and uses the canonical `AUTH0_TENANT_DOMAIN` for both `AUTH0_DOMAIN` and `VITE_AUTH0_DOMAIN`. Google client credentials are unnecessary in this mode. Selecting false uses `auth.${DOMAIN_NAME}` and your own provider credentials. Deployed environments require false. Auth0 does not support shared keys with custom login domains or silent login; see [its development-key limitations](https://auth0.com/docs/authenticate/identity-providers/social-identity-providers/devkeys). Apple remains optional and requires its own setup when enabled.
 
-Saving authentication changes also refreshes the signed browser issuer and JWKS settings. Keep LocalAuth0 enabled until billing's signup release is ready. The account service retains its separately configured custom machine-token issuer and public HTTPS gateway, including locally; switching the browser login hostname does not remove those resources. Billing's Dockerized `preview-domain` and `setup-domain` commands use the existing Pulumi hosted-zone, delegation, and DNS-record helpers for that service infrastructure.
+Saving authentication changes also refreshes the signed browser issuer and JWKS settings. Keep LocalAuth0 enabled until the external identity provider and account service are ready. The account service's issuer, gateway and DNS configuration belong to its deployment; changing the browser login hostname does not provision those resources.
 
 Non-interactive creation uses the same wrapper and refuses to overwrite an existing configuration:
 

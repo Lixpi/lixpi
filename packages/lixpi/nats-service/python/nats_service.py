@@ -867,6 +867,12 @@ class NatsService:
 
     async def _error_callback(self, e: Exception) -> None:
         """Handle NATS errors."""
+        # A broker admission lease may expire before the OAuth token does.
+        # The next connection still verifies the token and current admission.
+        if str(e).lower().removeprefix('nats: ').strip("'") == 'user authentication expired':
+            await self._refresh_token()
+            return
+
         err(f"NATS -> connection error: {e}")
         # If the server rejected our credentials (expired token or rotated signing
         # key), refresh them so the next reconnect presents valid credentials.

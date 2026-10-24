@@ -89,13 +89,13 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
         })).toEqual(bytes)
     })
 
-    it('retains charges through billing outages and worker restart, including a lost reply after posting', async () => {
+    it('retains usage through responder outages and worker restart, including a lost reply after posting', async () => {
         const committed = new Set<string>()
         let available = false
         let loseReply = true
         const transport: ProviderUsageTransport = { request: vi.fn(async (_subject, data) => {
             if (!available)
-                throw new Error('billing offline')
+                throw new Error('metrics offline')
 
             committed.add((data as ProviderUsageRecordRequest).providerRequestId)
 

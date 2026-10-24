@@ -44,11 +44,19 @@ func run(ctx context.Context, args []string) error {
 	command := ""
 
 	if len(args) > 1 {
-		return errors.New("usage: lixpi-caddy [local|maintain|version]")
+		return errors.New("usage: lixpi-caddy [local|serve-local|maintain|version]")
 	}
 
 	if len(args) == 1 {
 		command = args[0]
+	}
+
+	if command == "serve-local" {
+		if err := serveLocal(ctx, os.Getenv); err != nil {
+			return fmt.Errorf("execute local HTTPS command: %w", err)
+		}
+
+		return nil
 	}
 
 	if command == "version" {

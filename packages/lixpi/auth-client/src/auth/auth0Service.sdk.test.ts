@@ -9,6 +9,7 @@ import {
 import { webcrypto } from 'node:crypto'
 import { createAuthStore } from '../stores/authStore.ts'
 import { createAuth0Service } from './auth0Service.ts'
+import { createAuthClient } from '../authClient.ts'
 
 const config = {
     audience: 'https://api.lixpi.test',
@@ -19,6 +20,7 @@ const config = {
 }
 
 beforeEach(() => {
+    window.history.replaceState({}, '', '/')
     localStorage.clear()
     sessionStorage.clear()
     vi.spyOn(window.location, 'assign').mockImplementation(() => {})
@@ -32,6 +34,24 @@ afterEach(() => {
 })
 
 describe('Auth0 SDK logout integration', () => {
+    it('creates a PKCE continuation from an empty origin without requiring an SDK session cookie', async () => {
+        window.history.replaceState({}, '', '/settings?auth=continue&organization=one')
+        const client = createAuthClient({ auth: {
+            ...config,
+            domain: 'tenant.us.auth0.com',
+        } })
+        await expect(client.initializeSession()).resolves.toBeNull()
+        expect(client.authStore.getMeta('isRedirecting')).toBe(true)
+        const authorize = new URL(vi.mocked(window.location.assign).mock.calls[0][0])
+        expect(authorize.pathname).toBe('/authorize')
+        expect(authorize.searchParams.has('prompt')).toBe(false)
+        expect(authorize.searchParams.has('max_age')).toBe(false)
+        expect(authorize.searchParams.get('code_challenge_method')).toBe('S256')
+        const transaction = JSON.parse(sessionStorage.getItem(`a0.spajs.txs.${config.clientId}`)!)
+        expect(transaction.state).toBe(authorize.searchParams.get('state'))
+        expect(transaction.appState.returnTo).toBe('/settings?organization=one')
+        expect(window.fetch).not.toHaveBeenCalled()
+    })
     it('retains SDK state, nonce and PKCE through logout with a single browser navigation', async () => {
         const service = createAuth0Service(config, createAuthStore())
         await service.init()

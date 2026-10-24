@@ -62,7 +62,7 @@ Application subject names and permissions belong to [constants](../../packages/l
 
 The authority's private signing key stays with deployment tooling. Possessing the bootstrap password lets a service deliver a signed declaration; it cannot change the declared grants. Another application can register different identities, accounts and subjects through the same protocol using the same broker image. [Architecture](documentation/ARCHITECTURE.md#runtime-registration) explains that boundary and the first-start sequence.
 
-With account admission enabled, each broker replays the signed application's restriction stream before accepting browser sessions. The feed starts even when the broker has no browser connections. Its durable consumer identifies that broker process and its Compose container or ECS task; inactivity does not delete it. An account disable closes affected browser sockets before acknowledgement. Deployment inventory in the billing account service distinguishes a stopped container from a silent or disconnected broker, so a replacement broker cannot acknowledge on behalf of its predecessor.
+With account admission enabled, each broker replays the signed application's restriction stream before accepting browser sessions. The feed starts even when the broker has no browser connections. Its durable consumer identifies that broker process and its Compose container or ECS task; inactivity does not delete it. An account disable closes affected browser sockets before acknowledgement. Deployment inventory in the external account service distinguishes a stopped container from a silent or disconnected broker, so a replacement broker cannot acknowledge on behalf of its predecessor.
 
 ## What the container needs
 

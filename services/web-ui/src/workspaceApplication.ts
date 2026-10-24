@@ -41,7 +41,7 @@ import '@lixpi/ui-kit/styles/side-panel'
 import '@lixpi/canvas-engine/styles/interaction'
 import '@lixpi/web-client-service-factory/styles/foundation'
 
-import { routes } from '$src/routes.ts'
+import { workspaceRouting } from '$src/routes.ts'
 import { createLayout } from '$src/views/layouts/layout.ts'
 import '$src/sass/styles.scss'
 
@@ -92,7 +92,7 @@ export const createWorkspaceApplication = (config: {
                 nats,
             }
         },
-        routing: { routes },
+        routing: workspaceRouting,
         createResources: [() => createHelpTooltipProvider({
             showDelayMs: settings.helpTooltip.providerShowDelayMs,
             root: document,
@@ -152,7 +152,7 @@ export const createWorkspaceApplication = (config: {
                 })
 
             if (
-                import.meta.env.VITE_BILLING_ONBOARDING_ENABLED === 'true'
+                import.meta.env.VITE_ACCOUNT_ONBOARDING_ENABLED === 'true'
                 && import.meta.env.VITE_MOCK_AUTH !== 'true'
             ) {
                 const onboarding = new OnboardingService(

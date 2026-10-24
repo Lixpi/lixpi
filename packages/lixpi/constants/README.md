@@ -18,7 +18,7 @@ Canvas parenting uses parent-relative positions. The engine resolves world bound
 
 `ts/account-admission.ts` defines the neutral durable admission record and signed claim. Identity keys concatenate UTF-8 byte lengths and the exact issuer/subject values; email is never an identity key. Both values must be nonempty, well-formed Unicode and together fit within 1800 UTF-8 bytes. The TypeScript and provisioner tests share wire examples to keep their encodings compatible. Hosted writers belong to the private account provisioner. The public local initializer supplies only the fixed LocalAuth0 development fixture.
 
-Email proof distinguishes database signup codes (`database_otp`), Auth0's native Microsoft email challenge (`enterprise_otp`), trusted social verification (`provider`), and a consumed hosted challenge (`form_otp`). Enterprise proof requires the deployment to verify Auth0's tenant and connection policies; Microsoft's email field alone is not proof. The local fixture source is accepted only under mock admission policy.
+Email proof distinguishes Passwordless email codes (`passwordless_otp`), database email codes (`database_otp`), Auth0's native Microsoft email challenge (`enterprise_otp`), trusted social verification (`provider`), and a consumed hosted challenge (`form_otp`). Passwordless proof requires the configured `email` connection and Auth0's verified mailbox. Enterprise proof requires the deployment to verify Auth0's tenant and connection policies; Microsoft's email field alone is not proof. The local fixture source is accepted only under mock admission policy.
 
 `ts/asset-types.ts` defines Asset, Meta, ACL, typed references, edit leases, media/rendition states, Blob rows/references, and rendition job request/response types.
 

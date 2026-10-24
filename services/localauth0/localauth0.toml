@@ -19,7 +19,6 @@ custom_claims = [
     { name = "given_name", value = { String = "Test" } },
     { name = "family_name", value = { String = "User" } },
     { name = "email_verified", value = { Json = true } },
-    { name = "stripe_customer_id", value = { String = "cus_mock_stripe_test" } },
 ]
 
 [[audience]]

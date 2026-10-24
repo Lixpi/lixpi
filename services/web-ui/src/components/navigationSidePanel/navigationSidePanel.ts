@@ -38,7 +38,7 @@ const NAVIGATION_SIDE_PANEL_SETTINGS = settings.navigationSidePanel
 
 export type NavigationSidePanelConfig = {
     // Host element the panel/backdrop/overlay/toggle/resize-handle mount into.
-    auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently' | 'logout'>
+    auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently' | 'logout' | 'createSessionHandoffUrl'>
     paneEl: HTMLElement
     router: Pick<WebClientRouterService, 'getCurrentRoute' | 'navigateTo' | 'subscribe'>
     userPortalUrl: string
@@ -103,7 +103,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             onSelect: option => {
                 if (option.action === 'profile')
                     window.open(
-                        config.userPortalUrl,
+                        this.auth.createSessionHandoffUrl(config.userPortalUrl),
                         '_blank',
                         'noopener,noreferrer',
                     )

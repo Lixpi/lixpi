@@ -5,9 +5,9 @@ description: Embedded Caddy certificate issuance for local development and sched
 
 # Caddy Certificate Service
 
-`lixpi-caddy` obtains and renews the certificates used by Lixpi's NATS WebSocket listeners. It embeds Caddy's TLS and PKI modules in a Go executable. Caddy handles certificate authorities, ACME accounts, DNS challenges and renewal. The service handles invocation deadlines, durable state, certificate validation, local file exports and publication to AWS Secrets Manager.
+`lixpi-caddy` obtains and renews certificates for Lixpi's NATS WebSocket listeners and serves local HTTPS for the workspace, API and user portal. It embeds Caddy's TLS, PKI and HTTP modules in a Go executable. Caddy handles certificate authorities, ACME accounts, DNS challenges, renewal and reverse proxying. The service handles invocation deadlines, durable state, certificate validation, local file exports and publication to AWS Secrets Manager.
 
-The executable has two operating modes. Local Compose runs Caddy's internal CA, exports `ca.crt`, `localhost.crt` and `localhost.key` into the shared certificate volume, then exits. AWS Lambda restores public-certificate state from S3, performs any maintenance that is due, publishes validated certificate/key pairs and reports CloudWatch metrics. The Lambda runs at deployment and every six hours.
+Local certificate issuance runs Caddy's internal CA, exports `ca.crt`, `localhost.crt` and `localhost.key` into the shared certificate volume, then exits. The `serve-local` command uses that same CA and volume to serve the workspace, Profile and API on HTTPS localhost ports through one Docker gateway. Browser certificates have separate storage from the NATS exports. It refuses to create a separate CA when shared state is missing. AWS Lambda restores public-certificate state from S3, performs any maintenance that is due, publishes validated certificate/key pairs and reports CloudWatch metrics. The Lambda runs at deployment and every six hours.
 
 ## Why Caddy runs inside Go
 
@@ -15,7 +15,7 @@ The process calls `caddy.Run` with a native configuration and calls `caddy.Stop`
 
 This follows the same service boundary as [the embedded NATS broker](../nats/README.md): the service directory contains its Go module, runtime, image and manuals. [The certificate-manager Pulumi resource](../../infrastructure/pulumi/src/resources/certificate-manager/README.md) creates AWS resources and supplies configuration. It does not contain certificate-runtime source.
 
-Certificate issuance needs Caddy's TLS application, but it doesn't need a web server. The native configuration names the certificates to automate and disables the admin listener. Public issuance uses Route53 DNS-01, so no incoming HTTP or TLS connection to the Lambda is needed. Local issuance uses the internal CA without installing trust into the container or host.
+Certificate maintenance uses Caddy's TLS application without an HTTP server. The local gateway adds an HTTPS server with exact hostname routes and rejects mismatched TLS/HTTP hosts. Both disable the admin listener. Public issuance uses Route53 DNS-01, so no incoming HTTP or TLS connection to the Lambda is needed. Local issuance uses the internal CA without installing trust into the container or host.
 
 ## State and delivery
 

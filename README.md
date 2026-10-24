@@ -76,11 +76,11 @@ start.bat
 
 For an image rebuild, use `./rebuild-containers.sh <service>`. The helper stops on the first failed Docker command and returns a nonzero exit status; its completion message appears only after every requested rebuild succeeds.
 
-The avatar at the bottom of the left sidebar opens the account menu. Navigation menus mount outside the sidebar and render above its surface and backdrop. **Profile** opens the configured user portal in a new tab. **Sign out** ends the application's Auth0 session. With a standard Auth0 tenant hostname, the application login page waits for you to choose Sign in or Create an account. With a custom Auth0 hostname, logout leads directly to hosted sign-in without returning through the application.
+The avatar at the bottom of the left sidebar opens the account menu. Navigation menus mount outside the sidebar and render above its surface and backdrop. **Profile** opens the configured user portal in a new tab and resumes authentication if that origin has no session for the same account. The user portal's **Back to workspace** link uses the same handoff. **Sign out** ends the application's Auth0 session. With a standard Auth0 tenant hostname, the application login page waits for Sign in. With a custom Auth0 hostname, logout leads directly to hosted sign-in without returning through the application. After authentication, the workspace router resolves `/login` and other unmatched paths to its intro view while preserving valid workspace destinations.
 
-Startup, workspace loading and pending document content share one 100px traveling-outline indicator in a fixed layer above the application. Independent loading leases keep it visible until the pending work finishes. Its GPU renderer loads lazily; canvas and editor modules load after a session is available. The sign-in page appears only when authentication is required, so authenticated reloads do not flash a login screen. A workspace startup failure offers a reload without sending an authenticated user back through sign-in.
+Startup, workspace loading and pending document content share one 100px traveling-outline indicator in a fixed layer above the application. Independent loading leases keep it visible until the pending work finishes. The Profile portal uses the same indicator during authentication, connection setup and user-information loading. Its GPU renderer loads lazily; canvas and editor modules load after a session is available. The sign-in page appears only when authentication is required, so authenticated reloads do not flash a login screen. A workspace startup failure offers a reload without sending an authenticated user back through sign-in.
 
-Deployments with the private billing portal can enable `VITE_BILLING_ONBOARDING_ENABLED=true`. After Auth0 login, the app asks billing whether the organization has completed onboarding and sends new owners to the portal to choose free access or purchase AI credits. Free access requires no card and excludes AI generation; the API enforces the organization balance with `METRICS_ENABLED=true` and fail-closed usage authorization.
+Deployments can enable `VITE_ACCOUNT_ONBOARDING_ENABLED=true` to require account setup before workspace entry. After login, the app requests `portal.module.account.<user-token>.request.onboarding.get` with the authenticated token and organization ID. The account service returns only `{ organizationId, complete }`; an incomplete result opens `/onboarding` at the configured user portal. Setup policy and its UI belong to the selected account service and portal.
 
 ---
 
@@ -148,7 +148,9 @@ Dependency versions are authored in [`dev-tools/versions-registry/`](dev-tools/v
 
 For the full architecture deep-dive — including AI chat request/response flow, streaming, scalability via NATS queue groups, and authentication — see [Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md). For image generation specifics, see [Image Generation](documentation/media-generation/IMAGE-GENERATION.md).
 
-The main app and user portal share [authentication and recovery](documentation/platform/AUTHENTICATION.md). A denied sign-in removes protected views and offers an explicit retry; automatic recovery cannot keep redirecting a rejected callback.
+The main app and user portal share [authentication and recovery](documentation/platform/AUTHENTICATION.md) through one Sign in entry. Auth0 handles existing and new identities after verification, without an application-side account lookup. A rejected callback displays a generic retry message and clears protected views; a normal signed-out visit has no error message.
+
+Local workspace, API and user portal HTTPS use the [shared Caddy gateway and existing development CA](services/caddy/documentation/OPERATIONS.md#local-application-https). Enable the `local-https` Compose profile with matching HTTPS origins and exact Auth0 URL allowlists. The gateway can route to a separately deployed portal through `CADDY_USER_PORTAL_UPSTREAM`; frontend containers do not receive certificate keys.
 
 ---
 

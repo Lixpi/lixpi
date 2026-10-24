@@ -208,7 +208,7 @@ export abstract class BaseProvider {
     private userStopRequested = false
     private readonly settledUsageKinds = new Set<'usage' | 'imageUsage' | 'videoUsage'>()
     private usageSequence = 0
-    private readonly usageReservations = new Map<string, {
+    private readonly usageAuthorizations = new Map<string, {
         completion: ProviderRequestCompletionRequest
         started: boolean
         measured: boolean
@@ -348,7 +348,7 @@ export abstract class BaseProvider {
         this.userStopRequested = false
         this.settledUsageKinds.clear()
         this.usageSequence = 0
-        this.usageReservations.clear()
+        this.usageAuthorizations.clear()
         this.abortController = new AbortController()
         const signals = [requestData.abortSignal as AbortSignal | undefined, accountScope?.signal].filter((signal): signal is AbortSignal => !!signal)
         const parentAbortSignal = signals.length ? AbortSignal.any(signals) : undefined
@@ -579,23 +579,23 @@ export abstract class BaseProvider {
             initialState.requestAuthorizationId
             && initialState.workflowId
         )
-            this.rememberUsageReservation(initialState)
+            this.rememberUsageAuthorization(initialState)
 
-        const completeUsageReservations = AccountRequestContext.prepareCleanup(async () => {
-            for (const reservation of this.usageReservations.values()) {
-                if (reservation.completionQueued)
+        const completeUsageAuthorizations = AccountRequestContext.prepareCleanup(async () => {
+            for (const authorization of this.usageAuthorizations.values()) {
+                if (authorization.completionQueued)
                     continue
 
-                // An interrupted transport with no measurement has an unknown cost.
-                // Preserve that liability for reconciliation, never free it on a timer.
+                // An interrupted transport with no measurement has an unknown outcome.
+                // Leave it unresolved for reconciliation instead of inferring completion.
                 if (
-                    reservation.started
-                    && (!reservation.measured || !reservation.terminal)
+                    authorization.started
+                    && (!authorization.measured || !authorization.terminal)
                 )
                     continue
 
-                await this.deps.providerUsage?.completeRequest(reservation.completion)
-                reservation.completionQueued = true
+                await this.deps.providerUsage?.completeRequest(authorization.completion)
+                authorization.completionQueued = true
             }
         })
         const timeoutHandle = setTimeout(
@@ -708,9 +708,9 @@ export abstract class BaseProvider {
             parentAbortSignal?.removeEventListener('abort', abortFromParent)
 
             try {
-                await completeUsageReservations()
+                await completeUsageAuthorizations()
             } catch (completionError) {
-                err('[ProviderUsage] could not persist reservation completion; funds remain reserved', completionError)
+                err('[ProviderUsage] could not persist request completion; outcome remains unresolved', completionError)
             }
 
             try {
@@ -923,14 +923,14 @@ export abstract class BaseProvider {
     }
 
     // A matrix may fail before dispatching its already-authorized children.
-    // Started calls retain their reservation until measured completion.
-    async releaseUnusedUsageReservations(): Promise<void> {
-        for (const [id, reservation] of this.usageReservations) {
-            if (reservation.started)
+    // Started calls retain their authorization until measured completion.
+    async releaseUnusedUsageAuthorizations(): Promise<void> {
+        for (const [id, authorization] of this.usageAuthorizations) {
+            if (authorization.started)
                 continue
 
-            await this.deps.providerUsage?.completeRequest(reservation.completion)
-            this.usageReservations.delete(id)
+            await this.deps.providerUsage?.completeRequest(authorization.completion)
+            this.usageAuthorizations.delete(id)
         }
     }
 
@@ -986,7 +986,7 @@ export abstract class BaseProvider {
             workflowSeq: 0,
             requestAuthorizationId: authorization.authorizationId,
         }
-        this.rememberUsageReservation({
+        this.rememberUsageAuthorization({
             ...state,
             ...authorizedState,
         })
@@ -994,15 +994,15 @@ export abstract class BaseProvider {
         return authorizedState
     }
 
-    private rememberUsageReservation(state: ProviderState): void {
+    private rememberUsageAuthorization(state: ProviderState): void {
         if (
             !state.requestAuthorizationId
             || !state.workflowId
-            || this.usageReservations.has(state.requestAuthorizationId)
+            || this.usageAuthorizations.has(state.requestAuthorizationId)
         )
             return
 
-        this.usageReservations.set(
+        this.usageAuthorizations.set(
             state.requestAuthorizationId,
             {
                 completion: {
@@ -1800,30 +1800,30 @@ export abstract class BaseProvider {
         )
             return async () => {}
 
-        this.rememberUsageReservation(state)
+        this.rememberUsageAuthorization(state)
         let measurement: ProviderState
         const record = AccountRequestContext.prepareCleanup(async () => void (await this.recordMeasuredUsage(measurement)))
         let authorizedState = state
 
         if (
             state.requestAuthorizationId
-            && this.usageReservations.get(state.requestAuthorizationId)?.started
+            && this.usageAuthorizations.get(state.requestAuthorizationId)?.started
         )
             authorizedState = {
                 ...state,
                 ...await this.authorizeProviderRequest(state),
             }
 
-        const reservation = authorizedState.requestAuthorizationId ? this.usageReservations.get(authorizedState.requestAuthorizationId) : undefined
+        const authorization = authorizedState.requestAuthorizationId ? this.usageAuthorizations.get(authorizedState.requestAuthorizationId) : undefined
 
         AccountRequestContext.assertActive()
         const complete = AccountRequestContext.prepareCleanup(async () => {
-            if (reservation)
-                await this.deps.providerUsage!.completeRequest(reservation.completion)
+            if (authorization)
+                await this.deps.providerUsage!.completeRequest(authorization.completion)
         })
 
-        if (reservation)
-            reservation.started = true
+        if (authorization)
+            authorization.started = true
 
         const origin = {
             ...authorizedState,
@@ -1854,9 +1854,9 @@ export abstract class BaseProvider {
 
             await record()
 
-            if (reservation) {
-                reservation.measured = true
-                reservation.terminal ||= terminal
+            if (authorization) {
+                authorization.measured = true
+                authorization.terminal ||= terminal
             }
 
             for (const kind of kinds) {
@@ -1865,11 +1865,11 @@ export abstract class BaseProvider {
             }
 
             if (
-                reservation?.terminal
-                && !reservation.completionQueued
+                authorization?.terminal
+                && !authorization.completionQueued
             ) {
                 await complete()
-                reservation.completionQueued = true
+                authorization.completionQueued = true
             }
         }
     }
@@ -1980,18 +1980,18 @@ export abstract class BaseProvider {
 
     // Record and log measured provider usage with its request authorization ID.
     private async recordProviderUsage(request: ProviderUsageRecordRequest): Promise<void> {
-        const reservation = request.authorizationId ? this.usageReservations.get(request.authorizationId) : undefined
+        const authorization = request.authorizationId ? this.usageAuthorizations.get(request.authorizationId) : undefined
 
         if (
-            reservation
-            && !reservation.completion.providerRequestIds.includes(request.providerRequestId)
+            authorization
+            && !authorization.completion.providerRequestIds.includes(request.providerRequestId)
         )
-            reservation.completion.providerRequestIds.push(request.providerRequestId)
+            authorization.completion.providerRequestIds.push(request.providerRequestId)
 
         const response = await this.deps.providerUsage!.recordUsage(request)
 
-        if (reservation)
-            reservation.measured = true
+        if (authorization)
+            authorization.measured = true
 
         logRecordedProviderUsage({
             request,
@@ -2139,8 +2139,8 @@ export abstract class BaseProvider {
         operation: string,
         attempt: (context: TransportRetryAttempt) => Promise<T>,
     ): Promise<T> {
-        // A dropped connection can hide a paid attempt. Do not start another
-        // billable attempt under the same reservation when its outcome is unknown.
+        // A dropped connection can hide a completed request. Do not start another
+        // attempt under the same authorization when its outcome is unknown.
         if (this.deps.providerUsage?.enabled) {
             try {
                 return await attempt({ markPublished: () => {} })
@@ -2151,12 +2151,12 @@ export abstract class BaseProvider {
                     status
                     && [400, 401, 403, 404, 413, 422, 429].includes(status)
                 ) {
-                    const reservation = [...this.usageReservations.values()].findLast(value => value.started && !value.measured)
+                    const authorization = [...this.usageAuthorizations.values()].findLast(value => value.started && !value.measured)
 
-                    // An explicit rejection never began paid work. Completion
-                    // with no receipts releases this unused authorization.
-                    if (reservation)
-                        reservation.started = false
+                    // An explicit rejection never began provider work. Completion
+                    // with no measurements closes this unused authorization.
+                    if (authorization)
+                        authorization.started = false
                 }
 
                 throw error

@@ -154,7 +154,7 @@ describe('callStructuredVlm', () => {
         debugErrSpy = null
     })
 
-    it('authorizes and charges every truncated attempt before retrying with a larger budget', async () => {
+    it('authorizes and records every truncated attempt before retrying with a larger budget', async () => {
         const messages: Array<{
             subject: string
             data: any
@@ -211,7 +211,7 @@ describe('callStructuredVlm', () => {
             modelVersion: 'synthetic',
             natsService: {} as never,
             maxTokens: 256,
-            billingIdentity: {
+            usageIdentity: {
                 organizationId: 'org',
                 userId: 'owner',
                 workspaceId: 'workspace',
@@ -219,10 +219,10 @@ describe('callStructuredVlm', () => {
         })
         expect(result.parsed).toEqual({ status: 'ok' })
         expect(messages.map(message => message.subject.split('.').at(-1))).toEqual(['authorize', 'record', 'complete', 'authorize', 'record', 'complete'])
-        const charges = messages.filter(message => message.subject.endsWith('record')).map(message => message.data)
-        expect(charges.map(charge => charge.providerRequestId)).toEqual(['first', 'second'])
-        expect(charges.map(charge => charge.usage.completionTokens)).toEqual([256, 300])
-        expect(charges[0].authorizationId).not.toBe(charges[1].authorizationId)
+        const records = messages.filter(message => message.subject.endsWith('record')).map(message => message.data)
+        expect(records.map(record => record.providerRequestId)).toEqual(['first', 'second'])
+        expect(records.map(record => record.usage.completionTokens)).toEqual([256, 300])
+        expect(records[0].authorizationId).not.toBe(records[1].authorizationId)
     })
 
     it('denies an unfunded auxiliary call before SDK transport', async () => {
@@ -236,7 +236,7 @@ describe('callStructuredVlm', () => {
             provider: 'OpenAI',
             modelVersion: 'synthetic',
             natsService: {} as never,
-            billingIdentity: {
+            usageIdentity: {
                 organizationId: 'empty',
                 userId: 'owner',
             },

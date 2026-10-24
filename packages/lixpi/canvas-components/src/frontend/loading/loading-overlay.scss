@@ -33,13 +33,20 @@
     &.is-error {
         pointer-events: auto;
     }
+}
 
-    canvas {
-        position: absolute;
-        inset: 0;
-        z-index: 1;
-        display: block;
-    }
+.canvas-loading-outline {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 1;
+    display: none;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.canvas-loading-overlay.is-loading .canvas-loading-outline {
+    display: block;
 }
 
 .canvas-loading-error {

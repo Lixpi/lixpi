@@ -66,7 +66,7 @@ export type ProviderUsageRecordResult = {
     recorded: boolean
 }
 
-// Release unused funds only after all listed measurements have committed.
+// Acknowledge completion only after all listed measurements have been recorded.
 export type ProviderRequestCompletionRequest = {
     authorizationId: string
     orgId: string

@@ -695,7 +695,7 @@ describe('BaseProvider request validation', () => {
             const request = vi.fn<ProviderUsageTransport['request']>()
 
             if (outcome === 'unavailable')
-                request.mockRejectedValue(new Error('billing timeout'))
+                request.mockRejectedValue(new Error('metrics timeout'))
             else
                 request.mockResolvedValue(outcome === 'denied' ? { authorized: false } : {})
 
@@ -716,12 +716,12 @@ describe('BaseProvider request validation', () => {
                 aiChatThreadId: 'thread-1',
                 aiModelMetaInfo: {
                     provider: 'Anthropic',
-                    model: 'billing-test-model',
-                    modelVersion: 'billing-test-model',
+                    model: 'metrics-test-model',
+                    modelVersion: 'metrics-test-model',
                 },
                 messages: [{
                     role: 'user',
-                    content: 'A synthetic billing authorization test.',
+                    content: 'A synthetic metrics authorization test.',
                 }],
                 eventMeta: {
                     userId: 'user-1',
@@ -1739,7 +1739,7 @@ describe('BaseProvider process failure path', () => {
 })
 
 describe('BaseProvider usage lifecycle', () => {
-    it('reserves each model round and does not deduplicate separate modalities or later rounds', async () => {
+    it('authorizes each model round and does not deduplicate separate modalities or later rounds', async () => {
         const authorizeRequest = vi.fn(async () => ({
             authorized: true,
             authorizationId: 'second-authorization',
@@ -1793,11 +1793,11 @@ describe('BaseProvider usage lifecycle', () => {
         expect(records[0].authorizationId).toBe('first-authorization')
         expect(records[1].authorizationId).toBe('first-authorization')
         expect(records[2].authorizationId).toBe('second-authorization')
-        await provider.releaseUnusedUsageReservations()
+        await provider.releaseUnusedUsageAuthorizations()
         expect(completeRequest).toHaveBeenCalledTimes(2)
     })
 
-    it('releases a preflight reservation if its child never starts', async () => {
+    it('completes a preflight authorization if its child never starts', async () => {
         const completeRequest = vi.fn()
         const provider = new TestProvider('ws-1:thread-1', {
             natsService: makeFakeNats().fake,
@@ -1817,8 +1817,8 @@ describe('BaseProvider usage lifecycle', () => {
                 organizationId: 'org-1',
             },
         }))
-        await provider.releaseUnusedUsageReservations()
-        await provider.releaseUnusedUsageReservations()
+        await provider.releaseUnusedUsageAuthorizations()
+        await provider.releaseUnusedUsageAuthorizations()
         expect(completeRequest).toHaveBeenCalledOnce()
         expect(completeRequest).toHaveBeenCalledWith(expect.objectContaining({
             authorizationId: 'unused',
@@ -1847,7 +1847,7 @@ describe('BaseProvider usage lifecycle', () => {
             throw error
         })
         await expect((provider as any).retryTransport('request', attempt)).rejects.toThrow('rejected')
-        await provider.releaseUnusedUsageReservations()
+        await provider.releaseUnusedUsageAuthorizations()
         expect(attempt).toHaveBeenCalledOnce()
         expect(completeRequest).toHaveBeenCalledOnce()
     })

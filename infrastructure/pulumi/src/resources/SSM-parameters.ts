@@ -173,15 +173,6 @@ export const createSsmParameters = () => {
     //     secretString: process.env.ANTHROPIC_API_KEY || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
     // })
 
-    // const stripeSecretKeySecret = new aws.secretsmanager.Secret('STRIPE_SECRET_KEY', {
-    //     name: formatStageResourceName('STRIPE_SECRET_KEY', ORG_NAME, STAGE),
-    // })
-
-    // const stripeSecretKeySecretValue = new aws.secretsmanager.SecretVersion('STRIPE_SECRET_KEY_Value', {
-    //     secretId: stripeSecretKeySecret.id,
-    //     secretString: process.env.STRIPE_SECRET_KEY || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-    // })
-
     // --- Outputs ------------------------------------------------------------
 
     const outputs = {
@@ -197,9 +188,6 @@ export const createSsmParameters = () => {
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: saveLlmResponsesParam.name,
             // OPENAI_API_KEY_SECRET_ARN: openApiKeySecret.arn,
             // ANTHROPIC_API_KEY_SECRET_ARN: anthropicApiKeySecret.arn,
-        },
-        stripeConfig: {
-            // STRIPE_SECRET_KEY_SECRET_ARN: stripeSecretKeySecret.arn,
         },
         webUiConfig: {
             VITE_AUTH0_LOGIN_URL: webUiParams.VITE_AUTH0_LOGIN_URL.name,
@@ -223,7 +211,6 @@ export const createSsmParameters = () => {
         secrets: {
             // openApiKeySecret,
             // anthropicApiKeySecret,
-            // stripeSecretKeySecret,
         },
         outputs,
     }

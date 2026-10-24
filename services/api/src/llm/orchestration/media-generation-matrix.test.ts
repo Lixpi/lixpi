@@ -61,10 +61,10 @@ const natsService = { publish: vi.fn() } as any
 const createRegistry = () => {
     const process = vi.fn(async () => ({}))
     const preflightProviderRequestAuthorization = vi.fn(async () => ({ providerRequestAuthorized: true }))
-    const releaseUnusedUsageReservations = vi.fn(async () => undefined)
+    const releaseUnusedUsageAuthorizations = vi.fn(async () => undefined)
     const getOrCreate = vi.fn(() => ({
         preflightProviderRequestAuthorization,
-        releaseUnusedUsageReservations,
+        releaseUnusedUsageAuthorizations,
     }))
     const remove = vi.fn()
     const stopGroup = vi.fn(async () => undefined)
@@ -74,7 +74,7 @@ const createRegistry = () => {
     return {
         process,
         preflightProviderRequestAuthorization,
-        releaseUnusedUsageReservations,
+        releaseUnusedUsageAuthorizations,
         getOrCreate,
         remove,
         stopGroup,
@@ -1030,8 +1030,8 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(generatedAssetStorageMocks.ensurePendingGeneratedAssets).not.toHaveBeenCalled()
         expect(registry.process).not.toHaveBeenCalled()
         expect(registry.remove).toHaveBeenCalledOnce()
-        expect(registry.releaseUnusedUsageReservations).toHaveBeenCalledOnce()
-        const detail = 'AI generation could not be authorized. Check your organization\'s AI credits in Billing and try again.'
+        expect(registry.releaseUnusedUsageAuthorizations).toHaveBeenCalledOnce()
+        const detail = 'AI generation could not be authorized. Please try again or contact your organization administrator.'
 
         if (durableGenerationRequestId)
             expect(mediaGenerationRequestServiceMocks.failUnfinishedRuns).toHaveBeenCalledWith({

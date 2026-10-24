@@ -22,7 +22,7 @@ import { bedrockInference } from '../providers/bedrock-inference.ts'
 import { estimateInputTokens } from '../providers/provider-input-budget.ts'
 import {
     ProviderCallAccounting,
-    type ProviderBillingIdentity,
+    type ProviderUsageIdentity,
 } from '../../services/provider-call-accounting.ts'
 import {
     assertMessageInputKindsSupported,
@@ -43,7 +43,7 @@ export type VlmJsonSchema = {
 }
 
 export type VlmCallArgs = {
-    billingIdentity?: ProviderBillingIdentity
+    usageIdentity?: ProviderUsageIdentity
     provider: ProviderName
     modelVersion: string
     inferenceCapabilities: AiModelInferenceCapabilities
@@ -434,7 +434,7 @@ const callAnthropicOnce = async <T>(
 
             return finalMessage
         },
-        args.billingIdentity,
+        args.usageIdentity,
     )
 
     let parsed: T | undefined
@@ -799,7 +799,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
                 }
             }
         },
-        args.billingIdentity,
+        args.usageIdentity,
     )
 
     const outputText = finalText || rawText
@@ -1008,7 +1008,7 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
                     )
             }
         },
-        args.billingIdentity,
+        args.usageIdentity,
     )
 
     const truncated = /MAX_TOKENS/i.test(finishReason)

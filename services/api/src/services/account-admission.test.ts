@@ -98,9 +98,9 @@ describe('read-only account admission', () => {
         expect(reader.transactRead).not.toHaveBeenCalled()
     })
 
-    it('admits a stored native Microsoft email proof and rejects a changed mailbox', async () => {
+    it.each(['enterprise_otp', 'passwordless_otp'] as const)('admits a stored %s proof and rejects a changed mailbox', async source => {
         const f = fixture()
-        f.admission.emailVerification.source = 'enterprise_otp'
+        f.admission.emailVerification.source = source
         f.admission.emailVerification.connectionId = 'con_microsoft'
         await expect(f.service.admitVerifiedToken(f.token)).resolves.toBeDefined()
         f.admission.emailVerification.providerEmail = 'other@example.test'

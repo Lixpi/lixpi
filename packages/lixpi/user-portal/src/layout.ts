@@ -8,6 +8,7 @@ import {
 } from '@lixpi/web-client-service-factory'
 import { html } from '@lixpi/ui-primitives/dom'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
+import { gentelellaClasses } from '@lixpi/ui-kit-gentelella/class-names'
 
 import {
     type UserPortalModuleContext,
@@ -24,6 +25,7 @@ export type LayoutConfig = {
     context: UserPortalModuleContext
     routes: UserPortalRouteDefinition[]
     navigationGroups: UserPortalNavigationGroup[]
+    workspaceUrl?: string
 }
 
 class Layout implements LayoutInstance {
@@ -44,14 +46,29 @@ class Layout implements LayoutInstance {
                 ` as HTMLElement,
                 name: 'Lixpi',
             },
-            navigationGroups: config.navigationGroups,
+            navigationGroups: [{
+                label: 'Settings',
+                items: config.navigationGroups.flatMap(group => group.items),
+            }],
+            footerContent: config.workspaceUrl ? html`
+                <a
+                    className=${gentelellaClasses.layout.navigationLink}
+                    href=${config.context.createSessionHandoffUrl(config.workspaceUrl)}
+                >Back to workspace</a>
+            ` as HTMLAnchorElement : undefined,
             onNavigate: path => config.context.router.navigateTo(path),
         })
 
         try {
             this.viewOutlet = createRouteViewOutlet({
                 context: config.context,
-                onRouteChange: path => this.shell.setActivePath(path),
+                onRouteChange: path => {
+                    const active = config.navigationGroups.flatMap(group => group.items).filter(
+                        item => path === item.path || item.path !== '/' && path.startsWith(`${item.path}/`),
+                    )
+                        .sort((first, second) => second.path.length - first.path.length)[0]
+                    this.shell.setActivePath(active?.path ?? path)
+                },
                 target: this.shell.contentEl,
                 routes: config.routes,
             })

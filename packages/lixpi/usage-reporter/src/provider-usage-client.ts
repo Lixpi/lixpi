@@ -91,7 +91,7 @@ export class ProviderUsageClient {
     }
 
     // Persist before delivery. Failure to persist must surface to the caller;
-    // billing delivery can retry without discarding the measured usage.
+    // metrics delivery can retry without discarding the measured usage.
     async recordUsage(request: ProviderUsageRecordRequest): Promise<ProviderUsageRecordResult | undefined> {
         if (!this.options.enabled)
             return undefined
@@ -135,7 +135,7 @@ export class ProviderUsageClient {
             if (!this.outbox)
                 throw error
 
-            warn(`[ProviderUsage] reservation completion queued (authorizationId=${request.authorizationId})`)
+            warn(`[ProviderUsage] request completion queued (authorizationId=${request.authorizationId})`)
         }
     }
 }

@@ -6,7 +6,7 @@ import {
 } from '@lixpi/usage-reporter'
 import { AccountRequestContext } from './account-request-context.ts'
 
-export type ProviderBillingIdentity = {
+export type ProviderUsageIdentity = {
     organizationId: string
     userId: string
     workspaceId?: string
@@ -15,7 +15,7 @@ export type ProviderBillingIdentity = {
 // Infrastructure scope shared by chat, detached capabilities and auxiliary calls.
 // Identity comes from the authorized caller, never from model-generated input.
 export class ProviderCallAccounting {
-    private static readonly identities = new AsyncLocalStorage<ProviderBillingIdentity>()
+    private static readonly identities = new AsyncLocalStorage<ProviderUsageIdentity>()
     private static client?: ProviderUsageClient
     private usage?: MeasuredUsage
     private providerRequestId: string
@@ -23,7 +23,7 @@ export class ProviderCallAccounting {
     private constructor(
         private readonly workflowId: string,
         private readonly model: string,
-        private readonly identity: ProviderBillingIdentity | undefined,
+        private readonly identity: ProviderUsageIdentity | undefined,
         private readonly authorizationId: string | undefined,
     ) {
         this.providerRequestId = `auxiliary:${workflowId}`
@@ -34,7 +34,7 @@ export class ProviderCallAccounting {
     }
 
     static async inScope<T>(
-        identity: ProviderBillingIdentity,
+        identity: ProviderUsageIdentity,
         operation: () => Promise<T>,
     ): Promise<T> {
         return await this.identities.run(identity, operation)
@@ -59,7 +59,7 @@ export class ProviderCallAccounting {
                 !identity?.organizationId
                 || !identity.userId
             )
-                throw new Error('ProviderUsage: auxiliary call has no billing identity')
+                throw new Error('ProviderUsage: auxiliary call has no usage identity')
 
             const authorization = await client.authorizeRequest({
                 orgId: identity.organizationId,

@@ -107,7 +107,6 @@ type EnvConfig = {
     // When true, stableDiffusionApiKey is ignored and inference goes through AWS Bedrock.
     stabilityUseAwsBedrockInference: boolean
     arkApiKey: string
-    stripePublicKey: string
 }
 
 type CliArgs = {
@@ -167,7 +166,6 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     stableDiffusionApiKey: ['STABLE_DIFFUSION_API_KEY'],
     stabilityUseAwsBedrockInference: ['STABILITY_USE_AWS_BEDROCK_INFERENCE'],
     arkApiKey: ['ARK_API_KEY'],
-    stripePublicKey: ['VITE_STRIPE_PUBLIC_KEY'],
 }
 
 class SetupCancelled extends Error {}
@@ -1180,7 +1178,7 @@ const collectConfiguration = async (
         prompts.log.info(
             auth0UseDeveloperKeys
                 ? `Local login uses https://${auth0Domain} with Auth0's shared Google development keys. No Google client credentials are needed. These keys cannot use a custom login domain or silent login. Staging and production require your own provider credentials.`
-                : `Real Auth0 uses https://auth.${domainName}. Provision and verify this domain through billing's Auth0 Pulumi setup before starting real authentication.`,
+                : `Real Auth0 uses https://auth.${domainName}. Provision and verify this custom domain in your identity-provider deployment before starting real authentication.`,
         )
 
         const clientId = await fields.text(
@@ -1761,27 +1759,6 @@ const collectConfiguration = async (
         return null
     }
 
-    // Only ask for Stripe key if not using LocalAuth0 mock (real Auth0 = real payments)
-    let stripePublicKey = fields.read('stripePublicKey', '')
-
-    if (!useLocalAuth0Mock) {
-        const stripeKey = await fields.text(
-            'stripePublicKey',
-            {
-                message: 'Stripe Public Key',
-                placeholder: 'pk_test_...',
-            },
-        )
-
-        if (prompts.isCancel(stripeKey)) {
-            prompts.cancel('Setup cancelled')
-
-            return null
-        }
-
-        stripePublicKey = stripeKey as string
-    }
-
     return {
         edits: partial ? fields : undefined,
         envFilePath,
@@ -1841,7 +1818,6 @@ const collectConfiguration = async (
         stableDiffusionApiKey: (stableDiffusionApiKey as string) || '',
         stabilityUseAwsBedrockInference: stabilityUseAwsBedrockInference as boolean,
         arkApiKey: (arkApiKey as string) || '',
-        stripePublicKey: (stripePublicKey as string) || '',
     }
 }
 
@@ -1963,7 +1939,6 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{VITE_AUTH0_AUDIENCE}}': config.auth0Audience,
         '{{VITE_AUTH0_REDIRECT_URI}}': isLocal ? 'http://localhost:3001' : `https://${config.domainName}`,
         '{{VITE_USER_PORTAL_URL}}': isLocal ? 'http://localhost:3002' : `https://user-portal.${config.domainName}`,
-        '{{VITE_STRIPE_PUBLIC_KEY}}': config.stripePublicKey,
         '{{VITE_NATS_SERVER}}': isLocal ? 'wss://localhost:9222' : `wss://nats.${config.domainName}`,
         '{{CLOUDWATCH_LOG_RETENTION_DAYS}}': String(config.cloudwatchLogRetentionDays),
         '{{CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED}}': String(config.cloudwatchContainerInsightsEnabled),
@@ -2196,7 +2171,6 @@ const main = async (): Promise<void> => {
             googleVeoPersonGenerationProfile: 'standard',
             stableDiffusionApiKey: '',
             arkApiKey: '',
-            stripePublicKey: '',
         }
 
         await writeFiles(config)
@@ -2260,7 +2234,7 @@ const main = async (): Promise<void> => {
 
     if (!config.useLocalAuth0Mock)
         debugLog(
-            `  Before starting services, run billing's Auth0 Pulumi preview-domain and setup-domain commands for ${c.cyan(envFileName)}. DNS verification and HTTPS discovery must succeed.`,
+            `  Before starting services, provision the Auth0 custom domain configured in ${c.cyan(envFileName)}. DNS verification and HTTPS discovery must succeed.`,
         )
 
     debugLog(`  1. Run ${c.cyan(`docker compose --env-file ${envFileName} up`)}`)

@@ -354,7 +354,7 @@ export class MediaGenerationMatrixOrchestrator {
         const authorizationProviders: BaseProvider[] = []
         const releaseUnusedReservations = AccountRequestContext.prepareCleanup(async () => {
             for (const provider of authorizationProviders)
-                await provider.releaseUnusedUsageReservations()
+                await provider.releaseUnusedUsageAuthorizations()
         })
 
         try {
@@ -390,7 +390,7 @@ export class MediaGenerationMatrixOrchestrator {
         } catch (error) {
             await releaseUnusedReservations()
             authorizationInstanceKeys.forEach(instanceKey => this.registry.remove(instanceKey))
-            const detail = "AI generation could not be authorized. Check your organization's AI credits in Billing and try again."
+            const detail = 'AI generation could not be authorized. Please try again or contact your organization administrator.'
 
             try {
                 if (accountScope?.signal.aborted)

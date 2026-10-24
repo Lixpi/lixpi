@@ -149,7 +149,7 @@ describe('Auth0 web client service', () => {
             await expect(signedOut.recoverAccess()).rejects.toThrow('explicit sign-in')
         }
 
-        expect(mocks.getTokenSilently).not.toHaveBeenCalled()
+        expect(mocks.getTokenSilently).toHaveBeenCalledTimes(2)
         expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
         const signedOut = createAuth0Service(tenantConfig, createAuthStore())
         await signedOut.init()
@@ -173,21 +173,23 @@ describe('Auth0 web client service', () => {
         expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
     })
 
-    it('renews a remembered standard-tenant session without an interactive redirect', async () => {
+    it('renews a standard-tenant session even when its cached ID token and remembered cookie are absent', async () => {
         const store = createAuthStore()
         const service = createAuth0Service({
             ...config,
             domain: 'tenant.us.auth0.com',
         }, store)
         await service.init()
-        mocks.checkSession.mockImplementation(async () => {
+        mocks.getTokenSilently.mockImplementation(async () => {
             mocks.isAuthenticated.mockResolvedValue(true)
             mocks.getUser.mockResolvedValue({ sub: 'auth0|user-1' })
+
+            return 'renewed-token'
         })
-        mocks.getTokenSilently.mockResolvedValue('renewed-token')
 
         await expect(service.getTokenSilently()).resolves.toBe('renewed-token')
-        expect(mocks.checkSession).toHaveBeenCalledOnce()
+        expect(mocks.checkSession).not.toHaveBeenCalled()
+        expect(Auth0Client).toHaveBeenCalledWith(expect.objectContaining({ useRefreshTokensFallback: false }))
         expect(store.getMeta('isAuthenticated')).toBe(true)
         expect(mocks.loginWithRedirect).not.toHaveBeenCalled()
     })

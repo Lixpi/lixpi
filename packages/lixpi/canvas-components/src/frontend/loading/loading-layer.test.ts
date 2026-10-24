@@ -95,29 +95,28 @@ describe('application loading layer', () => {
         expect(layer.dom.isConnected).toBe(false)
     })
 
-    it('skips a renderer for completed work and can initialize for a later request', async () => {
+    it('paints the first request synchronously and retains the renderer for later work', () => {
         const layer = createLayer()
         const completed = layer.acquire({ visible: true })
+        expect(instances).toHaveLength(1)
+        expect(instances[0].setVisible).toHaveBeenLastCalledWith(true)
         completed.destroy()
-        await new Promise(resolve => setTimeout(resolve, 0))
-        expect(instances).toHaveLength(0)
         expect(layer.dom.isConnected).toBe(false)
 
         const pending = layer.acquire({ visible: true })
-        await vi.waitFor(() => expect(instances).toHaveLength(1))
+        expect(instances).toHaveLength(1)
         expect(layer.dom.isConnected).toBe(true)
         expect(instances[0].setVisible).toHaveBeenLastCalledWith(true)
         pending.destroy()
         expect(layer.dom.isConnected).toBe(false)
     })
 
-    it('cannot mount a late renderer after application disposal', async () => {
+    it('disposes the renderer and ignores requests after application disposal', () => {
         const layer = createLayer()
         const request = layer.acquire({ visible: true })
         layer.destroy()
         request.setVisible(true)
-        await new Promise(resolve => setTimeout(resolve, 0))
-        expect(instances).toHaveLength(0)
+        expect(instances[0].destroy).toHaveBeenCalledOnce()
         expect(layer.dom.isConnected).toBe(false)
         expect(() => layer.acquire()).toThrow('disposed')
     })

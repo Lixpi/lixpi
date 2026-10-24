@@ -167,7 +167,7 @@ describe('public web UI startup', () => {
         expect(document.body.children).toHaveLength(0)
     })
 
-    it('offers sign-in and signup only after the session check confirms no session', async () => {
+    it('offers one hosted sign-in entry only after the session check confirms no session', async () => {
         const {
             startup,
             auth,
@@ -180,12 +180,11 @@ describe('public web UI startup', () => {
         expect(document.querySelector('[role="status"]')).toBeNull()
         expect(document.querySelector('h1')?.textContent).toBe('Welcome to Lixpi')
         const buttons = document.querySelectorAll('button')
-        expect(Array.from(buttons, button => button.textContent)).toEqual(['Sign in', 'Create an account'])
+        expect(Array.from(buttons, button => button.textContent)).toEqual(['Sign in'])
         buttons[0].click()
         await vi.waitFor(() => expect(buttons[0].disabled).toBe(false))
         expect(auth.login).toHaveBeenCalledWith(true)
-        buttons[1].click()
-        expect(auth.login).toHaveBeenCalledWith(true, 'signup')
+        expect(auth.login).toHaveBeenCalledOnce()
         expect(loadWorkspace).not.toHaveBeenCalled()
     })
 
@@ -232,9 +231,10 @@ describe('public web UI startup', () => {
             loadWorkspace,
         } = harness()
         const started = startup.start()
-        pending.reject(new Error('access_denied'))
+        pending.reject(new Error('private account verification detail'))
         await started
-        expect(document.querySelector('[role="status"]')).toBeNull()
+        expect(document.querySelector('[role="status"]')?.textContent).toBe('Sign-in could not be completed. Please try again.')
+        expect(document.body.textContent).not.toContain('private account verification detail')
         expect(document.querySelector('button')?.textContent).toBe('Sign in')
         expect(loadWorkspace).not.toHaveBeenCalled()
     })

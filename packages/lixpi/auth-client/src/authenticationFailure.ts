@@ -1,35 +1,29 @@
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
 
-// Sign-in entry when protected views are unavailable. A missing session or
-// stopped automatic redirect does not establish that a sign-in attempt failed.
+// One hosted authentication entry for both existing and new accounts. Account
+// discovery and registration belong to Auth0 after proof of identity.
 export class AuthenticationFailure {
     private view?: AuthPanel
     private busy = false
 
-    constructor(
-        private readonly retry: () => Promise<void>,
-        private readonly signup?: () => Promise<void>,
-    ) {}
+    constructor(private readonly retry: () => Promise<void>) {}
 
-    show(target: HTMLElement): void {
+    show(
+        target: HTMLElement,
+        failed = false,
+    ): void {
         this.destroy()
         this.view = new AuthPanel({
             brand: 'Lixpi',
             logo: lixpiLogo,
             title: 'Welcome to Lixpi',
             description: 'Sign in to continue to your workspace.',
-            actions: [
-                {
-                    label: 'Sign in',
-                    onClick: () => void this.signIn(this.retry),
-                },
-                ...(this.signup ? [{
-                    label: 'Create an account',
-                    secondary: true,
-                    onClick: () => void this.signIn(this.signup!),
-                }] : []),
-            ],
+            message: failed ? 'Sign-in could not be completed. Please try again.' : undefined,
+            actions: [{
+                label: 'Sign in',
+                onClick: () => void this.signIn(target),
+            }],
         })
         target.replaceChildren(this.view.dom)
         this.view.dom.focus()
@@ -41,7 +35,7 @@ export class AuthenticationFailure {
         this.busy = false
     }
 
-    private async signIn(action: () => Promise<void>): Promise<void> {
+    private async signIn(target: HTMLElement): Promise<void> {
         if (
             this.busy
             || !this.view
@@ -53,9 +47,10 @@ export class AuthenticationFailure {
         view.setBusy(true)
 
         try {
-            await action()
+            await this.retry()
         } catch {
-            // Leave sign-in available without exposing provider diagnostics.
+            if (this.view === view)
+                this.show(target, true)
         } finally {
             if (this.view === view) {
                 this.busy = false

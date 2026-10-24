@@ -110,8 +110,7 @@ Here you can:
   ```json
   {
     "custom_claims": [
-      { "name": "https://lixpi.ai/admission", "value": { "Json": { "v": 1, "epoch": 1 } } },
-      { "name": "stripe_customer_id", "value": { "String": "cus_mock_stripe_test" } }
+      { "name": "https://lixpi.ai/admission", "value": { "Json": { "v": 1, "epoch": 1 } } }
     ]
   }
   ```
@@ -144,7 +143,6 @@ Given Name: Test
 Family Name: User
 Custom Claims:
   - https://lixpi.ai/admission: { v: 1, epoch: 1 }
-  - stripe_customer_id: cus_mock_stripe_test
 ```
 
 ## Runtime State

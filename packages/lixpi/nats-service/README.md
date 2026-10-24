@@ -6,6 +6,8 @@ Shared NATS client implementations for Lixpi services. The TypeScript package is
 
 Returning `false` from `onAuthError` (`on_auth_error` in Python) permanently closes that client instance and stops reconnect attempts. A failed token refresh discards the previous credential. Browser applications use `onAccessDenied` (`on_access_denied`) to clear protected state when an API reply contains `ACCOUNT_ADMISSION_DENIED`; installing that callback also closes the denied connection. Network failures still use ordinary reconnect behavior.
 
+An established connection's `user authentication expired` event renews the broker lease through the normal token provider without calling `onAuthError`. The provider can reuse a valid OAuth token or refresh an expired one. The broker rechecks admission on reconnect; an authorization rejection still invokes the application's bounded recovery and denial path. Lease renewal does not force an Auth0 token exchange every minute.
+
 Provides a unified API for NATS messaging with support for:
 - Connection management with automatic reconnection
 - Publish/subscribe patterns

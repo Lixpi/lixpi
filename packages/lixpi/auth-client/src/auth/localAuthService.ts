@@ -85,6 +85,7 @@ class LocalAuthService implements WebClientAuthService {
     }
 
     async login(): Promise<void> {
+        this.store.setMetaValues({ isRedirecting: true })
         const query = new URLSearchParams({
             client_id: this.config.clientId,
             audience: this.config.audience,

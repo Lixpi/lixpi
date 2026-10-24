@@ -42,7 +42,7 @@ export class WebUiStartup {
     private destroyed = false
 
     constructor(private readonly config: StartupConfig) {
-        this.signIn = new AuthenticationFailure(() => config.auth.login(true), () => config.auth.login(true, 'signup'))
+        this.signIn = new AuthenticationFailure(() => config.auth.login(true))
     }
 
     start(): Promise<void> {
@@ -65,7 +65,7 @@ export class WebUiStartup {
         try {
             session = await this.config.auth.initializeSession()
         } catch {
-            this.showSignIn()
+            this.showSignIn(true)
 
             return
         }
@@ -84,7 +84,7 @@ export class WebUiStartup {
                 loadingLayer: this.loadingLayer,
                 auth: this.config.auth,
                 session,
-                onAuthRequired: () => this.showSignIn(),
+                onAuthRequired: () => this.showSignIn(true),
                 onReady: () => this.clearView(),
                 onError: error => this.showWorkspaceError(error),
             })
@@ -110,7 +110,7 @@ export class WebUiStartup {
         this.panel = undefined
     }
 
-    private showSignIn(): void {
+    private showSignIn(failed = false): void {
         if (
             this.destroyed
             || this.config.auth.authStore.getMeta('isRedirecting')
@@ -118,7 +118,7 @@ export class WebUiStartup {
             return
 
         this.clearView()
-        this.signIn.show(this.config.target)
+        this.signIn.show(this.config.target, failed)
     }
 
     private showWorkspaceError(error: unknown): void {

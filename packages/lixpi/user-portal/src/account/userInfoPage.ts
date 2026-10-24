@@ -2,11 +2,12 @@ import {
     LoadingStatus,
     type User,
 } from '@lixpi/constants'
-import { createGentelellaCard } from '@lixpi/ui-kit-gentelella/components/card'
 import { createGentelellaPage } from '@lixpi/ui-kit-gentelella/components/page'
 import { createGentelellaPageHeader } from '@lixpi/ui-kit-gentelella/components/page-header'
-import { createGentelellaSpinner } from '@lixpi/ui-kit-gentelella/components/spinner'
-import { createGentelellaStatus } from '@lixpi/ui-kit-gentelella/components/status'
+import {
+    type LoadingLayer,
+    type LoadingLease,
+} from '@lixpi/canvas-components/loading/layer'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     type UserStateStore,
@@ -15,6 +16,7 @@ import {
 export type UserInfoPageConfig = {
     document?: Document
     store: UserStateStore
+    loadingLayer: Pick<LoadingLayer, 'acquire'>
 }
 
 export type UserInfoPageInstance = {
@@ -30,7 +32,6 @@ const formatTimestamp = (timestamp: number): string => {
         undefined,
         {
             dateStyle: 'medium',
-            timeStyle: 'short',
         },
     ).format(
         new Date(timestamp),
@@ -44,15 +45,16 @@ class UserInfoPage implements UserInfoPageInstance {
     private readonly document: Document
     private readonly store: UserStateStore
     private readonly unsubscribe: () => void
+    private readonly loading: LoadingLease
 
     constructor(config: UserInfoPageConfig) {
         this.document = config.document ?? globalThis.document
         this.store = config.store
+        this.loading = config.loadingLayer.acquire({ label: 'Loading user information' })
         const html = createDocumentHtml(this.document)
         const header = createGentelellaPageHeader({
             document: this.document,
-            pretitle: 'Account',
-            title: 'User information',
+            title: 'Profile',
         })
         this.contentEl = html`<div className="user-portal-user-content"></div>` as HTMLDivElement
         const page = createGentelellaPage({
@@ -71,15 +73,11 @@ class UserInfoPage implements UserInfoPageInstance {
         user: User,
     ): void {
         this.contentEl.replaceChildren()
+        const pending = loadingStatus === LoadingStatus.idle || loadingStatus === LoadingStatus.loading
+        this.loading.setVisible(pending)
 
-        if (
-            loadingStatus === LoadingStatus.idle
-            || loadingStatus === LoadingStatus.loading
-        ) {
-            this.renderLoading()
-
+        if (pending)
             return
-        }
 
         if (loadingStatus === LoadingStatus.error) {
             this.renderError()
@@ -90,91 +88,67 @@ class UserInfoPage implements UserInfoPageInstance {
         this.renderUser(user)
     }
 
-    private renderLoading(): void {
-        const html = createDocumentHtml(this.document)
-        const spinner = createGentelellaSpinner({
-            document: this.document,
-            label: 'Loading user information',
-        })
-        const card = createGentelellaCard({
-            document: this.document,
-            content: html`
-                <div className="user-portal-state">
-                    ${spinner.el}
-                    <span>Loading user information…</span>
-                </div>
-            `,
-        })
-        this.contentEl.append(card.el)
-    }
-
     private renderError(): void {
         const html = createDocumentHtml(this.document)
-        const status = createGentelellaStatus({
-            document: this.document,
-            label: 'Unable to load',
-            tone: 'red',
-        })
-        const card = createGentelellaCard({
-            document: this.document,
-            title: 'Profile',
-            content: html`
-                <div className="user-portal-state">
-                    ${status.el}
-                    <span>User information could not be loaded.</span>
-                </div>
-            `,
-        })
-        this.contentEl.append(card.el)
+        this.contentEl.append(
+            html`
+                <p
+                    className="user-portal-state"
+                    role="alert"
+                >User information could not be loaded. Reload this page to try again.</p>
+            ` as HTMLParagraphElement,
+        )
     }
 
     private renderUser(user: User): void {
         const html = createDocumentHtml(this.document)
-        const organizations = user.organizations.length > 0
-            ? user.organizations.join(', ')
-            : 'None'
-        const card = createGentelellaCard({
-            document: this.document,
-            title: 'Profile',
-            subtitle: 'Information returned by the existing authenticated user endpoint.',
-            content: html`
-                <dl className="user-portal-user-grid">
-                    <div className="user-portal-user-field">
-                        <dt className="user-portal-user-term">Name</dt>
-                        <dd className="user-portal-user-value">${user.name || 'Not available'}</dd>
+        const displayName = user.name
+            && user.name !== user.email
+            ? user.name
+            : 'Your account'
+        const initial = (user.givenName || user.name || user.email || 'L').slice(0, 1).toUpperCase()
+        this.contentEl.append(
+            html`
+                <section
+                    className="user-portal-profile"
+                    aria-label="Your profile"
+                >
+                    <div className="user-portal-profile-heading">
+                        <span
+                            className="user-portal-avatar"
+                            aria-hidden="true"
+                        >${initial}</span>
+                        <div><p className="user-portal-eyebrow">Your creative space</p><h2>${displayName}</h2><p>${user.email || 'Your Lixpi account'}</p></div>
                     </div>
-                    <div className="user-portal-user-field">
-                        <dt className="user-portal-user-term">Email</dt>
-                        <dd className="user-portal-user-value">${user.email || 'Not available'}</dd>
+                    <div className="user-portal-profile-section">
+                    <h3>Personal details</h3>
+                    <p className="user-portal-section-description">The details associated with your sign-in.</p>
+                    <dl className="user-portal-user-grid">
+                        <div className="user-portal-user-field">
+                            <dt className="user-portal-user-term">Name</dt>
+                            <dd className="user-portal-user-value">${user.name
+                                && user.name !== user.email
+                                ? user.name
+                                : 'Not set'}</dd>
+                        </div>
+                        <div className="user-portal-user-field">
+                            <dt className="user-portal-user-term">Email</dt>
+                            <dd className="user-portal-user-value">${user.email || 'Not available'}</dd>
+                        </div>
+                        <div className="user-portal-user-field">
+                            <dt className="user-portal-user-term">Member since</dt>
+                            <dd className="user-portal-user-value">${formatTimestamp(user.createdAt)}</dd>
+                        </div>
+                    </dl>
                     </div>
-                    <div className="user-portal-user-field">
-                        <dt className="user-portal-user-term">User ID</dt>
-                        <dd className="user-portal-user-value user-portal-user-code-value">${user.userId || 'Not available'}</dd>
-                    </div>
-                    <div className="user-portal-user-field">
-                        <dt className="user-portal-user-term">Given name</dt>
-                        <dd className="user-portal-user-value">${user.givenName || 'Not available'}</dd>
-                    </div>
-                    <div className="user-portal-user-field">
-                        <dt className="user-portal-user-term">Family name</dt>
-                        <dd className="user-portal-user-value">${user.familyName || 'Not available'}</dd>
-                    </div>
-                    <div className="user-portal-user-field user-portal-wide-user-field">
-                        <dt className="user-portal-user-term">Organizations</dt>
-                        <dd className="user-portal-user-value">${organizations}</dd>
-                    </div>
-                    <div className="user-portal-user-field user-portal-wide-user-field">
-                        <dt className="user-portal-user-term">Created</dt>
-                        <dd className="user-portal-user-value">${formatTimestamp(user.createdAt)}</dd>
-                    </div>
-                </dl>
-            `,
-        })
-        this.contentEl.append(card.el)
+                </section>
+            ` as HTMLElement,
+        )
     }
 
     destroy(): void {
         this.unsubscribe()
+        this.loading.destroy()
         this.el.remove()
     }
 }

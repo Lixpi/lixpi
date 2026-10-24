@@ -253,7 +253,7 @@ export class AccountAdmission {
                     || claim.epoch !== 1
                 )
                     return deny()
-            } else if (!['database_otp', 'enterprise_otp', 'provider', 'form_otp'].includes(
+            } else if (!['database_otp', 'passwordless_otp', 'enterprise_otp', 'provider', 'form_otp'].includes(
                 String(proof.source),
             ))
                 return deny()

@@ -15,8 +15,7 @@ echo "Setting custom claims..."
         { "name": "name", "value": { "String": "Test User" } },
         { "name": "given_name", "value": { "String": "Test" } },
         { "name": "family_name", "value": { "String": "User" } },
-        { "name": "email_verified", "value": { "Json": true } },
-        { "name": "stripe_customer_id", "value": { "String": "cus_mock_stripe_test" } }
+        { "name": "email_verified", "value": { "Json": true } }
     ]
 }' \
     --header="Content-Type: application/json" \

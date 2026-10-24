@@ -561,11 +561,11 @@ describe('shared grouped wizard', () => {
         expect(write).not.toHaveBeenCalled()
     })
 
-    it('does not ask for inactive provider credentials or Stripe with LocalAuth0', async () => {
+    it('does not ask for inactive provider credentials with LocalAuth0', async () => {
         groups.add('API Keys')
         await writeFiles(await collect())
 
-        for (const message of ['Anthropic API Key', 'Stable Diffusion API Key', 'Stripe Public Key'])
+        for (const message of ['Anthropic API Key', 'Stable Diffusion API Key'])
             expect(prompts.select).not.toHaveBeenCalledWith(expect.objectContaining({ message }))
 
         expect(prompts.text).not.toHaveBeenCalled()

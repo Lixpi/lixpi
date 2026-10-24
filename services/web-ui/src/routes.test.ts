@@ -11,7 +11,7 @@ import {
     vi,
 } from 'vitest'
 
-import { routes } from '$src/routes.ts'
+import { workspaceRouting } from '$src/routes.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 
 type Deferred = {
@@ -46,6 +46,7 @@ describe('web-ui routes', () => {
     let router: WebClientRouterService
 
     beforeEach(() => {
+        window.history.replaceState({}, '', '/')
         workspaceLoads.clear()
         getWorkspace.mockClear()
         loadWorkspaceAssets.mockClear()
@@ -54,10 +55,34 @@ describe('web-ui routes', () => {
             workspaceService: { getWorkspace },
             assetService: { loadWorkspaceAssets },
         })
-        router = createRouterService({ routes })
+        router = createRouterService(workspaceRouting)
     })
 
-    afterEach(() => void router.destroy())
+    afterEach(() => {
+        router.destroy()
+        window.history.replaceState({}, '', '/')
+    })
+
+    it('opens the intro view when authentication returns to the login callback path', async () => {
+        window.history.replaceState({}, '', '/login')
+
+        await router.init()
+
+        expect(window.location.pathname).toBe('/')
+        expect(router.getCurrentRoute().path).toBe('/')
+        expect(getWorkspace).not.toHaveBeenCalled()
+    })
+
+    it('preserves a valid workspace destination when initializing after authentication', async () => {
+        window.history.replaceState({}, '', '/workspace/existing?view=canvas#selection')
+
+        await router.init()
+
+        expect(window.location.pathname).toBe('/workspace/existing')
+        expect(window.location.search).toBe('?view=canvas')
+        expect(window.location.hash).toBe('#selection')
+        expect(getWorkspace).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'existing' })
+    })
 
     it('does not let a stale workspace load mark the active newer route as fetched', async () => {
         router.navigateTo('/workspace/:workspaceId', {

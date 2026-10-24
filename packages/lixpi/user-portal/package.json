@@ -17,6 +17,8 @@
     },
     "dependencies": {
         "@lixpi/auth-client": "workspace:*",
+        "@lixpi/canvas-components": "workspace:*",
+        "@lixpi/canvas-components-lixpi-specific": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/ui-kit": "workspace:*",

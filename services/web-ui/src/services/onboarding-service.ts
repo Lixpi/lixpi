@@ -8,8 +8,7 @@ import {
 
 export class OnboardingUnavailable extends Error {}
 
-// The billing service owns this decision. The browser only follows its result;
-// provider authorization independently enforces the organization's balance.
+// The account service owns setup requirements. The browser follows its result.
 export class OnboardingService {
     constructor(
         private readonly auth: AuthClientInstance,
@@ -35,7 +34,7 @@ export class OnboardingService {
                 organizationId: string
                 complete: boolean
             }>(
-                `portal.module.billing.${getNatsUserSubjectToken(userId)}.request.onboarding.get`,
+                `portal.module.account.${getNatsUserSubjectToken(userId)}.request.onboarding.get`,
                 {
                     organizationId,
                     token,
@@ -62,7 +61,9 @@ export class OnboardingService {
                 throw new OnboardingUnavailable()
 
             destination.searchParams.set('organization', organizationId)
-            this.navigate(destination.href)
+            this.navigate(
+                this.auth.createSessionHandoffUrl(destination.href),
+            )
 
             return false
         } catch {
