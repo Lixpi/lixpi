@@ -38,4 +38,4 @@ For a deployment with an external artifact publisher, set `USER_PORTAL_ARTIFACT_
 
 The application image includes UI-kit authentication presentation and its workspace dependencies. Private portal compositions can show the shared `AuthenticationFailure` panel and its single Sign in action; its styles must be imported once by the composition root.
 
-Use the repository TypeScript test and quality runner containers. The `web-ui-user-portal` domain covers the application composition. The `shared user-portal` package covers the module catalog, layout, and account view beside their implementations.
+Use the repository TypeScript test and quality runner containers. The `web-ui-user-portal` domain covers application composition, redirect suppression and sign-in retry. The `shared user-portal` package covers the module catalog, layout, and account view beside their implementations.
