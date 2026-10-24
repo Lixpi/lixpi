@@ -1,0 +1,71 @@
+// Hosts and caller-owned surfaces for the overlay demonstrations.
+
+.design-system-bubble-body {
+    max-width: 220px;
+    margin: 0;
+}
+
+.design-system-tooltip-target {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.design-system-tooltip-rich {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 220px;
+}
+
+.design-system-interactive-root {
+    position: relative;
+    display: inline-block;
+}
+
+// InteractivePreviewPopover only toggles is-open; the caller owns visibility.
+.design-system-interactive-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 10;
+    display: none;
+    width: 280px;
+
+    &.is-open {
+        display: block;
+    }
+}
+
+.design-system-bubble-menu-host {
+    position: relative;
+    display: flex;
+    gap: var(--space-6);
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    margin-bottom: var(--space-3);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius);
+}
+
+.design-system-bubble-menu-target {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--primary-lt);
+}
+
+.design-system-bubble-menu-image {
+    width: 96px;
+    height: 72px;
+    padding: var(--space-4);
+}

@@ -22,6 +22,7 @@ The quality runner follows the TypeScript test runner's domain shape. Run a serv
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner web-ui validate
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner web-ui-user-portal validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner design-system validate
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner api validate
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner nex validate
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate

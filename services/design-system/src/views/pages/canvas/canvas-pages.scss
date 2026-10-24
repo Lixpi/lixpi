@@ -1,0 +1,137 @@
+// Hosts for the canvas-mode demonstrations.
+
+.design-system-glass-target {
+    position: absolute;
+    z-index: 5;
+    min-width: 140px;
+    border-radius: 999px;
+}
+
+.design-system-glass-target-toolbar {
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.design-system-glass-target-composer {
+    bottom: 24px;
+    left: 50%;
+    min-width: 320px;
+    transform: translateX(-50%);
+}
+
+.design-system-material-preview {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: auto;
+}
+
+.design-system-glass-disc {
+    display: inline-block;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background-size: cover;
+}
+
+.design-system-loading-stage {
+    position: relative;
+    width: 100%;
+    height: 260px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface-secondary);
+}
+
+// The loading layer normally covers the window. The lease demonstration keeps
+// it inside its stage so the rest of the page stays usable.
+.design-system-loading-stage .canvas-loading-layer {
+    position: absolute;
+}
+
+// Positioned host for a single workspace node placed by WorkspaceNodeShells.
+.design-system-node-stage {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: #f5f3f3;
+}
+
+.design-system-prompt-parts {
+    margin: 0;
+    line-height: 1.8;
+}
+
+// Positioned hosts for chrome that is placed in screen coordinates.
+.design-system-output-stage,
+.design-system-video-chrome-stage {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: #f5f3f3;
+}
+
+.design-system-output-stage {
+    height: 300px;
+}
+
+.design-system-video-chrome-stage {
+    height: 320px;
+}
+
+.design-system-output-node {
+    position: absolute;
+    top: 40px;
+    left: 24px;
+    width: 280px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+}
+
+.design-system-progress-host {
+    width: 100%;
+    max-width: 520px;
+}
+
+.design-system-details-host {
+    position: relative;
+    max-width: 494px;
+    height: 520px;
+    margin-top: var(--space-3);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: #f8fafd;
+}
+
+.design-system-composer-host {
+    width: 100%;
+    max-width: 720px;
+}
+
+// The right panel measures its width host and pane like the workspace canvas.
+.design-system-right-panel-host {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 640px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: #f5f3f3;
+}
+
+// The workspace chrome fills its host the way it fills the web-ui view.
+.design-system-workspace-stage {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 600px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: #f5f3f3;
+}

@@ -44,6 +44,8 @@ jobs:
                       command: web-ui validate
                     - name: web-ui-user-portal
                       command: web-ui-user-portal validate
+                    - name: design-system
+                      command: design-system validate
                     - name: api
                       command: api validate
                     - name: nex
@@ -80,6 +82,7 @@ jobs:
                     - api
                     - web-ui
                     - web-ui-user-portal
+                    - design-system
                     - ai-model-registry
                     - nex
                     - shared

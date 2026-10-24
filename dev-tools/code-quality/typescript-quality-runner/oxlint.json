@@ -185,7 +185,8 @@
         {
             "files": [
                 "services/web-ui/src/**/*.ts",
-                "services/web-ui-user-portal/src/**/*.ts"
+                "services/web-ui-user-portal/src/**/*.ts",
+                "services/design-system/src/**/*.ts"
             ],
             "excludeFiles": [
                 "**/*.test.ts",
@@ -215,6 +216,7 @@
             "files": [
                 "services/web-ui/**/*.ts",
                 "services/web-ui-user-portal/**/*.ts",
+                "services/design-system/**/*.ts",
                 "services/ai-model-registry/src/client/**/*.ts",
                 "packages/lixpi/**/src/frontend/**/*.ts",
                 "packages/lixpi/canvas-engine/examples/**/*.ts",

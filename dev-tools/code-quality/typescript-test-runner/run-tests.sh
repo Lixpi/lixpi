@@ -27,6 +27,7 @@
 # --env-file .env.<your-env> to each command instead if you haven't run it):
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui-user-portal
+#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner design-system
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/canvas-adapters/workspace-canvas.test.ts
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
@@ -126,6 +127,7 @@ case "$domain" in
         run_domain api
         run_domain web-ui
         run_domain web-ui-user-portal
+        run_domain design-system
         run_domain ai-model-registry
         run_domain nex
         run_shared

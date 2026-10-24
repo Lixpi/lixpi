@@ -1,0 +1,35 @@
+// Demo panes that host a SidePanel. The component styles its own handle,
+// toggle, backdrop and overlay; the host positions the panel itself.
+
+.design-system-side-panel-pane {
+    position: relative;
+    width: 100%;
+    height: 340px;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: var(--bg-surface-secondary);
+}
+
+.design-system-side-panel-hint {
+    margin: 0;
+    padding: var(--space-6) var(--space-5);
+    max-width: 260px;
+    color: var(--text-muted);
+}
+
+.design-system-side-panel {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--side-panel-surface-z-index, 100);
+    overflow: auto;
+    padding: var(--space-3);
+}
+
+.design-system-side-panel-right {
+    right: 0;
+}
+
+.design-system-side-panel-left {
+    left: 0;
+}

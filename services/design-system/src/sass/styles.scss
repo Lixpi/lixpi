@@ -1,0 +1,15 @@
+// Global stylesheet. The Gentelella theme supplies the page frame, and the
+// UI-kit stylesheets are imported once from main.ts, the same way web-ui
+// imports them. Design-system layout rules live beside the views that use them.
+
+@use "@lixpi/ui-kit-gentelella/styles/theme";
+@use "@lixpi/ui-kit-gentelella/styles/application-shell";
+
+html,
+body {
+    overscroll-behavior: none;
+}
+
+.table-responsive {
+    overscroll-behavior-x: none;
+}

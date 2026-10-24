@@ -1,0 +1,8 @@
+// The auth panel is a full-height layout; the frame keeps it inside the card.
+
+.design-system-auth-panel-frame {
+    margin-top: var(--space-4);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}

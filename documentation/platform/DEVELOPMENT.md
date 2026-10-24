@@ -13,6 +13,7 @@ This guide gets Lixpi running locally. Everything runs in **Docker** via `docker
 |---------|------|---------|
 | **web-ui** | `services/web-ui/` | TypeScript SPA — canvas, ProseMirror editors, AI chat UI |
 | **web-ui-user-portal** | `services/web-ui-user-portal/` | TypeScript account-management SPA with Gentelella UI on `http://localhost:3002` |
+| **design-system** | `services/design-system/` | Every shared UI and canvas component on `http://localhost:3003`, in a Components mode and a Canvas mode |
 | **api** | `services/api/` | Node.js / TypeScript gateway — auth, CRUD, DynamoDB, plus the in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, video generation) |
 | **nats** | `services/nats/` | NATS message bus (3-node cluster) |
 | **localauth0** | `services/localauth0/` | Mock Auth0 for zero-config offline dev (Rust — vendored `primait/localauth0` image) |
@@ -110,6 +111,8 @@ These commands run inside standalone Node containers without installing dependen
 
 ## Build and run individual services
 
+The browser clients, `lixpi-web-ui`, `lixpi-web-ui-user-portal` and `lixpi-design-system`, are defined in `docker-compose.ui.yml`, which the root `docker-compose.yml` includes. The commands below work the same way for services in the root file and in its partials.
+
 ### Web UI
 
 ```shell
@@ -128,6 +131,15 @@ docker compose up lixpi-web-ui-user-portal
 ```
 
 The portal is served at `http://localhost:3002`. `VITE_USER_PORTAL_URL` is required in the environment file and supplies the URL to both browser clients, so the avatar in `web-ui` opens the portal in a new tab and the portal uses the same value as its distinct OAuth redirect URI. Both clients continue to use the same identity-provider tenant, client ID, and API audience.
+
+### Design system
+
+```shell
+./rebuild-containers.sh lixpi-design-system
+docker compose --profile design-system up lixpi-design-system
+```
+
+The design system is served at `http://localhost:3003` and needs no other service. See the [design system README](../../services/design-system/README.md) for its modes and demo data.
 
 ### API
 

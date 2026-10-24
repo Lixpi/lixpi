@@ -1,0 +1,16 @@
+// Plain targets for the DOM utility demonstrations.
+
+.design-system-lease-target {
+    margin-bottom: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+}
+
+.design-system-custom-property-source,
+.design-system-custom-property-target {
+    padding: var(--space-4) var(--space-5);
+    border: 2px solid var(--design-system-demo-stroke, var(--border-color));
+    border-radius: var(--radius);
+    background: var(--design-system-demo-fill, transparent);
+}

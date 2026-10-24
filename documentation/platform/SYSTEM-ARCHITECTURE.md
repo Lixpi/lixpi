@@ -23,6 +23,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 |---------|----------|------|------|
 | **web-ui** | TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction. Vanilla TypeScript DOM components with Nano Stores for state |
 | **web-ui-user-portal** | TypeScript | `services/web-ui-user-portal/` | User account SPA at `user-portal.<domain>` with Gentelella components backed by shared browser auth, routing, and user state |
+| **design-system** | TypeScript | `services/design-system/` | Development SPA that shows every shared UI and canvas component, with separate Components and Canvas modes and no backend dependency |
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
 | **nats** | Go (initially 3 nodes) | [services/nats](../../services/nats/README.md) | Embedded broker and admission, pub/sub, request/reply, JetStream replay and work queues, organization Blob Object Stores and NEX control state |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
