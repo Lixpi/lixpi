@@ -85,7 +85,7 @@ The selector works from `LatestReleaseResolver.availableDependencies()`. Derived
 | Go runtime | Take the first entry marked stable by Go download metadata |
 | GitHub-backed tool or Action | Read the latest stable GitHub release |
 | Alpine | Read the latest stable Alpine release metadata |
-| Docker Hub image | Walk every tag page and select the highest stable three-part semantic tag |
+| Docker Hub image | Read the most recently pushed tags, up to Docker Hub's 10-page limit, and select the highest stable tag with the selected tag's shape: the same number of version components and the same variant suffix, such as `-alpine`. Official images such as `rust` are requested under the `library/` namespace |
 
 Go semantic-import major suffixes remain part of the module path. A release under a different path such as `/v3` is a different dependency identity and requires source imports and the catalog key to change together.
 

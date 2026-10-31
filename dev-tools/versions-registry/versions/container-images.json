@@ -4,11 +4,11 @@
     "golang": "{{go.go}}-bookworm",
     "golangci/golangci-lint": "{{go.tools.golangci-lint}}",
     "pulumi/pulumi": "{{tools.pulumi}}",
-    "alpine": "3.24.2",
-    "rust": "1.88.0-alpine",
+    "alpine": "3.24.3",
+    "rust": "1.99.1-alpine",
     "public.ecr.aws/primaassicurazioni/localauth0": "0.9.1",
-    "amazon/aws-cli": "2.36.46",
-    "amazon/dynamodb-local": "3.3.1",
+    "amazon/aws-cli": "2.39.3",
+    "amazon/dynamodb-local": "3.3.2",
     "aaronshaf/dynamodb-admin": "5.3.4",
-    "natsio/nats-box": "0.19.7"
+    "natsio/nats-box": "0.20.1"
 }

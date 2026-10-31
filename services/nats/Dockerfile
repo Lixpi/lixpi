@@ -1,7 +1,7 @@
 # Go targets use the repository root as their build context.
-ARG GOLANGCI_LINT_IMAGE_REFERENCE=golangci/golangci-lint:v2.13.2
-ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.1-bookworm
-ARG GOPLS_VERSION=v0.23.0
+ARG GOLANGCI_LINT_IMAGE_REFERENCE=golangci/golangci-lint:v2.15.0
+ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.3-bookworm
+ARG GOPLS_VERSION=v0.24.0
 ARG DLV_VERSION=v1.27.2
 
 FROM ${GOLANGCI_LINT_IMAGE_REFERENCE} AS go-lint

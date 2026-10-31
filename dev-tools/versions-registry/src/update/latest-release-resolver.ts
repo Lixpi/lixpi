@@ -45,17 +45,45 @@ type SemanticVersionTag = {
     patch: number
 }
 
-const semanticVersionTag = (name: string): SemanticVersionTag | undefined => {
-    const match = name.match(/^v?(\d+)\.(\d+)\.(\d+)$/)
+// Image tags keep the selected tag's shape: its version precision, such as
+// Postgres's `17.11`, and its variant suffix, such as `-alpine`.
+type ImageTagShape = {
+    componentCount: number
+    variant: string
+}
+
+const imageTagShape = (tag: string): ImageTagShape => {
+    const match = tag.match(/^v?(\d+(?:\.\d+){1,2})(.*)$/)
 
     if (!match)
+        throw new Error(`Expected a semantic-version image tag, found ${tag}`)
+
+    return {
+        componentCount: match[1].split('.').length,
+        variant: match[2],
+    }
+}
+
+const semanticVersionTag = (
+    name: string,
+    shape: ImageTagShape,
+): SemanticVersionTag | undefined => {
+    if (!name.endsWith(shape.variant))
+        return undefined
+
+    const components = name
+        .slice(0, name.length - shape.variant.length)
+        .match(/^v?(\d+(?:\.\d+){1,2})$/)?.[1]
+        .split('.').map(Number)
+
+    if (components?.length !== shape.componentCount)
         return undefined
 
     return {
         name,
-        major: Number(match[1]),
-        minor: Number(match[2]),
-        patch: Number(match[3]),
+        major: components[0],
+        minor: components[1],
+        patch: components[2] ?? 0,
     }
 }
 
@@ -65,6 +93,8 @@ const compareSemanticVersionTags = (
 ): number => right.major - left.major
     || right.minor - left.minor
     || right.patch - left.patch
+
+const DOCKER_HUB_MAX_PAGES = 10
 
 export class LatestReleaseResolver {
     private readonly catalog: VersionCatalog
@@ -321,7 +351,7 @@ export class LatestReleaseResolver {
             )
         }
 
-        return this.dockerHubImage(repository)
+        return this.dockerHubImage(repository, this.catalog.data.containerImages[repository])
     }
 
     private async alpine(): Promise<string> {
@@ -342,17 +372,25 @@ export class LatestReleaseResolver {
         return version
     }
 
-    private async dockerHubImage(repository: string): Promise<string> {
-        const sourceUrl = `https://hub.docker.com/v2/repositories/${repository}/tags?page_size=100`
+    private async dockerHubImage(
+        repository: string,
+        currentTag: string,
+    ): Promise<string> {
+        const shape = imageTagShape(currentTag)
+        // Docker Hub serves official images such as `rust` under the `library` namespace.
+        const namespacedRepository = repository.includes('/') ? repository : `library/${repository}`
+        // Docker Hub refuses pages past its page limit, so read the most recently
+        // pushed tags first; a new release is always among them.
+        const sourceUrl = `https://hub.docker.com/v2/repositories/${namespacedRepository}/tags?page_size=100&ordering=last_updated${shape.variant ? `&name=${encodeURIComponent(shape.variant)}` : ''}`
         let nextUrl: string | undefined = sourceUrl
         const tags: SemanticVersionTag[] = []
         let pageCount = 0
 
-        while (nextUrl) {
+        while (
+            nextUrl
+            && pageCount < DOCKER_HUB_MAX_PAGES
+        ) {
             pageCount++
-
-            if (pageCount > 100)
-                throw new Error(`Docker Hub tag pagination exceeded 100 pages for ${repository}`)
 
             const data = await this.releases.fetchJson(nextUrl)
 
@@ -375,7 +413,7 @@ export class LatestReleaseResolver {
                     continue
 
                 const name = (result as Record<string, unknown>).name
-                const tag = typeof name === 'string' ? semanticVersionTag(name) : undefined
+                const tag = typeof name === 'string' ? semanticVersionTag(name, shape) : undefined
 
                 if (tag)
                     tags.push(tag)
@@ -394,7 +432,7 @@ export class LatestReleaseResolver {
         const latest = tags.sort(compareSemanticVersionTags)[0]
 
         if (!latest)
-            throw new Error(`No stable semantic-version tag for ${repository}`)
+            throw new Error(`No stable semantic-version${shape.variant ? ` ${shape.variant}` : ''} tag for ${repository}`)
 
         this.releases.recordRelease(
             'containerImages',

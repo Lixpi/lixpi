@@ -1,6 +1,6 @@
-ARG ALPINE_IMAGE_REFERENCE=alpine:3.24.2
+ARG ALPINE_IMAGE_REFERENCE=alpine:3.24.3
 ARG LOCAL_AUTH0_IMAGE_REFERENCE=public.ecr.aws/primaassicurazioni/localauth0:0.9.1
-ARG RUST_ALPINE_IMAGE_REFERENCE=rust:1.88.0-alpine
+ARG RUST_ALPINE_IMAGE_REFERENCE=rust:1.99.1-alpine
 
 # Build the server and browser frontend from the same pinned release.
 FROM ${RUST_ALPINE_IMAGE_REFERENCE} AS mock-source
@@ -18,7 +18,7 @@ RUN --mount=type=tmpfs,target=/source/target \
     && cp target/release/localauth0 /localauth0
 
 FROM mock-source AS web-build
-ARG TRUNK_VERSION=0.21.14
+ARG TRUNK_VERSION=0.22.1
 RUN apk add --no-cache gcompat libstdc++ \
     && rustup target add wasm32-unknown-unknown
 RUN set -eu; \

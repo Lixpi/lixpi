@@ -18,21 +18,21 @@
         "@lixpi/nats-service": "workspace:*",
         "@nats-io/nats-core": "3.4.0",
         "@nats-io/transport-node": "3.4.0",
-        "openai": "7.20.0",
-        "onnxruntime-web": "1.30.0",
-        "@anthropic-ai/sdk": "0.127.0",
-        "@aws-sdk/client-bedrock": "3.1136.0",
-        "@aws-sdk/credential-providers": "3.1136.0",
-        "@google/genai": "2.23.0",
-        "sharp": "0.35.4",
+        "openai": "7.45.1",
+        "onnxruntime-web": "1.31.1",
+        "@anthropic-ai/sdk": "0.137.0",
+        "@aws-sdk/client-bedrock": "3.1159.0",
+        "@aws-sdk/credential-providers": "3.1159.0",
+        "@google/genai": "2.32.0",
+        "sharp": "0.35.5",
         "type-fest": "5.10.0"
     },
     "devDependencies": {
         "@nats-io/jetstream": "3.4.0",
         "@nats-io/obj": "3.4.0",
         "@lixpi/test-utils": "workspace:*",
-        "vitest": "5.0.1",
-        "@types/node": "26.6.2"
+        "vitest": "5.0.5",
+        "@types/node": "26.6.6"
     },
-    "packageManager": "pnpm@12.5.1"
+    "packageManager": "pnpm@12.16.1"
 }

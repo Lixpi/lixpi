@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { ViewportController, type ViewportControllerOptions } from './viewport-controller.ts'
 
 const controllers: ViewportController[] = []
@@ -177,6 +177,11 @@ describe('native viewport input', () => {
     })
 
     it('uses the root document window for dragging and blur', () => {
+        // Happy DOM creates an iframe document only when iframe page loading is enabled.
+        const settings = (window as unknown as { happyDOM: { settings: { enableIframePageLoading: boolean } } }).happyDOM.settings
+        const iframePageLoading = settings.enableIframePageLoading
+        settings.enableIframePageLoading = true
+        onTestFinished(() => void (settings.enableIframePageLoading = iframePageLoading))
         const frame = document.createElement('iframe')
         document.body.append(frame)
         const owner = frame.contentDocument!

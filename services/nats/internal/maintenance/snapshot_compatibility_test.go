@@ -14,6 +14,10 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// The NATS CLI names its stream archive independently of the archive name used
+// by lixpi-nats backups.
+const natsCLIArchiveName = "stream.arc.s2"
+
 func TestSnapshotCompatibilityWithNATSCLI(t *testing.T) {
 	instance, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: -1, NoLog: true, NoSigs: true, JetStream: true, StoreDir: t.TempDir()})
 	if err != nil {
@@ -61,7 +65,7 @@ func TestSnapshotCompatibilityWithNATSCLI(t *testing.T) {
 		}
 	}
 	directory := t.TempDir()
-	runCLI("stream", "backup", "COMPAT", directory)
+	runCLI("backup", "stream", "COMPAT", directory)
 
 	metadata, err := os.ReadFile(filepath.Join(directory, "backup.json"))
 	if err != nil {
@@ -74,7 +78,7 @@ func TestSnapshotCompatibilityWithNATSCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	archive, err := os.Open(filepath.Join(directory, "stream.tar.s2"))
+	archive, err := os.Open(filepath.Join(directory, natsCLIArchiveName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +118,7 @@ func TestSnapshotCompatibilityWithNATSCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(goDirectory, "stream.tar.s2"), goArchive.Bytes(), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(goDirectory, natsCLIArchiveName), goArchive.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +126,7 @@ func TestSnapshotCompatibilityWithNATSCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runCLI("stream", "restore", goDirectory)
+	runCLI("backup", "restore", "stream", goDirectory)
 
 	message, err := js.GetMsg("COMPAT", 1)
 	if err != nil || string(message.Data) != "compatible payload" {

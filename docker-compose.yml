@@ -11,7 +11,7 @@ services:
     lixpi-dynamodb:
         container_name: lixpi-dynamodb
         profiles: ["main", "deploy"]
-        image: amazon/dynamodb-local:3.3.1
+        image: amazon/dynamodb-local:3.3.2
         user: "0:0"  # run as root so the volume is writable
         command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data", "-cors", "*", "-delayTransientStatuses"]
         ports:

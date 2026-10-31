@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -238,8 +239,8 @@ func TestRealBrowserServiceAndNKeyAdmissions(t *testing.T) {
 			return rsa.SignPKCS1v15(rand.Reader, rsaKey, crypto.SHA256, digest[:])
 		},
 	)
-	errors := make(chan error, 4)
-	connection := connect(nats.Token(browserJWT), nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { errors <- err }))
+	permissionErrors := make(chan error, 4)
+	connection := connect(nats.Token(browserJWT), nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { permissionErrors <- err }))
 	inbox := "_INBOX." + policy.UserToken(user) + ".response"
 
 	sub, err := connection.SubscribeSync(inbox)
@@ -272,7 +273,10 @@ func TestRealBrowserServiceAndNKeyAdmissions(t *testing.T) {
 	}
 
 	select {
-	case <-errors:
+	case err := <-permissionErrors:
+		if !errors.Is(err, nats.ErrPermissionViolation) {
+			t.Fatalf("expected a permissions violation: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("cross-user inbox was allowed")
 	}
@@ -334,7 +338,10 @@ func TestDispatcherRecoveryAndReadiness(t *testing.T) {
 		cancel()
 
 		select {
-		case <-finished:
+		case err := <-finished:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Errorf("runtime stopped with %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("runtime did not stop")
 		}

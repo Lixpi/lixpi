@@ -128,7 +128,7 @@
     },
     "dependencies": {
         "d3-selection": "3.0.0",
-        "prosemirror-view": "1.42.4",
+        "prosemirror-view": "1.42.8",
         "@lixpi/prosemirror": "workspace:*",
         "@lixpi/capability-system": "workspace:*",
         "@lixpi/ui-kit": "workspace:*",
@@ -140,7 +140,7 @@
     "devDependencies": {
         "@lixpi/test-utils": "workspace:*",
         "@types/d3-selection": "3.0.12",
-        "vitest": "5.0.1",
-        "happy-dom": "20.14.5"
+        "vitest": "5.0.5",
+        "happy-dom": "21.0.4"
     }
 }
