@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -221,10 +222,10 @@ func TestContainerServicePermissions(t *testing.T) {
 		t.Fatal("NEX leaked into AUTH")
 	}
 
-	errors := make(chan error, 1)
+	permissionErrors := make(chan error, 1)
 	api.SetErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 		select {
-		case errors <- err:
+		case permissionErrors <- err:
 		default:
 		}
 	})
@@ -238,7 +239,10 @@ func TestContainerServicePermissions(t *testing.T) {
 	}
 
 	select {
-	case <-errors:
+	case err := <-permissionErrors:
+		if !errors.Is(err, nats.ErrPermissionViolation) {
+			t.Fatalf("expected a permissions violation: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("service subscribed to auth callout")
 	}

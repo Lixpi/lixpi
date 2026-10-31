@@ -167,7 +167,7 @@ services:
     lixpi-nats-cli:
         container_name: lixpi-nats-cli
         profiles: ["dev"]
-        image: natsio/nats-box:0.19.7
+        image: natsio/nats-box:0.20.1
         command: >
             -c "sleep infinity"
         stop_signal: SIGTERM

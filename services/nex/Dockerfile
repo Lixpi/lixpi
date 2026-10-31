@@ -7,10 +7,10 @@
 # workload's @lixpi/* + provider-SDK deps
 # are installed from the pnpm workspace, just like the API.
 
-ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.1-bookworm
-ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
+ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.3-bookworm
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.22.2-alpine
 ARG NEX_VERSION=0.5.0
-ARG PNPM_VERSION=12.5.1
+ARG PNPM_VERSION=12.16.1
 
 FROM --platform=$BUILDPLATFORM ${GO_BOOKWORM_IMAGE_REFERENCE} AS nex-build
 ARG NEX_VERSION

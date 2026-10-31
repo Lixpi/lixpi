@@ -369,7 +369,10 @@ func TestBootstrapRejectsOverlappingWildcard(t *testing.T) {
 	}
 
 	select {
-	case <-errorsSeen:
+	case err := <-errorsSeen:
+		if !errors.Is(err, nats.ErrPermissionViolation) {
+			t.Fatalf("expected a permissions violation: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("overlapping bootstrap wildcard was not rejected")
 	}
