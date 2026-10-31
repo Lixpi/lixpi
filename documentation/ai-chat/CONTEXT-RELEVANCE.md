@@ -1,11 +1,15 @@
 ---
-title: Explicit Workspace Context
-description: How prompt references and composer context chips become authorized model inputs without canvas-wide relevance selection.
+title: Workspace Context
+description: Conversation context modes, immutable source attribution, and direct-generation reference resolution.
 ---
 
-# Explicit Workspace Context
+# Workspace Context
 
-AI turns receive workspace content only when the user attaches it to the submitted message or adds it to the composer's context tray. Unselected canvas nodes, connected nodes, and generated outputs from earlier turns are not candidates for automatic inclusion.
+Conversation settings select Explicit, Discovery, or Mixed context, with Explicit as the default. Explicit admits submitted references, authorized prior conversation context, and outputs created by that conversation. Discovery permits bounded search/read of authorized current-workspace Assets. Mixed combines both while preserving explicit constraints. Canvas proximity and edges never grant access, and other conversations' private state is excluded.
+
+Every turn freezes source identities, rendition hashes, and document versions. Reads and operation commits reauthorize those bindings. Attaching a sequence admits its declared immutable inputs through the Artifact definition's source-reference contract. Narrowing to Explicit rebuilds active model context without discovered-only source material or summaries derived from it. The visible transcript remains intact.
+
+The direct-generation path below receives workspace content only through prompt references or context chips. It does not discover unselected canvas nodes or automatically reuse earlier outputs.
 
 The API enforces this boundary. Browser snapshots are request hints, not permission to load arbitrary workspace media.
 
@@ -16,7 +20,7 @@ Two user actions add context:
 - **Prompt reference atoms** are typed references embedded in the authoritative latest user message. They can reference media, documents, Capability Artifacts, Tools, Skills, or Capability modules.
 - **Composer context chips** are canvas nodes explicitly added to the context tray before submit. They can reference images, videos, documents, or Capability Artifacts.
 
-Plain canvas proximity, connector edges, branch membership, recency, and descriptor similarity do not add context. A follow-up such as "make it warmer" must carry the intended media as a prompt reference or context chip.
+Plain canvas proximity, connector edges, branch membership, recency, and descriptor similarity do not add context. Direct-generation follow-ups must carry the intended media as a prompt reference or context chip. Conversational follow-ups may also target an authorized output created by that conversation.
 
 ## Request Path
 

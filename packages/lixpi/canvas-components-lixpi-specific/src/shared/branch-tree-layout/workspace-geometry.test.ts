@@ -8,6 +8,7 @@ import {
     type ImageCanvasNode,
 } from '@lixpi/constants'
 import { createLixpiCanvasSettings } from '../../frontend/settings/canvas-settings.ts'
+import { getGeneratedOutputChromeCollisionInsets } from './media-fitting.ts'
 import {
     WorkspaceGeometry,
     type WorkspaceGeometryPorts,
@@ -209,6 +210,50 @@ describe('WorkspaceGeometry', () => {
             y: 20,
         })
         expect(geometry.createGeneratedMediaRebalancePipeline().rebalance([], []).nodes).toEqual([])
+    })
+
+    it('reserves audio titles and footers when inserting several audio nodes near an Artifact', () => {
+        const { geometry } = setup()
+        const artifact: CanvasNode = {
+            ...image('sequence'),
+            type: 'capabilityArtifact',
+            artifactTypeId: 'media-sequence',
+        }
+        let nodes: CanvasNode[] = [artifact]
+
+        for (const nodeId of ['wav', 'mp3', 'another-mp3'])
+            nodes = geometry.resolveTopLevelNodeCollisions([...nodes, {
+                ...image(nodeId),
+                type: 'audio',
+                dimensions: {
+                    width: 360,
+                    height: 96,
+                },
+            }])
+
+        const insets = getGeneratedOutputChromeCollisionInsets('audio')
+        const rects = nodes.map(node => ({
+            x: node.position.x,
+            y: node.position.y - insets.top,
+            width: node.dimensions.width,
+            height: node.dimensions.height + insets.top + insets.bottom,
+        }))
+
+        for (let index = 0; index < rects.length; index++) {
+            const left = rects[index]
+
+            for (const right of rects.slice(index + 1))
+                expect(left.x + left.width <= right.x + 1
+                    || right.x + right.width <= left.x + 1
+                    || left.y + left.height <= right.y + 1
+                    || right.y + right.height <= left.y + 1).toBe(true)
+        }
+
+        const audio = nodes.find(node => node.type === 'audio')!
+        expect(geometry.getCanvasNodeConnectorAnchorRect(audio, audio.position)).toEqual({
+            ...audio.position,
+            ...audio.dimensions,
+        })
     })
 
     it('uses the live viewport for insertion and rejects an unavailable visible area', () => {

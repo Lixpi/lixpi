@@ -165,3 +165,98 @@
         padding-right: 18px;
     }
 }
+.workspace-conversation-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 150px;
+    max-height: min(45vh, 480px);
+    overflow: hidden;
+    border: 1px solid hsl(var(--border, 215 16% 82%));
+    border-radius: 14px;
+    background: hsl(var(--background, 0 0% 100%));
+    color: hsl(var(--foreground, 220 20% 14%));
+    box-shadow: 0 6px 24px #00000012;
+    font: 13px/1.5 system-ui, sans-serif;
+    pointer-events: auto;
+
+    > header,
+    > .workspace-conversation-settings {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid hsl(var(--border, 215 16% 82%));
+    }
+
+    > header,
+    > .workspace-conversation-settings,
+    > .workspace-conversation-queue {
+        button,
+        input,
+        select {
+            min-width: 0;
+            padding: 4px 6px;
+            border: 1px solid hsl(var(--border, 215 16% 82%));
+            border-radius: 5px;
+            background: inherit;
+            color: inherit;
+            font: inherit;
+        }
+
+        select {
+            flex: 1;
+        }
+
+        input {
+            width: 120px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        :disabled {
+            opacity: 0.5;
+        }
+
+        :focus-visible {
+            outline: 2px solid #5772df;
+            outline-offset: 2px;
+        }
+    }
+
+    &[data-collapsed="true"] {
+        min-height: 0;
+
+        .workspace-conversation-messages,
+        .workspace-conversation-settings,
+        .workspace-conversation-queue,
+        .workspace-conversation-new-messages {
+            display: none;
+        }
+    }
+
+    [hidden] {
+        display: none;
+    }
+}
+
+.workspace-conversation-messages {
+    flex: 1;
+    min-height: 90px;
+    padding: 8px 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.workspace-conversation-state,
+.workspace-conversation-queue {
+    padding: 4px 12px;
+    font-size: 11px;
+}
+
+.workspace-conversation-queue:empty {
+    display: none;
+}

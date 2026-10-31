@@ -1,11 +1,13 @@
 ---
-title: Workspace Composer and Generated Output Details
-description: Conversation Assets, detached document authority, streaming resume, and the persisted unified generated-output details panel.
+title: Workspace Conversations and Generated Output Details
+description: Persistent conversations, private composer state, transcript history and replay, and generated-output details.
 ---
 
-# Workspace Composer and Generated Output Details
+# Workspace Conversations and Generated Output Details
 
-Every canvas AI run uses a conversation Asset with a `conversation` document role. There is no separate chat-thread persistence table. The screen-fixed canvas composer creates those conversations, while the right-side panel presents generated-output details, the Media library, and the Tools and Skills catalog. The panel never mounts a session browser, chat tabs, or a full-conversation transcript.
+Every canvas AI run uses a conversation Asset with a `conversation` document role. Every workspace mounts a persistent transcript and conversation picker above the rich composer, and every composer message goes to the agent conversation. The right-side panel presents generated-output details, the Media library, and the Tools and Skills catalog. A conversation does not require a canvas node.
+
+The API owns conversation execution and transcript projection. Agent-Conversations records hold ordered commands, messages, events, run state, queues and checkpoints; the Asset holds the projected ProseMirror document. A greeting, discussion or plan does not create a generation request. Selected image/video models are preferences for a later authorized action.
 
 ## Conversation Asset
 
@@ -16,13 +18,35 @@ A conversation Asset contains:
 - `documents.conversation`, pointing to the latest immutable ProseMirror snapshot Blob;
 - conversation lifecycle state (`idle`, `receiving`, `paused`, `completed`, `failed`);
 - one workspace surface reference such as `conversation#<assetId>`;
-- an edit lease while a composer/editor or AI writer is active.
+- a server-managed transcript projection for conversations using the agent runtime.
 
 The ProseMirror document is title-free. Its root contains one or more `aiChatThread` content nodes for existing renderer/schema behavior, but the durable identity is the Asset ID. The root node’s `threadId` equals that Asset ID.
 
 ## Creating a conversation
 
-The browser pre-generates an Asset UUID, builds the initial conversation document with that ID, and calls `asset.create`. The API validates the document with the `assetConversation` schema, stores the initial JSON snapshot as a Blob, and transactionally creates:
+`conversation.create` reserves an identity and initial settings using a stable client conversation ID. The first accepted `conversation.submit` activates the Asset and workspace membership. Acceptance atomically records the user message, idempotency receipt and dispatch intent. A rejected first message leaves only an expiring reservation. The browser sends the rich user fragment, explicit reference identities and settings revision, rather than an authoritative transcript.
+
+The composer keeps its draft until the server acknowledges acceptance. A lost reply is recovered by client message ID. Retrying the same content reuses that identity, while reusing an identity for changed content is rejected. Text typed while a message is pending remains in the composer.
+
+## Transcript and run controls
+
+The conversation picker lists authorized workspace conversations with background run status and unread state. The transcript uses the sidebar's `ProseMirrorEditor`, `aiChatThread` schema and message NodeViews. It opens the authoritative conversation document and preserves the user's saved scroll position. `conversation.get` and `conversation.messages` provide bounded command-history pages for runtime recovery; they do not supply a parallel browser message renderer. Imported message IDs retain their separate storage order.
+
+Snapshots, conversation-list pages and event replay are bounded by serialized UTF-8 bytes as well as item count. Snapshot construction rereads metadata and retries if its revision changed during the read. Queued entries contain summaries rather than copies of their rich drafts and source data.
+
+The conversation controller subscribes before loading its snapshot, then replays ordered private events through `conversation.events.replay` to recover execution, queue and operation state. Duplicate events are ignored and sequence gaps trigger replay or a fresh snapshot. Message content reaches the editor through `ProseMirrorAuthorityService`, using the same versioned steps, selection mapping and reconnect path as sidebar chat. The transcript follows new output only when the reader is near the bottom; otherwise New messages returns to the latest response.
+
+Accepted creation and editing operations appear as action cards inside the assistant response. Each card shows the request, operation status, committed outputs and actionable errors. Pipeline trace expands operation identity, timing, state and output slots. Snapshots and older-message pages include bounded operation summaries, so cards survive reload and pagination. Output buttons recheck Asset access and open the corresponding preview or module editor; media previews also select an existing canvas node when present.
+
+Context mode and model preferences belong to the conversation and are captured for each accepted turn. Settings changes appear as small emphasized entries in the same authoritative conversation document. Explicit mode uses attached sources and authorized conversation outputs; discovery and mixed modes also permit bounded workspace discovery. Changing active context mode rebuilds model context at the next safe boundary while preserving completed work and the visible transcript. Mid-run controls offer Steer, Stop first and Queue, with a one-message override. Stop pauses queued work until Resume queue. A run waiting for necessary input shows Waiting for your answer, and the next message carries its interrupt identity.
+
+A necessary-input answer resumes the saved tool result under the original action scope and budget. The server accepts one answer from the active turn's author, and repeated submission of that same message remains idempotent. Completed work is retained across the question and reconnect. A terminal failure stores an assistant explanation and a structured run error; both remain available after reload.
+
+The active conversation, rich draft, context chips, read position and transcript scroll are private browser state keyed by user, workspace and conversation. The shared workspace panel state does not receive those private selections.
+
+## Generation compatibility
+
+For workspaces outside the conversational rollout, the generation composer pre-generates an Asset UUID, builds the initial conversation document with that ID, and calls `asset.create`. The API validates the document with the `assetConversation` schema, stores the initial JSON snapshot as a Blob, and transactionally creates:
 
 - `Assets`;
 - workspace and catalog `Asset-References`;
@@ -30,7 +54,7 @@ The browser pre-generates an Asset UUID, builds the initial conversation documen
 - the owner ACL;
 - the snapshot `Blob-Reference`.
 
-The browser keeps a detached editor for the conversation so document authority, streaming steps, reconnect, and branch projection continue without mounting the full transcript in the right panel.
+This generation path keeps a detached editor for document authority, streaming steps, reconnect and branch projection. The document-authority and pipeline-event contracts below also support generated-output history.
 
 ## Panel state
 
@@ -59,7 +83,7 @@ Panel state is saved through normal Workspace metadata persistence. Refreshing t
 
 The component body owns the only vertical scrollbar. Nested ProseMirror, prompt, reasoning, and trace content expands inside that flow. During generation, detached conversation authority and durable JetStream pipeline events rebuild all prior steps, then continue applying live events to the selected sidebar instance. Terminal outputs rebuild the same history from sealed provenance.
 
-The deprecated Sessions browser, AI Chat tabs, and full transcript renderer are removed from the workspace right panel. Their former list appearance is retained only as the unused, abstract `BlockCardTile` and `BlockCardTilesList` UI-kit primitives. They preserve marker, title, metadata, selection, hover, and action styling without conversation behavior.
+Conversation selection and transcript controls belong above the composer. The generated-output panel focuses on the selected Asset and its provenance.
 
 Capability runs use `Capability-Runs` index rows plus durable JetStream events. They are not conversation sessions. A chat-originated Tool run mirrors safe events into the conversation document, while generated-output details rebuild the same progress from replay and the tokenized live relay.
 
@@ -133,10 +157,13 @@ On reconnect during an active response, the browser resumes the conversation sna
 
 Conversation title edits update `Asset.title` under `revision`. They do not edit the ProseMirror snapshot. Canvas projections and Asset panels resolve the same title.
 
-Panel width, open state, top-level mode, context chips, and the selected generated-output details target are local to a Workspace. Conversation Asset access remains subject to scope and ACL rules.
+Panel width, open state, top-level mode and the selected generated-output details target persist on the Workspace. In conversational workspaces, context chips and conversation selections use private browser storage. Conversation Asset access remains subject to scope and ACL rules.
 
 ## Relevant code
 
+- [`services/api/src/llm/agent/conversation-service.ts`](../../services/api/src/llm/agent/conversation-service.ts)
+- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-controller.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-controller.ts)
+- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-panel.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-panel.ts)
 - [`services/api/src/services/asset-document-service.ts`](../../services/api/src/services/asset-document-service.ts)
 - [`services/api/src/prosemirror/asset-prosemirror-step-transport.ts`](../../services/api/src/prosemirror/asset-prosemirror-step-transport.ts)
 - [`services/api/src/prosemirror/ai-chat-stream-assembler.ts`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts)
@@ -144,4 +171,3 @@ Panel width, open state, top-level mode, context chips, and the selected generat
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
 - [`packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-panel-state.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-panel-state.ts)
 - [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.ts)
-- [`packages/lixpi/ui-kit/src/components/blockCardTilesList/`](../../packages/lixpi/ui-kit/src/components/blockCardTilesList/)

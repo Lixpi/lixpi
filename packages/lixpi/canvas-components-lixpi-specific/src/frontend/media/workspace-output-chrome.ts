@@ -5,6 +5,7 @@ import {
     type CanvasNode,
     type ImageCanvasNode,
     type VideoCanvasNode,
+    type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
     type MediaDescriptor,
 } from '@lixpi/constants'
@@ -37,6 +38,7 @@ import {
 } from './workspace-video-chrome.ts'
 
 type MediaNode = ImageCanvasNode | VideoCanvasNode
+type OutputNode = GeneratedOutputCanvasNode | AudioCanvasNode
 
 export type WorkspaceOutputChromePorts = {
     document: Document
@@ -44,7 +46,7 @@ export type WorkspaceOutputChromePorts = {
     getState: () => CanvasState | null
     getViewport: () => CanvasViewport
     getBounds: (
-        node: GeneratedOutputCanvasNode,
+        node: OutputNode,
         nodesById: Map<string, CanvasNode>,
     ) => CanvasEngineRect
     getPendingBounds: (
@@ -62,6 +64,7 @@ export type WorkspaceOutputChromePorts = {
     isProgressActive: (node: GeneratedOutputCanvasNode) => boolean
     isSelected: (nodeId: string) => boolean
     getVideo: (nodeId: string) => HTMLVideoElement | null | undefined
+    getAudio?: (nodeId: string) => HTMLAudioElement | null | undefined
     video: Pick<WorkspaceVideoChrome, 'sync' | 'update' | 'outsideOffsetScreen'>
     createModelBadge: (options: {
         modelId: string
@@ -69,7 +72,7 @@ export type WorkspaceOutputChromePorts = {
         iconOnly: boolean
     }) => HTMLElement | null
     mountTitle: (
-        node: GeneratedOutputCanvasNode,
+        node: OutputNode,
         host: HTMLElement,
     ) => () => void
     queueAnalysis: (node: MediaNode) => void
@@ -153,10 +156,15 @@ export class WorkspaceOutputChrome {
                 this.ports.getAsset(node.assetId),
             ),
         )
+        const audio = nodes.filter(
+            (node): node is AudioCanvasNode => node.type === 'audio' && Boolean(
+                this.ports.getAsset(node.assetId),
+            ),
+        )
         const pending = nodes.filter((node): node is MediaNode => (node.type === 'image' || node.type === 'video') && pendingIds.has(node.nodeId))
         const videos = nodes.filter(
-            (node): node is VideoCanvasNode =>
-                node.type === 'video' && this.ports.getAsset(node.assetId)?.media?.renditions.original?.status === 'ready',
+            (node): node is VideoCanvasNode | AudioCanvasNode =>
+                (node.type === 'video' || node.type === 'audio') && this.ports.getAsset(node.assetId)?.media?.renditions.original?.status === 'ready',
         )
 
         for (const node of media) {
@@ -172,6 +180,7 @@ export class WorkspaceOutputChrome {
         const key = [
             media.map(node => this.mediaKey(node)).join('\u001e'),
             artifacts.map(node => this.artifactKey(node)).join('\u001e'),
+            audio.map(node => [node.nodeId, node.assetId, this.ports.getAsset(node.assetId)?.revision ?? ''].join('\u001f')).join('\u001e'),
             pending.map(
                 node => [node.nodeId, node.type, node.assetId, getGeneratedMediaModelId(node), getGeneratedMediaModelProvider(
                     node,
@@ -179,7 +188,7 @@ export class WorkspaceOutputChrome {
                 ), node.generationProgress?.status ?? ''].join('\u001f'),
             ).join('\u001e'),
             videos.map(node => {
-                const video = this.ports.getVideo(node.nodeId)
+                const video = node.type === 'audio' ? this.ports.getAudio?.(node.nodeId) : this.ports.getVideo(node.nodeId)
 
                 return [node.nodeId, node.assetId, video ? 'video-element-ready' : 'video-element-missing', video?.currentSrc || video?.src || ''].join('\u001f')
             }).join('\u001e'),
@@ -216,6 +225,9 @@ export class WorkspaceOutputChrome {
                     pendingIds.has(node.nodeId),
                 )
 
+            for (const node of audio)
+                this.mountAudioFooter(node)
+
             this.layout(
                 this.ports.getViewport(),
                 state,
@@ -240,12 +252,13 @@ export class WorkspaceOutputChrome {
             if (
                 node.type !== 'image'
                 && node.type !== 'video'
+                && node.type !== 'audio'
                 && node.type !== 'capabilityArtifact'
             )
                 continue
 
             this.footers.get(node.nodeId)?.update({
-                progressActive: this.ports.isProgressActive(node),
+                progressActive: node.type !== 'audio' && this.ports.isProgressActive(node),
                 selected: this.ports.isSelected(node.nodeId),
             })
         }
@@ -266,6 +279,7 @@ export class WorkspaceOutputChrome {
             if (
                 node.type !== 'image'
                 && node.type !== 'video'
+                && node.type !== 'audio'
                 && node.type !== 'capabilityArtifact'
             )
                 continue
@@ -403,6 +417,36 @@ export class WorkspaceOutputChrome {
             onAccept: () => this.ports.onAccept(node.nodeId),
             onReject: () => this.ports.onReject(node.nodeId),
             onRegenerate: () => this.ports.onRegenerate(node),
+        })
+        this.content.own(() => chrome.destroy())
+        this.footers.set(node.nodeId, chrome)
+        this.element.appendChild(chrome.element)
+    }
+
+    private mountAudioFooter(node: AudioCanvasNode): void {
+        const chrome = new GeneratedOutputNodeChrome({
+            document: this.ports.document,
+            nodeId: node.nodeId,
+            kind: 'media',
+            state: {
+                pendingBeforeFrame: false,
+                generated: false,
+                hasAsset: true,
+                accepted: false,
+                superseded: false,
+                reviewReady: false,
+                rejectable: false,
+                analyzing: false,
+                progressActive: false,
+                selected: this.ports.isSelected(node.nodeId),
+            },
+            modelBadge: null,
+            settings: this.ports.settings,
+            mountTitle: host => this.ports.mountTitle(node, host),
+            onOpenDetails: () => this.ports.onOpenDetails(node.nodeId),
+            onAccept: () => {},
+            onReject: () => {},
+            onRegenerate: () => {},
         })
         this.content.own(() => chrome.destroy())
         this.footers.set(node.nodeId, chrome)

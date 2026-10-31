@@ -45,5 +45,11 @@
     "unsupportedApis": [],
     "sources": [
         "https://platform.claude.com/docs/en/build-with-claude/thinking"
-    ]
+    ],
+    "usage": {
+        "what": "Preserves orchestration control over tools and refuses incompatible forced choices in the DeepAgents Bedrock adapter.",
+        "setIn": "services/api/src/llm/providers/anthropic-provider.ts; services/api/src/llm/agent/agent-bedrock-model.ts; services/api/src/capability-system/media-pipeline-prompt-adapter.ts",
+        "from": "Sealed tool bindings and synchronized requiresAutoToolChoiceWithThinking.",
+        "code": "request.tool_choice = choice"
+    }
 }

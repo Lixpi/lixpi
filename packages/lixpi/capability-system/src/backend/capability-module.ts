@@ -8,6 +8,7 @@ import {
 
 import {
     type CapabilityActionRegistry,
+    type CapabilityActionAuthorizationContext,
 } from './capability-action-registry.ts'
 import {
     type CapabilityMediaStrategyRegistry,
@@ -25,6 +26,10 @@ export type CapabilityPackageSeedContext = {
 export type CapabilitySkillPackageInstaller = {
     kind: 'skill'
     capabilityId: string
+    agentSkill?: {
+        name: string
+        files: Readonly<Record<string, string>>
+    }
     seed: (context: CapabilityPackageSeedContext) => Promise<void>
 }
 
@@ -46,6 +51,18 @@ export type CapabilityModuleRoutingDefinition = {
     resolve: (prompt: string) => CapabilityModuleRoute | undefined
 }
 
+export type CapabilityAgentTool = {
+    name: string
+    description: string
+    schema: Record<string, unknown>
+    intent: 'inspect' | 'plan' | 'execute'
+    operationFamilies: string[]
+    execute: (
+        input: Readonly<Record<string, unknown>>,
+        context: CapabilityActionAuthorizationContext,
+    ) => Promise<unknown>
+}
+
 export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & {
     entry: {
         capabilityId: string
@@ -55,6 +72,13 @@ export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & 
     skills: CapabilitySkillPackageInstaller[]
     mediaStrategies?: CapabilityMediaStrategy[]
     routing?: CapabilityModuleRoutingDefinition
+    extensions?: Readonly<Record<string, unknown>>
+    agentTools?: CapabilityAgentTool[]
+    operationFamilies?: Array<{
+        family: string
+        description: string
+        operationKeys: string[]
+    }>
 }
 
 export class CapabilityModuleCatalog {
@@ -113,6 +137,21 @@ export class CapabilityModuleCatalog {
 
     getModule(moduleId: string): CapabilityModuleDefinition | undefined {
         return this.modules.get(moduleId)
+    }
+
+    getExtension<T>(
+        moduleId: string,
+        key: string,
+    ): T | undefined {
+        return this.modules.get(moduleId)?.extensions?.[key] as T | undefined
+    }
+
+    listAgentTools(): CapabilityAgentTool[] {
+        return [...this.modules.values()].flatMap(definition => definition.agentTools ?? [])
+    }
+
+    listOperationFamilies(): NonNullable<CapabilityModuleDefinition['operationFamilies']> {
+        return [...this.modules.values()].flatMap(definition => definition.operationFamilies ?? [])
     }
 
     getModuleMeta(moduleId: string): CapabilityModuleMeta | undefined {

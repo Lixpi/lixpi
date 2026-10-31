@@ -1,4 +1,7 @@
 packages:
+  - "packages/lixpi/capability-system"
+  - "packages/lixpi/ui-primitives"
+  - "packages/lixpi/canvas-engine"
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/dynamodb-service"
@@ -9,3 +12,6 @@ allowBuilds:
   "@google/genai": true
   protobufjs: true
   sharp: true
+
+patchedDependencies:
+  '@nats-io/obj@3.4.0': packages/lixpi/nats-service/patches/@nats-io__obj@3.4.0.patch

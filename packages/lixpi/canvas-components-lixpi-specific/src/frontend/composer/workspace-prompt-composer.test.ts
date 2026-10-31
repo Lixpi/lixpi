@@ -119,4 +119,26 @@ describe('Workspace prompt composer', () => {
         expect(f.trayDestroy).toHaveBeenCalledOnce()
         expect(document.body.childElementCount).toBe(0)
     })
+
+    it('migrates the workspace draft once into the user draft without overwriting a saved conversation', () => {
+        const f = fixture()
+        const stored = new Map([['lixpi:canvas-global-composer-draft:w', '{"type":"doc","content":[]}']])
+        f.options.userId = 'user'
+        f.options.storage = {
+            getItem: key => stored.get(key) ?? null,
+            setItem: (key, value) => void stored.set(key, value),
+        }
+        f.mount()
+        expect(f.requests[0].initialContent).toEqual({
+            type: 'doc',
+            content: [],
+        })
+        stored.set('lixpi:conversation-draft:user:w:new', '{"type":"doc","attrs":{"saved":true}}')
+        f.mount()
+        expect(f.requests[1].initialContent).toEqual({
+            type: 'doc',
+            attrs: { saved: true },
+        })
+        expect(stored.get('lixpi:conversation-draft-migrated:user:w')).toBe('true')
+    })
 })

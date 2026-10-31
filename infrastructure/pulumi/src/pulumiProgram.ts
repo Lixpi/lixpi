@@ -399,6 +399,7 @@ export const createInfrastructure = async () => {
                 capabilitiesMetaTable: dynamoDBtables.capabilitiesMetaTable,
                 capabilitiesAccessListTable: dynamoDBtables.capabilitiesAccessListTable,
                 capabilityRunsTable: dynamoDBtables.capabilityRunsTable,
+                agentConversationsTable: dynamoDBtables.agentConversationsTable,
                 mediaGenerationRequestsTable: dynamoDBtables.mediaGenerationRequestsTable,
                 mediaGenerationRequestsMetaTable: dynamoDBtables.mediaGenerationRequestsMetaTable,
                 mediaGenerationRequestsAccessListTable: dynamoDBtables.mediaGenerationRequestsAccessListTable,
@@ -424,6 +425,9 @@ export const createInfrastructure = async () => {
             ACCOUNT_ADMISSION_ENABLED: process.env.ACCOUNT_ADMISSION_ENABLED ?? 'false',
             ACCOUNT_ADMISSION_STREAM: process.env.ACCOUNT_ADMISSION_STREAM ?? '',
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: SAVE_LLM_RESPONSES_TO_DEBUG_DIR!,
+            AGENT_MAX_MODEL_CALLS: process.env.AGENT_MAX_MODEL_CALLS ?? '24',
+            AGENT_MAX_TOOL_CALLS: process.env.AGENT_MAX_TOOL_CALLS ?? '64',
+            AGENT_MAX_SPECIALIST_CALLS: process.env.AGENT_MAX_SPECIALIST_CALLS ?? '4',
             OPENAI_API_KEY: OPENAI_API_KEY!,
             // An api key may be empty when its provider runs through Bedrock and signs with the task role.
             ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ?? '',

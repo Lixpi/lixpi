@@ -4,6 +4,8 @@ import {
 import {
     type WorkspaceCanvasHost,
 } from './workspace-canvas-host.ts'
+import { WorkspaceConversationController } from './workspace-conversation-controller.ts'
+import { WorkspaceConversationPanel } from './workspace-conversation-panel.ts'
 import {
     type WorkspacePromptCatalog,
 } from './workspace-canvas-editors.ts'
@@ -29,7 +31,6 @@ import {
     getBranchMarkerThreadId,
     WorkspaceReferenceProjection,
     WorkspaceBranchActivity,
-    CanvasGenerationSubmission,
     CanvasGenerationEvents,
     createPendingCanvasVisualCommit,
     getCanvasVisualSyncKey,
@@ -245,6 +246,10 @@ export class LixpiWorkspaceCanvas {
     private readonly branchMarkerProjection
     private readonly outputDetails
     private globalCanvasComposer: WorkspacePromptComposer | null
+    private agentConversation: WorkspaceConversationController | null = null
+    private agentConversationPanel: WorkspaceConversationPanel | null = null
+    private contextDraftConversationId = 'new'
+    private contextDraftInitialized = false
     private readonly DETACHED_CANVAS_PREFLIGHT_REATTACH_WINDOW_MS
     private readonly context
     private readonly libraries
@@ -274,7 +279,6 @@ export class LixpiWorkspaceCanvas {
     private readonly mediaOperationRecovery
     private readonly conversationProjection
     private readonly threadState
-    private readonly canvasGenerationSubmission
     private readonly mediaAnalysis
     private readonly outputReview
     private projectionOverrides
@@ -553,12 +557,8 @@ export class LixpiWorkspaceCanvas {
                     this.aiChatPanelState = state
                     this.persistAiChatSidebarState()
                 },
-                applyLocalPanelState: state => {
-                    this.aiChatPanelState = state
-
-                    if (this.currentCanvasState)
-                        this.currentCanvasState = setAiChatPanelState(this.currentCanvasState, state)
-                },
+                // Conversation selection and context chips are private per user, so they never enter shared canvas state.
+                applyLocalPanelState: state => void (this.aiChatPanelState = state),
                 findNode: this.findCanvasNodeById,
                 getPreviewNode: reference => this.referenceProjection.getPromptReferencePreviewNode(reference),
             })
@@ -980,42 +980,6 @@ export class LixpiWorkspaceCanvas {
                 now: Date.now,
                 reattachWindowMs: this.DETACHED_CANVAS_PREFLIGHT_REATTACH_WINDOW_MS,
             })
-            this.canvasGenerationSubmission = new CanvasGenerationSubmission({
-                readScope: () =>
-                    this.currentCanvasState
-                        && this.workspaceId
-                        ? {
-                            workspaceId: this.workspaceId,
-                            organizationId: String(this.host.workspace.organizationId() ?? ''),
-                            sceneKey: this.canvasRuntime.scene.scene.sceneKey,
-                            contextNodeIds: this.aiChatPanelState.contextChips,
-                        }
-                        : null,
-                createId: this.host.createId,
-                now: Date.now,
-                createConversation: request => this.host.assets.create({
-                    ...request,
-                    primaryCategory: 'conversation',
-                }),
-                activate: threadId => this.detachedAiChatThreadEditors.activate(threadId),
-                cancel: this.teardownDetachedCanvasRun,
-                install: request => {
-                    const thread: AiChatThread = {
-                        ...request.thread,
-                        status: request.thread.status === 'none' ? 'idle' : request.thread.status,
-                    }
-                    this.currentAiChatThreads = this.currentAiChatThreads.some(existing => existing.threadId === thread.threadId)
-                        ? this.currentAiChatThreads.map(existing => existing.threadId === thread.threadId ? thread : existing)
-                        : [...this.currentAiChatThreads, thread]
-                    this.createDetachedCanvasThreadEditor({
-                        ...request,
-                        thread,
-                    })
-
-                    this.submitPersistedDetachedCanvasThreadMessage(thread.threadId)
-                },
-                reportError: error => console.error('[CANVAS-RUN] failed to submit detached canvas generation request', error),
-            })
             this.mediaAnalysis = new WorkspaceMediaAnalysis({
                 readScope: () => ({
                     workspaceId: this.workspaceId,
@@ -1129,7 +1093,6 @@ export class LixpiWorkspaceCanvas {
                     this.conversationProjection.clear()
                     this.detachedAiChatThreadEditors.clear()
                     this.mediaOperationRecovery.clear()
-                    this.canvasGenerationSubmission.clear()
                     this.projectionSceneKey = scene.sceneKey
                     this.projectionOverrides.destroy()
                     this.projectionOverrides = this.liveNodeOverrides.createScope()
@@ -1181,6 +1144,7 @@ export class LixpiWorkspaceCanvas {
                 document: this.paneEl.ownerDocument,
                 settings: this.host.settings.videoControls,
                 getVideo: nodeId => this.canvasMediaLayer?.playback.getVideoElement(nodeId),
+                getAudio: nodeId => this.canvasMediaLayer?.playback.getAudioElement(nodeId),
                 getBounds: node => this.canvasMediaLayer?.getNodeBounds(node.nodeId) ?? {
                     ...this.getNodeWorldPosition(node),
                     ...node.dimensions,
@@ -1231,6 +1195,7 @@ export class LixpiWorkspaceCanvas {
                     },
                 ),
                 getVideo: nodeId => this.canvasMediaLayer?.playback.getVideoElement(nodeId),
+                getAudio: nodeId => this.canvasMediaLayer?.playback.getAudioElement(nodeId),
                 video: this.videoChrome,
                 createModelBadge: options => this.host.models.createBadge(options),
                 mountTitle: (node, host) => this.canvasAssetViews.mountMetadata(
@@ -2166,7 +2131,14 @@ export class LixpiWorkspaceCanvas {
         if (!this.currentCanvasState)
             return
 
-        const nextCanvasState = setAiChatPanelState(this.currentCanvasState, this.aiChatPanelState)
+        this.writeConversationContext()
+        const nextCanvasState = setAiChatPanelState(
+            this.currentCanvasState,
+            {
+                ...this.aiChatPanelState,
+                contextChips: getAiChatPanelState(this.currentCanvasState).contextChips,
+            },
+        )
 
         if (JSON.stringify(this.currentCanvasState.aiChatPanel) === JSON.stringify(nextCanvasState.aiChatPanel))
             return
@@ -2175,8 +2147,51 @@ export class LixpiWorkspaceCanvas {
     }
 
     private syncActiveAiChatPanelFromState = (): void => {
+        const contextChips = this.aiChatPanelState.contextChips
         this.aiChatPanelState = getAiChatPanelState(this.currentCanvasState)
+        this.aiChatPanelState.contextChips = contextChips
+
         this.rightPanel.syncState()
+    }
+
+    private writeConversationContext(): void {
+        try {
+            this.host.storage.setItem(
+                `lixpi:conversation-context:${this.host.workspace.userId()}:${this.workspaceId}:${this.contextDraftConversationId}`,
+                JSON.stringify(this.aiChatPanelState.contextChips),
+            )
+        } catch {}
+    }
+
+    private selectConversationContext(conversationAssetId: string): void {
+        this.writeConversationContext()
+        this.contextDraftConversationId = conversationAssetId || 'new'
+        let saved: unknown
+        let migrated = false
+        const migrationKey = `lixpi:conversation-context-migrated:${this.host.workspace.userId()}:${this.workspaceId}`
+
+        try {
+            const raw = this.host.storage.getItem(
+                `lixpi:conversation-context:${this.host.workspace.userId()}:${this.workspaceId}:${this.contextDraftConversationId}`,
+            )
+            saved = raw ? JSON.parse(raw) : undefined
+            migrated = this.host.storage.getItem(migrationKey) === 'true'
+            this.host.storage.setItem(migrationKey, 'true')
+        } catch {}
+
+        const contextChips = Array.isArray(saved)
+            ? saved.filter((id): id is string => typeof id === 'string' && this.currentCanvasState?.nodes.some(node => node.nodeId === id) === true)
+            : this.contextDraftInitialized
+                || migrated
+                ? []
+                : this.aiChatPanelState.contextChips
+        this.aiChatPanelState = {
+            ...this.aiChatPanelState,
+            contextChips,
+        }
+        this.contextDraftInitialized = true
+        this.writeConversationContext()
+        this.context.refresh()
     }
 
     private openAiChatPanel = (): void => {
@@ -2216,6 +2231,7 @@ export class LixpiWorkspaceCanvas {
         this.globalCanvasComposer = new WorkspacePromptComposer({
             document: this.paneEl.ownerDocument,
             workspaceId: this.workspaceId,
+            userId: this.host.workspace.userId(),
             storage: this.host.storage,
             mountContextTray: () => {
                 const element = this.context.createTray('canvas')
@@ -2231,14 +2247,69 @@ export class LixpiWorkspaceCanvas {
                 gradientColors: this.host.settings.gradient.styles.shiftingColors,
             },
             mountEditor: this.editors.createPrompt({
+                submitOnEnter: true,
                 mountMediaModeSwitch: switchElement => this.options.mediaModeSwitchMountEl.replaceChildren(switchElement),
                 mountModelMenuControl: controlElement => this.options.modelMenuControlMountEl.replaceChildren(controlElement),
                 promptReferenceCatalog: this.getPromptReferenceCatalogClient(),
                 promptReferencePreviewRenderer: this.context.getPromptReferencePreviewRenderer(),
             }),
-            onSubmit: data => void this.submitCanvasGenerationRun(data),
+            onSubmit: data => this.submitCanvasGenerationRun(data),
         })
         this.paneEl.appendChild(this.globalCanvasComposer.element)
+
+        const composer = this.globalCanvasComposer
+        const controller = new WorkspaceConversationController(
+            this.workspaceId,
+            this.host.workspace.userId(),
+            this.host.conversations,
+            this.host.storage,
+            this.host.createId,
+        )
+        this.agentConversation = controller
+        this.agentConversationPanel = new WorkspaceConversationPanel(
+            controller,
+            this.paneEl.ownerDocument,
+            id => {
+                this.window.setTimeout(
+                    () => {
+                        if (
+                            this.globalCanvasComposer === composer
+                            && controller.current?.conversationAssetId === id
+                        ) {
+                            this.selectConversationContext(id)
+                            composer.selectConversation(id, controller.current?.settings.models)
+                        }
+                    },
+                    0,
+                )
+            },
+            {
+                resolve: async assetId => {
+                    const asset = await this.host.assets.refresh(assetId, this.workspaceId)
+
+                    if ('error' in asset)
+                        throw new Error(asset.error)
+
+                    return { title: asset.title }
+                },
+                open: assetId => this.openConversationOutput(assetId),
+            },
+            {
+                load: conversationAssetId => this.host.generation.fetchConversation({
+                    workspaceId: this.workspaceId,
+                    threadId: conversationAssetId,
+                }),
+                mount: this.editors.createConversation({
+                    createContextTray: () => this.context.createTray('chat'),
+                    promptReferencePreviewRenderer: this.context.getPromptReferencePreviewRenderer(),
+                    contextPreview: this.context.getAiUserMessagePreviewRenderer(),
+                }),
+            },
+        )
+        composer.element.prepend(this.agentConversationPanel.element)
+        composer.element.classList.add('has-conversation')
+        void controller.initialize(this.currentCanvasState?.lastActiveConversationAssetId)
+
         this.canvasMediaLayer?.setGlassTargets([
             ...(this.options.glassTargets ?? []),
             {
@@ -2433,17 +2504,125 @@ export class LixpiWorkspaceCanvas {
         }
     }
 
-    private submitPersistedDetachedCanvasThreadMessage = (threadId: string): void =>
-        void this.detachedAiChatThreadEditors.get(threadId)?.submitPersisted()
+    private submitCanvasGenerationRun = async (data: AiPromptComposerSubmitData): Promise<void> => {
+        if (!this.agentConversation)
+            throw new Error('The conversation is not ready yet.')
 
-    private submitCanvasGenerationRun = async (
-        data: AiPromptComposerSubmitData,
-        options: {
-            explicitContextNodeIds?: string[]
-            excludedCanvasNodeIds?: string[]
-            regeneration?: NonNullable<AiInteractionMediaGenerationRequest['regeneration']>
-        } = {},
-    ): Promise<void> => void (await this.canvasGenerationSubmission.submit(data, options))
+        const modelIds = (values: string[]): Array<`${string}:${string}`> =>
+            values.map(value => {
+                const separator = value.indexOf(':')
+
+                if (
+                    separator <= 0
+                    || separator === value.length - 1
+                )
+                    throw new Error('Select a valid model before sending.')
+
+                return value as `${string}:${string}`
+            })
+        const references = new Map<string, {
+            assetId: string
+            role: 'media' | 'artifact' | 'content' | 'conversation'
+        }>()
+        const visit = (node: {
+            attrs?: Record<string, unknown>
+            content?: unknown[]
+        }): void => {
+            const attrs = node.attrs
+
+            if (typeof attrs?.assetId === 'string')
+                references.set(
+                    attrs.assetId,
+                    {
+                        assetId: attrs.assetId,
+                        role: attrs.referenceType === 'capability-artifact' ? 'artifact' : 'media',
+                    },
+                )
+
+            for (const child of node.content ?? [])
+                if (
+                    child
+                    && typeof child === 'object'
+                )
+                    visit(child as typeof node)
+        }
+
+        for (const node of data.contentJSON)
+            visit(node)
+
+        for (const nodeId of this.aiChatPanelState.contextChips) {
+            const node = this.currentCanvasState?.nodes.find(candidate => candidate.nodeId === nodeId)
+
+            if (
+                node
+                && 'assetId' in node
+                && typeof node.assetId === 'string'
+            )
+                references.set(
+                    node.assetId,
+                    {
+                        assetId: node.assetId,
+                        role: node.type === 'capabilityArtifact'
+                            ? 'artifact'
+                            : node.type === 'document'
+                                ? 'content'
+                                : 'media',
+                    },
+                )
+        }
+
+        await this.agentConversation.submit(
+            {
+                type: 'aiUserMessage',
+                content: data.contentJSON,
+            },
+            [...references.values()],
+            {
+                reasoningModelIds: modelIds(data.aiReasoningModels),
+                imageModelIds: modelIds(data.imageOptions?.aiImageModels ?? []),
+                videoModelIds: modelIds(data.videoOptions?.aiVideoModels ?? []),
+                ...(data.reasoningOptions ? { reasoningOptions: data.reasoningOptions } : {}),
+                ...(data.imageOptions ? { imageOptions: {
+                    imageSize: data.imageOptions.imageGenerationSize as NonNullable<AiInteractionMediaGenerationRequest['imageOptions']>['imageSize'],
+                    ...(data.imageOptions.configGroups ? { configGroups: data.imageOptions.configGroups } : {}),
+                } } : {}),
+                ...(data.videoOptions ? { videoOptions: {
+                    aspectRatio: data.videoOptions.videoAspectRatio,
+                    resolution: data.videoOptions.videoResolution,
+                    duration: data.videoOptions.videoDuration,
+                    ...(data.videoOptions.configGroups ? { configGroups: data.videoOptions.configGroups } : {}),
+                } } : {}),
+            },
+        )
+        this.context.clear()
+    }
+
+    private async openConversationOutput(assetId: string): Promise<void> {
+        const workspaceId = this.workspaceId
+        const asset = await this.host.assets.refresh(assetId, workspaceId)
+
+        if ('error' in asset)
+            throw new Error(asset.error)
+
+        if (
+            this.rendererDestroyed
+            || workspaceId !== this.workspaceId
+        )
+            return
+
+        const node = this.currentCanvasState?.nodes.find(node => 'assetId' in node && node.assetId === assetId)
+
+        if (node)
+            this.selectNode(node.nodeId)
+
+        if (asset.artifact) {
+            this.openRightSidePanelToMode('artifacts')
+            this.libraries.showArtifactAsset(assetId)
+        } else {
+            this.openRightSidePanelToMode('media')
+            this.libraries.showMediaAsset(assetId)
+        }
+    }
 
     private isBranchMarkerGenerationCancelled = (node: BranchMarkerNode): boolean => this.generationPlacements.isBranchMarkerGenerationCancelled(node)
 
@@ -2708,7 +2887,9 @@ export class LixpiWorkspaceCanvas {
         const detailsThreadId = detailsNode
             ? this.isBranchMarkerNode(detailsNode)
                 ? detailsNode.conversationAssetId
-                : detailsNode.generatedBy?.conversationAssetId
+                : 'generatedBy' in detailsNode
+                    ? detailsNode.generatedBy?.conversationAssetId
+                    : undefined
             : undefined
 
         if (
@@ -2726,7 +2907,9 @@ export class LixpiWorkspaceCanvas {
             const currentDetailsThreadId = currentDetailsNode
                 ? this.isBranchMarkerNode(currentDetailsNode)
                     ? currentDetailsNode.conversationAssetId
-                    : currentDetailsNode.generatedBy?.conversationAssetId
+                    : 'generatedBy' in currentDetailsNode
+                        ? currentDetailsNode.generatedBy?.conversationAssetId
+                        : undefined
                 : undefined
 
             if (
@@ -3463,6 +3646,12 @@ export class LixpiWorkspaceCanvas {
     }
 
     private releaseWorkspaceResources = (): void => {
+        this.writeConversationContext()
+        this.contextDraftConversationId = 'new'
+        this.contextDraftInitialized = false
+        this.agentConversationPanel?.destroy()
+        this.agentConversationPanel = null
+        this.agentConversation = null
         this.detachedAiChatThreadEditors.clear()
         this.libraries.release()
         const composer = this.globalCanvasComposer
@@ -3498,7 +3687,6 @@ export class LixpiWorkspaceCanvas {
         this.conversationProjection.clear()
         this.detachedAiChatThreadEditors.clear()
         this.mediaOperationRecovery.clear()
-        this.canvasGenerationSubmission.clear()
         this.capabilityProgressRuns.clear()
         this.destroyGeneratedMediaChromeControls()
         this.resetGeneratedMediaChromeSyncKey()
@@ -3751,6 +3939,7 @@ export class LixpiWorkspaceCanvas {
 
         this.rendererDestroyed = true
         destroyWorkspaceCanvasResources([
+            () => this.agentConversationPanel?.destroy(),
             () => this.context?.destroy(),
             () => void (this.globalCanvasComposer = null),
             () => this.globalCanvasComposer?.destroy(),
@@ -3823,7 +4012,6 @@ export class LixpiWorkspaceCanvas {
             () => this.apiCanvasGeometry?.destroy(),
             () => this.generationHandlers?.destroy(),
             () => this.mediaOperationRecovery?.destroy(),
-            () => this.canvasGenerationSubmission?.destroy(),
             () => this.nodeDeletion?.destroy(),
             () => this.projectionOverrides?.destroy(),
             () => this.callbacks.destroy(),

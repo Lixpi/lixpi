@@ -996,19 +996,22 @@ describe('asset canvas projection', () => {
         expect(nodeCenterY(fork)).toBeCloseTo((nodeCenterY(first) + nodeCenterY(second)) / 2, 6)
     })
 
-    it('separates first-frame media chrome from the title above an existing media node', () => {
+    it.each(['image', 'audio'] as const)('separates first-frame media chrome from the title above an existing %s node', type => {
         const pending = projectMedia(emptyCanvasState(), 0, true)
         const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
         const pendingNode = pending.nodes.find(node => node.nodeId === pendingNodeId)!
         const existingNode: CanvasNode = {
             nodeId: 'existing-media',
-            type: 'image',
+            type,
             assetId: 'existing-asset',
             position: {
                 x: pendingNode.position.x,
                 y: pendingNode.position.y + pendingNode.dimensions.height + 100,
             },
-            dimensions: { ...pendingNode.dimensions },
+            dimensions: type === 'audio' ? {
+                width: 360,
+                height: 96,
+            } : { ...pendingNode.dimensions },
         }
         const beforeFirstFrame = {
             ...pending,
@@ -1019,7 +1022,7 @@ describe('asset canvas projection', () => {
         const generatedOut = resolved.nodes.find(node => node.nodeId === pendingNodeId)!
         const existingOut = resolved.nodes.find(node => node.nodeId === existingNode.nodeId)!
         const generatedInsets = getGeneratedOutputChromeCollisionInsets('image')
-        const existingInsets = getGeneratedOutputChromeCollisionInsets('image')
+        const existingInsets = getGeneratedOutputChromeCollisionInsets(type)
 
         expect(generatedOut.position.y + generatedOut.dimensions.height + generatedInsets.bottom)
             .toBeLessThanOrEqual(existingOut.position.y - existingInsets.top + 1)

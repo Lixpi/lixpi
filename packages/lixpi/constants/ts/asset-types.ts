@@ -95,6 +95,11 @@ export type AssetCapabilityArtifact = {
 export type AssetLineage = {
     sourceConversationAssetId?: string
     parentAssetId?: string
+    sourceArtifact?: {
+        artifactId: string
+        artifactTypeId: string
+        revision: number
+    }
     sourceAssetIds: string[]
     generationRequestId?: string
     reasoningRunId?: string
@@ -220,6 +225,8 @@ export type Asset = {
     originWorkspaceId: string
     ownerUserId: string
     documents: Partial<Record<AssetDocumentRole, AssetDocumentPointer>>
+    conversationRuntime?: 'deep-agents'
+    artifactRevisionState?: true
     media?: AssetMedia
     composition?: AssetMediaComposition
     artifact?: AssetCapabilityArtifact

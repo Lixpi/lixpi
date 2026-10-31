@@ -32,6 +32,7 @@ describe('createInstructionSkillPackage', () => {
             exportName: 'instructions',
             resourceId: 'instructions',
             resourceName: 'Instructions',
+            agentSkillName: 'test-skill',
             skillFile: new URL('./fixtures/instruction-skill.md', import.meta.url),
         }, {
             storeResource,
@@ -42,6 +43,11 @@ describe('createInstructionSkillPackage', () => {
             allowedActions: new Set(['test.action']),
             parentModuleId: 'test-module',
             catalogExposure: 'module-internal',
+        })
+
+        expect(module.agentSkill).toEqual({
+            name: 'test-skill',
+            files: { instructions: 'SKILL.md' },
         })
 
         expect(storeResource).toHaveBeenCalledWith(expect.objectContaining({

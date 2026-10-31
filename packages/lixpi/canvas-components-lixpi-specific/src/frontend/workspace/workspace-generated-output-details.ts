@@ -34,6 +34,7 @@ import {
     type CanvasState,
     type CapabilityArtifactCanvasNode,
     type ImageCanvasNode,
+    type AudioCanvasNode,
     type MediaDescriptor,
     type MediaGenerationProgressState,
     type VideoCanvasNode,
@@ -172,7 +173,7 @@ export class WorkspaceGeneratedOutputDetails {
         return status === 'pending' || status === 'running' || status === 'awaiting-provider-verification'
     }
 
-    resolveNode = (target: CanvasGeneratedOutputDetailsTarget | undefined): GeneratedOutputCanvasNode | BranchMarkerNode | null =>
+    resolveNode = (target: CanvasGeneratedOutputDetailsTarget | undefined): GeneratedOutputCanvasNode | AudioCanvasNode | BranchMarkerNode | null =>
         this.ports.history.resolveGeneratedOutputDetailsNode(target)
 
     mountContent = (
@@ -282,7 +283,7 @@ export class WorkspaceGeneratedOutputDetails {
 
     private renderContent(
         body: HTMLElement,
-        node: GeneratedOutputCanvasNode | BranchMarkerNode,
+        node: GeneratedOutputCanvasNode | AudioCanvasNode | BranchMarkerNode,
     ): WorkspaceOutputDetails {
         this.activeDetails = new WorkspaceOutputDetails(
             body,

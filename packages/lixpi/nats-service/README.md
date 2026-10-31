@@ -154,6 +154,10 @@ An application may provide `requestScope` (`request_scope` in Python) to wrap ex
 
 ### JetStream Object Store (TypeScript)
 
+The pinned `@nats-io/obj` patch in `patches/` deletes the exact temporary consumer created for each Object Store read, including failed and cancelled reads. Stream completion waits for deletion, so repeated Blob reads do not exhaust the account consumer limit. The SDK still validates the Object Store digest. Every consuming workspace applies this patch; native storage acceptance tests cover completion, corrupted bytes and cancellation. Recheck this patch when changing the SDK version.
+
+`getObject(bucket, name, { signal, maxBytes })` optionally cancels transfers with an `AbortSignal` and enforces a byte cap against both metadata and received chunks. Cancellation waits for the read consumer to close and releases the reader lock. Media workers combine their job and account signals at this boundary, so stopping during a stalled download does not wait for the whole object.
+
 ```typescript
 // Create an Object Store bucket
 const os = await natsService.createObjectStore('my-bucket', {

@@ -11,6 +11,7 @@
         "test": "vitest"
     },
     "dependencies": {
+        "@lixpi/capability-system": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",

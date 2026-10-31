@@ -24,6 +24,7 @@ The active runtime has no document table, chat-thread table, media-library table
 | `Capability` package | Kind, scope, owners, status, module membership/exposure, and current manifest hash | Manifest and resource bytes or top-level module presentation metadata |
 | `Prompt-Reference-Recent` | Per-user reference identity and last accepted-use timestamp | Authorization or display metadata |
 | `Capability Run` | Sealed manifest hashes, owner, origin, state, steps, and output Asset IDs | Event payload bytes |
+| `Agent Conversation` | Accepted commands, transcript/event projections, settings, queue, owner fences, operation receipts, and checkpoints | Provider credentials or mutable media bytes |
 
 ## DynamoDB tables
 
@@ -43,10 +44,19 @@ The Asset/Blob tables and their prompt-reference projections are defined in [`Dy
 | `Media-Generation-Requests-Meta` | `workspaceId` | `generationRequestId` | LSI `updatedAt`, LSI `statusUpdatedAt` |
 | `Media-Generation-Requests-Access-List` | `generationRequestId` | `principalId` | none |
 | `Asset-Subject-Identity-Attestations` | `assetId` | `attestationId` | none |
+| `Agent-Conversations` | `pk` | `sk` | none; TTL on `expiresAt` |
 
 There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Prompt autocomplete queries authorized `Assets-Search` partitions by media-category or `capabilityArtifact#<artifactTypeId>` prefixes, merges and deduplicates thin rows, and still point-authorizes the selected Asset before use. Conversation Assets are not projected into search. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
 
 Capability-package storage uses `Capabilities`, `Capabilities-Meta`, `Capabilities-Access-List`, and `Capability-Runs` alongside the Asset/Blob tables. Source-registered top-level Capability modules remain authoritative in the module registry; their contained packages carry `parentModuleId` plus `catalogExposure: 'module-internal'`. Workspaces include `organizationId`; every Asset or organization-owned Capability package created from a workspace uses that organization rather than selecting an arbitrary organization from the user account.
+
+## Conversation and media execution state
+
+`Agent-Conversations` uses organization-scoped conversation, workspace, Artifact, render, and source-probe partitions. Conversation membership lists do not scan the table. Accepted messages, idempotency receipts, event sequence allocation, and dispatch intent commit together. The conversation Asset holds the projected rich transcript; execution rows remain authoritative for accepted commands and recovery.
+
+Checkpoint serialization, scratch files, immutable Artifact revisions, and large operation results use retained Blob payloads. Each stored payload has an exact ownership key so replacing or deleting a row releases its reference once. Sequence revisions retain their frozen input Blobs. Render jobs retain the selected revision and inputs through finalization. Deletion fences an execution partition before releasing its rows and source pins; staged historical imports receive the same cleanup.
+
+Dispatch queries sixteen due-work shards and publishes to a durable work queue. Renewable conversation epochs fence every commit, and atomic per-user slots admit at most two graph invocations. TTL expires empty conversation reservations, unused admission slots, and source-probe cache entries. It does not expire accepted conversations, operation receipts, or output provenance.
 
 ## Asset aggregate
 

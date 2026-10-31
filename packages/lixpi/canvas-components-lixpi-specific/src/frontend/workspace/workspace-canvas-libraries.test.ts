@@ -72,6 +72,7 @@ describe('WorkspaceCanvasLibraries', () => {
                 media: { prepareRenditionUrls: vi.fn() },
             },
             captureAdmission: () => () => true,
+            getWorkspaceId: () => 'workspace-1',
             createLibraryPorts: () => ({}),
             createAssetViewPorts: () => ({ mountEditor: vi.fn() }),
         } as WorkspaceCanvasLibrariesPorts)

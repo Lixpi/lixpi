@@ -53,7 +53,7 @@
         position: relative;
         display: block;
 
-        :global(svg) {
+        svg {
             height: map.get($s, svgSize);
             width: map.get($s, svgSize);
         }
@@ -95,7 +95,7 @@
                 position: relative;
             }
 
-            span.selected-option-icon :global(svg) {
+            span.selected-option-icon svg {
                 margin: map.get($s, iconMargin);
                 width: map.get($s, iconSize);
                 height: map.get($s, iconSize);
@@ -109,12 +109,12 @@
                 margin-left: 2px;
             }
 
-            span.state-indicator :global(svg) {
+            span.state-indicator svg {
                 margin: 0;
                 padding: 0;
                 transition:
                     hoverTransition(fill, map.get($s, hoverDuration)),
-                    pupOutTransition(transform, 200ms);
+                    pupOutTransition(transform, map.get($s, hoverDuration));
                 position: relative;
                 z-index: 1;
             }
@@ -217,7 +217,7 @@
                 border-radius: 12px;
                 background: transparent;
 
-                :global(svg) {
+                svg {
                     height: map.get($s, itemIconSize);
                     width: map.get($s, itemIconSize);
                     flex-shrink: 0;
@@ -307,7 +307,7 @@
     $s: map.merge($defaults, $config);
 
     .dots-dropdown-menu {
-        :global(svg) {
+        svg {
             fill: map.get($s, glyphBase);
         }
 
@@ -318,7 +318,7 @@
 
             @if map.get($s, hoverGlyphFill) {
                 &:hover {
-                    :global(svg) {
+                    svg {
                         fill: map.get($s, hoverGlyphFill);
                     }
                 }
@@ -329,13 +329,13 @@
         &.is-active {
             button {
                 @if map.get($s, invertIndicatorOnActive) {
-                    span.state-indicator :global(svg) {
+                    span.state-indicator svg {
                         transform: rotate(180deg);
                     }
                 }
 
                 @if map.get($s, activeIndicatorFill) {
-                    span.state-indicator :global(svg) {
+                    span.state-indicator svg {
                         fill: map.get($s, activeIndicatorFill);
                     }
                 }
@@ -372,7 +372,7 @@
                     background: map.get($s, stateLayerColor);
                 }
 
-                :global(svg) {
+                svg {
                     fill: map.get($s, itemIconColor);
                 }
             }

@@ -5,16 +5,20 @@ description: How AI generation events move from the in-process API workflow to t
 
 # Streaming and Events
 
-Lixpi uses NATS for the live AI generation path and JetStream for resumability while a response is active. The in-process LangGraph workflow publishes live chat pipeline events onto an internal per-pipeline subject, writes the same pipeline events to a workspace JetStream log before live publish, and mirrors AI chat document mutations into the conversation Asset's organization-scoped ProseMirror step log. Authorized API relays copy canonical live traffic to per-user browser subjects. A refreshed browser can therefore recover both pieces of active state it needs:
+Lixpi uses NATS for live conversation and media updates. Conversation commands and ordered events persist in DynamoDB, while JetStream dispatches durable agent and renderer work. The direct media-generation workflow publishes pipeline events into a workspace JetStream log and mirrors rich transcript mutations into the conversation Asset's ProseMirror step log. Authorized API relays copy live traffic to per-user browser subjects. The direct generation client recovers:
 
 - non-ProseMirror pipeline events such as branch resolution, lineage planning, image/video progress, traces, and errors through `CHAT_PIPELINE_RESUME`
 - rendered AI chat text and generated-media transcript nodes through `asset.document.resume` plus a per-user Asset-document event relay
 
-The AI live path has no polling loop and no separate streaming server. Live latency is still the direct NATS WebSocket path; durability is provided by bounded JetStream streams that can replay missed events after a refresh or second-tab mount. Asset metadata/rendition cache synchronization uses tokenized Asset events plus a low-frequency reconciliation poll because those mutation notifications are invalidations, not a durable replay log.
+Live delivery uses NATS WebSockets without a separate streaming server. Conversation controllers reconcile persisted events on reconnect and periodically refresh background status. Asset metadata/rendition cache synchronization uses tokenized Asset events plus a low-frequency reconciliation poll because those mutation notifications are invalidations, not a durable replay log.
 
 This page documents the wire shape: live subjects, replay subjects, event statuses, and browser render paths. For which workflow nodes emit these events and why the lifecycle is shaped this way, see [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md). For the system-wide messaging picture, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
 
 ## Subject Families
+
+The enabled conversation composer uses `conversation.create`, `.list`, `.get`, `.messages`, `.submit`, `.settings.update`, `.stop`, `.queue.update`, and `.events.replay`. Events publish to `conversation.status.{userIdToken}.{workspaceId}.{conversationAssetId}` after current workspace authorization. Clients deduplicate by `eventSeq`; text deltas also carry a message ID and character offset. Snapshot reads return a coherent event cursor, latest messages, and an opaque older-history cursor. History and replay pages have byte ceilings below the broker payload limit. Reconnection never submits the user message again.
+
+`conversation.dispatch` and media render dispatch/progress/completion subjects are service-only. The API persists work before publishing it and accepts duplicate delivery through owner fences and operation receipts. A renderer returns a verified immutable output descriptor; the API commits the output Asset before announcing completion. The signed subject registration must include every deployed conversation, sequence, and render endpoint.
 
 AI generation uses one request subject, internal canonical live subjects, authorized per-user live relays, one durable pipeline-event subject family, and the shared Asset-role ProseMirror step subject family:
 

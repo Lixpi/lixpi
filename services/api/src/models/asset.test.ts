@@ -117,6 +117,7 @@ const requester = {
 
 beforeEach(() => {
     vi.clearAllMocks()
+    dynamo.getItem.mockReset()
     ;(globalThis as any).dynamoDBService = dynamo
     dynamo.queryItems.mockResolvedValue({ items: [] })
     dynamo.transactWrite.mockResolvedValue(undefined)
@@ -171,6 +172,129 @@ describe('Asset lease account ownership', () => {
 })
 
 describe('Asset.attachWorkspaceReference', () => {
+    it('rebuilds the attachment from the latest Asset when rendition completion races the first commit', async () => {
+        const completed: Asset = {
+            ...asset,
+            title: 'Converted audio',
+            media: {
+                kind: 'audio',
+                originalName: 'audio.wav',
+                sourceMimeType: 'audio/wav',
+                modelSafe: true,
+                renditions: { original: {
+                    name: 'original',
+                    status: 'ready',
+                    blobHash: 'a'.repeat(64),
+                    mimeType: 'audio/wav',
+                    byteSize: 100,
+                    updatedAt: 20,
+                } },
+            },
+            states: {
+                ...asset.states,
+                lifecycle: 'active',
+                media: 'ready',
+            },
+            revision: asset.revision + 1,
+        }
+
+        for (const current of [asset, completed])
+            dynamo.getItem
+                .mockResolvedValueOnce(current)
+                .mockResolvedValueOnce({ organizationId: 'organization-1' })
+                .mockResolvedValueOnce(undefined)
+                .mockResolvedValueOnce({
+                    canvasStateUpdatedAt: 100,
+                    canvasState: {
+                        ...canvasState(10),
+                        nodes: [],
+                    },
+                })
+                .mockResolvedValueOnce({ referenceKey: 'catalog#workspace#workspace-1' })
+
+        dynamo.transactWrite.mockRejectedValueOnce({
+            name: 'TransactionCanceledException',
+            CancellationReasons: [{ Code: 'ConditionalCheckFailed' }],
+        })
+
+        const result = await AssetModel.attachWorkspaceReference({
+            assetId: asset.assetId,
+            workspaceId: 'workspace-1',
+            requester,
+            nodeId: 'node-1',
+            workspaceMutation: {
+                expectedCanvasStateUpdatedAt: 100,
+                canvasStateUpdatedAt: 101,
+                canvasState: canvasState(500),
+            },
+        })
+
+        expect(result).toMatchObject({ nodeIds: ['node-1'] })
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(2)
+        const operations = dynamo.transactWrite.mock.calls[1][0].operations
+        const update = operations.find((operation: any) => operation.updates?.referenceCount !== undefined)
+        expect(update).toMatchObject({
+            updates: {
+                revision: completed.revision + 1,
+                referenceCount: asset.referenceCount + 1,
+            },
+            expressionAttributeValues: { ':expectedRevision': completed.revision },
+        })
+        expect(update.updates).not.toHaveProperty('states')
+        expect(operations).toEqual(expect.arrayContaining([
+            expect.objectContaining({ item: expect.objectContaining({ title: completed.title }) }),
+        ]))
+    })
+
+    it('rechecks lifecycle after an attachment conflict instead of reviving a deleting Asset', async () => {
+        dynamo.getItem
+            .mockResolvedValueOnce(asset)
+            .mockResolvedValueOnce({ organizationId: 'organization-1' })
+            .mockResolvedValueOnce(undefined)
+            .mockResolvedValueOnce(undefined)
+            .mockResolvedValueOnce({
+                ...asset,
+                states: {
+                    ...asset.states,
+                    lifecycle: 'deleting',
+                },
+            })
+        dynamo.transactWrite.mockRejectedValueOnce({
+            name: 'TransactionCanceledException',
+            CancellationReasons: [{ Code: 'ConditionalCheckFailed' }],
+        })
+
+        await expect(AssetModel.attachWorkspaceReference({
+            assetId: asset.assetId,
+            workspaceId: 'workspace-1',
+            requester,
+            surfaceId: 'conversation-1',
+        })).resolves.toEqual({ error: 'NOT_FOUND' })
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(1)
+    })
+
+    it('bounds conflicting attachment attempts', async () => {
+        for (let attempt = 0; attempt < 5; attempt += 1)
+            dynamo.getItem
+                .mockResolvedValueOnce(asset)
+                .mockResolvedValueOnce({ organizationId: 'organization-1' })
+                .mockResolvedValueOnce(undefined)
+                .mockResolvedValueOnce(undefined)
+
+        dynamo.transactWrite.mockRejectedValue({
+            name: 'TransactionCanceledException',
+            CancellationReasons: [{ Code: 'ConditionalCheckFailed' }],
+        })
+
+        await expect(AssetModel.attachWorkspaceReference({
+            assetId: asset.assetId,
+            workspaceId: 'workspace-1',
+            requester,
+            surfaceId: 'conversation-1',
+        })).resolves.toEqual({ error: 'ASSET_ATTACH_CONFLICT' })
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(5)
+    })
+
     it('commits final API geometry even when the Asset reference already contains the generated node', async () => {
         dynamo.getItem
             .mockResolvedValueOnce(asset)

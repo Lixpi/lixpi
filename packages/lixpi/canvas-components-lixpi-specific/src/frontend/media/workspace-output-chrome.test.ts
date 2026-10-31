@@ -12,6 +12,7 @@ import {
     type CanvasState,
     type ImageCanvasNode,
     type VideoCanvasNode,
+    type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
 } from '@lixpi/constants'
 import {
@@ -126,6 +127,39 @@ afterEach(() => {
 })
 
 describe('WorkspaceOutputChrome', () => {
+    it('mounts audio title, details and playback chrome after the native source becomes ready', () => {
+        const node: AudioCanvasNode = {
+            ...image('audio'),
+            type: 'audio',
+            dimensions: {
+                width: 360,
+                height: 96,
+            },
+        }
+        const f = fixture([node])
+        f.ports.mountTitle = vi.fn((node, host) => {
+            host.textContent = f.assets.get(node.assetId)!.title
+
+            return () => {}
+        })
+        f.owner.sync()
+        expect(f.owner.element.textContent).toContain('audio')
+        expect(f.ports.video.sync).toHaveBeenCalledWith([node])
+        const native = document.createElement('audio')
+        native.src = 'https://example.test/export.mp3'
+        f.ports.getAudio = () => native
+        f.owner.sync()
+        expect(f.ports.video.sync).toHaveBeenCalledTimes(2)
+        expect(f.ports.queueAnalysis).not.toHaveBeenCalled()
+        const footer = f.owner.element.firstElementChild as HTMLElement
+        footer.querySelector<HTMLButtonElement>('.canvas-node-footer-info-button')!.click()
+        expect(f.ports.onOpenDetails).toHaveBeenCalledWith('audio')
+        f.state.nodes[0].position.x = 300
+        f.owner.sync()
+        expect(f.owner.element.firstElementChild).toBe(footer)
+        expect(footer.style.left).toBe('310px')
+    })
+
     it('shows media attribution from progress before Asset hydration', () => {
         const node = {
             ...image(),

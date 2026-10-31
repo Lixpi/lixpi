@@ -34,6 +34,20 @@
 			"EVENTS": "ai.interaction.mediaGeneration.events"
 		}
 	},
+	"CONVERSATION_SUBJECTS": {
+		"CREATE": "conversation.create",
+		"LIST": "conversation.list",
+		"GET": "conversation.get",
+		"MESSAGES": "conversation.messages",
+		"SUBMIT": "conversation.submit",
+		"SETTINGS_UPDATE": "conversation.settings.update",
+		"STOP": "conversation.stop",
+		"QUEUE_UPDATE": "conversation.queue.update",
+		"REPLAY": "conversation.events.replay",
+		"STATUS": "conversation.status",
+		"DISPATCH": "conversation.internal.dispatch",
+		"OPERATION_COMPLETED": "conversation.internal.operationCompleted"
+	},
 	"ASSET_SUBJECTS": {
 		"CREATE": "asset.create",
 		"GET": "asset.get",
@@ -60,6 +74,15 @@
 	},
 	"BLOB_PROCESSING_SUBJECTS": {
 		"GENERATE_RENDITIONS": "blob.processing.generateRenditions"
+	},
+	"MEDIA_RENDER_SUBJECTS": {
+		"PROBE_SOURCE": "media.render.internal.probeSource",
+		"DISPATCH": "media.render.internal.dispatch",
+		"RENDER": "media.render.internal.render",
+		"CANCEL": "media.render.internal.cancel",
+		"READINESS": "media.render.internal.readiness",
+		"PROGRESS": "media.render.internal.progress",
+		"COMPLETE": "media.render.internal.complete"
 	},
 	"CHARACTER_FIDELITY_SUBJECTS": {
 		"ASSESS_PANEL": "character.fidelity.assessPanel"

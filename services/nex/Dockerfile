@@ -39,7 +39,7 @@ ARG PNPM_VERSION
 # Character fidelity uses onnxruntime-web's WASM backend rather than a native
 # musl binding. Its pinned YuNet/SFace artifacts are copied with workloads and
 # verified by SHA-256 before a session is created.
-RUN apk add --update --no-cache curl ca-certificates ffmpeg libreoffice poppler-utils libheif-tools rsync
+RUN apk add --update --no-cache curl ca-certificates ffmpeg font-dejavu util-linux-misc libreoffice poppler-utils libheif-tools rsync
 
 # pnpm installs the workload's node_modules (mirrors services/api).
 RUN npm install -g "pnpm@${PNPM_VERSION}"

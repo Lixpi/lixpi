@@ -196,7 +196,12 @@ export class AssetService {
         assetsStore.upsert(asset)
 
         for (const role of Object.keys(asset.documents) as AssetDocumentRole[]) {
-            if (assetDocumentsStore.get(asset.assetId, role))
+            const cached = assetDocumentsStore.get(asset.assetId, role)
+
+            if (
+                cached
+                && cached.version >= (asset.documents[role]?.version ?? 0)
+            )
                 continue
 
             await this.resumeDocument({

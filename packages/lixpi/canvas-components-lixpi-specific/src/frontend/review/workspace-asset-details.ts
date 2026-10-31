@@ -126,6 +126,7 @@ export class WorkspaceAssetDetails {
                 asset.lineage?.sourceConversationAssetId ? `conversation ${asset.lineage.sourceConversationAssetId}` : '',
                 asset.lineage?.parentAssetId ? `parent ${asset.lineage.parentAssetId}` : '',
                 ...(asset.lineage?.sourceAssetIds ?? []).map(assetId => `source ${assetId}`),
+                asset.lineage?.sourceArtifact ? `${asset.lineage.sourceArtifact.artifactTypeId} ${asset.lineage.sourceArtifact.artifactId} revision ${asset.lineage.sourceArtifact.revision}` : '',
             ].filter(Boolean).join('\n') || 'No lineage'
             const seed = asset.lineage?.generationSeed
 

@@ -23,6 +23,7 @@ export type InstructionSkillDefinition = {
     resourceId: string
     resourceName: string
     skillFile: URL
+    agentSkillName?: string
     references?: CapabilityReference[]
 }
 
@@ -53,6 +54,10 @@ export const createInstructionSkillPackage = (
     return {
         kind: 'skill',
         capabilityId: definition.capabilityId,
+        ...(definition.agentSkillName ? { agentSkill: {
+            name: definition.agentSkillName,
+            files: { [definition.resourceId]: 'SKILL.md' },
+        } } : {}),
         seed: async (context: CapabilityPackageSeedContext): Promise<void> => void (await seedInstructionSkill(
             definition,
             storage,

@@ -3,6 +3,7 @@ import {
     type Node as ProseMirrorNode,
 } from 'prosemirror-model'
 import {
+    TextSelection,
     type Transaction,
 } from 'prosemirror-state'
 import {
@@ -553,6 +554,25 @@ export class ProseMirrorAuthorityService {
                 )
             } else
                 transaction = transaction.step(remoteStep)
+
+            const selection = view.state.selection
+
+            if (
+                selection instanceof TextSelection
+                && !selection.empty
+            ) {
+                const forward = selection.anchor < selection.head
+                transaction.setSelection(
+                    TextSelection.between(
+                        transaction.doc.resolve(
+                            transaction.mapping.map(selection.anchor, forward ? 1 : -1),
+                        ),
+                        transaction.doc.resolve(
+                            transaction.mapping.map(selection.head, forward ? -1 : 1),
+                        ),
+                    ),
+                )
+            }
 
             transaction.setMeta('skipDispatch', true)
             transaction.setMeta('proseMirrorAuthorityRemote', true)

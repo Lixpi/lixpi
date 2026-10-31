@@ -66,6 +66,8 @@ type EnvConfig = {
     natsFileConversionNkeyPublic: string
     natsCharacterFidelityNkeySeed: string
     natsCharacterFidelityNkeyPublic: string
+    natsMediaRenderNkeySeed: string
+    natsMediaRenderNkeyPublic: string
     natsBackupNkeySeed: string
     natsBackupNkeyPublic: string
     natsOperatorNkeySeed: string
@@ -143,6 +145,8 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     natsFileConversionNkeyPublic: ['NATS_FILE_CONVERSION_NKEY_PUBLIC'],
     natsCharacterFidelityNkeySeed: ['NATS_CHARACTER_FIDELITY_NKEY_SEED'],
     natsCharacterFidelityNkeyPublic: ['NATS_CHARACTER_FIDELITY_NKEY_PUBLIC'],
+    natsMediaRenderNkeySeed: ['NATS_MEDIA_RENDER_NKEY_SEED'],
+    natsMediaRenderNkeyPublic: ['NATS_MEDIA_RENDER_NKEY_PUBLIC'],
     natsBackupNkeySeed: ['NATS_BACKUP_NKEY_SEED'],
     natsBackupNkeyPublic: ['NATS_BACKUP_NKEY_PUBLIC'],
     natsOperatorNkeySeed: ['NATS_OPERATOR_NKEY_SEED'],
@@ -686,6 +690,10 @@ const generateNatsKeys = (): {
         seed: string
         public: string
     }
+    mediaRenderNkey: {
+        seed: string
+        public: string
+    }
     backupNkey: {
         seed: string
         public: string
@@ -773,6 +781,7 @@ const generateNatsKeys = (): {
         apiNkey: createIdentity(),
         fileConversionNkey: createIdentity(),
         characterFidelityNkey: createIdentity(),
+        mediaRenderNkey: createIdentity(),
         backupNkey: createIdentity(),
         operatorNkey: createIdentity(),
         authNkey,
@@ -1233,6 +1242,11 @@ const collectConfiguration = async (
         characterFidelityNkey: await fields.keyPair(
             'natsCharacterFidelityNkeySeed',
             'natsCharacterFidelityNkeyPublic',
+            createUser,
+        ),
+        mediaRenderNkey: await fields.keyPair(
+            'natsMediaRenderNkeySeed',
+            'natsMediaRenderNkeyPublic',
             createUser,
         ),
         backupNkey: await fields.keyPair(
@@ -1781,6 +1795,8 @@ const collectConfiguration = async (
         natsFileConversionNkeyPublic: natsKeys.fileConversionNkey.public,
         natsCharacterFidelityNkeySeed: natsKeys.characterFidelityNkey.seed,
         natsCharacterFidelityNkeyPublic: natsKeys.characterFidelityNkey.public,
+        natsMediaRenderNkeySeed: natsKeys.mediaRenderNkey.seed,
+        natsMediaRenderNkeyPublic: natsKeys.mediaRenderNkey.public,
         natsBackupNkeySeed: natsKeys.backupNkey.seed,
         natsBackupNkeyPublic: natsKeys.backupNkey.public,
         natsOperatorNkeySeed: natsKeys.operatorNkey.seed,
@@ -1891,6 +1907,8 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{NATS_FILE_CONVERSION_NKEY_PUBLIC}}': config.natsFileConversionNkeyPublic,
         '{{NATS_CHARACTER_FIDELITY_NKEY_SEED}}': config.natsCharacterFidelityNkeySeed,
         '{{NATS_CHARACTER_FIDELITY_NKEY_PUBLIC}}': config.natsCharacterFidelityNkeyPublic,
+        '{{NATS_MEDIA_RENDER_NKEY_SEED}}': config.natsMediaRenderNkeySeed,
+        '{{NATS_MEDIA_RENDER_NKEY_PUBLIC}}': config.natsMediaRenderNkeyPublic,
         '{{NATS_BACKUP_NKEY_SEED}}': config.natsBackupNkeySeed,
         '{{NATS_BACKUP_NKEY_PUBLIC}}': config.natsBackupNkeyPublic,
         '{{NATS_OPERATOR_NKEY_SEED}}': config.natsOperatorNkeySeed,
@@ -2136,6 +2154,8 @@ const main = async (): Promise<void> => {
             natsFileConversionNkeyPublic: natsKeys.fileConversionNkey.public,
             natsCharacterFidelityNkeySeed: natsKeys.characterFidelityNkey.seed,
             natsCharacterFidelityNkeyPublic: natsKeys.characterFidelityNkey.public,
+            natsMediaRenderNkeySeed: natsKeys.mediaRenderNkey.seed,
+            natsMediaRenderNkeyPublic: natsKeys.mediaRenderNkey.public,
             natsBackupNkeySeed: natsKeys.backupNkey.seed,
             natsBackupNkeyPublic: natsKeys.backupNkey.public,
             natsOperatorNkeySeed: natsKeys.operatorNkey.seed,

@@ -90,7 +90,10 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
 
         this.mounted = true
 
-        if (this.entries.length > 0)
+        if (
+            this.entries.length > 0
+            && (!this.selectedAssetId || this.entries.some(entry => entry.meta.assetId === this.selectedAssetId))
+        )
             this.render()
         else
             void this.load()
@@ -102,8 +105,12 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
 
         this.selectedAssetId = assetId
 
-        if (this.mounted)
-            this.render()
+        if (this.mounted) {
+            if (this.entries.some(entry => entry.meta.assetId === assetId))
+                this.render()
+            else
+                void this.load()
+        }
     }
 
     refresh(): void {
@@ -135,7 +142,11 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
     private async load(): Promise<void> {
         const sequence = ++this.loadSequence
         this.destroyViews()
-        this.inspectorEl.replaceChildren()
+        this.rootEl.classList.toggle(
+            'media-library-panel-item-selected',
+            Boolean(this.selectedAssetId),
+        )
+        this.inspectorEl.replaceChildren(this.html`<div className="media-library-state">Loading Artifact…</div>` as HTMLElement)
         this.browserEl.replaceChildren(this.html`<div className="media-library-state">Loading Artifacts…</div>` as HTMLElement)
 
         try {
@@ -175,7 +186,8 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
                 return
 
             this.options.onError(error)
-            this.browserEl.replaceChildren(
+            const target = this.selectedAssetId ? this.inspectorEl : this.browserEl
+            target.replaceChildren(
                 this.html`<div className="media-library-state media-library-state-error">Could not load Artifacts.</div>` as HTMLElement,
             )
         }
@@ -213,6 +225,10 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
             return
 
         this.destroyViews()
+        this.rootEl.classList.toggle(
+            'media-library-panel-item-selected',
+            Boolean(this.selectedAssetId),
+        )
 
         try {
             this.browserEl.replaceChildren(

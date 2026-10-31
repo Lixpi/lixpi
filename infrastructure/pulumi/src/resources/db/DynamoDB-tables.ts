@@ -28,6 +28,10 @@ type TableDefinition = {
     hashKey: string
     rangeKey?: string
     localSecondaryIndexes?: SecondaryIndex[]
+    ttl?: {
+        attributeName: string
+        enabled: boolean
+    }
 }
 
 type LegacyStorageRemovalStage = 'retain' | 'disable-protection' | 'remove'
@@ -314,6 +318,24 @@ export const getTableDefinitions = () => ({
         'capabilityId',
         'principalId',
     ),
+    agentConversationsTable: {
+        ...table(
+            'AGENT_CONVERSATIONS',
+            [{
+                name: 'pk',
+                type: 'S',
+            }, {
+                name: 'sk',
+                type: 'S',
+            }],
+            'pk',
+            'sk',
+        ),
+        ttl: {
+            attributeName: 'expiresAt',
+            enabled: true,
+        },
+    },
     capabilityRunsTable: table(
         'CAPABILITY_RUNS',
         [{

@@ -55,8 +55,13 @@ export const jwtVerifier = {
             }
 
             return result
-        } catch {
-            return { error: 'ACCOUNT_ADMISSION_DENIED' }
+        } catch (error) {
+            return {
+                error: error instanceof Error
+                    && error.message === 'ACCOUNT_ADMISSION_UNAVAILABLE'
+                    ? 'ACCOUNT_ADMISSION_UNAVAILABLE'
+                    : 'ACCOUNT_ADMISSION_DENIED',
+            }
         }
     },
 }

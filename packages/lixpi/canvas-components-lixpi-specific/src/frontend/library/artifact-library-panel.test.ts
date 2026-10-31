@@ -142,6 +142,37 @@ afterEach(() => {
 })
 
 describe('Artifact library ownership', () => {
+    it.each([false, true])('refreshes a newly opened output and exposes its inspector with cached rows (remounted: %s)', async remounted => {
+        const f = fixture()
+            f.mount()
+            await vi.waitFor(() => expect(f.frontend.createLibraryItemView).toHaveBeenCalledOnce())
+            expect(f.panel.rootEl.classList.contains('media-library-panel-item-selected')).toBe(false)
+            const output = {
+                ...f.asset,
+                assetId: 'new-output',
+                title: 'Blue hold',
+            }
+            vi.mocked(f.options.assets.list).mockResolvedValue({ items: [f.meta, output] })
+            vi.mocked(f.options.assets.refresh).mockImplementation(async assetId => assetId === output.assetId ? output : f.asset)
+
+            if (remounted)
+                f.panel.unmount()
+
+            f.panel.showAsset(output.assetId)
+
+            if (remounted)
+                f.mount()
+
+            await vi.waitFor(() => expect(f.panel.rootEl.querySelector<HTMLInputElement>('input')?.value).toBe('Blue hold'))
+            expect(f.options.assets.list).toHaveBeenCalledTimes(2)
+            const inspector = f.panel.rootEl.querySelector<HTMLElement>('.media-library-inspector')!
+            expect(f.panel.rootEl.classList.contains('media-library-panel-item-selected')).toBe(true)
+            expect(inspector.textContent).toContain('Registered detail')
+            f.panel.rootEl.querySelector<HTMLButtonElement>('.media-library-detail-back')!.click()
+            expect(f.panel.rootEl.classList.contains('media-library-panel-item-selected')).toBe(false)
+            expect(f.panel.rootEl.querySelector('.media-library-browser')?.textContent).toContain('Blue hold')
+    })
+
     it('loads available scopes across pages and delegates metadata and views to the registered definition', async () => {
         const f = fixture()
         vi.mocked(f.options.assets.list).mockResolvedValueOnce({

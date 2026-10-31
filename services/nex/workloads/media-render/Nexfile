@@ -1,0 +1,11 @@
+name: media-render
+description: Frozen media sequence exports using organization Blob inputs
+type: native
+lifecycle: service
+start_request:
+  uri: "file:///usr/local/bin/node"
+  argv:
+    - "--experimental-transform-types"
+    - "--disable-warning=ExperimentalWarning"
+    - "/usr/src/service/workloads/media-render/index.ts"
+  environment: {}

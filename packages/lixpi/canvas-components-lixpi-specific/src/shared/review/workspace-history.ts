@@ -3,6 +3,7 @@ import {
     type CanvasGeneratedOutputDetailsTarget,
     type ImageCanvasNode,
     type VideoCanvasNode,
+    type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
     type BranchOriginCanvasNode,
     type BranchForkCanvasNode,
@@ -488,7 +489,7 @@ export class WorkspaceHistory {
         return null
     }
 
-    resolveGeneratedOutputDetailsNode(target: CanvasGeneratedOutputDetailsTarget | undefined): GeneratedOutputCanvasNode | BranchMarkerNode | null {
+    resolveGeneratedOutputDetailsNode(target: CanvasGeneratedOutputDetailsTarget | undefined): GeneratedOutputCanvasNode | AudioCanvasNode | BranchMarkerNode | null {
         if (!target)
             return null
 
@@ -502,6 +503,7 @@ export class WorkspaceHistory {
 
         return node.type === 'image'
             || node.type === 'video'
+            || node.type === 'audio'
             || node.type === 'capabilityArtifact'
             ? node
             : null

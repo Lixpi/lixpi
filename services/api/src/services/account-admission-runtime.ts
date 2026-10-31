@@ -31,7 +31,7 @@ export class AccountAdmissionRuntime {
             !this.serving
             || !this.serving.feed.isReady()
         )
-            throw new Error('ACCOUNT_ADMISSION_DENIED')
+            throw new Error('ACCOUNT_ADMISSION_UNAVAILABLE')
 
         return this.serving
     }

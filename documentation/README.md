@@ -5,7 +5,7 @@ description: Map of the Lixpi documentation for the product, platform, canvas, A
 
 # Lixpi Documentation
 
-Lixpi is a visual, node-based AI workspace for image and video generation pipelines — **the spatial arrangement of nodes _is_ the workflow**. This is the documentation map. Start with the [Product Overview](PRODUCT-OVERVIEW.md), then dive into the domain you care about. Search the documentation tree when a page is not listed here.
+Lixpi combines a visual canvas, independent AI conversations, generation pipelines, and agent-driven media sequence editing and export. Start with the [Product Overview](PRODUCT-OVERVIEW.md), then choose the relevant domain below. Search the documentation tree when a page is not listed here.
 
 These docs are maintained as Markdown and read directly in GitHub or an editor. The static documentation site has been set aside pending its redesign.
 
@@ -92,7 +92,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 | Page | What it covers |
 |------|----------------|
 | [Workspace Composer & Generated Output Details](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | Conversation Assets, detached streaming authority, the canvas composer, and the persisted unified generated-output details panel |
-| [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Prompt reference atoms, composer context chips, authorization, and explicit-only media candidate routing |
+| [Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Explicit, Discovery, and Mixed conversation context; prompt references, source authorization, and direct-generation media candidates |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 | [Markdown Rendering](ai-chat/MARKDOWN-RENDERING.md) | The one-parser rule and the editable and non-editable rendering paths |
 

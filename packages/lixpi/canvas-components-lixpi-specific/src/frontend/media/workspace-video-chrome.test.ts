@@ -8,6 +8,7 @@ import {
 } from 'vitest'
 import {
     type VideoCanvasNode,
+    type AudioCanvasNode,
 } from '@lixpi/constants'
 import { createDefaultVideoControlsSettings } from '@lixpi/ui-kit/components/video-controls'
 import {
@@ -116,6 +117,70 @@ afterEach(() => {
 })
 
 describe('WorkspaceVideoChrome', () => {
+    it('mounts audible audio controls inside the node and preserves playback across updates', async () => {
+        const {
+            chrome,
+            sourceHost,
+            options,
+        } = fixture()
+        const audio = document.createElement('audio')
+        audio.src = 'https://example.test/export.wav'
+        audio.muted = false
+        let paused = true
+        Object.defineProperties(audio, {
+            duration: { get: () => 4 },
+            paused: { get: () => paused },
+        })
+        audio.play = vi.fn(async () => {
+            paused = false
+            audio.dispatchEvent(new Event('play'))
+        })
+        audio.pause = vi.fn(() => {
+            paused = true
+            audio.dispatchEvent(new Event('pause'))
+        })
+        sourceHost.appendChild(audio)
+        options.getAudio = () => audio
+        const audioNode: AudioCanvasNode = {
+            ...node,
+            type: 'audio',
+            dimensions: {
+                width: 360,
+                height: 96,
+            },
+        }
+        chrome.sync([audioNode])
+        const element = chrome.element.firstElementChild as HTMLElement
+        const host = element.querySelector<HTMLElement>('.workspace-video-controls-host')!
+        expect(element.querySelector('audio')).toBe(audio)
+        expect(parseFloat(host.style.top)).toBeGreaterThanOrEqual(0)
+        expect(parseFloat(host.style.top) + parseFloat(host.style.height)).toBeLessThanOrEqual(96)
+        expect(element.textContent).toContain('0:04')
+        expect(element.querySelector('.video-controls-fullscreen')).toBeNull()
+        expect(element.querySelector('[aria-label="Enter fullscreen"]')).toBeNull()
+        mouse(element.querySelector('.video-controls-play-hit')!, 'click')
+        await Promise.resolve()
+        expect(audio.play).toHaveBeenCalledOnce()
+        expect(audio.muted).toBe(false)
+        expect(element.querySelector('[aria-label="Pause audio"]')).not.toBeNull()
+        chrome.sync([{
+            ...audioNode,
+            position: {
+                x: 300,
+                y: 400,
+            },
+        }])
+        expect(chrome.element.firstElementChild).toBe(element)
+        mouse(element.querySelector('.video-controls-play-hit')!, 'click')
+        expect(audio.pause).toHaveBeenCalledOnce()
+        expect(chrome.outsideOffsetScreen(audioNode.nodeId, options.getViewport())).toBe(0)
+        const playHit = element.querySelector('.video-controls-play-hit')!
+        chrome.sync([])
+        expect(sourceHost.contains(audio)).toBe(true)
+        mouse(playHit, 'click')
+        expect(audio.play).toHaveBeenCalledOnce()
+    })
+
     it('retains playback controls across metadata and geometry updates and restores the native element on removal', () => {
         const {
             chrome,

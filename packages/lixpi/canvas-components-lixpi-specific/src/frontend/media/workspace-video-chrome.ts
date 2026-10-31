@@ -1,6 +1,7 @@
 import { select } from 'd3-selection'
 import {
     type VideoCanvasNode,
+    type AudioCanvasNode,
 } from '@lixpi/constants'
 import {
     applyStyle,
@@ -42,7 +43,8 @@ export type WorkspaceVideoControlsSettings = VideoControlsSettings & {
 export type WorkspaceVideoChromeOptions = Pick<WorkspaceNodeShellsOptions, 'document' | 'getResizeSettings' | 'startResize' | 'togglePlayback'> & {
     settings: WorkspaceVideoControlsSettings
     getVideo: (nodeId: string) => HTMLVideoElement | null | undefined
-    getBounds: (node: VideoCanvasNode) => CanvasEngineRect
+    getAudio?: (nodeId: string) => HTMLAudioElement | null | undefined
+    getBounds: (node: VideoCanvasNode | AudioCanvasNode) => CanvasEngineRect
     getViewport: () => CanvasViewport
     startDrag: (
         event: MouseEvent,
@@ -73,14 +75,14 @@ export class WorkspaceVideoChrome {
         this.element = html`<div className="workspace-media-chrome-viewport"></div>` as HTMLDivElement
     }
 
-    sync(nodes: readonly VideoCanvasNode[]): void {
+    sync(nodes: readonly (VideoCanvasNode | AudioCanvasNode)[]): void {
         if (this.destroyed)
             return
 
         const retained = new Set<string>()
 
         for (const node of nodes) {
-            const video = this.options.getVideo(node.nodeId)
+            const video = node.type === 'audio' ? this.options.getAudio?.(node.nodeId) : this.options.getVideo(node.nodeId)
 
             if (
                 !video
@@ -133,7 +135,10 @@ export class WorkspaceVideoChrome {
         nodeId: string,
         viewport: CanvasViewport,
     ): number {
-        if (!this.entries.has(nodeId))
+        if (
+            !this.entries.has(nodeId)
+            || this.entries.get(nodeId)?.video.tagName === 'AUDIO'
+        )
             return 0
 
         const { settings } = this.options
@@ -187,7 +192,7 @@ class VideoChromeEntry {
 
     constructor(
         private readonly nodeId: string,
-        readonly video: HTMLVideoElement,
+        readonly video: HTMLMediaElement,
         private readonly options: WorkspaceVideoChromeOptions,
     ) {
         const html = createDocumentHtml(options.document)
@@ -306,11 +311,13 @@ class VideoChromeEntry {
         return {
             insetX,
             width,
-            top: bounds.height + scaleCanvasChromeWorldSizeForZoom(
-                settings.canvas.bottomInset,
-                zoom,
-                scaling,
-            ),
+            top: this.video.tagName === 'AUDIO'
+                ? Math.max(0, (bounds.height - settings.height * screenScale / zoom) / 2)
+                : bounds.height + scaleCanvasChromeWorldSizeForZoom(
+                    settings.canvas.bottomInset,
+                    zoom,
+                    scaling,
+                ),
             height: Math.max(1, settings.height * screenScale / zoom),
             responsiveWidth: Math.max(1, width * zoom),
             logicalWidth: Math.max(1, width * zoom / screenScale),

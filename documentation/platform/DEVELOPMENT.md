@@ -176,6 +176,8 @@ LocalAuth0 provides zero-config Auth0 mocking for offline development — it gen
 
 See [`services/localauth0/README.md`](../../services/localauth0/README.md) for endpoints, default claims, and troubleshooting, and [Authentication](./AUTHENTICATION.md) for how it fits the dual-auth model.
 
+For tests requiring a provisioned account and provider-usage authorization, use the [hosted account configuration commands](../../dev-tools/config-utils/README.md). The account service's `documentation/platform/DEVELOPMENT.md`, under **Automated sign-in inbox**, documents SES test addresses and the Docker helper that reads Auth0 codes from S3. Use that flow before requesting manual code entry; reuse an existing test recipient when its organization and credit are required.
+
 ## Pulumi (Infrastructure-as-Code)
 
 Pulumi manages the infrastructure, and it runs inside a Docker container — you never run `pulumi` directly on the host.

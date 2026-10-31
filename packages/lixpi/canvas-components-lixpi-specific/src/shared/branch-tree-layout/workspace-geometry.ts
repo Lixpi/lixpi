@@ -209,6 +209,7 @@ export class WorkspaceGeometry {
         if (
             node.type !== 'image'
             && node.type !== 'video'
+            && node.type !== 'audio'
             && node.type !== 'capabilityArtifact'
         )
             return {

@@ -14,10 +14,10 @@
         "Lixpi already generates one and stores what comes back, so exposing it as an editable field is mostly UI work."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:294 and :407",
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:294 and :407; services/api/src/llm/providers/stability-bedrock-call.ts; services/api/src/capability-system/stability-pipeline-executor.ts",
         "code": "formData.set('seed', String(requestedSeed)) and body.seed = requestedSeed",
-        "from": "a pipeline-generated seed constrained to the common Stability model range",
-        "what": "Makes the provider request reproducible, then stores the seed reported by Stability on the generated Asset. It is not an editable composer option."
+        "from": "Existing generation seed policy, or a stable operation identity for typed pipeline calls",
+        "what": "Makes the provider request reproducible, then stores the seed reported by Stability on the generated Asset. It is not an editable composer option. The typed image.generate pipeline operation uses one Bedrock text-to-image request with durable authorization, native-result persistence, and a stable output slot."
     },
     "supportedModels": [
         "stability-ultra",

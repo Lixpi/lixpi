@@ -50,6 +50,7 @@ export class WorkspaceCanvasLibraries {
     private media: MediaLibraryPanelInstance | null = null
     private artifact: ArtifactLibraryPanelInstance | null = null
     private capability: CapabilityLibraryPanelInstance | null = null
+    private generation = 0
 
     constructor(private readonly ports: WorkspaceCanvasLibrariesPorts) {}
 
@@ -88,7 +89,12 @@ export class WorkspaceCanvasLibraries {
         this.ensureMedia().showAsset(assetId)
     }
 
+    showArtifactAsset(assetId: string): void {
+        this.ensureArtifact().showAsset(assetId)
+    }
+
     release(): void {
+        this.generation++
         const cleanup = new Lifetime()
         const media = this.media
         const artifact = this.artifact
@@ -108,7 +114,8 @@ export class WorkspaceCanvasLibraries {
 
     private ensureMedia(): MediaLibraryPanelInstance {
         if (!this.media) {
-            const current = this.ports.captureAdmission()
+            const generation = this.generation
+            const workspaceId = this.ports.getWorkspaceId()
             this.media = createMediaLibraryPanel({
                 ...this.ports.createLibraryPorts(),
                 tooltipHideDelayMs: this.ports.host.settings.helpTooltip.interactiveHideDelayMs,
@@ -128,6 +135,8 @@ export class WorkspaceCanvasLibraries {
                 }) as { error?: string },
                 prepareRenditionUrls: this.ports.host.media.prepareRenditionUrls,
                 onInsertAsset: async (item: AssetMeta) => {
+                    const current = this.captureActionAdmission(workspaceId, generation)
+
                     if (
                         !this.ports.attachAsset
                         || !current()
@@ -179,13 +188,16 @@ export class WorkspaceCanvasLibraries {
 
     private ensureArtifact(): ArtifactLibraryPanelInstance {
         if (!this.artifact) {
-            const current = this.ports.captureAdmission()
+            const generation = this.generation
+            const workspaceId = this.ports.getWorkspaceId()
             this.artifact = createArtifactLibraryPanel({
                 ...this.ports.createLibraryPorts(),
                 frontendRegistry: this.ports.host.capabilities.frontend,
                 sharedRegistry: this.ports.host.capabilities.shared,
                 ensureStyles: this.ports.host.capabilities.ensureStyles,
                 onInsertAsset: async (item: AssetMeta) => {
+                    const current = this.captureActionAdmission(workspaceId, generation)
+
                     if (
                         !this.ports.attachAsset
                         || !item.artifactTypeId
@@ -216,10 +228,11 @@ export class WorkspaceCanvasLibraries {
                     return true
                 },
                 onAcceptAsset: async asset => {
+                    const current = this.captureActionAdmission(workspaceId, generation)
+
                     if (!current())
                         return false
 
-                    const workspaceId = this.ports.getWorkspaceId()
                     const node = this.ports.getCanvasState()?.nodes.find(
                         candidate => (
                             candidate.type === 'capabilityArtifact' && candidate.assetId === asset.assetId
@@ -255,7 +268,8 @@ export class WorkspaceCanvasLibraries {
 
     private ensureCapability(): CapabilityLibraryPanelInstance {
         if (!this.capability) {
-            const current = this.ports.captureAdmission()
+            const generation = this.generation
+            const workspaceId = this.ports.getWorkspaceId()
             this.capability = createCapabilityLibraryPanel({
                 document: this.ports.document,
                 client: this.ports.host.capabilities.catalog(
@@ -263,6 +277,8 @@ export class WorkspaceCanvasLibraries {
                     this.ports.host.workspace.organizationId() as string,
                 ),
                 onAttach: reference => {
+                    const current = this.captureActionAdmission(workspaceId, generation)
+
                     if (!current())
                         return
 
@@ -290,6 +306,17 @@ export class WorkspaceCanvasLibraries {
         }
 
         return this.capability
+    }
+
+    private captureActionAdmission(
+        workspaceId: string,
+        generation: number,
+    ): () => boolean {
+        const current = this.ports.captureAdmission()
+
+        return () => generation === this.generation
+            && workspaceId === this.ports.getWorkspaceId()
+            && current()
     }
 
     private destroyCapability(): void {

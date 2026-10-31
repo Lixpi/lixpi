@@ -84,7 +84,7 @@
     );
 
     // Force option icons to be compact even if SVGs have baked-in sizing
-    .bubble-body .submenu li :global(svg) {
+    .bubble-body .submenu li svg {
         width: 12px !important;
         height: 12px !important;
     }

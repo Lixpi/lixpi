@@ -80,6 +80,8 @@ type AiChatProseMirrorStreamAssemblerConfig = {
     baseVersion?: number
     initialDoc?: object
     transport?: AssetProseMirrorStepTransport
+    projectionOnly?: boolean
+    responseMessageId?: string
 }
 
 type ParserInstance = ReturnType<typeof MarkdownStreamParser.getInstance>
@@ -366,7 +368,9 @@ export const settlePersistedAiChatGenerationRequest = async (params: {
 export class AiChatProseMirrorStreamAssembler {
     private readonly coordinate: AssetDocCoordinate
     private readonly engine: HeadlessProseMirrorEngine
-    private readonly transport: AssetProseMirrorStepTransport
+    private get transport(): AssetProseMirrorStepTransport {
+        return this.config.transport ?? AssetProseMirrorStepTransport.fromSingleton()
+    }
     private readonly streamId = randomUUID()
     private readonly workQueue: QueuedTask[] = []
     private parser: ParserInstance | null = null
@@ -382,6 +386,7 @@ export class AiChatProseMirrorStreamAssembler {
     private isEnded = false
     private isProcessingQueue = false
     private hasPublishedError = false
+    private projectionFailure?: unknown
 
     constructor(private readonly config: AiChatProseMirrorStreamAssemblerConfig) {
         this.coordinate = {
@@ -389,7 +394,6 @@ export class AiChatProseMirrorStreamAssembler {
             assetId: config.aiChatThreadId,
             role: 'conversation',
         }
-        this.transport = config.transport ?? AssetProseMirrorStepTransport.fromSingleton()
         this.engine = new HeadlessProseMirrorEngine({
             documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: config.initialDoc ?? this.createEmptyThreadDoc(),
@@ -570,11 +574,17 @@ export class AiChatProseMirrorStreamAssembler {
                     finalVersion,
                 },
             )
-            await this.transport.purgeDocumentSubject(this.coordinate)
+
+            if (!this.config.projectionOnly)
+                await this.transport.purgeDocumentSubject(this.coordinate)
+
             this.destroyParser()
         })
         await textPhasePromise
         await finalizationPromise
+
+        if (this.projectionFailure)
+            throw this.projectionFailure
     }
 
     async cancelGenerationRequest(generationRequestId: string): Promise<void> {
@@ -617,6 +627,9 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     snapshotForProjection(): object {
+        if (this.projectionFailure)
+            throw this.projectionFailure
+
         return this.sanitizeSnapshotForPersistence(
             this.engine.snapshot(),
         ) as object
@@ -820,7 +833,7 @@ export class AiChatProseMirrorStreamAssembler {
         }
 
         const responseNode = this.engine.schema.nodes[aiResponseMessageNodeType].create({
-            id: `resp-${this.streamId}`,
+            id: this.config.responseMessageId ?? `resp-${this.streamId}`,
             isInitialRenderAnimation: true,
             isReceivingAnimation: true,
             aiProvider: this.activeProvider,
@@ -1681,6 +1694,9 @@ export class AiChatProseMirrorStreamAssembler {
         step: Step,
         version: number,
     ): Promise<void> {
+        if (this.config.projectionOnly)
+            return
+
         await this.ensureSubjectSequence()
         const nextSubjectSeq = this.subjectSeq! + 1
         const published = await this.transport.publishAiStreamStep({
@@ -1698,6 +1714,9 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private async persistFinalSnapshot(finalVersion: number): Promise<boolean> {
+        if (this.config.projectionOnly)
+            return true
+
         try {
             await AssetDocumentService.settle({
                 organizationId: this.coordinate.organizationId,
@@ -1759,6 +1778,9 @@ export class AiChatProseMirrorStreamAssembler {
             error?: string
         },
     ): Promise<void> {
+        if (this.config.projectionOnly)
+            return
+
         await this.ensureSubjectSequence()
         const nextSubjectSeq = this.subjectSeq! + 1
         const published = await this.transport.publishControlEvent({
@@ -1791,6 +1813,9 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private async syncEngineToAuthority(): Promise<void> {
+        if (this.config.projectionOnly)
+            return
+
         if (
             (this.config.baseVersion ?? 0) === 0
             && this.subjectSeq === undefined
@@ -1833,6 +1858,9 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private async resetSubjectIfStartingFromBase(): Promise<void> {
+        if (this.config.projectionOnly)
+            return
+
         if ((this.config.baseVersion ?? 0) !== 0)
             return
 
@@ -1872,6 +1900,9 @@ export class AiChatProseMirrorStreamAssembler {
                 try {
                     await this.runQueuedTaskWithAuthorityRetry(queuedTask)
                 } catch (error) {
+                    if (this.config.projectionOnly)
+                        this.projectionFailure = error
+
                     err('[AiChatProseMirrorStreamAssembler] queued task failed:', error)
                 } finally {
                     queuedTask.resolve()
@@ -1895,6 +1926,9 @@ export class AiChatProseMirrorStreamAssembler {
 
                 return
             } catch (error) {
+                if (this.config.projectionOnly)
+                    throw error
+
                 if (
                     !this.transport.isExpectationFailure(error)
                     || attempt === MAX_AUTHORITY_CAS_RETRIES

@@ -30,12 +30,13 @@ vi.mock('$src/components/proseMirror/components/editor.ts', () => ({
 }))
 vi.mock('$src/services/ai-interaction-service.ts', () => ({ default: class {} }))
 
-const setup = (version = 7) => {
+const setup = (version = 7, readOnly = false) => {
     const state = createEditorState(doc(p('prefix'), thread({ threadId: 'conversation' }, p('request'))))
     const dispatch = vi.fn()
     const view = {
         state,
         dispatch,
+        dom: document.createElement('div'),
     } as unknown as EditorView
     const destroy = vi.fn()
     mocks.mount.mockReturnValue({
@@ -45,6 +46,7 @@ const setup = (version = 7) => {
     const unregister = vi.fn()
     const register = vi.fn(() => unregister)
     const request: CanvasConversationEditorMount = {
+        readOnly,
         container: document.createElement('div'),
         workspaceId: 'workspace',
         thread: {
@@ -76,6 +78,41 @@ const setup = (version = 7) => {
 beforeEach(() => vi.resetAllMocks())
 
 describe('canvas conversation editor adapter', () => {
+    it('mounts an agent transcript read-only and cannot submit through the legacy editor command', () => {
+        const fixture = setup(7, true)
+        expect(mocks.mount.mock.calls[0][0].readOnly).toBe(true)
+        expect(mocks.mount.mock.calls[0][0].proseMirrorAuthority.receiveOnly).toBe(true)
+        fixture.editor.submitPersisted()
+        expect(fixture.dispatch).not.toHaveBeenCalled()
+        fixture.editor.destroy()
+    })
+
+    it('attaches buffered operation progress after an authority streaming update creates the response mount', () => {
+        const fixture = setup(7, true)
+        fixture.editor.renderOperations?.([{
+            operationId: 'operation',
+            turnId: 'turn',
+            responseMessageId: 'response',
+            operationKey: 'media-sequence.export',
+            stepLabel: 'Export sequence',
+            state: 'running',
+            outputAssetIds: {},
+            createdAt: 1,
+            updatedAt: 2,
+        }])
+        const response = document.createElement('div')
+        response.className = 'ai-response-message-wrapper'
+        response.dataset.messageId = 'response'
+        const mount = document.createElement('div')
+        mount.className = 'ai-response-capability-progress'
+        response.append(mount)
+        fixture.view.dom.append(response)
+        mocks.mount.mock.calls[0][0].onStreamingUpdate(fixture.view.state.doc.toJSON())
+        expect(mount.querySelector('.capability-run-progress')?.textContent).toContain('Export sequence')
+        expect(fixture.request.onStreaming).toHaveBeenCalledWith(fixture.view.state.doc.toJSON())
+        fixture.editor.destroy()
+        expect(mount.children).toHaveLength(0)
+    })
     it('mounts receive-only authority with the captured identity and waits before registration', () => {
         const fixture = setup()
         expect(mocks.mount.mock.calls[0][0].proseMirrorAuthority).toEqual({

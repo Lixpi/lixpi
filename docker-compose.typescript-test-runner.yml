@@ -63,6 +63,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/api/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/api/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/api/packages/lixpi/constants/ts/account-admission.ts:ro,cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/service/api/packages/lixpi/constants/ts/agent-conversation.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/api/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -75,6 +76,7 @@ services:
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/api/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/api/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/api/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/patches:/usr/src/service/api/packages/lixpi/nats-service/patches:ro,cached
             - ./packages/lixpi/nats-subject-registry/package.json:/usr/src/service/api/packages/lixpi/nats-subject-registry/package.json:ro,cached
             - ./packages/lixpi/nats-subject-registry/src:/usr/src/service/api/packages/lixpi/nats-subject-registry/src:ro,cached
             - ./packages/lixpi/nats-subject-registry/package.json:/usr/src/service/shared/nats-subject-registry/package.json:ro,cached
@@ -130,6 +132,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/account-admission.ts:ro,cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/agent-conversation.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -140,6 +143,7 @@ services:
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/patches:/usr/src/service/web-ui/packages/lixpi/nats-service/patches:ro,cached
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui/packages/lixpi/prosemirror/package.json:ro,cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/web-ui/packages/lixpi/prosemirror/src:ro,cached
             - ./packages/lixpi/test-utils/package.json:/usr/src/service/web-ui/packages/lixpi/test-utils/package.json:ro,cached
@@ -198,6 +202,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/account-admission.ts:ro,cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/agent-conversation.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -208,6 +213,7 @@ services:
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/patches:/usr/src/service/web-ui-user-portal/packages/lixpi/nats-service/patches:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/src:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/src:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/styles:/usr/src/service/web-ui-user-portal/packages/lixpi/ui-kit-gentelella/styles:ro,cached
@@ -247,6 +253,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/account-admission.ts:ro,cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/agent-conversation.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/ai-model-registry/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -259,6 +266,7 @@ services:
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/patches:/usr/src/service/ai-model-registry/packages/lixpi/nats-service/patches:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/package.json:/usr/src/service/ai-model-registry/packages/lixpi/ui-kit-gentelella/package.json:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/src:/usr/src/service/ai-model-registry/packages/lixpi/ui-kit-gentelella/src:ro,cached
             - ./packages/lixpi/ui-kit-gentelella/styles:/usr/src/service/ai-model-registry/packages/lixpi/ui-kit-gentelella/styles:ro,cached
@@ -286,12 +294,19 @@ services:
             - ./services/nex/pnpm-workspace.yaml:/usr/src/service/workspace-manifests/nex/pnpm-workspace.yaml:ro,cached
             - ./services/nex/vitest.config.ts:/usr/src/service/nex/vitest.config.ts:cached
             - ./services/nex/workloads:/usr/src/service/nex/workloads:cached
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/nex/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/nex/packages/lixpi/capability-system/src:ro,cached
+            - ./packages/lixpi/ui-primitives/package.json:/usr/src/service/nex/packages/lixpi/ui-primitives/package.json:ro,cached
+            - ./packages/lixpi/ui-primitives/src:/usr/src/service/nex/packages/lixpi/ui-primitives/src:ro,cached
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/nex/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/nex/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/nex/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/nex/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/nex/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/nex/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/nex/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/nex/packages/lixpi/constants/ts/account-admission.ts:ro,cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/service/nex/packages/lixpi/constants/ts/agent-conversation.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/nex/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -304,12 +319,16 @@ services:
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/nex/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/patches:/usr/src/service/nex/packages/lixpi/nats-service/patches:ro,cached
             - ./packages/lixpi/test-utils/package.json:/usr/src/service/nex/packages/lixpi/test-utils/package.json:ro,cached
             - ./packages/lixpi/test-utils/src:/usr/src/service/nex/packages/lixpi/test-utils/src:ro,cached
 
             # --- nex domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
             - typescript-test-runner-node-modules-nex:/usr/src/service/nex/node_modules
+            - typescript-test-runner-node-modules-nex-capability-system:/usr/src/service/nex/packages/lixpi/capability-system/node_modules
+            - typescript-test-runner-node-modules-nex-ui-primitives:/usr/src/service/nex/packages/lixpi/ui-primitives/node_modules
+            - typescript-test-runner-node-modules-nex-canvas-engine:/usr/src/service/nex/packages/lixpi/canvas-engine/node_modules
             - typescript-test-runner-node-modules-nex-constants-ts:/usr/src/service/nex/packages/lixpi/constants/ts/node_modules
             - typescript-test-runner-node-modules-nex-debug-tools-ts:/usr/src/service/nex/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-nex-dynamodb-service:/usr/src/service/nex/packages/lixpi/dynamodb-service/node_modules
@@ -350,6 +369,7 @@ services:
             - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/shared/constants/ts/asset-types.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/service/shared/constants/ts/account-admission.ts:cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/service/shared/constants/ts/agent-conversation.ts:cached
             - ./packages/lixpi/constants/ts/account-admission.test.ts:/usr/src/service/shared/constants/ts/account-admission.test.ts:ro,cached
             - ./packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/service/shared/constants/ts/nats-subject-path.test.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
@@ -366,6 +386,7 @@ services:
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/shared/dynamodb-service/src:cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/shared/nats-service/ts/nats-service.ts:cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/shared/nats-service/ts/package.json:cached
+            - ./packages/lixpi/nats-service/patches:/usr/src/service/shared/nats-service/patches:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.test.ts:/usr/src/service/shared/nats-service/ts/nats-service.test.ts:cached
             - ./packages/lixpi/nats-service/ts/registration.ts:/usr/src/service/shared/nats-service/ts/registration.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/registration.test.ts:/usr/src/service/shared/nats-service/ts/registration.test.ts:ro,cached
@@ -480,6 +501,9 @@ volumes:
     typescript-test-runner-node-modules-ai-model-registry-usage-reporter:
     typescript-test-runner-node-modules-ai-model-registry-web-client-service-factory:
     typescript-test-runner-node-modules-nex:
+    typescript-test-runner-node-modules-nex-capability-system:
+    typescript-test-runner-node-modules-nex-ui-primitives:
+    typescript-test-runner-node-modules-nex-canvas-engine:
     typescript-test-runner-node-modules-nex-constants-ts:
     typescript-test-runner-node-modules-nex-debug-tools-ts:
     typescript-test-runner-node-modules-nex-dynamodb-service:

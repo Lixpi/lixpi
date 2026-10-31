@@ -131,6 +131,22 @@ afterEach(() => {
 })
 
 describe('WorkspaceAssetViews', () => {
+    it('lists the frozen source Artifact revision in lineage', () => {
+        const f = fixture()
+        f.setAsset({
+            ...f.getAsset(),
+            lineage: {
+                ...f.getAsset().lineage!,
+                sourceArtifact: {
+                    artifactId: 'sequence',
+                    artifactTypeId: 'media-sequence',
+                    revision: 7,
+                },
+            },
+        })
+        const element = f.mount()
+        expect(element.querySelector('.canvas-asset-lineage')?.textContent).toContain('media-sequence sequence revision 7')
+    })
     it('renders rendition state, lineage, seed zero and a leased content editor', () => {
         const f = fixture()
         const element = f.mount()

@@ -13,7 +13,7 @@ FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
 ARG PNPM_VERSION
 
 RUN npm install -g "pnpm@${PNPM_VERSION}"
-RUN apk add --no-cache util-linux-misc
+RUN apk add --no-cache util-linux-misc ffmpeg font-dejavu
 
 WORKDIR /usr/src/service
 

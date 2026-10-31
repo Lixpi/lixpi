@@ -1101,6 +1101,7 @@ const rebalance = (
 
                 const chromeInsets = node.type === 'image'
                     || node.type === 'video'
+                    || node.type === 'audio'
                     || node.type === 'capabilityArtifact'
                     ? getGeneratedOutputChromeCollisionInsets(node.type)
                     : {

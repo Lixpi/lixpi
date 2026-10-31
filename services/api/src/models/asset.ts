@@ -967,6 +967,8 @@ type CreateAssetInput =
             Asset,
             | 'assetId'
             | 'documents'
+            | 'conversationRuntime'
+            | 'artifactRevisionState'
             | 'media'
             | 'composition'
             | 'artifact'
@@ -1179,7 +1181,19 @@ export const assertAssetComponents = (asset: Asset): void => {
 }
 
 const AssetModel = {
-    create: async ({
+    create: async (input: CreateAssetInput): Promise<Asset> => {
+        const prepared = await AssetModel.prepareCreate(input)
+        await dynamoDBService.transactWrite({
+            operations: prepared.operations,
+            origin: 'Asset.create',
+        })
+        publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.CREATED, prepared.asset)
+
+        return prepared.asset
+    },
+    // Callers can atomically activate an Asset with a durable domain command.
+    // Preparation may store immutable bytes, but does not make the Asset live.
+    prepareCreate: async ({
         assetId: requestedAssetId,
         organizationId,
         title,
@@ -1188,6 +1202,8 @@ const AssetModel = {
         originWorkspaceId,
         ownerUserId,
         documents = {},
+        conversationRuntime,
+        artifactRevisionState,
         media,
         composition,
         artifact,
@@ -1199,7 +1215,10 @@ const AssetModel = {
         states,
         importedFromAssetId,
         workspaceReference,
-    }: CreateAssetInput): Promise<Asset> => {
+    }: CreateAssetInput): Promise<{
+        asset: Asset
+        operations: TransactOperation[]
+    }> => {
         if (!title.trim())
             throw new Error('TITLE_REQUIRED')
 
@@ -1316,6 +1335,8 @@ const AssetModel = {
             originWorkspaceId,
             ownerUserId,
             documents: resolvedDocuments,
+            ...(conversationRuntime ? { conversationRuntime } : {}),
+            ...(artifactRevisionState ? { artifactRevisionState } : {}),
             ...(media ? { media } : {}),
             ...(composition ? { composition } : {}),
             ...(artifact ? { artifact } : {}),
@@ -1346,7 +1367,8 @@ const AssetModel = {
         }
         const blobReferences = await buildAssetBlobReferences(asset)
 
-        await dynamoDBService.transactWrite({
+        return {
+            asset,
             operations: [
                 {
                     type: 'update',
@@ -1403,12 +1425,7 @@ const AssetModel = {
                     : []),
                 ...blobReferences,
             ],
-            origin: 'Asset.create',
-        })
-
-        publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.CREATED, asset)
-
-        return asset
+        }
     },
     get: async ({
         assetId,
@@ -2681,132 +2698,133 @@ const AssetModel = {
         )
             return { error: 'CANVAS_MUTATION_REQUIRED' }
 
-        const authorized = await getAuthorizedAsset({
-            assetId,
-            requester,
-        })
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            const authorized = await getAuthorizedAsset({
+                assetId,
+                requester,
+            })
 
-        if ('error' in authorized)
-            return authorized
+            if ('error' in authorized)
+                return authorized
 
-        if (!requester.editableWorkspaceIds.includes(workspaceId))
-            return { error: 'PERMISSION_DENIED' }
-
-        if (
-            authorized.states.lifecycle !== 'active'
-            && authorized.states.lifecycle !== 'creating'
-        )
-            return { error: 'ASSET_NOT_ATTACHABLE' }
-
-        if (
-            authorized.scope === 'workspace'
-            && authorized.scopeOwnerId !== workspaceId
-        )
-            return { error: 'SCOPE_DENIES_WORKSPACE' }
-
-        const workspace = await dynamoDBService.getItem({
-            tableName: getDynamoDbTableStageName(
-                'WORKSPACES',
-                ORG_NAME,
-                STAGE,
-            ),
-            key: { workspaceId },
-            consistentRead: true,
-            origin: 'Asset.attachWorkspaceReference.validateWorkspace',
-        }) as {
-            organizationId?: string
-            deletingAt?: number
-        } | undefined
-
-        if (!workspace)
-            return { error: 'WORKSPACE_NOT_FOUND' }
-
-        if (workspace.organizationId !== authorized.organizationId)
-            return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
-
-        if (workspace.deletingAt)
-            return { error: 'WORKSPACE_DELETING' }
-
-        const referenceKey = buildAssetWorkspaceReferenceKey(workspaceId)
-        const existing = await getReference(assetId, referenceKey)
-        const nextNodeIds = [...new Set([
-            ...(existing?.nodeIds ?? []),
-            ...(nodeId ? [nodeId] : []),
-        ])]
-        const nextSurfaceIds = [...new Set([
-            ...(existing?.surfaceIds ?? []),
-            ...(surfaceId ? [surfaceId] : []),
-        ])]
-        const referenceUnchanged = Boolean(
-            existing
-                && nextNodeIds.length === (existing.nodeIds ?? []).length
-                && nextSurfaceIds.length === (existing.surfaceIds ?? []).length,
-        )
-
-        if (
-            existing
-            && referenceUnchanged
-        ) {
-            if (activateOnAttach)
-                return { error: 'ASSET_ACTIVATION_REQUIRES_NEW_REFERENCE' }
+            if (!requester.editableWorkspaceIds.includes(workspaceId))
+                return { error: 'PERMISSION_DENIED' }
 
             if (
-                !nodeId
-                || !workspaceMutation
+                authorized.states.lifecycle !== 'active'
+                && authorized.states.lifecycle !== 'creating'
             )
+                return { error: 'ASSET_NOT_ATTACHABLE' }
+
+            if (
+                authorized.scope === 'workspace'
+                && authorized.scopeOwnerId !== workspaceId
+            )
+                return { error: 'SCOPE_DENIES_WORKSPACE' }
+
+            const workspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName(
+                    'WORKSPACES',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                key: { workspaceId },
+                consistentRead: true,
+                origin: 'Asset.attachWorkspaceReference.validateWorkspace',
+            }) as {
+                organizationId?: string
+                deletingAt?: number
+            } | undefined
+
+            if (!workspace)
+                return { error: 'WORKSPACE_NOT_FOUND' }
+
+            if (workspace.organizationId !== authorized.organizationId)
+                return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+
+            if (workspace.deletingAt)
+                return { error: 'WORKSPACE_DELETING' }
+
+            const referenceKey = buildAssetWorkspaceReferenceKey(workspaceId)
+            const existing = await getReference(assetId, referenceKey)
+            const nextNodeIds = [...new Set([
+                ...(existing?.nodeIds ?? []),
+                ...(nodeId ? [nodeId] : []),
+            ])]
+            const nextSurfaceIds = [...new Set([
+                ...(existing?.surfaceIds ?? []),
+                ...(surfaceId ? [surfaceId] : []),
+            ])]
+            const referenceUnchanged = Boolean(
+                existing
+                && nextNodeIds.length === (existing.nodeIds ?? []).length
+                && nextSurfaceIds.length === (existing.surfaceIds ?? []).length,
+            )
+
+            if (
+                existing
+                && referenceUnchanged
+            ) {
+                if (activateOnAttach)
+                    return { error: 'ASSET_ACTIVATION_REQUIRES_NEW_REFERENCE' }
+
+                if (
+                    !nodeId
+                    || !workspaceMutation
+                )
+                    return existing
+
+                const workspaceOperations = await getWorkspaceMutationOperations({
+                    workspaceId,
+                    mutation: workspaceMutation,
+                    assetId,
+                    nodeId,
+                    operation: 'attach',
+                    allowExistingTargetMembership: true,
+                })
+                await dynamoDBService.transactWrite({
+                    operations: workspaceOperations,
+                    origin: 'Asset.attachWorkspaceReference.canvasMutation',
+                })
+
                 return existing
+            }
 
-            const workspaceOperations = await getWorkspaceMutationOperations({
-                workspaceId,
-                mutation: workspaceMutation,
+            const now = workspaceMutation?.canvasStateUpdatedAt ?? Date.now()
+            const reference: AssetReference = {
                 assetId,
-                nodeId,
-                operation: 'attach',
-                allowExistingTargetMembership: true,
-            })
-            await dynamoDBService.transactWrite({
-                operations: workspaceOperations,
-                origin: 'Asset.attachWorkspaceReference.canvasMutation',
-            })
-
-            return existing
-        }
-
-        const now = workspaceMutation?.canvasStateUpdatedAt ?? Date.now()
-        const reference: AssetReference = {
-            assetId,
-            referenceKey,
-            type: 'workspace',
-            workspaceId,
-            nodeIds: nextNodeIds,
-            surfaceIds: nextSurfaceIds,
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-        }
-        const nextAsset: Asset = {
-            ...authorized,
-            states: activateOnAttach
+                referenceKey,
+                type: 'workspace',
+                workspaceId,
+                nodeIds: nextNodeIds,
+                surfaceIds: nextSurfaceIds,
+                createdAt: existing?.createdAt ?? now,
+                updatedAt: now,
+            }
+            const nextAsset: Asset = {
+                ...authorized,
+                states: activateOnAttach
                 ? {
                     ...authorized.states,
                     lifecycle: 'active',
                 }
                 : authorized.states,
-            referenceCount: authorized.referenceCount + (existing ? 0 : 1),
-            revision: authorized.revision + 1,
-            updatedAt: now,
-        }
-        const workspaceOperations = nodeId
-            && workspaceMutation
-            ? await getWorkspaceMutationOperations({
-                workspaceId,
-                mutation: workspaceMutation,
-                assetId,
-                nodeId,
-                operation: 'attach',
-                allowExistingTargetMembership: Boolean(existing?.nodeIds?.includes(nodeId)),
-            })
-            : []
-        const workspaceGuardOperations: TransactOperation[] = workspaceOperations.length === 0
+                referenceCount: authorized.referenceCount + (existing ? 0 : 1),
+                revision: authorized.revision + 1,
+                updatedAt: now,
+            }
+            const workspaceOperations = nodeId
+                && workspaceMutation
+                ? await getWorkspaceMutationOperations({
+                    workspaceId,
+                    mutation: workspaceMutation,
+                    assetId,
+                    nodeId,
+                    operation: 'attach',
+                    allowExistingTargetMembership: Boolean(existing?.nodeIds?.includes(nodeId)),
+                })
+                : []
+            const workspaceGuardOperations: TransactOperation[] = workspaceOperations.length === 0
             ? [{
                 type: 'update',
                 tableName: getDynamoDbTableStageName(
@@ -2826,56 +2844,64 @@ const AssetModel = {
             }]
             : []
 
-        await dynamoDBService.transactWrite({
-            operations: [
-                ...workspaceOperations,
-                ...workspaceGuardOperations,
-                {
-                    type: 'put',
-                    tableName: assetReferencesTableName(),
-                    item: reference,
-                    conditionExpression: existing
+            try {
+                await dynamoDBService.transactWrite({
+                    operations: [
+                        ...workspaceOperations,
+                        ...workspaceGuardOperations,
+                        {
+                            type: 'put',
+                            tableName: assetReferencesTableName(),
+                            item: reference,
+                            conditionExpression: existing
                         ? '#updatedAt = :expectedUpdatedAt'
                         : 'attribute_not_exists(#referenceKey)',
-                    expressionAttributeNames: existing
+                            expressionAttributeNames: existing
                         ? { '#updatedAt': 'updatedAt' }
                         : { '#referenceKey': 'referenceKey' },
-                    ...(existing ? { expressionAttributeValues: { ':expectedUpdatedAt': existing.updatedAt } } : {}),
-                },
-                {
-                    type: 'update',
-                    tableName: assetsTableName(),
-                    key: { assetId },
-                    updates: {
-                        ...(activateOnAttach ? { states: nextAsset.states } : {}),
-                        referenceCount: nextAsset.referenceCount,
-                        revision: nextAsset.revision,
-                        updatedAt: now,
-                    },
-                    conditionExpression: activateOnAttach
+                            ...(existing ? { expressionAttributeValues: { ':expectedUpdatedAt': existing.updatedAt } } : {}),
+                        },
+                        {
+                            type: 'update',
+                            tableName: assetsTableName(),
+                            key: { assetId },
+                            updates: {
+                                ...(activateOnAttach ? { states: nextAsset.states } : {}),
+                                referenceCount: nextAsset.referenceCount,
+                                revision: nextAsset.revision,
+                                updatedAt: now,
+                            },
+                            conditionExpression: activateOnAttach
                         ? '#revision = :expectedRevision AND #referenceCount = :expectedReferenceCount AND #states.#lifecycle = :creating'
                         : '#revision = :expectedRevision AND #referenceCount = :expectedReferenceCount AND (#states.#lifecycle = :active OR #states.#lifecycle = :creating)',
-                    expressionAttributeNames: {
-                        '#revision': 'revision',
-                        '#referenceCount': 'referenceCount',
-                        '#states': 'states',
-                        '#lifecycle': 'lifecycle',
-                    },
-                    expressionAttributeValues: {
-                        ':expectedRevision': authorized.revision,
-                        ':expectedReferenceCount': authorized.referenceCount,
-                        ...(activateOnAttach ? {} : { ':active': 'active' }),
-                        ':creating': 'creating',
-                    },
-                },
-                ...await buildAssetProjectionOperations(nextAsset),
-            ],
-            logConditionalCheckFailures: false,
-            origin: 'Asset.attachWorkspaceReference',
-        })
-        publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, nextAsset)
+                            expressionAttributeNames: {
+                                '#revision': 'revision',
+                                '#referenceCount': 'referenceCount',
+                                '#states': 'states',
+                                '#lifecycle': 'lifecycle',
+                            },
+                            expressionAttributeValues: {
+                                ':expectedRevision': authorized.revision,
+                                ':expectedReferenceCount': authorized.referenceCount,
+                                ...(activateOnAttach ? {} : { ':active': 'active' }),
+                                ':creating': 'creating',
+                            },
+                        },
+                        ...await buildAssetProjectionOperations(nextAsset),
+                    ],
+                    logConditionalCheckFailures: false,
+                    origin: 'Asset.attachWorkspaceReference',
+                })
+                publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, nextAsset)
 
-        return reference
+                return reference
+            } catch (error) {
+                if (!isTransactionConditionalCheckFailure(error))
+                    throw error
+            }
+        }
+
+        return { error: 'ASSET_ATTACH_CONFLICT' }
     },
     detachWorkspaceReference: async ({
         assetId,

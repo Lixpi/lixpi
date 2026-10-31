@@ -25,7 +25,7 @@
 
 ## Runtime Wiring
 
-`ProseMirrorEditor` adds this plugin for `documentType: 'assetConversation'` and `documentType: 'assetProvenance'`. Provenance passes `readOnly: true` and never publishes client steps.
+`ProseMirrorEditor` adds this plugin for `documentType: 'assetConversation'` and `documentType: 'assetProvenance'`. Provenance passes `readOnly: true` and never publishes client steps. Conversational workspace transcripts also mount read-only, but receive document changes through the existing authority subscription. The plugin accepts those authority transactions and blocks local document edits and legacy submission commands.
 
 ```ts
 createAiChatThreadPlugin({
@@ -122,7 +122,7 @@ Assistant response node created as the request is submitted, then filled by stre
 - Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
 - Request metadata attrs: `generationRequestId`
 - Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting response stays compact without clipping the spinner.
-- The non-editable `.ai-response-capability-progress` mount hosts the shared sequence-deduplicating `CapabilityRunEvent` projection.
+- The non-editable `.ai-response-capability-progress` mount hosts the shared sequence-deduplicating `CapabilityRunEvent` projection. Durable conversational operation summaries use that same progress timeline, targeted by their response-message ID and retained until the matching NodeView mounts. Output actions resolve current Asset access before opening the installed editor or media preview.
 - Response nodes in the chat thread do not render an assistant avatar.
 
 ### `aiReasoningSection`

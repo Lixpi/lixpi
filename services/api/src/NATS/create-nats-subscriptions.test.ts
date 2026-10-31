@@ -25,7 +25,7 @@ describe('contract handler bindings', () => {
             name,
             createNatsSubscriptions(name as keyof typeof activeContractGroups, Object.fromEntries(contracts.map(contract => [contract.id, () => null])) as never),
         ])) as Parameters<typeof composeApiSubscriptions>[0]
-        expect(composeApiSubscriptions(groups)).toHaveLength(53)
+        expect(composeApiSubscriptions(groups)).toHaveLength(Object.values(activeContractGroups).flat().length)
         expect(() => composeApiSubscriptions({} as never)).toThrow('groups')
         expect(() => composeApiSubscriptions({
             ...groups,

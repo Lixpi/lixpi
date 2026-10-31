@@ -9,6 +9,8 @@ import {
 } from 'vitest'
 import {
     LoadingStatus,
+    createConversationSettings,
+    type ConversationSnapshot,
     type CanvasState,
 } from '@lixpi/constants'
 import {
@@ -28,6 +30,7 @@ import {
     type WorkspaceCanvasHost,
 } from './workspace-canvas-host.ts'
 import { createLixpiCanvasSettings } from '../settings/index.ts'
+import { createProseMirrorSchema } from '@lixpi/prosemirror'
 
 const renderers = vi.hoisted(() => [] as any[])
 vi.mock('@lixpi/canvas-engine/frontend/rendering', async importOriginal => {
@@ -292,6 +295,22 @@ const fixture = (overrides: Partial<WorkspaceCanvasHost> = {}, optionOverrides: 
             stopConversation: vi.fn(),
             describeMedia: vi.fn(),
         },
+        conversations: {
+            create: vi.fn(),
+            list: vi.fn(async () => ({ conversations: [] })),
+            get: vi.fn(),
+            submit: vi.fn(),
+            settings: vi.fn(),
+            stop: vi.fn(),
+            queue: vi.fn(),
+            replay: vi.fn(async () => ({
+                events: [],
+                hasMore: false,
+                snapshotRequired: false,
+                eventSeq: 0,
+            })),
+            subscribe: vi.fn(() => () => {}),
+        },
         workspace: {
             organizationId: () => 'org',
             userId: () => 'user',
@@ -419,6 +438,211 @@ afterEach(() => {
 })
 
 describe('LixpiWorkspaceCanvas composition', () => {
+    it('switches prompt drafts through the workspace callback when the picker changes conversation', async () => {
+        const stored = new Map<string, string>()
+        const snapshot = (conversationAssetId: string): ConversationSnapshot => ({
+            protocolVersion: 1,
+            workspaceId: 'first',
+            conversationAssetId,
+            title: conversationAssetId,
+            settings: createConversationSettings(),
+            settingsRevision: 0,
+            queueRevision: 0,
+            queuePaused: false,
+            queuedTurns: [],
+            messages: [],
+            documentRevision: 0,
+            eventSeq: 0,
+            createdAt: 1,
+            updatedAt: 1,
+        })
+        const schema = createProseMirrorSchema('aiPromptInput')
+        let promptDocument = schema.topNodeType.createAndFill()!
+        const restoreContent = vi.fn(content => void (promptDocument = schema.nodeFromJSON(content)))
+        const f = fixture({}, {}, host => {
+            host.storage = {
+                getItem: key => stored.get(key) ?? null,
+                setItem: (key, value) => void stored.set(key, value),
+            }
+            host.editors.createPrompt = () => request => {
+                return {
+                    editorView: { state: {
+                        get doc() { return promptDocument },
+                        schema,
+                    } } as never,
+                    restoreContent,
+                    destroy: vi.fn(),
+                }
+            }
+            host.conversations = {
+                create: async () => snapshot('blue-hold'),
+                list: async () => ({ conversations: [snapshot('hi')] }),
+                get: async request => snapshot(request.conversationAssetId),
+                submit: vi.fn(),
+                settings: vi.fn(),
+                stop: vi.fn(),
+                queue: vi.fn(),
+                replay: async () => ({
+                    events: [],
+                    hasMore: false,
+                    snapshotRequired: false,
+                    eventSeq: 0,
+                }),
+                subscribe: () => () => {},
+            }
+        })
+        await vi.advanceTimersByTimeAsync(1)
+        f.owner.render(state(), [], [])
+        const panel = f.paneEl.querySelector('.workspace-conversation-panel')!
+        const create = [...panel.querySelectorAll('button')].find(button => button.textContent === 'New conversation')!
+        create.click()
+        await vi.advanceTimersByTimeAsync(1)
+        promptDocument = schema.topNodeType.create(null, schema.nodes.aiPromptInput.create(null, schema.nodes.paragraph.create(null, schema.text('Unsent pipeline draft'))))
+        const picker = panel.querySelector<HTMLSelectElement>('[aria-label="Conversation"]')!
+        picker.value = 'hi'
+        picker.dispatchEvent(new Event('change'))
+        await vi.advanceTimersByTimeAsync(1)
+        expect(picker.disabled).toBe(false)
+        expect(promptDocument.textContent).toBe('')
+        picker.value = 'blue-hold'
+        picker.dispatchEvent(new Event('change'))
+        await vi.advanceTimersByTimeAsync(1)
+        expect(promptDocument.textContent).toBe('Unsent pipeline draft')
+    })
+
+    it('sends a greeting with media preferences through the conversation protocol without media preflight', async () => {
+        let send!: (data: import('../../shared/composer/canvas-conversation-content.ts').AiPromptComposerSubmitData) => void | Promise<void>
+        const snapshot: ConversationSnapshot = {
+            protocolVersion: 1,
+            workspaceId: 'first',
+            conversationAssetId: 'conversation',
+            title: 'Conversation',
+            settings: createConversationSettings(),
+            settingsRevision: 1,
+            queueRevision: 1,
+            queuePaused: false,
+            queuedTurns: [],
+            messages: [],
+            documentRevision: 0,
+            eventSeq: 0,
+            createdAt: 1,
+            updatedAt: 1,
+        }
+        const submit = vi.fn(async request => {
+            snapshot.messages = [{
+                messageId: 'user-message',
+                turnId: 'turn',
+                role: 'user',
+                text: 'hi',
+                complete: true,
+                createdAt: 1,
+            }, {
+                messageId: 'response',
+                turnId: 'turn',
+                role: 'assistant',
+                text: 'Hello',
+                complete: true,
+                createdAt: 1,
+            }]
+            snapshot.documentRevision = 1
+            snapshot.eventSeq = 1
+
+            return {
+                status: 'accepted' as const,
+                clientMessageId: request.clientMessageId,
+                turnId: 'turn',
+                commandSeq: 1,
+                eventSeq: 1,
+                documentRevision: 1,
+                projectionPending: false,
+            }
+        })
+        const f = fixture({}, {}, host => {
+            host.generation.fetchConversation = vi.fn(async () => ({
+                threadId: 'conversation',
+                assetId: 'conversation',
+                organizationId: 'organization',
+                workspaceId: 'first',
+                content: {
+                    type: 'doc',
+                    content: [],
+                },
+                proseMirrorVersion: 1,
+                revision: 1,
+                title: 'Conversation',
+                status: 'idle',
+                createdAt: 1,
+                updatedAt: 1,
+                aiModel: '',
+            }))
+            host.editors.createConversation = vi.fn(() => vi.fn(() => ({
+                activate: vi.fn(),
+                readContent: vi.fn(),
+                submitPersisted: vi.fn(),
+                destroy: vi.fn(),
+            })))
+            host.editors.createPrompt = () => request => { send = request.onSubmit
+
+            return {
+                editorView: null,
+                restoreContent: vi.fn(),
+                destroy: vi.fn(),
+            } }
+            host.conversations = {
+                create: async () => structuredClone(snapshot),
+                list: async () => ({ conversations: [] }),
+                get: async () => structuredClone(snapshot),
+                submit,
+                settings: async request => { snapshot.settings = {
+                    ...snapshot.settings,
+                    ...request.patch,
+                }; snapshot.settingsRevision++
+
+                return structuredClone(snapshot) },
+                stop: vi.fn(),
+                queue: vi.fn(),
+                replay: async () => ({
+                    events: [],
+                    eventSeq: snapshot.eventSeq,
+                    hasMore: false,
+                    snapshotRequired: false,
+                }),
+                subscribe: () => () => {},
+            }
+        })
+        await Promise.resolve()
+        const before = structuredClone(f.owner.getCanvasState())
+        await send({
+            contentJSON: [{
+                type: 'paragraph',
+                content: [{
+                    type: 'text',
+                    text: 'hi',
+                }],
+            }],
+            mediaGenerationMode: 'image',
+            aiReasoningModels: ['test:reasoning'],
+            useMultipleReasoningModels: false,
+            useMultipleImageModels: false,
+            useMultipleVideoModels: false,
+            imageOptions: {
+                aiImageModels: ['test:image'],
+                imageGenerationSize: 'auto',
+            },
+            capabilityInputs: {},
+        })
+        expect(submit).toHaveBeenCalledOnce()
+        expect(f.host.assets.create).not.toHaveBeenCalled()
+        expect(f.owner.getCanvasState()?.nodes).toEqual(before?.nodes)
+        expect(f.owner.getCanvasState()?.edges).toEqual(before?.edges)
+        await vi.waitFor(() => expect(f.host.generation.fetchConversation).toHaveBeenCalledWith({
+            workspaceId: 'first',
+            threadId: 'conversation',
+        }))
+        expect(f.paneEl.querySelector('.workspace-conversation-messages article')).toBeNull()
+        expect(f.host.editors.createConversation).toHaveBeenCalledOnce()
+        expect(snapshot.settings.models.imageModelIds).toEqual(['test:image'])
+    })
     it('mounts and releases a blank workspace through its infrastructure ports', () => {
         const f = fixture()
         expect(f.owner.getCanvasState()).toMatchObject(state())

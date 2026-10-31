@@ -351,7 +351,20 @@ export class AccountWorkStorage {
 
     async getObject(...args: Parameters<NatsService['getObject']>): ReturnType<NatsService['getObject']> {
         await AccountWorkScope.check()
-        const result = await this.service.getObject(...args)
+        const [bucket, key, options] = args
+        const accountSignal = AccountWorkScope.signal()
+        const signal = options?.signal
+            && accountSignal
+            ? AbortSignal.any([options.signal, accountSignal])
+            : options?.signal ?? accountSignal
+        const result = await this.service.getObject(
+            bucket,
+            key,
+            {
+                ...options,
+                ...(signal ? { signal } : {}),
+            },
+        )
         AccountWorkScope.assertActive()
 
         return result

@@ -89,6 +89,62 @@ describe.runIf(Boolean(server))('API storage on a disposable native NATS server'
         })).toEqual(bytes)
     })
 
+    it('deletes each Object Store read consumer before returning completed bytes', async () => {
+        const bytes = new Uint8Array(256 * 1024).fill(42)
+        await service.putObject(bucket, 'repeated-read', bytes)
+        const manager = await service.getJetStreamManager()
+        await manager.streams.update(`OBJ_${bucket}`, { max_consumers: 3 })
+
+        for (let index = 0; index < 12; index++) {
+            expect(await service.getObject(bucket, 'repeated-read')).toEqual(bytes)
+            expect((await service.getJetStreamStreamInfo(`OBJ_${bucket}`)).state.consumer_count).toBe(0)
+        }
+    }, 15000)
+
+    it('deletes its read consumer when native Object Store digest validation fails', async () => {
+        const stored = await service.putObject(bucket, 'corrupt-read', new Uint8Array([1, 2, 3]))
+        await service.publishJetStream(`$O.${bucket}.C.${stored.nuid}`, new Uint8Array([4]))
+
+        await expect(service.getObject(bucket, 'corrupt-read')).rejects.toThrow('digests do not match')
+        expect((await service.getJetStreamStreamInfo(`OBJ_${bucket}`)).state.consumer_count).toBe(0)
+    })
+
+    it('deletes its exact read consumer when a caller cancels the stream', async () => {
+        await service.putObject(bucket, 'cancelled-read', new Uint8Array(4 * 1024 * 1024).fill(7))
+        const stream = await service.getObjectStream(bucket, 'cancelled-read')
+        const reader = stream!.getReader()
+
+        try {
+            expect((await reader.read()).done).toBe(false)
+            await reader.cancel()
+            expect((await service.getJetStreamStreamInfo(`OBJ_${bucket}`)).state.consumer_count).toBe(0)
+        } finally {
+            reader.releaseLock()
+        }
+    })
+
+    it('cancels a stalled native read through AbortSignal and removes its consumer', async () => {
+        const stored = await service.putObject(bucket, 'stalled-read', new Uint8Array([1, 2, 3]))
+        const manager = await service.getJetStreamManager()
+        await manager.streams.purge(`OBJ_${bucket}`, { filter: `$O.${bucket}.C.${stored.nuid}` })
+        const controller = new AbortController()
+        const read = service.getObject(bucket, 'stalled-read', {
+            signal: controller.signal,
+            maxBytes: 3,
+        })
+        const rejected = expect(read).rejects.toThrow('test-cancelled')
+        await vi.waitFor(async () => expect((await service.getJetStreamStreamInfo(`OBJ_${bucket}`)).state.consumer_count).toBe(1))
+        controller.abort(new Error('test-cancelled'))
+        await rejected
+        expect((await service.getJetStreamStreamInfo(`OBJ_${bucket}`)).state.consumer_count).toBe(0)
+    })
+
+    it('rejects an oversized native object and removes its consumer before returning', async () => {
+        await service.putObject(bucket, 'size-limited-read', new Uint8Array(256 * 1024))
+        await expect(service.getObject(bucket, 'size-limited-read', { maxBytes: 10 })).rejects.toThrow('NATS_OBJECT_BYTE_LIMIT')
+        expect((await service.getJetStreamStreamInfo(`OBJ_${bucket}`)).state.consumer_count).toBe(0)
+    })
+
     it('retains usage through responder outages and worker restart, including a lost reply after posting', async () => {
         const committed = new Set<string>()
         let available = false

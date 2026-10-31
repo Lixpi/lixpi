@@ -59,6 +59,7 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
                 type="button"
                 aria-label=${config.infoLabel}
                 data-help-tooltip=${config.infoTitle ?? 'aria-label'}
+                data-side-panel-no-drag="true"
             >
                 <span
                     className="canvas-node-footer-info-icon"
@@ -72,6 +73,7 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
                 type="button"
                 aria-label=${config.progressLabel ?? 'Open generation details'}
                 data-help-tooltip=${config.progressTitle ?? 'Generation details'}
+                data-side-panel-no-drag="true"
             >${this.progressRipple.element}</button>
         ` as HTMLButtonElement
         this.element = html`

@@ -307,7 +307,7 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 **User input is handled separately by `aiPromptInputPlugin`** — a floating canvas element that renders below the selected node, with its own `ProseMirrorEditor` instance. An `AiPromptInputController` service coordinates message injection between the floating input and thread editors.
 
 **Message submission flow:**
-1. User types in the floating `aiPromptInput` and presses Cmd/Ctrl+Enter or clicks submit
+1. User types in the floating `aiPromptInput` and presses Cmd/Ctrl+Enter or clicks submit. The conversational workspace also sends on Enter, with Shift+Enter for a newline. Reference pickers handle Enter before submission, and IME composition never submits.
 2. `AiPromptInputController` extracts content, creates an `aiUserMessage` node in the target thread
 3. Dispatches `USE_AI_CHAT_META` on the thread editor to trigger the AI request; this submit-seed transaction uses `skipDispatch` because the API receives the post-submit doc and persists the final authoritative snapshot
 4. Plugin calls `onAiChatSubmit` callback with the message array
@@ -316,6 +316,7 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 - Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
 - `ProseMirrorAuthorityService` subscribes to the live ProseMirror step subject and applies `Step.fromJSON(schema, step)` events from the API
 - Conflict resume preserves pending local steps and rebases them over replayed authority events; it applies a newer snapshot directly only when there are no pending local steps
+- The conversation surface above the workspace composer uses the same chat editor, schemas and NodeViews as sidebar chat. Receive-only authority applies server transactions while read-only mode rejects local document edits. Remote insertions at a selected range's boundaries preserve the selected text instead of expanding the range into arriving tokens.
 - The submit payload includes the post-placeholder thread doc JSON so API-authored step positions match the browser doc
 - If a remote step is structurally invalid for a mounted editor, the authority service stops retrying that step and waits for a newer persisted snapshot to recover the document
 - `SegmentsReceiver` remains for non-ProseMirror pipeline events such as media trace, lineage, partial, complete, and error events

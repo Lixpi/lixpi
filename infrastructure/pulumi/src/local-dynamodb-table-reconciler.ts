@@ -17,6 +17,8 @@ import {
     CreateTableCommand,
     DeleteTableCommand,
     DescribeTableCommand,
+    DescribeTimeToLiveCommand,
+    UpdateTimeToLiveCommand,
     type CreateTableCommandInput,
     type DynamoDBClient,
     type TableDescription,
@@ -35,6 +37,10 @@ export type TableDefinition = {
         rangeKey: string
         projectionType: 'ALL'
     }>
+    ttl?: {
+        attributeName: string
+        enabled: boolean
+    }
 }
 
 // Resolves whether existing tables get force-recreated this run:
@@ -82,6 +88,7 @@ export class LocalDynamoDbTableReconciler {
 
         if (live) {
             if (!this.forceRecreate) {
+                await this.ensureTimeToLive(table)
                 debugLog(`  ✓ ${table.name} (exists — kept as is)`)
 
                 return
@@ -99,10 +106,46 @@ export class LocalDynamoDbTableReconciler {
                     this.buildCreateTableInput(table),
                 ),
             )
+            await this.ensureTimeToLive(table)
             debugLog(`  ✓ ${table.name} (created)`)
         } catch (error: unknown) {
             debugError(`  ✗ ${table.name}: ${(error as Error).message}`)
+
+            throw error
         }
+    }
+
+    private async ensureTimeToLive(table: TableDefinition): Promise<void> {
+        if (!table.ttl)
+            return
+
+        const current = await this.client.send(
+            new DescribeTimeToLiveCommand({ TableName: table.name }),
+        )
+        const description = current.TimeToLiveDescription
+        const enabled = description?.TimeToLiveStatus === 'ENABLED' || description?.TimeToLiveStatus === 'ENABLING'
+
+        if (
+            enabled === table.ttl.enabled
+            && (!enabled || description?.AttributeName === table.ttl.attributeName)
+        )
+            return
+
+        if (
+            enabled
+            && description?.AttributeName !== table.ttl.attributeName
+        )
+            throw new Error(`TTL attribute change requires an explicit migration for ${table.name}`)
+
+        await this.client.send(
+            new UpdateTimeToLiveCommand({
+                TableName: table.name,
+                TimeToLiveSpecification: {
+                    AttributeName: table.ttl.attributeName,
+                    Enabled: table.ttl.enabled,
+                },
+            }),
+        )
     }
 
     private buildCreateTableInput(table: TableDefinition): CreateTableCommandInput {

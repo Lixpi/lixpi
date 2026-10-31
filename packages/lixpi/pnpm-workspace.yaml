@@ -28,3 +28,6 @@ allowBuilds:
   esbuild: true
   protobufjs: true
   sharp: true
+
+patchedDependencies:
+  '@nats-io/obj@3.4.0': nats-service/patches/@nats-io__obj@3.4.0.patch

@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
     remove: vi.fn(),
     subscribe: vi.fn(),
     unsubscribe: vi.fn(),
+    getDocument: vi.fn(() => undefined),
+    setDocument: vi.fn(),
 }))
 
 vi.mock('$src/stores/servicesStore.ts', () => ({
@@ -49,8 +51,8 @@ vi.mock('$src/stores/assetsStore.ts', () => ({
 
 vi.mock('$src/stores/assetDocumentsStore.ts', () => ({
     assetDocumentsStore: {
-        get: vi.fn(() => undefined),
-        set: vi.fn(),
+        get: mocks.getDocument,
+        set: mocks.setDocument,
         setMany: vi.fn(),
     },
 }))
@@ -87,6 +89,50 @@ const makeAsset = (overrides: Partial<Asset> & Pick<Asset, 'assetId' | 'title'>)
         ...overrides,
     }
 }
+
+describe('AssetService.refresh', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.getTokenSilently.mockResolvedValue('token')
+        mocks.getDocument.mockReset()
+    })
+
+    it.each([12, 13, 14])('refreshes the document only when cached version %i trails the Asset pointer', async cachedVersion => {
+        const asset = makeAsset({
+            assetId: 'sequence',
+            title: 'Named sequence',
+            documents: { capabilityArtifact: {
+                role: 'capabilityArtifact',
+                version: 13,
+                blobHash: 'next',
+                byteSize: 10,
+                schemaVersion: 'media-sequence-v1',
+                updatedAt: 1,
+            } },
+        })
+        mocks.request.mockResolvedValueOnce(asset)
+        mocks.getDocument.mockReturnValue({ version: cachedVersion } as never)
+        const service = createAssetService()
+        const resume = vi.spyOn(service, 'resumeDocument').mockResolvedValue({})
+
+        try {
+            await service.refresh('sequence', 'workspace-1')
+            expect(mocks.upsert).toHaveBeenCalledWith(asset)
+
+            if (cachedVersion < 13)
+                expect(resume).toHaveBeenCalledExactlyOnceWith({
+                    organizationId: 'organization-1',
+                    assetId: 'sequence',
+                    role: 'capabilityArtifact',
+                })
+            else
+                expect(resume).not.toHaveBeenCalled()
+        } finally {
+            resume.mockRestore()
+            mocks.getDocument.mockReset()
+        }
+    })
+})
 
 describe('AssetService.startWorkspaceSynchronization', () => {
     beforeEach(() => {

@@ -14,6 +14,7 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     CAPABILITIES_META: 'Capabilities-Meta',
     CAPABILITIES_ACCESS_LIST: 'Capabilities-Access-List',
     CAPABILITY_RUNS: 'Capability-Runs',
+    AGENT_CONVERSATIONS: 'Agent-Conversations',
     MEDIA_GENERATION_REQUESTS: 'Media-Generation-Requests',
     MEDIA_GENERATION_REQUESTS_META: 'Media-Generation-Requests-Meta',
     MEDIA_GENERATION_REQUESTS_ACCESS_LIST: 'Media-Generation-Requests-Access-List',

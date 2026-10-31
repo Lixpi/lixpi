@@ -92,7 +92,7 @@ const downloadViaFetch = async (
     anchor.click()
 
     setTimeout(() => {
-        document.body.removeChild(anchor)
+        anchor.remove()
         URL.revokeObjectURL(objectUrl)
     }, 100)
 }
@@ -131,7 +131,7 @@ const downloadViaNavigation = async (
     ` as HTMLIFrameElement
     document.body.appendChild(iframe)
 
-    setTimeout(() => void document.body.removeChild(iframe), 30000)
+    setTimeout(() => iframe.remove(), 30000)
 }
 
 export const downloadImage = async (
