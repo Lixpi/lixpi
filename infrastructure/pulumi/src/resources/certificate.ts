@@ -1,5 +1,7 @@
 import * as aws from '@pulumi/aws'
-import type * as pulumi from '@pulumi/pulumi'
+import {
+    type Input,
+} from '@pulumi/pulumi'
 
 import { formatStageResourceName } from '@lixpi/constants'
 
@@ -7,9 +9,16 @@ export type CertificateArgs = {
     orgName: string
     stage: string
     domainName: string
-    hostedZoneId: pulumi.Input<string>
+    hostedZoneId: Input<string>
     serviceName: string
-    dnsProvider: aws.Provider
+    dnsProvider?: aws.Provider
+    identity?: {
+        resourceName: string
+        validationResourceName: string
+        validationRecordPrefix: string
+        tagName: string
+        provider: aws.Provider
+    }
 }
 
 export type CertificateResult = {
@@ -28,15 +37,17 @@ export const createCertificate = async (args: CertificateArgs): Promise<Certific
         domainName,
         hostedZoneId,
         serviceName,
-        dnsProvider,
+        identity,
     } = args
 
+    const resourceBase = formatStageResourceName(
+        serviceName,
+        orgName,
+        stage,
+    )
+
     const certificate = new aws.acm.Certificate(
-        `${formatStageResourceName(
-            serviceName,
-            orgName,
-            stage,
-        )}-cert`,
+        identity?.resourceName ?? `${resourceBase}-cert`,
         {
             domainName: domainName,
             validationMethod: 'DNS',
@@ -46,64 +57,58 @@ export const createCertificate = async (args: CertificateArgs): Promise<Certific
                 `*.${domainName}`,
             ],
             tags: {
-                Name: `${serviceName}-cert`,
+                Name: identity?.tagName ?? `${serviceName}-cert`,
             },
         },
+        identity ? { provider: identity.provider } : undefined,
     )
 
-    // Extract unique validation records from ACM's response to avoid duplicates
+    // Preserve the default record indexes while allowing existing compact identities.
     const certValidationRecords = certificate.domainValidationOptions.apply(options => {
-        // Create a Map to track unique records by name
-        const uniqueRecords = new Map()
+        const uniqueRecords = new Map<string, aws.route53.Record>()
 
-        // Process each validation option
-        options.forEach((option, i) => {
-            // Use the record name as the unique key
+        options.forEach((option, originalIndex) => {
             const recordKey = option.resourceRecordName
 
-            // Only add to our map if we haven't seen this record name before
             if (!uniqueRecords.has(recordKey)) {
+                const recordIndex = identity ? uniqueRecords.size : originalIndex
+                const validationRecordPrefix = identity?.validationRecordPrefix ?? `${resourceBase}-cert-validation`
+
                 uniqueRecords.set(
                     recordKey,
                     new aws.route53.Record(
-                        `${formatStageResourceName(
-                            serviceName,
-                            orgName,
-                            stage,
-                        )}-cert-validation-${i}`,
+                        `${validationRecordPrefix}-${recordIndex}`,
                         {
                             name: option.resourceRecordName,
                             zoneId: hostedZoneId,
                             type: option.resourceRecordType,
                             records: [option.resourceRecordValue],
                             ttl: 60,
+                            ...(identity ? { allowOverwrite: true } : {}),
                         },
-                        {
-                            // Don't use dnsProvider for delegated zone - use default credentials
-                            deleteBeforeReplace: true,
-                        },
+                        identity
+                            ? undefined
+                            : {
+                                // Delegated zones use the default credentials.
+                                deleteBeforeReplace: true,
+                            },
                     ),
                 )
             }
         })
 
-        // Return array of unique validation records
         return Array.from(
             uniqueRecords.values(),
         )
     })
 
-    // Certificate validation resource for all SANs
     const certValidation = new aws.acm.CertificateValidation(
-        `${formatStageResourceName(
-            serviceName,
-            orgName,
-            stage,
-        )}-cert-validation-complete`,
+        identity?.validationResourceName ?? `${resourceBase}-cert-validation-complete`,
         {
             certificateArn: certificate.arn,
             validationRecordFqdns: certValidationRecords.apply(records => records.map(r => r.fqdn)),
         },
+        identity ? { provider: identity.provider } : undefined,
     )
 
     return {

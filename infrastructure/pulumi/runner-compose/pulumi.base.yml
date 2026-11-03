@@ -1,0 +1,16 @@
+services:
+    pulumi-base:
+        profiles: ["deploy"]
+        image: lixpi/pulumi
+        build:
+            context: ../../..
+            dockerfile: infrastructure/pulumi/Dockerfile
+        environment:
+            FORCE_COLOR: 1
+            NODE_OPTIONS: '--trace-deprecation --abort-on-uncaught-exception --trace-warnings --disable-warning=ExperimentalWarning --experimental-transform-types'
+        volumes:
+            - aws-config:/root/.aws:cached
+        working_dir: /usr/src/service/infrastructure/pulumi
+        entrypoint: /bin/bash
+        command: >-
+            -lc "sleep infinity"

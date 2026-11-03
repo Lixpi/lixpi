@@ -452,13 +452,11 @@ services:
                 restart: true
 
     lixpi-pulumi:
+        extends:
+            file: infrastructure/pulumi/runner-compose/pulumi.base.yml
+            service: pulumi-base
         container_name: lixpi-pulumi
-        profiles: ["deploy"]
         restart: always
-        image: lixpi/pulumi
-        build:
-            dockerfile: infrastructure/pulumi/Dockerfile
-            context: .
         environment:
             MOCK_AUTH0: ${MOCK_AUTH0}
             VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
