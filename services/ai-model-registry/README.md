@@ -100,7 +100,7 @@ Any source that cannot answer fails the whole fetch. Not just a dead credential:
 
 That is the point of failing rather than continuing. A source that is broken and a source that has nothing to say look identical once written to disk, and continuing would silently reprice models onto whichever sources still answered.
 
-An expired or missing AWS session goes through `err` and stops the run, naming the call that hit it, the profile, and the `aws sso login` command to fix it. The CLI exits with status 2.
+An expired or missing AWS session goes through `err` and stops the run, naming the call that hit it. The message states only that the session expired, without the profile or a command; sign in again with the repository's `./aws-sso-login.sh`. The CLI exits with status 2.
 
 Every run records its outcome in `data/_last-sync.json`, whether it finished or failed and which sources failed. The catalog page reads it and shows a banner naming each failed source and what it said, so a stale catalog announces itself instead of looking current.
 

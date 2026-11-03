@@ -379,7 +379,7 @@ services:
 
         volumes:
             - aws-config:/root/.aws:cached    # AWS SSO credentials
-            - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
+            - ./.aws/config:/root/.aws/config:cached    # AWS SSO profile definitions
             - ./services/api/package.json:/usr/src/service/package.json:cached
             # NOT mounted: pnpm@12 rewrites pnpm-workspace.yaml during install (write-temp + atomic
             # rename), which fails EBUSY against a single-file bind mount on Docker Desktop/Windows.
@@ -567,7 +567,7 @@ services:
             NATS_OPERATOR_NKEY_PUBLIC: ${NATS_OPERATOR_NKEY_PUBLIC}
 
         volumes:
-            # AWS SSO credentials
+            # AWS SSO credentials and profile definitions
             - aws-config:/root/.aws:cached
             - ./.aws/config:/root/.aws/config:cached
 
@@ -603,7 +603,8 @@ services:
             lixpi-caddy:
                 condition: service_completed_successfully
 volumes:
-    aws-config:    # AWS SSO credentials volume that's shared between multiple containers
+    aws-config:    # AWS SSO credentials, shared with lixpi-aws-cli and other repositories' containers
+        name: lixpi-aws-config
     pulumi-local-state:    # A volume where Pulumi stores stack state. Used only for local development.
     caddy-certs:   # Shared volume for certificate storage
     dynamodb-data: # Persistent storage for DynamoDB Local
