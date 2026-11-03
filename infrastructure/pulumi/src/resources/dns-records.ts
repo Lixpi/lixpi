@@ -1,5 +1,9 @@
 import * as aws from '@pulumi/aws'
-import type * as pulumi from '@pulumi/pulumi'
+import {
+    type Input,
+    type Output,
+    type ResourceOptions,
+} from '@pulumi/pulumi'
 import {
     plInfo,
     plWarn,
@@ -15,13 +19,13 @@ export type DnsRecordConfig = {
     ttl?: number
 
     // For simple records
-    records?: pulumi.Input<pulumi.Input<string>[]>
+    records?: Input<Input<string>[]>
     allowOverwrite?: boolean
 
     // For alias records
     alias?: {
-        name: pulumi.Input<string>
-        zoneId: pulumi.Input<string>
+        name: Input<string>
+        zoneId: Input<string>
         evaluateTargetHealth?: boolean
     }
 
@@ -35,10 +39,11 @@ export type DnsRecordConfig = {
 export type DnsRecordsArgs = {
     orgName: string
     stage: string
-    hostedZoneId: pulumi.Input<string>
+    hostedZoneId: Input<string>
     records: DnsRecordConfig[]
     serviceName: string
     dnsProvider?: aws.Provider
+    resourcePrefix?: string
 }
 
 export const createDnsRecords = async (args: DnsRecordsArgs) => {
@@ -49,17 +54,20 @@ export const createDnsRecords = async (args: DnsRecordsArgs) => {
         records,
         serviceName,
         dnsProvider,
+        resourcePrefix,
     } = args
 
     // Create DNS records for all configurations
     const createdRecords: { [key: string]: aws.route53.Record } = {}
 
     records.forEach((record, index) => {
-        const recordName = formatStageResourceName(
-            `${serviceName}-Route53-record-${index}`,
-            orgName,
-            stage,
-        )
+        const recordName = resourcePrefix === undefined
+            ? formatStageResourceName(
+                `${serviceName}-Route53-record-${index}`,
+                orgName,
+                stage,
+            )
+            : `${resourcePrefix}-record-${index}`
 
         const recordArgs: aws.route53.RecordArgs = {
             name: record.name,
@@ -95,7 +103,7 @@ export const createDnsRecords = async (args: DnsRecordsArgs) => {
             recordArgs.failoverRoutingPolicies = [{ type: record.failover }]
 
         // Create the record
-        const recordOptions: pulumi.ResourceOptions = {}
+        const recordOptions: ResourceOptions = {}
 
         if (dnsProvider)
             recordOptions.provider = dnsProvider
@@ -246,7 +254,7 @@ export const getOrCreateHostedZone = async (args: CreateHostedZoneArgs & { prote
 export type CreateDelegationRecordArgs = {
     parentHostedZoneId: string // Parent zone id (e.g. lixpi.dev zone)
     subdomainName: string // The subdomain we are delegating (e.g. firstName-dev.lixpi.dev)
-    nameServers: pulumi.Output<string[]> // Nameservers from created child zone
+    nameServers: Output<string[]> // Nameservers from created child zone
     serviceName: string
     dnsProvider: aws.Provider // Provider with permissions in parent account
 }

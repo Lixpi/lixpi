@@ -162,6 +162,14 @@ docker run ... lixpi/pulumi up
 
 The CLI supports `init`, `up`, `preview`, `destroy`, `force-destroy`, `clean-ecr`, `refresh`, `outputs`, `list-stacks`, `create-stack`, `remove-stack`, `cancel` — see [`cli.ts`](../../../infrastructure/pulumi/src/cli.ts).
 
+### Separately deployed static websites
+
+The shared [Pulumi Compose base](../../../infrastructure/pulumi/runner-compose/pulumi.base.yml) supplies the same image, runtime and cache mount to the main application and consuming repositories. A repository adapter supplies its environment, source and existing AWS profile mounts. Runtime configuration stays in a root `.env.<name>`; `env.lixpi` identifies the main checkout used by the adapter.
+
+Set `PULUMI_PROGRAM=static-website` to use the shared [static website program](../../../infrastructure/pulumi/src/static-website/program.ts). `PULUMI_PROJECT_NAME`, `STAGE` and `STATE_STORAGE_URL` identify the existing project, stack and backend. With `PULUMI_REQUIRE_EXISTING_STACK=true`, the runner selects that stack and fails instead of creating one. `AWS_EXPECTED_ACCOUNT_ID` restricts both the default AWS provider and the certificate provider. The normal application program and project remain the defaults when these selectors are absent.
+
+The website program preserves its established resource identities through explicit hosting, certificate and DNS naming options. The shared static client factory also accepts local artifact commands; its existing Docker build mode and externally managed artifact mode retain their behavior. [Build preparation](../../../infrastructure/pulumi/src/static-website/prepare-build.ts) copies only website build inputs and the required shared UI packages into an isolated directory before installation and compilation. Deployment consumes the existing shared SSO cache and never configures authentication.
+
 ### Local vs AWS Mode
 
 The program inspects `ENVIRONMENT`. When it's `local`, only the DynamoDB tables are created (against DynamoDB Local through a custom provider), and the program returns early. Everything else — VPC, ECS, NATS, certs, CloudFront — is created only when `ENVIRONMENT !== 'local'`.

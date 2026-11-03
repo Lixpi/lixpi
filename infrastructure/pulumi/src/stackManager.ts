@@ -19,6 +19,7 @@ import {
     getStackArgs,
     getWorkspaceOptions,
     awsConfig,
+    requiresExistingStack,
 } from './workspace.ts'
 
 export class StackManager {
@@ -41,9 +42,9 @@ export class StackManager {
 
         const workspaceOptions = getWorkspaceOptions()
         const stackArgs = getStackArgs(this.stackName)
-        this.stack = await LocalWorkspace.createOrSelectStack(stackArgs, workspaceOptions)
-
-        await this.stack.workspace.installPlugin('aws', 'v4.0.0')
+        this.stack = requiresExistingStack()
+            ? await LocalWorkspace.selectStack(stackArgs, workspaceOptions)
+            : await LocalWorkspace.createOrSelectStack(stackArgs, workspaceOptions)
         const config = awsConfig(this.region)
 
         await Promise.all(
