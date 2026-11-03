@@ -29,8 +29,7 @@ export class CssGradientRenderer {
     }
 
     private static renderLayer(layer: CssGradientLayer): string {
-        const stops = layer.stops
-            .map(stop => stop.position === undefined ? stop.color : `${stop.color} ${stop.position}`)
+        const stops = layer.stops.map(stop => stop.position === undefined ? stop.color : `${stop.color} ${stop.position}`)
             .join(', ')
 
         if (layer.type === 'linear')
