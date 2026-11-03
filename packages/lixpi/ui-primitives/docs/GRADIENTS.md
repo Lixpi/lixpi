@@ -11,12 +11,19 @@ UI Primitives owns reusable color sampling, gradient generation, SVG utilities a
 
 | API | Output |
 |---|---|
+| `CssGradientRenderer` | Native CSS linear and radial layers with caller-owned stops, geometry, and custom properties |
 | `FreeformGradientRenderer` | Four-anchor bitmap sampling, color parsing and canvas drawing |
 | `ShiftingGradientRenderer` | Instance-owned subscriptions, phase animation and optional patterns |
 | `SvgGradientRenderer` | Linear/repeating stops and rotating SVG gradient endpoints |
 | `Easing` | Cubic-bezier evaluation and shared hover, shifting and traveling timing |
 
 Import gradients from `@lixpi/ui-primitives/gradients` and timing from `/animation`. Canvas glass and traveling-outline resource composition belongs to [Canvas Components](../../canvas-components/docs/EFFECTS.md); icons remain in UI-kit.
+
+## Native CSS gradients
+
+`CssGradientRenderer.render(layers)` returns a CSS background-image value. Layers remain in caller order, with the first painted closest to the content. Linear layers provide a direction; radial layers provide a circle or ellipse shape, size, and position. Each layer supplies at least two color stops with optional positions.
+
+CSS strings pass through unchanged, including percentages, `rem` lengths, color alpha, and `var(--custom-property)` references. The browser owns interpolation and compositing. Keep component palette and geometry tokens in its stylesheet and pass those token references to the renderer. Use this API when native radial or linear geometry must be preserved; a four-anchor freeform bitmap is a different visual model. Apply the returned value through the existing DOM style helpers or template style binding. The generator does not own DOM elements, observers, or animation.
 
 ## Freeform bitmap algorithm
 
