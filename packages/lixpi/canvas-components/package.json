@@ -18,6 +18,14 @@
             "sass": "./src/frontend/loading/loading-overlay.scss",
             "style": "./src/frontend/loading/loading-overlay.scss",
             "default": "./src/frontend/loading/loading-overlay.scss"
+        },
+        "./connectors": "./src/frontend/connectors/connector-settings.ts",
+        "./diagram": "./src/frontend/diagram/diagram-canvas.ts",
+        "./styles/diagram-canvas": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/frontend/diagram/diagram-canvas.scss",
+            "style": "./src/frontend/diagram/diagram-canvas.scss",
+            "default": "./src/frontend/diagram/diagram-canvas.scss"
         }
     },
     "scripts": {

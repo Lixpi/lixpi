@@ -616,3 +616,101 @@ describe('ConnectionManager gesture ownership', () => {
         expect(onConnectorGeometry).not.toHaveBeenCalled()
     })
 })
+
+
+describe('ConnectionManager orthogonal routing failures', () => {
+    it('reports a failed route, omits its geometry, and retries after nodes change', () => {
+        const {
+            manager,
+            onConnectorGeometry,
+            config,
+        } = setup()
+        const obstacle: ConnectionNode = {
+            nodeId: 'blocker',
+            position: {
+                x: 0,
+                y: 0,
+            },
+            dimensions: {
+                width: 600,
+                height: 400,
+            },
+        }
+        manager.syncNodes([...nodes, obstacle])
+        manager.syncEdges([{
+            ...existingEdge,
+            pathType: 'orthogonal',
+        }])
+
+        expect(() => manager.render()).not.toThrow()
+        expect(config.onError).toHaveBeenCalledTimes(1)
+        expect(onConnectorGeometry).toHaveBeenLastCalledWith([])
+
+        manager.syncNodes(nodes)
+        manager.render()
+
+        expect(config.onError).toHaveBeenCalledTimes(1)
+        expect(onConnectorGeometry.mock.lastCall?.[0]).toHaveLength(1)
+    })
+
+    it('stops render when the routing error callback destroys the manager', () => {
+        let manager: ConnectionManager
+        const onError = vi.fn(() => manager.destroy())
+        const result = setup(0, { onError })
+        manager = result.manager
+        manager.syncNodes([
+            ...nodes,
+            {
+                nodeId: 'blocker',
+                position: {
+                    x: 0,
+                    y: 0,
+                },
+                dimensions: {
+                    width: 600,
+                    height: 400,
+                },
+            },
+        ])
+        manager.syncEdges([{
+            ...existingEdge,
+            pathType: 'orthogonal',
+        }])
+
+        expect(() => manager.render()).not.toThrow()
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(result.onConnectorGeometry).not.toHaveBeenCalled()
+    })
+
+    it('stops zoom recomputation when the routing error callback destroys the manager', () => {
+        let manager: ConnectionManager
+        const onError = vi.fn(() => manager.destroy())
+        const obstacle = {
+            id: 'blocker',
+            shape: 'rect' as const,
+            x: 1000,
+            y: 1000,
+            width: 100,
+            height: 100,
+        }
+        const result = setup(0, {
+            onError,
+            additionalGeometry: () => [obstacle],
+        })
+        manager = result.manager
+        manager.syncEdges([{
+            ...existingEdge,
+            pathType: 'orthogonal',
+        }])
+        manager.render()
+        obstacle.x = 0
+        obstacle.y = 0
+        obstacle.width = 600
+        obstacle.height = 400
+        const geometryCallCount = result.onConnectorGeometry.mock.calls.length
+
+        expect(() => manager.recomputeConnectorGeometry(0.5)).not.toThrow()
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(result.onConnectorGeometry).toHaveBeenCalledTimes(geometryCallCount)
+    })
+})

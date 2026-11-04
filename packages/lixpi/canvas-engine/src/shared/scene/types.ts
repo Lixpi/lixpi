@@ -40,6 +40,7 @@ export type EngineEdge<Data = unknown> = {
     source: EdgeEndpoint
     target: EdgeEndpoint
     path: ConnectorPathType
+    bendPoints?: CanvasEnginePoint[]
     data: Data
 }
 

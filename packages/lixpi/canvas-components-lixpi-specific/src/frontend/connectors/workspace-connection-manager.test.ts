@@ -19,11 +19,12 @@ import {
     getAdaptiveBoundedZoomScalingOptions,
     scaleCanvasChromeWorldSizeForZoom,
 } from '@lixpi/canvas-engine/shared'
-import { createWorkspaceConnectorSettings } from './workspace-connector-settings.ts'
+import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'
 import { getEdgeAnchorPositions } from '@lixpi/canvas-engine/frontend/connectors'
 import { flattenSvgPath } from '@lixpi/ui-primitives/svg'
+import { arrowRightMarkerBodyLengthFraction } from '@lixpi/ui-kit/svg'
 
-const settings = { connector: createWorkspaceConnectorSettings({ lineDefaultColor: '#5d656d' }) }
+const settings = { connector: createCanvasConnectorSettings({ lineDefaultColor: '#5d656d' }) }
 
 // =============================================================================
 // HELPERS
@@ -209,6 +210,76 @@ describe('WorkspaceConnectionManager — menu connections', () => {
 // =============================================================================
 
 describe('WorkspaceConnectionManager — edge anchors', () => {
+
+    it('routes orthogonal workspace edges around intervening nodes', () => {
+        const onConnectorGeometry = vi.fn()
+        const manager = new WorkspaceConnectionManager({
+            ...createMockConfig(),
+            onConnectorGeometry,
+        })
+        const sourceNode = makeNode({
+            nodeId: 'route-source',
+            type: 'document',
+            position: {
+                x: 0,
+                y: 0,
+            },
+            dimensions: {
+                width: 200,
+                height: 100,
+            },
+        })
+        const blocker = makeNode({
+            nodeId: 'route-blocker',
+            type: 'document',
+            position: {
+                x: 300,
+                y: 0,
+            },
+            dimensions: {
+                width: 120,
+                height: 80,
+            },
+        })
+        const targetNode = makeNode({
+            nodeId: 'route-target',
+            type: 'document',
+            position: {
+                x: 600,
+                y: 100,
+            },
+            dimensions: {
+                width: 200,
+                height: 100,
+            },
+        })
+        const edge = makeEdge({
+            edgeId: 'edge-around-blocker',
+            sourceNodeId: sourceNode.nodeId,
+            targetNodeId: targetNode.nodeId,
+            pathType: 'orthogonal',
+        })
+
+        manager.syncNodes([sourceNode, blocker, targetNode])
+        manager.syncEdges([edge])
+        manager.render()
+
+        const rendered = onConnectorGeometry.mock.calls.at(-1)?.[0][0] as {
+            svgPath: string
+        }
+        const pathPoints = flattenSvgPath(rendered.svgPath)
+        const crossesBlocker = pathPoints.some(point => {
+            return point.x > blocker.position.x
+                && point.x < blocker.position.x + blocker.dimensions.width
+                && point.y > blocker.position.y
+                && point.y < blocker.position.y + blocker.dimensions.height
+        })
+
+        expect(pathPoints.some(point => point.y > blocker.position.y + blocker.dimensions.height)).toBe(true)
+        expect(crossesBlocker).toBe(false)
+    })
+
+
     it('renders workspace connector data through PIXI only at screenshot zoom levels', () => {
         let zoom = 1
         const onConnectorGeometry = vi.fn()
@@ -423,6 +494,49 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
             settings.connector.scaling = originalScaling
         }
     })
+
+    it('keeps the native arrow tip at the configured gap from the target node', () => {
+        const onConnectorGeometry = vi.fn()
+        const manager = new WorkspaceConnectionManager({
+            ...createMockConfig(),
+            onConnectorGeometry,
+        })
+        const sourceNode = makeNode({
+            nodeId: 'marker-source',
+            type: 'document',
+        })
+        const targetNode = makeNode({
+            nodeId: 'marker-target',
+            type: 'document',
+            position: {
+                x: 500,
+                y: 0,
+            },
+        })
+        const edge = makeEdge({
+            edgeId: 'edge-native-marker-gap',
+            sourceNodeId: sourceNode.nodeId,
+            targetNodeId: targetNode.nodeId,
+        })
+
+        manager.syncNodes([sourceNode, targetNode])
+        manager.syncEdges([edge])
+        manager.render()
+
+        const rendered = onConnectorGeometry.mock.calls.at(-1)?.[0][0] as {
+            arrowEnd: {
+                x: number
+                baseScreenSize: number
+            } | null
+        }
+        expect(rendered.arrowEnd).not.toBeNull()
+
+        const arrow = rendered.arrowEnd!
+        const visibleTipX = arrow.x + arrow.baseScreenSize * arrowRightMarkerBodyLengthFraction
+
+        expect(targetNode.position.x - visibleTipX).toBeCloseTo(settings.connector.scaling.markerOffset.target, 10)
+    })
+
 
     it('renders rectangular node edge endpoints and recomputes them after resize', () => {
         const onConnectorGeometry = vi.fn()

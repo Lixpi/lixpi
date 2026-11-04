@@ -20,7 +20,11 @@ import {
     getAdaptiveBoundedZoomScalingOptions,
     getEdgeScaledSizes,
 } from '../../shared/index.ts'
-import { computeConnectorDatum } from './connector-datum.ts'
+import {
+    computeConnectorDatum,
+    type ConnectorDatumStyle,
+} from './connector-datum.ts'
+import { OrthogonalRoutingError } from '../../shared/connectors/paths/index.ts'
 import { computeConnectorSpread } from './connector-spread.ts'
 import { HandleConnectionGesture } from './handle-connection-gesture.ts'
 import {
@@ -952,6 +956,29 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         this.selectEdge(null)
     }
 
+    private createConnectorDatum(
+        edgeConfig: EdgeConfig,
+        worldNodeMap: Map<string, NodeConfig>,
+        style: ConnectorDatumStyle,
+    ): ConnectorRenderDatum | null {
+        try {
+            return computeConnectorDatum(
+                edgeConfig,
+                worldNodeMap,
+                style,
+            )
+        } catch (error) {
+            if (!(error instanceof OrthogonalRoutingError))
+                throw error
+
+            this.config.onError(
+                new OrthogonalRoutingError(edgeConfig.id),
+            )
+
+            return null
+        }
+    }
+
     public render() {
         if (this.destroyed)
             return
@@ -1048,7 +1075,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 edgeConfig,
                 isSelected,
             })
-            const drawingDatum = computeConnectorDatum(
+            const drawingDatum = this.createConnectorDatum(
                 edgeConfig,
                 worldNodeMap,
                 {
@@ -1193,7 +1220,11 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 }
             }
 
-            const targetMarker = this.config.targetMarker?.(edgeTargetNode, isSelected) ?? (isSelected ? 'arrowhead-selected' : 'arrowhead')
+            const targetMarker = this.config.targetMarker?.(
+                edgeTargetNode,
+                isSelected,
+                e,
+            ) ?? (isSelected ? 'arrowhead-selected' : 'arrowhead')
             const renderedSourceNodeId = this.getRenderedEdgeSourceNodeId(
                 e,
                 nodeById,
@@ -1220,12 +1251,16 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     targetContentAnchor,
                 ),
                 pathType: e.pathType ?? this.config.settings.lineCurve,
+                bendPoints: e.bendPoints,
                 marker: targetMarker,
                 laneIndex: tValues?.laneIndex ?? 0,
                 laneCount: tValues?.laneCount ?? 1,
             }
 
             addConnectorDatum(edgeConfig, isSelected)
+
+            if (this.destroyed)
+                return
         }
 
         // Add in-progress edge (new connection or reconnecting existing edge)
@@ -1350,6 +1385,9 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 lineStyle: isReconnecting ? 'solid' : 'dashed',
             }
             addConnectorDatum(tempEdge, false)
+
+            if (this.destroyed)
+                return
         }
 
         // Draw potential proximity connection
@@ -1381,6 +1419,9 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 lineStyle: 'dashed',
             }
             addConnectorDatum(ghostEdge, false)
+
+            if (this.destroyed)
+                return
         }
 
         this.config.onConnectorGeometry?.(connectorData)
@@ -1397,7 +1438,8 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     // then flushed synchronously by canvasMediaLayer.renderNow().
     public recomputeConnectorGeometry(zoom: number): boolean {
         if (
-            !this.cachedEdgeConfigs
+            this.destroyed
+            || !this.cachedEdgeConfigs
             || !this.cachedWorldNodeMap
             || !this.config.onConnectorGeometry
         )
@@ -1434,7 +1476,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             edgeConfig,
             isSelected,
         } of this.cachedEdgeConfigs) {
-            const drawingDatum = computeConnectorDatum(
+            const drawingDatum = this.createConnectorDatum(
                 edgeConfig,
                 this.cachedWorldNodeMap,
                 {
@@ -1448,6 +1490,9 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                     markerBodyLengthFraction: this.config.markerBodyLengthFraction,
                 },
             )
+
+            if (this.destroyed)
+                return false
 
             if (drawingDatum)
                 connectorData.push(drawingDatum)

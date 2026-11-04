@@ -57,10 +57,8 @@ import {
     type WorkspaceRegisteredNodeData,
 } from '../nodes/workspace-node-registry.ts'
 import { WorkspaceConnectionProjection } from '../connectors/workspace-connection-projection.ts'
-import {
-    createWorkspaceConnectionPolicy,
-    workspaceConnectorMarkerBodyLengthFraction,
-} from '../connectors/workspace-connection-manager.ts'
+import { createWorkspaceConnectionPolicy } from '../connectors/workspace-connection-manager.ts'
+import { arrowRightMarkerBodyLengthFraction } from '@lixpi/ui-kit/svg'
 
 export type SelectionColors = {
     marqueeStroke: string
@@ -192,7 +190,7 @@ export class WorkspaceMediaLayer {
                     marker: options.marker,
                     zoomScaling: options.settings.connector.scaling.zoomScaling,
                 },
-                markerBodyLengthFraction: workspaceConnectorMarkerBodyLengthFraction,
+                markerBodyLengthFraction: arrowRightMarkerBodyLengthFraction,
                 policy: createWorkspaceConnectionPolicy(),
                 onSelectionChange: options.onEdgeSelectionChange,
                 onEdgesChange: edges => {

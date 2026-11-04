@@ -2,7 +2,7 @@ import {
     type ConnectionSettings,
 } from '@lixpi/canvas-engine/frontend/connectors'
 
-export const createWorkspaceConnectorSettings = (colors: { lineDefaultColor: string }): ConnectionSettings => {
+export const createCanvasConnectorSettings = (colors: { lineDefaultColor: string } = { lineDefaultColor: '#5d656d' }): ConnectionSettings => {
     return {
         // Default curve used for connector lines between nodes.
         lineCurve: 'horizontal-bezier',
@@ -16,8 +16,8 @@ export const createWorkspaceConnectorSettings = (colors: { lineDefaultColor: str
             markerSize: 23,
             // Base screen-pixel gap between a connector endpoint and the node it
             // attaches to, at 100% and higher zoom. This is the pure node↔line gap
-            // and is identical for both ends; it carries NO arrowhead knowledge —
-            // WorkspaceConnectionManager adds the arrowhead's own length only on
+            // and is identical for both ends. The engine adds the arrowhead's
+            // own length separately, only on
             // ends that actually draw an arrow.
             markerOffset: {
                 source: 15,
@@ -49,3 +49,24 @@ export const createWorkspaceConnectorSettings = (colors: { lineDefaultColor: str
         },
     }
 }
+
+export const createDiagramConnectorSettings = (options: { markers?: boolean } = {}): ConnectionSettings => ({
+    ...createCanvasConnectorSettings(),
+    lineCurve: 'bezier',
+    scaling: {
+        strokeWidth: 1.5,
+        markerSize: 6,
+        markerOffset: {
+            source: options.markers ? 6 : 0,
+            target: options.markers ? 6 : 0,
+        },
+        clickAreaWidth: 8,
+        zoomScaling: { minZoom: 0.25 },
+    },
+    proximityConnectThreshold: 0,
+    menuConnectionSnapRadius: 0,
+    autoAlign: {
+        minSlideHeight: 200,
+        edgeMargin: 0.1,
+    },
+})

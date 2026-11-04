@@ -130,11 +130,12 @@ export const validateScene = (scene: SceneSnapshot): void => {
             || !target
             || source.role === 'input'
             || target.role === 'output'
+            || edge.bendPoints?.some(point => ![point.x, point.y].every(Number.isFinite))
         )
             throw new CanvasDiagnosticError({
                 code: 'invalid-edge',
                 edgeId: edge.edgeId,
-                message: `Invalid edge identity or endpoints: ${edge.edgeId}`,
+                message: `Invalid edge identity, endpoints or route geometry: ${edge.edgeId}`,
             })
 
         edgeIds.add(edge.edgeId)

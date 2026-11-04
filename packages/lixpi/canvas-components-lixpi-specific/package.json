@@ -121,6 +121,14 @@
             "sass": "./src/frontend/nodes/workspace-node-shells.scss",
             "style": "./src/frontend/nodes/workspace-node-shells.scss",
             "default": "./src/frontend/nodes/workspace-node-shells.scss"
+        },
+        "./frontend/diagram": "./src/frontend/diagram/index.ts",
+        "./shared/diagram": "./src/shared/diagram/workspace-diagram.ts",
+        "./styles/diagram": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/frontend/diagram/workspace-diagram.scss",
+            "style": "./src/frontend/diagram/workspace-diagram.scss",
+            "default": "./src/frontend/diagram/workspace-diagram.scss"
         }
     },
     "scripts": {
