@@ -130,7 +130,8 @@ const loadTs = (): string => {
     ]
     const workspaceOwners = workspaceOwnerFiles.map(filename => readSourceFile(`../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`)).join('\n')
     const nodeShells = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/workspace-node-shells.ts')
-    const source = `${loadNodeDeletion()}\n${loadNodeGestures()}\n${loadGenerationHandlers()}\n${workspaceOwners}\n${nodeShells}`
+    const canvasTheme = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/settings/canvas-theme.ts')
+    const source = `${loadNodeDeletion()}\n${loadNodeGestures()}\n${loadGenerationHandlers()}\n${workspaceOwners}\n${nodeShells}\n${canvasTheme}`
     sourceFileNames.set(source, 'workspace renderer, focused owners, and generation handlers')
 
     return source
