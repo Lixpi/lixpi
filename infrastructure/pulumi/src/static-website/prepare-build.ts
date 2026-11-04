@@ -39,10 +39,50 @@ class StaticWebsiteBuild {
             'public',
         ]
         const packages = [
-            'ui-kit',
-            'ui-primitives',
-            'web-client-service-factory',
-            'test-utils',
+            {
+                directory: 'canvas-engine',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'canvas-components',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'canvas-components-lixpi-specific',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'capability-system',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'prosemirror',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'constants',
+                manifest: 'ts/package.json',
+            },
+            {
+                directory: 'debug-tools',
+                manifest: 'ts/package.json',
+            },
+            {
+                directory: 'ui-kit',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'ui-primitives',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'web-client-service-factory',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'test-utils',
+                manifest: 'package.json',
+            },
         ]
 
         for (const file of [...files, ...directories]) {
@@ -52,17 +92,20 @@ class StaticWebsiteBuild {
                 throw new Error(`Missing website build input: ${file}`)
         }
 
-        for (const name of packages) {
+        for (const {
+            directory,
+            manifest,
+        } of packages) {
             if (!existsSync(
                 join(
                     this.lixpiSource,
                     'packages',
                     'lixpi',
-                    name,
-                    'package.json',
+                    directory,
+                    manifest,
                 ),
             ))
-                throw new Error(`Missing shared website package: ${name}`)
+                throw new Error(`Missing shared website package: ${directory}`)
         }
 
         mkdirSync(this.destination, { recursive: true })
@@ -89,12 +132,12 @@ class StaticWebsiteBuild {
             )
         }
 
-        for (const name of packages) {
+        for (const { directory } of packages) {
             const target = join(
                 this.destination,
                 '.lixpi',
                 'packages',
-                name,
+                directory,
             )
             rmSync(
                 target,
@@ -108,7 +151,7 @@ class StaticWebsiteBuild {
                     this.lixpiSource,
                     'packages',
                     'lixpi',
-                    name,
+                    directory,
                 ),
                 target,
                 {
