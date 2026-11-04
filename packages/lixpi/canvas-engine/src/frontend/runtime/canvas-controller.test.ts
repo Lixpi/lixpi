@@ -580,7 +580,7 @@ describe('CanvasController', () => {
 
     it('passes opaque edge data and the owned node root to connector policies', () => {
         const sourceAnchorT = vi.fn(() => 0.25)
-        const targetMarker = vi.fn(() => 'none' as const)
+        const targetMarker = vi.fn((_node, _selected, _edge) => 'none' as const)
         const first = {
             ...node('a'),
             ports: [{
@@ -624,6 +624,10 @@ describe('CanvasController', () => {
                         portId: 'in',
                     },
                     path: 'straight',
+                    bendPoints: [{
+                        x: 180,
+                        y: -40,
+                    }],
                     data,
                 }],
             },
@@ -637,7 +641,20 @@ describe('CanvasController', () => {
             },
         })
         expect(sourceAnchorT).toHaveBeenCalledWith(expect.objectContaining({ data }), contexts.get('a')!.contentRoot)
-        expect(targetMarker).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'b' }), false)
+        expect(targetMarker).toHaveBeenCalledWith(
+            expect.objectContaining({ nodeId: 'b' }),
+            false,
+            expect.objectContaining({
+                edgeId: 'a-b',
+                sourceNodeId: 'a',
+                targetNodeId: 'b',
+                bendPoints: [{
+                    x: 180,
+                    y: -40,
+                }],
+                data,
+            }),
+        )
         expect(onError).not.toHaveBeenCalled()
         const previousRoot = contexts.get('a')!.contentRoot
         canvas.setScene(snapshot([]))

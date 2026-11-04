@@ -7,6 +7,8 @@ import {
 import { createLixpiCanvasSettings } from '../settings/index.ts'
 import {
     applyWorkspaceCanvasTheme,
+} from '../settings/canvas-theme.ts'
+import {
     getWorkspaceRightPanelCssProperties,
 } from './workspace-canvas-theme.ts'
 import {

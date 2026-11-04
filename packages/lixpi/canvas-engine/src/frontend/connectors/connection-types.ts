@@ -1,4 +1,5 @@
 import {
+    type CanvasEnginePoint,
     type ConnectionGeometryNode,
     type BoundedZoomScalingOptions,
 } from '../../shared/index.ts'
@@ -18,6 +19,7 @@ export type ConnectionNode = ConnectionGeometryNode
 
 export type ConnectionEdge<Data = unknown> = SpreadEdge & {
     pathType?: PathType
+    bendPoints?: CanvasEnginePoint[]
     data?: Data
 }
 export type ProximityCandidate = {
@@ -78,6 +80,7 @@ export type ConnectionPolicy<Node extends ConnectionNode> = {
     targetMarker?: (
         node: Node | undefined,
         selected: boolean,
+        edge: ConnectionEdge,
     ) => MarkerType
     additionalGeometry?: (
         node: Node,

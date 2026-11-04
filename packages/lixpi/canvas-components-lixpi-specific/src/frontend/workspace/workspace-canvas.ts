@@ -116,9 +116,8 @@ import {
 import {
     type BranchMarkerConversationPreview,
 } from '@lixpi/prosemirror/shared/thread-doc'
-import { arrowRightIcon } from '@lixpi/ui-kit/svg'
+import { createArrowRightMarker } from '@lixpi/ui-kit/svg'
 
-import { extractSvgPathIcon } from '@lixpi/ui-primitives/svg'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 
 import {
@@ -156,10 +155,8 @@ import { WorkspaceCanvasContext } from './workspace-canvas-context.ts'
 import { WorkspaceBranchMarkerProjection } from './workspace-branch-marker-projection.ts'
 import { WorkspaceGeneratedOutputDetails } from './workspace-generated-output-details.ts'
 import { WorkspaceCanvasInteractions } from './workspace-canvas-interactions.ts'
-import {
-    applyWorkspaceCanvasTheme,
-    getWorkspaceRightPanelCssProperties,
-} from './workspace-canvas-theme.ts'
+import { applyWorkspaceCanvasTheme } from '../settings/canvas-theme.ts'
+import { getWorkspaceRightPanelCssProperties } from './workspace-canvas-theme.ts'
 import { WorkspaceCanvasRendering } from './workspace-canvas-rendering.ts'
 import { destroyWorkspaceCanvasResources } from './workspace-canvas-cleanup.ts'
 import { WorkspaceCanvasVisibility } from './workspace-canvas-visibility.ts'
@@ -647,7 +644,7 @@ export class LixpiWorkspaceCanvas {
                 groupOverlayStroke: this.selectionStyles.overlayBorderColor,
                 groupOverlayFill: this.selectionStyles.overlayBackgroundColor,
             }
-            this.connectorIcon = extractSvgPathIcon(arrowRightIcon)
+            this.connectorIcon = createArrowRightMarker()
             this.domNodes = new WorkspaceDomNodes({
                 shells: this.nodeShells,
                 document: node => this.documentNodes.create(
@@ -752,14 +749,7 @@ export class LixpiWorkspaceCanvas {
                 onImageIntrinsicSize: this.mediaGeometry.handleImageIntrinsicSize,
                 onVideoIntrinsicSize: this.mediaGeometry.handleVideoIntrinsicSize,
                 onPlaybackReady: () => this.scheduleGeneratedMediaChromeSync(),
-                marker: {
-                    paths: this.connectorIcon.pathData,
-                    width: this.connectorIcon.width,
-                    reference: {
-                        x: 48,
-                        y: 128,
-                    },
-                },
+                marker: this.connectorIcon,
                 onEdgesChange: edges => {
                     if (this.currentCanvasState)
                         this.commitCanvasState({

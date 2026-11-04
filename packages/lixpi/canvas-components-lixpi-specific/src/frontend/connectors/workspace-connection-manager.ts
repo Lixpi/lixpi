@@ -13,7 +13,9 @@ import {
     type CanvasNode,
     type WorkspaceEdge,
 } from '@lixpi/constants'
+import { arrowRightMarkerBodyLengthFraction } from '@lixpi/ui-kit/svg'
 import { isBranchLineageMarkerNode } from '../../shared/branch-tree-layout/branch-lineage-state.ts'
+import { getBranchConnectionTargetMarker } from './branch-connection-policy.ts'
 import {
     getBranchMarkerMediaModelCircleDescriptors,
     getBranchMarkerMediaModelCircleIndexForGeneratedMedia,
@@ -24,9 +26,6 @@ import {
 } from '../../shared/branch-tree-layout/marker-media-ports.ts'
 
 export type WorkspaceConnectionManagerConfig = Pick<ConnectionManagerConfig<CanvasNode>, 'paneEl' | 'viewportEl' | 'flowId' | 'getTransform' | 'panBy' | 'onEdgesChange' | 'onError' | 'onSelectedEdgeChange' | 'onConnectorGeometry' | 'settings'>
-
-// The arrow artwork's body spans this fraction between its reference point and tip.
-export const workspaceConnectorMarkerBodyLengthFraction = (228.992 - 48) / 256
 
 export type WorkspaceConnectionNodeData = { node: CanvasNode }
 
@@ -143,13 +142,16 @@ const workspacePolicy = (): ConnectionPolicy<CanvasNode> => {
                 || (node?.type === 'operationStatus' && node.operation === 'media-generation')
                 ? 'left'
                 : 'right',
-        targetMarker: (node, selected) =>
+        targetMarker: (node, selected) => getBranchConnectionTargetMarker(
             node?.type === 'branchLine'
-                || node?.type === 'branchFork'
-                ? 'none'
-                : selected
-                    ? 'arrowhead-selected'
-                    : 'arrowhead',
+                ? 'continuation'
+                : node?.type === 'branchFork'
+                    ? 'fork'
+                    : node?.type === 'branchOrigin'
+                        ? 'origin'
+                        : undefined,
+            selected,
+        ),
         additionalGeometry,
         renderedSourceNodeId,
         sourceAnchorT,
@@ -186,9 +188,14 @@ export const createWorkspaceConnectionPolicy = (): ConnectionPolicy<EngineNode> 
         defaultTargetHandle: node => policy.defaultTargetHandle!(
             projectOptional(node),
         ),
-        targetMarker: (node, selected) => policy.targetMarker!(
+        targetMarker: (
+            node,
+            selected,
+            edge,
+        ) => policy.targetMarker!(
             projectOptional(node),
             selected,
+            edge,
         ),
         additionalGeometry: (node, nodes) => additionalGeometry(
             projectConnectionNode(node),
@@ -213,7 +220,7 @@ export class WorkspaceConnectionManager extends ConnectionManager<CanvasNode> {
     constructor(config: WorkspaceConnectionManagerConfig) {
         super({
             ...config,
-            markerBodyLengthFraction: workspaceConnectorMarkerBodyLengthFraction,
+            markerBodyLengthFraction: arrowRightMarkerBodyLengthFraction,
             ...workspacePolicy(),
         })
     }

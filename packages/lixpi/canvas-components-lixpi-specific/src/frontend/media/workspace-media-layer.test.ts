@@ -25,7 +25,7 @@ import {
     WorkspaceMediaLayer,
     type WorkspaceMediaLayerOptions,
 } from './workspace-media-layer.ts'
-import { createWorkspaceConnectorSettings } from '../connectors/workspace-connector-settings.ts'
+import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'
 
 const renderers = vi.hoisted(() => [] as any[])
 vi.mock('@lixpi/canvas-engine/frontend/rendering', async importOriginal => {
@@ -131,7 +131,7 @@ const settings = (): WorkspaceMediaLayerOptions['settings'] => {
             animationDurationMs: 600,
             snakeLengthFraction: 0.6,
         },
-        connector: createWorkspaceConnectorSettings({ lineDefaultColor: '#000000' }),
+        connector: createCanvasConnectorSettings({ lineDefaultColor: '#000000' }),
         mediaNode: {
             styles: { borderRadius: 12 },
             inProgressOutlineAnimation: {

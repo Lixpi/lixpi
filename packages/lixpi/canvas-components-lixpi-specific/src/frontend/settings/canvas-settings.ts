@@ -3,7 +3,7 @@ import {
     workspaceCollisionSettings,
     workspacePersistenceSettings,
 } from '@lixpi/constants'
-import { createWorkspaceConnectorSettings } from '../connectors/workspace-connector-settings.ts'
+import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'
 import {
     type LixpiCanvasPalette,
     type LixpiCanvasSettings,
@@ -136,7 +136,7 @@ export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> =
             },
         },
 
-        connector: createWorkspaceConnectorSettings({ lineDefaultColor: colorPalette.steelBlue }),
+        connector: createCanvasConnectorSettings({ lineDefaultColor: colorPalette.steelBlue }),
 
         selection: {
             styles: {

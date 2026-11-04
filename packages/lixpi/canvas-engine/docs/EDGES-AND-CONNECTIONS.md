@@ -35,7 +35,7 @@ Transient sessions contain a start port, an optional candidate, validity, a pane
 
 ## Routing and coordinates
 
-[Shared path helpers](../src/shared/connectors/paths/index.ts) support the exported path families; [ELK routing](../src/frontend/connectors/elkRouting.ts) provides obstacle-aware routing utilities. Connection settings select the line curve, sizes, snap distances, alignment thresholds and colors.
+[Shared path helpers](../src/shared/connectors/paths/index.ts) supply the path families used by `ConnectionManager`. Connection settings select the line curve, sizes, snap distances, alignment thresholds and colors. The separate [ELK utility](../src/frontend/connectors/elkRouting.ts) is not part of that rendering path.
 
 Connector spread policies can center endpoints, auto-align eligible targets or spread anchors near corners. Product-specific source content can return a finite `sourceAnchorT` to override the vertical anchor on left/right ports. Returning null or a nonfinite value retains the configured port; top/bottom ports keep their explicit coordinates.
 
@@ -45,7 +45,14 @@ The manager caches flattened paths for hit testing and midpoint anchoring. `getE
 
 Connector callers import path functions and types directly from their shared definitions. `computePath` returns the SVG path plus label X/Y and source offsets. Straight labels use the endpoint midpoint. Bezier labels use the cubic point at parameter 0.5; forward controls use half the axis distance, while backward controls use `curvature * 25 * sqrt(-distance)`. Directional paths map `center` to `bottom`.
 
-Smoothstep handles opposite, equal and mixed sides, corrects short gaps, removes duplicate bend points and limits rounded corners to adjacent half-segment lengths. Its dispatcher fixes the gap at 20 and radius at 8. Labels prefer the longest routing segment; its returned offsets are half the endpoint displacement. The custom `horizontal-bezier` path and `orthogonal` obstacle, bend-point and lane rules remain separate path families.
+Smoothstep handles opposite, equal and mixed sides, corrects short gaps, removes duplicate bend points and limits rounded corners to adjacent half-segment lengths. Its dispatcher fixes the gap at 20 and radius at 8. Labels prefer the longest routing segment; its returned offsets are half the endpoint displacement. The custom `horizontal-bezier` path remains a separate path family without obstacle routing.
+
+
+Automatic `orthogonal` paths use endpoint runs and a perpendicular lane, with 15-unit lane offsets for edges sharing a target. Top/bottom port pairs transpose the same obstacle solver. Mixed port axes use a direct orthogonal corner when it is clear. Backward, equal-side and obstructed mixed ports reserve outward leads and reuse the solver between them with endpoint bodies included as obstacles. The native router moves the lane and adds detours around intermediate node bounds. It checks the straight shortcut and every detour leg; a detour that enters another node expands its blocker envelope and retries, bounded by newly absorbed obstacle IDs. Both detour sides are checked. Use `bezier` for directional fan-out and fan-in.
+
+Scene edges and lower-level `EdgeConfig` callers may supply world-space `bendPoints` computed by a layout. Scene validation rejects nonfinite coordinates. The native renderer checks that the complete route remains orthogonal and clears intermediate nodes, then removes duplicate and redundant collinear points before rounding corners. Invalid explicit routes report the same `OrthogonalRoutingError` as an exhausted automatic route. The shared `isOrthogonalRouteClear` helper lets layout planners validate candidate escape corridors with that same clearance rule. Layouts must reserve enough first and last segment length for their configured marker offsets and include their computed routes in fit bounds.
+
+Local detours are not a general maze solver. If neither candidate can clear the obstacles and no new blocker can be absorbed, path computation throws `OrthogonalRoutingError`. `ConnectionManager` catches only that routing failure per edge, reports its edge ID through `onError`, and omits the unsafe drawing without deleting the edge. Later geometry or zoom updates retry it. If reporting disposes the owner, rendering stops immediately; unrelated errors retain their normal propagation.
 
 ## Rendering and state
 
@@ -57,4 +64,4 @@ Apply accepted edge changes through `setScene`. Reconcile authoritative state wi
 
 ## Extending behavior
 
-Use connection policies for domain-specific admission, centered anchors, source-content alignment, target markers and proximity eligibility. Keep branch lineage, message identifiers and AI context semantics outside the engine. [Rendering resources](RENDERING-RESOURCES.md) covers the drawing contract; [rendering lifecycle](RENDERING-ENGINE.md) covers scope disposal.
+Use connection policies for domain-specific admission, centered anchors, source-content alignment, target markers and proximity eligibility. The target-marker callback receives the target node, selection state and committed edge, so domain adapters can preserve direction for relations and feedback while retaining arrowless lineage branches. Keep branch lineage, message identifiers and AI context semantics outside the engine. [Rendering resources](RENDERING-RESOURCES.md) covers the drawing contract; [rendering lifecycle](RENDERING-ENGINE.md) covers scope disposal.

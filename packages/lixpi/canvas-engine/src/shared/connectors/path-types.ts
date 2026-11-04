@@ -10,7 +10,7 @@ export type PathType =
     | 'straight' // Direct line
     | 'smoothstep' // Orthogonal segments with rounded corners
     | 'horizontal-bezier' // Custom symmetric S-curve for horizontal flows
-    | 'orthogonal' // Circuit board style: horizontal → vertical → horizontal with rounded corners
+    | 'orthogonal' // Obstacle-aware axis-aligned segments with rounded corners
 
 // Marker (arrowhead) style
 export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'arrowhead-selected' | 'none'
@@ -40,7 +40,7 @@ export type EdgeConfig = {
     bendPoints?: Array<{
         x: number
         y: number
-    }> // elkjs-computed waypoints for orthogonal routing
+    }> // Layout-computed world-space waypoints for orthogonal routing
     laneIndex?: number // Index within edges sharing same target (for vertical lane ordering)
     laneCount?: number // Total edges sharing same target
 }

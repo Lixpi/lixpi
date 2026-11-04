@@ -83,6 +83,8 @@ Video controls accept `icons` and optional complete `settings`. `createDefaultVi
 
 UI-kit's SVG catalog exports `progressRippleArtwork` and `videoControlIcons` for the footer, ripple and video controls. Callers may supply other artwork through component configuration. Tooltip triggers fall back to a text question mark when no icon or custom trigger content is supplied.
 
+`createArrowRightMarker()` returns the native arrow artwork as parsed paths, width, line reference point and body-length fraction. The workspace and embedded diagrams pass this artifact to their renderer; UI-kit owns the artwork and does not depend on a canvas package.
+
 The catalog also exports `operationStatusDismissIcon`, the dismiss artwork used by Lixpi's operation-status canvas card. The card implementation lives in the Lixpi canvas package; the artwork stays in this catalog.
 
 `createContextPreviewPopover()` accepts trigger content, preview content and an optional `getPortal(element)` callback returning an explicit root and scale. `contentCssVariableNames` selects the theme properties copied from the trigger to portaled content. Inline previews manage focus, Escape and outside interaction; floating previews use the tooltip surface. Each instance owns its portal tracking and cancels it on hide or disposal. The component does not resolve Assets, documents or application routes.

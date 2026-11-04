@@ -15,7 +15,7 @@ import {
     type ConnectionEdge,
 } from '@lixpi/canvas-engine/frontend/connectors'
 import { WorkspaceConnectionProjection } from './workspace-connection-projection.ts'
-import { createWorkspaceConnectorSettings } from './workspace-connector-settings.ts'
+import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'
 import {
     type WorkspaceConnectionNodeData,
 } from './workspace-connection-manager.ts'
@@ -65,7 +65,7 @@ const change = (edge: EngineEdge<WorkspaceEdge>): ConnectionEdge => {
 }
 const projection = (compact = false) => {
     return new WorkspaceConnectionProjection<WorkspaceConnectionNodeData>({
-        settings: createWorkspaceConnectorSettings({ lineDefaultColor: '#000000' }),
+        settings: createCanvasConnectorSettings({ lineDefaultColor: '#000000' }),
         connectorBounds: node =>
             compact
                 && node.type === 'image'
