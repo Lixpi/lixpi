@@ -259,6 +259,27 @@ describe('NatsService', () => {
             expect(connectMock).not.toHaveBeenCalled()
         })
 
+        it('keeps the browser connection available when conversation replay reaches a restarting admission service', async () => {
+            const onAccessDenied = vi.fn()
+            const service = new (NatsService as any)({ onAccessDenied })
+            service.nc = connectionMock
+            connectionMock.request.mockResolvedValueOnce({ string: () => JSON.stringify({ error: 'ACCOUNT_ADMISSION_UNAVAILABLE' }) })
+                .mockResolvedValueOnce({ string: () => JSON.stringify({
+                    events: [],
+                    hasMore: false,
+                    eventSeq: 1,
+                }) })
+            expect(await service.request('conversation.events.replay', {})).toEqual({ error: 'ACCOUNT_ADMISSION_UNAVAILABLE' })
+            expect(onAccessDenied).not.toHaveBeenCalled()
+            expect(connectionMock.close).not.toHaveBeenCalled()
+            expect(await service.request('conversation.events.replay', {})).toEqual({
+                events: [],
+                hasMore: false,
+                eventSeq: 1,
+            })
+            expect(connectionMock.request).toHaveBeenCalledTimes(2)
+        })
+
         it('throws only when connection path is configured wrongly and keeps auth retries isolated', async () => {
             const onAuthError = vi.fn()
             const authError: any = new Error('authorization failed')
@@ -886,28 +907,12 @@ describe('NatsService', () => {
         it('concatenates chunks from object data stream', async () => {
             const objectStore = {
                 get: vi.fn().mockResolvedValue({
-                    data: {
-                        getReader: () => {
-                            let chunks = [new Uint8Array([1, 2]), new Uint8Array([3])]
-
-                            return {
-                                read: vi.fn().mockImplementation(async () => {
-                                    const value = chunks.shift()
-
-                                    if (value)
-                                        return {
-                                            done: false,
-                                            value,
-                                        }
-
-                                    return {
-                                        done: true,
-                                        value: undefined,
-                                    }
-                                }),
-                            }
-                        },
-                    },
+                    data: new ReadableStream({ start(controller) {
+                        controller.enqueue(new Uint8Array([1, 2]))
+                        controller.enqueue(new Uint8Array([3]))
+                        controller.close()
+                    } }),
+                    error: Promise.resolve(null),
                 }),
             }
             objmMock.open.mockResolvedValue(objectStore)
@@ -917,6 +922,54 @@ describe('NatsService', () => {
 
             expect(result).toEqual(new Uint8Array([1, 2, 3]))
             expect(result?.length).toBe(3)
+        })
+
+        it('cancels a stalled read on abort and releases its reader lock', async () => {
+            const cleaned = Promise.withResolvers<void>()
+            const cancelling = Promise.withResolvers<void>()
+            const cancel = vi.fn(async () => {
+                cancelling.resolve()
+                await cleaned.promise
+            })
+            const data = new ReadableStream<Uint8Array>({ cancel })
+            const objectStore = { get: vi.fn(async () => ({
+                data,
+                error: Promise.resolve(null),
+                info: { size: 1 },
+            })) }
+            objmMock.open.mockResolvedValue(objectStore)
+            const service = new (NatsService as any)({})
+            service['nc'] = connectionMock
+            const controller = new AbortController()
+            const read = service.getObject('bucket', 'name', { signal: controller.signal })
+            const rejected = expect(read).rejects.toThrow('stopped')
+            await vi.waitFor(() => expect(data.locked).toBe(true))
+            controller.abort(new Error('stopped'))
+            await cancelling.promise
+            await Promise.resolve()
+            expect(data.locked).toBe(true)
+            cleaned.resolve()
+            await rejected
+            expect(cancel).toHaveBeenCalledTimes(1)
+            expect(data.locked).toBe(false)
+        })
+
+        it.each([1, 3])('bounds received bytes even when metadata claims size %s', async size => {
+            const cancel = vi.fn()
+            const data = new ReadableStream<Uint8Array>({
+                start(controller) { controller.enqueue(new Uint8Array([1, 2, 3])) },
+                cancel,
+            })
+            objmMock.open.mockResolvedValue({ get: vi.fn(async () => ({
+                data,
+                error: Promise.resolve(null),
+                info: { size },
+            })) })
+            const service = new (NatsService as any)({})
+            service['nc'] = connectionMock
+            await expect(service.getObject('bucket', 'name', { maxBytes: 2 })).rejects.toThrow('NATS_OBJECT_BYTE_LIMIT')
+            expect(cancel).toHaveBeenCalledTimes(1)
+            expect(data.locked).toBe(false)
         })
 
         it('returns null for stream message when stream does not exist and throws on other errors', async () => {

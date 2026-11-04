@@ -135,7 +135,7 @@ describe('shared grouped wizard', () => {
         'NATS_AI_MODEL_REGISTRY_USER_ID=svc:ai-model-registry',
         'NATS_SYS_USER_PASSWORD=keep-system-password',
         'NATS_CALLOUT_PASSWORD=keep-callout-password',
-        ...['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'BACKUP', 'OPERATOR'].flatMap(name => [
+        ...['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'MEDIA_RENDER', 'BACKUP', 'OPERATOR'].flatMap(name => [
             `NATS_${name}_NKEY_SEED=SU${name}`,
             `NATS_${name}_NKEY_PUBLIC=U${name}`,
         ]),
@@ -246,7 +246,7 @@ describe('shared grouped wizard', () => {
             vi.mocked(registrationEnvironment).mockImplementation(actual.registrationEnvironment)
             const updates = new EnvFileUpdates(fixture)
 
-            for (const name of ['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'BACKUP', 'OPERATOR', 'NEX_NODE', 'AI_MODEL_REGISTRY']) {
+            for (const name of ['API', 'FILE_CONVERSION', 'CHARACTER_FIDELITY', 'MEDIA_RENDER', 'BACKUP', 'OPERATOR', 'NEX_NODE', 'AI_MODEL_REGISTRY']) {
                 const key = nkeys.createUser()
                 updates.setValue(`NATS_${name}_NKEY_SEED`, new TextDecoder().decode(key.getSeed()))
                 updates.setValue(`NATS_${name}_NKEY_PUBLIC`, key.getPublicKey())
@@ -757,7 +757,7 @@ describe('shared grouped wizard', () => {
         expect(prompts.text).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Hosted Zone DNS Role ARN (optional)' }))
         expect(nkeys.createAccount).toHaveBeenCalledTimes(1)
         expect(nkeys.createCurve).toHaveBeenCalledTimes(1)
-        expect(nkeys.createUser).toHaveBeenCalledTimes(8)
+        expect(nkeys.createUser).toHaveBeenCalledTimes(9)
     })
 
     it('preserves kept AWS fields including comments and spacing', async () => {

@@ -2261,6 +2261,33 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         expect(options.onSubmit).not.toHaveBeenCalled()
     })
 
+    it('submits conversational prompts with Enter and leaves Shift+Enter and composition to the editor', () => {
+        const { options } = createPluginOptions()
+        const plugin = createAiPromptInputPlugin({
+            ...options,
+            submitOnEnter: true,
+        })
+        const state = createEditorStateWithPlugins(doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Hello'))), [plugin])
+        const view = {
+            state,
+            dispatch: vi.fn(),
+            composing: false,
+        } as unknown as EditorView
+        const handler = plugin.props.handleKeyDown!
+
+        expect(handler(view, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            shiftKey: true,
+        }))).toBe(false)
+        expect(handler(view, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            isComposing: true,
+        }))).toBe(false)
+        expect(options.onSubmit).not.toHaveBeenCalled()
+        expect(handler(view, new KeyboardEvent('keydown', { key: 'Enter' }))).toBe(true)
+        expect(options.onSubmit).toHaveBeenCalledOnce()
+    })
+
     it('does not submit when content is empty', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
@@ -2329,6 +2356,52 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         expect(options.onSubmit).not.toHaveBeenCalled()
         expect(mockView.dispatch).not.toHaveBeenCalled()
         expect((mockView as any).state.doc.firstChild!.textContent).toBe('Keep this prompt')
+    })
+
+    it('retains the rich draft while acknowledgement is pending and after rejection', async () => {
+        const { options } = createPluginOptions()
+        let reject: (error: Error) => void = () => {}
+        options.onSubmit = vi.fn(() => new Promise<void>((_, fail) => void (reject = fail)))
+        const plugin = createAiPromptInputPlugin(options)
+        const testDoc = doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Keep this draft')))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+        const mockView = {
+            state,
+            dispatch: vi.fn(),
+        } as unknown as EditorView
+        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+        }))
+        expect(mockView.dispatch).not.toHaveBeenCalled()
+        reject(new Error('Rejected'))
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(mockView.dispatch).not.toHaveBeenCalled()
+        expect(mockView.state.doc.textContent).toBe('Keep this draft')
+    })
+
+    it('clears only after acceptance and preserves new text typed during the request', async () => {
+        const { options } = createPluginOptions()
+        let accept: () => void = () => {}
+        options.onSubmit = vi.fn(() => new Promise<void>(resolve => void (accept = resolve)))
+        const plugin = createAiPromptInputPlugin(options)
+        const state = createEditorStateWithPlugins(doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Sent text'))), [plugin])
+        const mockView = {
+            state,
+            dispatch: vi.fn(),
+        } as unknown as EditorView
+        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+        }))
+        expect(mockView.dispatch).not.toHaveBeenCalled()
+        ;(mockView as any).state = mockView.state.apply(mockView.state.tr.insertText('More text', 2))
+        accept()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(mockView.dispatch).not.toHaveBeenCalled()
+        expect(mockView.state.doc.textContent).toContain('More text')
     })
 
     it('preserves model settings attrs when clearing input after submit', () => {

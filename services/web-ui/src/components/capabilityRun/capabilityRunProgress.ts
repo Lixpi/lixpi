@@ -14,6 +14,9 @@ import { createExecutionTraceTimelineDetailAdapter } from '$src/components/execu
 import {
     type PromptReferencePreviewRenderer,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type WorkspaceConversationOutputPorts,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 
 import {
     type CapabilityCatalogClient,
@@ -133,6 +136,19 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         ></section>
     ` as HTMLElement
     private readonly timeline: ProgressTimelineInstance
+    private readonly status = html`<span></span>` as HTMLElement
+    private readonly header = html`
+        <header className="capability-run-progress-header">
+            <strong>Tool run</strong>${this.status}
+        </header>
+    ` as HTMLElement
+    private readonly outputs = html`
+        <ul
+            className="capability-run-progress-outputs"
+            aria-label="Outputs"
+        ></ul>
+    ` as HTMLElement
+    private readonly outputRows = new Map<string, HTMLElement>()
     private replaySequence = 0
     private run: CapabilityRun | null = null
     private readonly eventsBySequence = new Map<number, CapabilityRunEvent>()
@@ -142,11 +158,17 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
     constructor(
         private readonly client?: Pick<CapabilityCatalogClient, 'replay' | 'subscribeToRunEvents'>,
         previewRenderer?: PromptReferencePreviewRenderer,
+        private readonly outputPorts?: WorkspaceConversationOutputPorts,
     ) {
         this.timeline = createProgressTimeline({
             ariaLabel: 'Tool run progress',
             ...createExecutionTraceTimelineDetailAdapter(previewRenderer ? { previewRenderer } : {}),
         })
+        this.element.append(
+            this.header,
+            this.timeline.element,
+            this.outputs,
+        )
     }
 
     async replay(runId: string): Promise<void> {
@@ -248,15 +270,101 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
             }),
         )
         this.timeline.setItems(steps)
-        this.element.replaceChildren(
-            html`
-                <header className="capability-run-progress-header">
-                    <strong>Tool run</strong>
-                    <span>${state.status}</span>
-                </header>
-            `,
-            this.timeline.element,
-        )
+        this.status.textContent = state.status
+
+        if (this.header.parentElement !== this.element)
+            this.element.replaceChildren(
+                this.header,
+                this.timeline.element,
+                this.outputs,
+            )
+
+        this.renderOutputs(state.outputAssetIds)
+    }
+
+    private renderOutputs(assetIds: string[]): void {
+        const ids = new Set(this.outputPorts ? assetIds : [])
+
+        for (const [assetId, row] of this.outputRows)
+            if (!ids.has(assetId)) {
+                row.remove()
+                this.outputRows.delete(assetId)
+            }
+
+        for (const assetId of ids) {
+            if (this.outputRows.has(assetId))
+                continue
+
+            const row = html`<li>Loading output...</li>` as HTMLElement
+            this.outputRows.set(assetId, row)
+            this.outputs.append(row)
+            void this.resolveOutput(assetId, row)
+        }
+
+        this.outputs.hidden = ids.size === 0
+    }
+
+    private async resolveOutput(
+        assetId: string,
+        row: HTMLElement,
+    ): Promise<void> {
+        if (!this.outputPorts)
+            return
+
+        try {
+            const output = await this.outputPorts.resolve(assetId)
+
+            if (this.outputRows.get(assetId) !== row)
+                return
+
+            const button = html`
+                <button
+                    type="button"
+                    onclick=${() => void this.openOutput(
+                        assetId,
+                        button,
+                        error,
+                    )}
+                >
+                    Open ${output.title}
+                </button>
+            ` as HTMLButtonElement
+            const error = html`
+                <span
+                    className="capability-run-step-error"
+                    role="status"
+                ></span>
+            ` as HTMLElement
+            row.replaceChildren(button, error)
+        } catch {
+            if (this.outputRows.get(assetId) === row)
+                row.textContent = 'Output unavailable'
+        }
+    }
+
+    private async openOutput(
+        assetId: string,
+        button: HTMLButtonElement,
+        error: HTMLElement,
+    ): Promise<void> {
+        if (!this.outputPorts)
+            return
+
+        button.disabled = true
+        error.textContent = ''
+
+        try {
+            await this.outputPorts.resolve(assetId)
+
+            if (!this.outputRows.has(assetId))
+                return
+
+            await this.outputPorts.open(assetId)
+        } catch {
+            error.textContent = 'Could not open this output.'
+        } finally {
+            button.disabled = false
+        }
     }
 
     private stopLiveEventsIfSettled(): void {
@@ -275,6 +383,7 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         this.unsubscribeFromLiveEvents?.()
         this.unsubscribeFromLiveEvents = null
         this.timeline.destroy()
+        this.outputRows.clear()
         this.element.remove()
     }
 }
@@ -282,4 +391,9 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
 export const createCapabilityRunProgress = (
     client?: Pick<CapabilityCatalogClient, 'replay' | 'subscribeToRunEvents'>,
     previewRenderer?: PromptReferencePreviewRenderer,
-): CapabilityRunProgressInstance => new CapabilityRunProgress(client, previewRenderer)
+    outputPorts?: WorkspaceConversationOutputPorts,
+): CapabilityRunProgressInstance => new CapabilityRunProgress(
+    client,
+    previewRenderer,
+    outputPorts,
+)

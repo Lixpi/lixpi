@@ -18,3 +18,6 @@ packages:
 allowBuilds:
   "@google/genai": true
   protobufjs: true
+
+patchedDependencies:
+  '@nats-io/obj@3.4.0': packages/lixpi/nats-service/patches/@nats-io__obj@3.4.0.patch

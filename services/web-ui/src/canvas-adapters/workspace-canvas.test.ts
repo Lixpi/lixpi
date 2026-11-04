@@ -1405,16 +1405,14 @@ describe('Workspace canvas — detached generation resume stability', () => {
         expectSourceToContain(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers()')
     })
 
-    it('creates detached canvas threads with the submitted user message already persisted', () => {
+    it('sends every composer message to the agent conversation without a generation-first fallback', () => {
         const submitBody = extractFunctionBody(ts, 'submitCanvasGenerationRun')
-        const submitPersistedBody = extractFunctionBody(ts, 'submitPersistedDetachedCanvasThreadMessage')
         const markerContentBody = extractFunctionBody(ts, 'createContent')
 
-        expectExcerptToContain(submitBody, 'await this.canvasGenerationSubmission.submit(data, options)', 'detached run submit')
-        expectSourceToContain(ts, 'createDetachedCanvasThreadEditor({ ...request, thread })')
-        expectSourceToContain(ts, 'submitPersistedDetachedCanvasThreadMessage(thread.threadId)')
-        expectExcerptNotToContain(submitBody, 'promptInputController.submitMessage', 'detached run submit')
-        expectExcerptToContain(submitPersistedBody, 'detachedAiChatThreadEditors.get(threadId)?.submitPersisted()', 'persisted detached submit')
+        expectExcerptToContain(submitBody, 'await this.agentConversation.submit(', 'agent submit')
+        expectExcerptNotToContain(submitBody, 'canvasGenerationSubmission', 'agent submit')
+        expectSourceNotToContain(ts, 'new CanvasGenerationSubmission(')
+        expectSourceNotToContain(ts, 'conversations?.enabled(')
         expectExcerptToContain(markerContentBody, 'this.ports.getPromptParts(node, preview)', 'detached marker Capability badge order')
         expectExcerptToContain(markerContentBody, 'renderReference: createCanvasPromptReferenceRenderer({', 'detached marker reference renderer port')
         expectExcerptNotToContain(markerContentBody, '${promptReferenceBadges}', 'detached marker Capability badge order')

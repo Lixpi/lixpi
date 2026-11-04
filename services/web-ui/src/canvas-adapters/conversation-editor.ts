@@ -7,7 +7,11 @@ import {
     type CanvasConversationRunPorts,
     type CanvasConversationTransport,
     type CanvasGenerationRequest,
+    type WorkspaceConversationOutputPorts,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+import {
+    type ConversationOperationSummary,
+} from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     type AuthClientInstance,
@@ -15,6 +19,7 @@ import {
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
+import { CapabilityChatRunProgressController } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/capabilityChatRunProgress.ts'
 
 type EditorOptions = ConstructorParameters<typeof ProseMirrorEditor>[0]
 
@@ -34,6 +39,7 @@ export type CanvasConversationEditorIntegration = Pick<
 
 class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     private readonly editor: ProseMirrorEditor
+    private readonly progress: CapabilityChatRunProgressController
     private unregister: (() => void) | null = null
     private destroyed = false
 
@@ -43,12 +49,14 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     ) {
         const html = createDocumentHtml(request.container.ownerDocument)
         const version = request.thread.proseMirrorVersion
+        this.progress = new CapabilityChatRunProgressController(integration.promptReferencePreviewRenderer)
         this.editor = new ProseMirrorEditor({
             ...integration,
             editorMountElement: request.container,
             content: html`<div></div>` as HTMLDivElement,
             initialVal: request.thread.content,
             isDisabled: false,
+            readOnly: request.readOnly,
             documentType: 'assetConversation',
             threadId: request.thread.threadId,
             proseMirrorAuthority: {
@@ -64,7 +72,12 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
                 receiveOnly: true,
             },
             onEditorChange: request.onChange,
-            onStreamingUpdate: request.onStreaming,
+            onStreamingUpdate: content => {
+                if (this.editor?.editorView)
+                    this.progress.sync(this.editor.editorView)
+
+                request.onStreaming(content)
+            },
             onStreamEvent: request.onSegment,
             onAiChatSubmit: request.onSubmit,
             onAiChatStop: request.onStop,
@@ -104,7 +117,10 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     }
 
     submitPersisted(): void {
-        if (this.destroyed)
+        if (
+            this.destroyed
+            || this.request.readOnly
+        )
             return
 
         const view = this.editor.editorView
@@ -139,6 +155,18 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
             )
     }
 
+    renderOperations(
+        operations: ConversationOperationSummary[],
+        outputPorts?: WorkspaceConversationOutputPorts,
+    ): void {
+        if (!this.destroyed)
+            this.progress.renderOperations(
+                this.editor.editorView,
+                operations,
+                outputPorts,
+            )
+    }
+
     destroy(): void {
         if (this.destroyed)
             return
@@ -153,6 +181,7 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
         }
 
         try {
+            this.progress.destroy()
             this.editor.destroy()
         } catch (error) {
             errors.push(error)

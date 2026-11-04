@@ -25,7 +25,7 @@ export type VideoControlsConfig = {
     width: number
     height?: number
     responsiveWidth?: number
-    videoEl: HTMLVideoElement
+    videoEl: HTMLMediaElement
     className?: string
 }
 
@@ -86,7 +86,7 @@ const clamp = (
     )
 }
 
-const isFiniteDuration = (videoEl: HTMLVideoElement): boolean => Number.isFinite(videoEl.duration) && videoEl.duration > 0
+const isFiniteDuration = (videoEl: HTMLMediaElement): boolean => Number.isFinite(videoEl.duration) && videoEl.duration > 0
 
 const formatTime = (seconds: number): string => {
     if (
@@ -224,7 +224,7 @@ const bindButtonAction = (
         })
 }
 
-const bufferedEnd = (videoEl: HTMLVideoElement): number => {
+const bufferedEnd = (videoEl: HTMLMediaElement): number => {
     if (!isFiniteDuration(videoEl))
         return 0
 
@@ -245,10 +245,10 @@ const bufferedEnd = (videoEl: HTMLVideoElement): number => {
     }
 }
 
-const supportsFullscreen = (videoEl: HTMLVideoElement): boolean =>
-    typeof videoEl.requestFullscreen === 'function' && typeof videoEl.ownerDocument.exitFullscreen === 'function'
+const supportsFullscreen = (videoEl: HTMLMediaElement): boolean =>
+    videoEl.tagName === 'VIDEO' && typeof videoEl.requestFullscreen === 'function' && typeof videoEl.ownerDocument.exitFullscreen === 'function'
 
-const isFullscreen = (videoEl: HTMLVideoElement): boolean => videoEl.ownerDocument.fullscreenElement === videoEl
+const isFullscreen = (videoEl: HTMLMediaElement): boolean => videoEl.ownerDocument.fullscreenElement === videoEl
 
 class VideoControls implements VideoControlsInstance {
     private readonly settings: VideoControlsSettings
@@ -256,7 +256,7 @@ class VideoControls implements VideoControlsInstance {
     private readonly view: Window
     private readonly id: string
     private readonly height: number
-    private readonly videoEl: HTMLVideoElement
+    private readonly videoEl: HTMLMediaElement
     private readonly buttonY: number
     private readonly scrubberY: number
     private readonly glassFilterId: string
@@ -289,7 +289,7 @@ class VideoControls implements VideoControlsInstance {
     private readonly backgroundHighlight: any
     private readonly playButton: ButtonControl
     private readonly volumeButton: ButtonControl
-    private readonly fullscreenButton: ButtonControl
+    private readonly fullscreenButton: ButtonControl | null
     private readonly currentTimeText: any
     private readonly durationText: any
     private readonly seekGroup: any
@@ -439,7 +439,7 @@ class VideoControls implements VideoControlsInstance {
             this.icons.volumeHigh,
             'Mute video',
         )
-        this.fullscreenButton = this.createButton(
+        this.fullscreenButton = videoEl.tagName === 'AUDIO' ? null : this.createButton(
             'video-controls-fullscreen',
             this.icons.fullscreenEnter,
             'Enter fullscreen',
@@ -674,7 +674,8 @@ class VideoControls implements VideoControlsInstance {
             playIcon,
             this.settings.styles.icon,
         )
-        this.playButton.group.attr('aria-label', this.videoEl.paused ? 'Play video' : 'Pause video')
+        const kind = this.videoEl.tagName === 'AUDIO' ? 'audio' : 'video'
+        this.playButton.group.attr('aria-label', `${this.videoEl.paused ? 'Play' : 'Pause'} ${kind}`)
 
         const isMuted = this.videoEl.muted || this.videoEl.volume === 0
         const volumeIcon = isMuted ? this.icons.volumeMuted : this.icons.volumeHigh
@@ -683,7 +684,7 @@ class VideoControls implements VideoControlsInstance {
             volumeIcon,
             isMuted ? this.settings.styles.iconMuted : this.settings.styles.icon,
         )
-        this.volumeButton.group.attr('aria-label', isMuted ? 'Unmute video' : 'Mute video')
+        this.volumeButton.group.attr('aria-label', `${isMuted ? 'Unmute' : 'Mute'} ${kind}`)
         this.volumeProgress.attr('width', this.volumeWidth * volume)
         this.volumeHandle.attr('cx', this.volumeWidth * volume)
 
@@ -699,13 +700,15 @@ class VideoControls implements VideoControlsInstance {
         this.speedProgress.attr('width', this.speedSliderWidth * speedRatio)
         this.speedHandle.attr('cx', this.speedSliderX + this.speedSliderWidth * speedRatio)
 
-        const fullscreenIcon = isFullscreen(this.videoEl) ? this.icons.fullscreenExit : this.icons.fullscreenEnter
-        setIconPaths(
-            this.fullscreenButton.icon,
-            fullscreenIcon,
-            this.settings.styles.icon,
-        )
-        this.fullscreenButton.group.attr('aria-label', isFullscreen(this.videoEl) ? 'Exit fullscreen' : 'Enter fullscreen')
+        if (this.fullscreenButton) {
+            const fullscreenIcon = isFullscreen(this.videoEl) ? this.icons.fullscreenExit : this.icons.fullscreenEnter
+            setIconPaths(
+                this.fullscreenButton.icon,
+                fullscreenIcon,
+                this.settings.styles.icon,
+            )
+            this.fullscreenButton.group.attr('aria-label', isFullscreen(this.videoEl) ? 'Exit fullscreen' : 'Enter fullscreen')
+        }
     }
 
     resize = (
@@ -736,6 +739,8 @@ class VideoControls implements VideoControlsInstance {
         }
 
         this.videoEl.ownerDocument.removeEventListener('fullscreenchange', this.onMediaEvent)
+        this.group.selectAll('*').on('.', null)
+        this.group.on('.', null)
         this.group.remove()
     }
 
@@ -904,13 +909,15 @@ class VideoControls implements VideoControlsInstance {
 
         let right = this.width - layout.padding
 
-        right -= layout.buttonSize
-        setButtonPosition(
-            this.fullscreenButton,
-            right,
-            this.buttonY,
-        )
-        right -= layout.gap
+        if (this.fullscreenButton) {
+            right -= layout.buttonSize
+            setButtonPosition(
+                this.fullscreenButton,
+                right,
+                this.buttonY,
+            )
+            right -= layout.gap
+        }
 
         right -= volumeSliderWidth
         this.volumeWidth = volumeSliderWidth
@@ -1399,11 +1406,13 @@ class VideoControls implements VideoControlsInstance {
                 this.render()
             },
         )
-        bindButtonAction(
-            this.fullscreenButton,
-            this.settings.styles.buttonHover,
-            () => void this.toggleFullscreen(),
-        )
+
+        if (this.fullscreenButton)
+            bindButtonAction(
+                this.fullscreenButton,
+                this.settings.styles.buttonHover,
+                () => void this.toggleFullscreen(),
+            )
     }
 
     private bindSpeedSlider(): void {

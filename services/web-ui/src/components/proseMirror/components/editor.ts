@@ -65,6 +65,7 @@ type ProseMirrorEditorConfig = {
     onAiChatSubmit?: (value: any) => void
     onAiChatStop?: (value: any) => void
     onPromptSubmit?: (value: any) => void
+    promptSubmitOnEnter?: boolean
     promptControlFactories?: any
     promptReferenceCatalog?: any
     promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
@@ -83,6 +84,7 @@ type ProseMirrorEditorConfig = {
 export class ProseMirrorEditor {
     editorView!: EditorView
     private readonly onStreamEvent?: AiChatStreamObserver
+    private readonly promptSubmitOnEnter: boolean
     editorSchema: any = null
     proseMirrorAuthority: ProseMirrorAuthorityService | null = null
 
@@ -101,6 +103,7 @@ export class ProseMirrorEditor {
         onAiChatSubmit,
         onAiChatStop,
         onPromptSubmit,
+        promptSubmitOnEnter = false,
         promptControlFactories,
         promptReferenceCatalog,
         promptReferencePreviewRenderer,
@@ -120,6 +123,7 @@ export class ProseMirrorEditor {
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
         this.onPromptSubmit = onPromptSubmit
+        this.promptSubmitOnEnter = promptSubmitOnEnter
         this.promptControlFactories = promptControlFactories
         this.promptReferenceCatalog = promptReferenceCatalog
         this.promptReferencePreviewRenderer = promptReferencePreviewRenderer
@@ -320,16 +324,19 @@ export class ProseMirrorEditor {
 
         // Add aiPromptInput-specific plugin for the floating input editor
         if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
+            const promptPlugins = []
+
             if (this.promptReferenceCatalog) {
-                basePlugins.push(
+                promptPlugins.push(
                     createAtPromptReferencePickerPlugin(this.auth, this.promptReferenceCatalog),
                     createSlashCapabilityModulePickerPlugin(this.auth, this.promptReferenceCatalog),
                 )
             }
 
-            basePlugins.push(
+            promptPlugins.push(
                 createAiPromptInputPlugin({
                     onSubmit: data => this.onPromptSubmit?.(data),
+                    submitOnEnter: this.promptSubmitOnEnter,
                     createContextTray: this.promptControlFactories?.createContextTray,
                     mountMediaModeSwitch: this.promptControlFactories?.mountMediaModeSwitch,
                     mountModelMenuControl: this.promptControlFactories?.mountModelMenuControl,
@@ -348,6 +355,7 @@ export class ProseMirrorEditor {
                     placeholderText: 'Talk to me...',
                 }),
             )
+            basePlugins.unshift(...promptPlugins)
         }
 
         return basePlugins

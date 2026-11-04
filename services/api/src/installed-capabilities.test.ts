@@ -2,18 +2,31 @@ import {
     describe,
     expect,
     it,
+    vi,
+    afterEach,
 } from 'vitest'
 
 import { createDefaultCapabilityModuleCatalog } from './installed-capabilities.ts'
 
 describe('installed Capability composition', () => {
+    afterEach(() => vi.unstubAllGlobals())
+
     it('installs first-class modules with their internal Skill and Tool packages', () => {
+        vi.stubGlobal('dynamoDBService', {})
         const catalog = createDefaultCapabilityModuleCatalog({
             natsService: {} as never,
             imageRouter: { execute: async () => ({}) } as never,
+            characterCreatorRuntime: {} as never,
         })
 
-        expect(catalog.listModuleIds()).toEqual(['character-creator', 'style-extraction', 'action-timeline'])
+        expect(catalog.listModuleIds()).toEqual(['character-creator', 'style-extraction', 'action-timeline', 'media-sequence', 'media-pipeline'])
+        expect(catalog.getModule('media-pipeline')?.tools?.map(tool => tool.capabilityId)).toEqual([
+            'global.get-pipeline', 'global.save-pipeline', 'global.save-pipeline-matrix', 'global.prepare-pipeline-matrix', 'global.submit-pipeline', 'global.retry-pipeline',
+        ])
+        expect(catalog.getModule('media-sequence')?.entry).toMatchObject({
+            capabilityId: 'global.media-sequence',
+            kind: 'tool',
+        })
         expect(catalog.getModule('character-creator')).toMatchObject({
             entry: {
                 capabilityId: 'global.character-creator',

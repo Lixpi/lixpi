@@ -5,6 +5,7 @@ import {
     it,
 } from 'vitest'
 import { builtInPermissions } from './service-permissions.ts'
+import { NATS_SUBJECTS } from '@lixpi/constants'
 import {
     authPolicy,
     createPolicyArtifact,
@@ -12,6 +13,23 @@ import {
 } from './policy.ts'
 
 describe('application permission declarations', () => {
+    it('limits conversation dispatch to the API worker identity', () => {
+        const subjects = NATS_SUBJECTS.CONVERSATION_SUBJECTS
+
+        for (const subject of [subjects.DISPATCH, subjects.OPERATION_COMPLETED]) {
+            expect(builtInPermissions.API.pub.allow).toContain(subject)
+            expect(builtInPermissions.API.sub.allow).toContain(subject)
+
+            for (const [name, permissions] of Object.entries(builtInPermissions)) {
+                if (name === 'API')
+                    continue
+
+                expect(permissions.pub.allow).not.toContain(subject)
+                expect(permissions.sub.allow).not.toContain(subject)
+            }
+        }
+    })
+
     it('exports deterministic complete policy with a verifiable digest', () => {
         const artifact = JSON.parse(serializePolicyArtifact())
         expect(serializePolicyArtifact()).toBe(serializePolicyArtifact())

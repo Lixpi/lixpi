@@ -23,6 +23,7 @@ import {
 } from '$src/services/asset-service.ts'
 
 export type PromptComposerEditorOptions = {
+    submitOnEnter?: boolean
     assetService: AssetService
     auth: AuthClientInstance
     controlFactories?: PromptControlFactories
@@ -52,6 +53,7 @@ class PromptComposerEditorAdapter implements PromptComposerEditor {
             onAiChatSubmit: () => {},
             onAiChatStop: () => {},
             onPromptSubmit: request.onSubmit,
+            promptSubmitOnEnter: options.submitOnEnter,
             promptControlFactories: options.controlFactories ?? createDefaultPromptControlFactories(),
             promptReferenceCatalog: options.promptReferenceCatalog,
             promptReferencePreviewRenderer: options.promptReferencePreviewRenderer,

@@ -5,7 +5,17 @@ description: How Lixpi resolves authoritative context, runs Capabilities, execut
 
 # AI Generation Pipeline
 
-Lixpi uses one generation pipeline for chat, image, video, and Capability-driven output. The API owns authorization, model selection, lineage, usage, cancellation, and Asset settlement. Providers receive only the context and references approved for their concrete run.
+The enabled conversation workspace uses Deep Agents for discussion and planning, with typed media tools backed by durable domain executors. The API owns authorization, model selection, lineage, provider usage, cancellation, and Asset settlement. Providers receive only the context and references authorized for their concrete operation.
+
+## Conversational execution
+
+An accepted message enters its existing conversation without allocating media nodes. A metered Bedrock intent call distinguishes discussion, inspection, planning, and execution. Server-side tool guards enforce the resulting scope. Selecting an image/video model is a preference for a future requested action and does not authorize generation.
+
+The `media-pipeline` Capability owns validated dependency plans; `media-sequence` owns the multitrack sequence document and deterministic render compiler. The conversation agent edits sequences through revisioned patch validation. NEX renders frozen sequence revisions from authorized media inputs and returns an output descriptor for API settlement. Unsupported generation routes fail before media admission, while editing and exporting existing media remain available.
+
+Each actual model call has an individual provider-usage authorization and durable response/usage receipt. Checkpoint recovery reuses saved responses. An uncertain paid submission is not automatically repeated. Pending media tools yield the conversation owner and resume from persisted completion data with the original native tool-call identity. Input questions use checkpointed interrupt IDs, and execution limits require a human follow-up before allocating another budget.
+
+The sections below describe the explicit media-generation path used outside conversational rollout and by existing output controls. That path retains its own provider graph and selected model axes.
 
 ## Request flow
 

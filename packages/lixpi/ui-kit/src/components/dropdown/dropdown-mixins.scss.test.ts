@@ -23,7 +23,21 @@ describe('dropdown hover transitions', () => {
         expectSourceToContain(source, 'hoverTransition(color, map.get($s, hoverDuration))')
         expectSourceToContain(source, 'hoverTransition(opacity, map.get($s, hoverDuration))')
         expectSourceToContain(source, 'hoverTransition(fill, map.get($s, hoverDuration))')
+        expectSourceToContain(source, 'pupOutTransition(transform, map.get($s, hoverDuration))')
         expectSourceToContain(source, 'hoverTransition(background-color, $defaultHoverTransitionDuration)')
         expectSourceToContain(source, 'hoverTransition(border-color, $defaultHoverTransitionDuration)')
+    })
+})
+
+describe('dropdown icon selectors', () => {
+    it('targets trigger and option icons with plain selectors browsers can match', () => {
+        const stylesheets = ['_dropdown-mixins.scss', 'dropdown.scss']
+            .map(file => readFileSync(resolve(import.meta.dirname, file), 'utf-8'))
+
+        for (const source of stylesheets)
+            expect(source).not.toContain(':global(')
+
+        expectSourceToContain(stylesheets[0], 'span.state-indicator svg {')
+        expectSourceToContain(stylesheets[0], 'fill: map.get($s, glyphBase);')
     })
 })

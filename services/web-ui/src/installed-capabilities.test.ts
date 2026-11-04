@@ -8,12 +8,16 @@ import {
 import {
     ACTION_TIMELINE_FRONTEND_STYLES,
     actionTimelineFrontendDefinition,
+    mediaPipelineSharedDefinition,
 } from '@lixpi/capability-system/frontend'
 import { buildActionTimelineDocument } from '@lixpi/capability-system'
 
 import {
     createInstalledCapabilityControls,
     ensureCapabilityStyles,
+    capabilityArtifactFrontendRegistry,
+    capabilityArtifactSharedRegistry,
+    getCapabilityArtifactIcon,
 } from './installed-capabilities.ts'
 
 const extractCssRule = (selector: string): string => {
@@ -27,6 +31,17 @@ const extractCssRule = (selector: string): string => {
 }
 
 describe('installed Action Timeline frontend', () => {
+    it('installs the pipeline Artifact definitions required by output navigation and the library', () => {
+        expect(capabilityArtifactSharedRegistry.get('media-pipeline')).toStrictEqual(mediaPipelineSharedDefinition)
+        expect(capabilityArtifactFrontendRegistry.require('media-pipeline')).toMatchObject({
+            artifactTypeId: 'media-pipeline',
+            createCanvasNodeView: expect.any(Function),
+            createGeneratedOutputInfoView: expect.any(Function),
+            createLibraryItemView: expect.any(Function),
+        })
+        expect(getCapabilityArtifactIcon('media-pipeline')).toContain('<svg')
+    })
+
     it('registers a complete package-owned Artifact frontend definition', () => {
         expect(actionTimelineFrontendDefinition).toMatchObject({
             artifactTypeId: 'action-timeline',

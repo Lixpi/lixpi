@@ -17,7 +17,9 @@ const {
     BLOB_PROCESSING_SUBJECTS,
     CAPABILITY_SUBJECTS,
     CHARACTER_FIDELITY_SUBJECTS,
+    CONVERSATION_SUBJECTS,
     METRICS_SUBJECTS,
+    MEDIA_RENDER_SUBJECTS,
     PROTOCOL_SUBJECTS,
 } = NATS_SUBJECTS
 const { JETSTREAM } = PROTOCOL_SUBJECTS
@@ -35,6 +37,7 @@ const storageSubscribe = [
     PROTOCOL_SUBJECTS.INBOX,
 ]
 const events = [
+    `${CONVERSATION_SUBJECTS.STATUS}.>`,
     `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.>`,
     `${AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_EVENTS}.>`,
     `${AI_INTERACTION_SUBJECTS.CHAT_ERROR}.>`,
@@ -68,8 +71,15 @@ export const builtInPermissions = {
                 ...Object.values(ASSET_MAINTENANCE_SUBJECTS),
                 ...Object.values(METRICS_SUBJECTS),
                 'provider-usage.outbox',
+                CONVERSATION_SUBJECTS.DISPATCH,
+                CONVERSATION_SUBJECTS.OPERATION_COMPLETED,
                 BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS,
                 CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL,
+                MEDIA_RENDER_SUBJECTS.RENDER,
+                MEDIA_RENDER_SUBJECTS.CANCEL,
+                MEDIA_RENDER_SUBJECTS.READINESS,
+                MEDIA_RENDER_SUBJECTS.PROBE_SOURCE,
+                MEDIA_RENDER_SUBJECTS.DISPATCH,
             ],
         },
         sub: {
@@ -77,11 +87,20 @@ export const builtInPermissions = {
                 ACCOUNT_ADMISSION_CHECK_SUBJECT,
                 ACCOUNT_WORK_ADMISSION_SUBJECT,
                 ...storageSubscribe,
+                CONVERSATION_SUBJECTS.DISPATCH,
+                CONVERSATION_SUBJECTS.OPERATION_COMPLETED,
                 ...activeContracts.map(contract => contract.subject),
+                MEDIA_RENDER_SUBJECTS.PROGRESS,
+                MEDIA_RENDER_SUBJECTS.COMPLETE,
+                MEDIA_RENDER_SUBJECTS.DISPATCH,
                 ...events,
                 ...Object.values(ASSET_MAINTENANCE_SUBJECTS),
             ],
         },
+    },
+    MEDIA_RENDER: {
+        pub: { allow: [...storagePublish, ACCOUNT_WORK_ADMISSION_SUBJECT, MEDIA_RENDER_SUBJECTS.PROGRESS, MEDIA_RENDER_SUBJECTS.COMPLETE] },
+        sub: { allow: [...storageSubscribe, ACCOUNT_ADMISSION_CHANGED_SUBJECT, MEDIA_RENDER_SUBJECTS.RENDER, MEDIA_RENDER_SUBJECTS.CANCEL, MEDIA_RENDER_SUBJECTS.READINESS, MEDIA_RENDER_SUBJECTS.PROBE_SOURCE] },
     },
     FILE_CONVERSION: {
         pub: { allow: [...storagePublish, ACCOUNT_WORK_ADMISSION_SUBJECT] },

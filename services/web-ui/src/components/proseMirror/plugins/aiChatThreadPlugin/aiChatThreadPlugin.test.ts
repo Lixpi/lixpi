@@ -140,6 +140,37 @@ const makeThread = (attrs: Record<string, unknown> = {}, children: ProseMirrorNo
     }, children)
 }
 
+describe('aiChatThreadPlugin read-only authority', () => {
+    it('accepts authoritative steps while rejecting local text edits and submission metadata', async () => {
+        const send = vi.fn()
+        const stop = vi.fn()
+        const plugin = createAiChatThreadPlugin({
+            sendAiRequestHandler: send,
+            stopAiRequestHandler: stop,
+            renderContext: { readOnly: true },
+        })
+        const initial = EditorState.create({
+            schema,
+            doc: doc(makeThread({}, [makeUserMessage('Accepted')])),
+            plugins: [plugin],
+        })
+        const local = initial.applyTransaction(initial.tr.insertText('local ', 3))
+        expect(local.transactions).toHaveLength(0)
+        const remote = initial.applyTransaction(initial.tr.insertText('remote ', 3).setMeta('proseMirrorAuthorityRemote', true))
+        expect(remote.state.doc.textContent).toBe('remote Accepted')
+        const command = remote.state.tr
+            .setMeta(USE_AI_CHAT_META, {
+                threadId: 'thread-1',
+                nodePos: 0,
+            })
+            .setMeta(STOP_AI_CHAT_META, { threadId: 'thread-1' })
+        remote.state.applyTransaction(command)
+        await Promise.resolve()
+        expect(send).not.toHaveBeenCalled()
+        expect(stop).not.toHaveBeenCalled()
+    })
+})
+
 // =============================================================================
 // aiChatThreadPlugin — local media response templates
 // =============================================================================

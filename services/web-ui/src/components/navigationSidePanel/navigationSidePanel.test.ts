@@ -10,6 +10,9 @@ import {
     LoadingStatus,
     type WorkspaceMeta,
 } from '@lixpi/constants'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+import { withoutLayout } from '@lixpi/test-utils'
 import {
     createRouterService,
     type WebClientRouterService,
@@ -1045,5 +1048,37 @@ describe('NavigationSidePanel — destroy', () => {
         input.dispatchEvent(new Event('change'))
 
         expect(mocks.getTokenSilently).not.toHaveBeenCalled()
+    })
+})
+
+describe('NavigationSidePanel row menu styles', () => {
+    it('reveals the row menu only on row hover, keyboard focus, or while its menu is open', () => {
+        const source = withoutLayout(readFileSync(resolve(import.meta.dirname, 'navigation-side-panel.scss'), 'utf-8'))
+
+        expect(source).toContain(withoutLayout(`
+            .navigation-side-panel-row-menu {
+                flex: 0 0 auto;
+                margin-left: auto;
+                opacity: 0;
+                transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+            }
+        `))
+        expect(source).toContain(withoutLayout(`
+            .navigation-side-panel-row:hover .navigation-side-panel-row-menu,
+            .navigation-side-panel-row-menu:focus-within,
+            .navigation-side-panel-row-menu:has(.dots-dropdown-menu.is-active) {
+                opacity: 1;
+            }
+        `))
+    })
+
+    it('turns the open row menu dots horizontal instead of flipping them', () => {
+        const source = withoutLayout(readFileSync(resolve(import.meta.dirname, 'navigation-side-panel.scss'), 'utf-8'))
+
+        expect(source).toContain(withoutLayout(`
+            .navigation-side-panel-row-menu .dropdown-menu-tag-pill-wrapper.theme-dark .dots-dropdown-menu.is-active button span.state-indicator svg {
+                transform: rotate(90deg);
+            }
+        `))
     })
 })

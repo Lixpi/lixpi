@@ -32,6 +32,9 @@ import {
     type WorkspaceCanvasConversation,
 } from './workspace-canvas-surface.ts'
 import {
+    type WorkspaceConversationPorts,
+} from './workspace-conversation-controller.ts'
+import {
     type WorkspaceMediaSourcePorts,
     type WorkspaceVideoControlsSettings,
 } from '../media/index.ts'
@@ -51,7 +54,6 @@ import {
     type WorkspaceConversationProjectionPorts,
     type WorkspaceMediaOperationRecoveryPorts,
     type WorkspaceMediaAnalysisPorts,
-    type CanvasGenerationSubmissionPorts,
 } from '../../shared/index.ts'
 
 export type WorkspaceCanvasAppearance = LixpiCanvasSettings & {
@@ -83,7 +85,14 @@ export type WorkspaceCanvasAssetPorts = {
         doc: object
         version: number
     } | undefined
-    create: (request: Parameters<CanvasGenerationSubmissionPorts['createConversation']>[0] & { primaryCategory: 'conversation' }) => Promise<Asset>
+    create: (request: {
+        workspaceId: string
+        organizationId: string
+        assetId: string
+        title: string
+        initialDoc: object
+        primaryCategory: 'conversation'
+    }) => Promise<Asset>
     get: (
         assetId: string,
         workspaceId?: string,
@@ -176,6 +185,7 @@ export type WorkspaceCanvasHost = {
     editors: WorkspaceCanvasEditors
     assets: WorkspaceCanvasAssetPorts
     generation: WorkspaceCanvasGenerationPorts
+    conversations: WorkspaceConversationPorts
     workspace: {
         organizationId: () => string
         userId: () => string

@@ -1,5 +1,5 @@
 # Build from the repository root, as with services/nats.
-ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.1-bookworm
+ARG GO_BOOKWORM_IMAGE_REFERENCE=golang:1.27.3-bookworm
 
 FROM --platform=$BUILDPLATFORM ${GO_BOOKWORM_IMAGE_REFERENCE} AS go-build
 ARG TARGETOS

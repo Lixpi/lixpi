@@ -41,5 +41,11 @@
     "unsupportedApis": [],
     "sources": [
         "https://platform.claude.com/docs/en/build-with-claude/thinking"
-    ]
+    ],
+    "usage": {
+        "what": "Bounds each reasoning response, including each DeepAgents model call. Agent model-call authorization and measured usage identify the synchronized provider modelVersion; canonical model selection IDs remain separate from the resolved AWS inference-profile ID. Conversational turns persist the accepted model profile, controls, and resolved Bedrock inference-profile ID; recovery reuses them and rejects a changed registry model version. Matrix prompt preparations retain one snapshot per preparation and selected model.",
+        "setIn": "services/api/src/capability-system/media-pipeline-prompt-adapter.ts; services/api/src/llm/agent/agent-bedrock-model.ts; services/api/src/llm/agent/agent-model-snapshot.ts; services/api/src/llm/providers/anthropic-provider.ts",
+        "from": "The selected synchronized model completion limit, reduced by the accepted request configuration when applicable.",
+        "code": "max_tokens: maxTokens"
+    }
 }

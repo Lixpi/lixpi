@@ -71,6 +71,8 @@ Each repository template sets both coding-agent verification modes to `auto`. Ag
 
 ## Lixpi adapter
 
+For end-to-end sign-in verification, follow [Local authentication](../../documentation/platform/DEVELOPMENT.md#local-authentication), including the account service's automated test inbox.
+
 The hosted account release can prepare a local configuration without reopening the wizard:
 
 ```bash

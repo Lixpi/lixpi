@@ -17,10 +17,10 @@
         "aspect_ratio is ignored in image-to-image mode."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:297 through :325 and :403 through :421",
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:297 through :325 and :403 through :421; services/api/src/llm/providers/stability-bedrock-call.ts; services/api/src/capability-system/stability-pipeline-executor.ts",
         "code": "routingMode chooses a direct endpoint; Bedrock sends body.mode as text-to-image or image-to-image",
         "from": "the count and roles of resolved image references",
-        "what": "Selects text-to-image or a reference-driven route without exposing provider routing as a user setting."
+        "what": "Selects text-to-image or a reference-driven route without exposing provider routing as a user setting. The typed image.generate pipeline operation uses one Bedrock text-to-image request with durable authorization, native-result persistence, and a stable output slot. Pipeline image authorization and usage identify the synchronized provider modelVersion, while operation metadata and Asset lineage retain the canonical provider:model selection ID."
     },
     "supportedModels": [
         "stability-ultra",

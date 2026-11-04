@@ -94,7 +94,7 @@ const getMaximumGeneratedMediaChromeWorldSize = (baseSize: number): number => {
 // Resolved media title/actions are screen-fixed DOM chrome, so their largest
 // world-space footprint occurs at the bounded curve's lower zoom breakpoint.
 // Pending media callers use the compact pre-frame circle instead of this box.
-export const getGeneratedOutputChromeCollisionInsets = (nodeType: 'image' | 'video' | 'capabilityArtifact'): GeneratedOutputChromeCollisionInsets => {
+export const getGeneratedOutputChromeCollisionInsets = (nodeType: 'image' | 'video' | 'audio' | 'capabilityArtifact'): GeneratedOutputChromeCollisionInsets => {
     const chrome = mediaGenerationLayoutSettings.generatedMediaChrome
     const bottomBaseHeight = chrome.topGap
         + chrome.iconSize
@@ -108,7 +108,7 @@ export const getGeneratedOutputChromeCollisionInsets = (nodeType: 'image' | 'vid
     }
 }
 
-export const getGeneratedOutputChromeCollisionHeight = (nodeType: 'image' | 'video' | 'capabilityArtifact'): number =>
+export const getGeneratedOutputChromeCollisionHeight = (nodeType: 'image' | 'video' | 'audio' | 'capabilityArtifact'): number =>
     getGeneratedOutputChromeCollisionInsets(nodeType).bottom
 
 export const getGeneratedMediaChromeCollisionHeight = getGeneratedOutputChromeCollisionHeight

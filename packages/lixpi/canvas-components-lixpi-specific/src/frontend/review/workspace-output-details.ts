@@ -2,6 +2,7 @@ import {
     type CanvasState,
     type ImageCanvasNode,
     type VideoCanvasNode,
+    type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
     type MediaDescriptor,
     type MediaGenerationProgressState,
@@ -56,7 +57,7 @@ export type WorkspaceOutputDetailsPorts = {
     now: () => number
 }
 
-const isMarker = (node: GeneratedOutputCanvasNode | BranchMarkerNode): node is BranchMarkerNode =>
+const isMarker = (node: GeneratedOutputCanvasNode | AudioCanvasNode | BranchMarkerNode): node is BranchMarkerNode =>
     node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 
 const descriptorSpinnerPeriodMs = 800
@@ -71,7 +72,7 @@ export class WorkspaceOutputDetails {
 
     constructor(
         private readonly body: HTMLElement,
-        node: GeneratedOutputCanvasNode | BranchMarkerNode,
+        node: GeneratedOutputCanvasNode | AudioCanvasNode | BranchMarkerNode,
         private readonly ports: WorkspaceOutputDetailsPorts,
     ) {
         try {
@@ -124,7 +125,10 @@ export class WorkspaceOutputDetails {
             } else {
                 this.appendMetadata(node)
 
-                if (node.generatedBy) {
+                if (
+                    node.type === 'capabilityArtifact'
+                    && node.generatedBy
+                ) {
                     this.appendHistory()
                     this.adoptProjection(
                         ports.mountArtifactHistory({
@@ -256,7 +260,7 @@ export class WorkspaceOutputDetails {
         )
     }
 
-    private appendMetadata(node: GeneratedOutputCanvasNode): void {
+    private appendMetadata(node: GeneratedOutputCanvasNode | AudioCanvasNode): void {
         const html = createDocumentHtml(this.body.ownerDocument)
         const definition = node.type === 'capabilityArtifact' ? this.ports.getArtifactDefinition(node.artifactTypeId) : null
         const title = html`<div className="canvas-asset-metadata-editor is-details nopan"></div>` as HTMLElement

@@ -28,8 +28,11 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
             requireFreshVerification: msg.subject === NATS_SUBJECTS.ORGANIZATION_SUBJECTS.GET_MEMBERSHIP,
         })
 
-        if (error === 'ACCOUNT_ADMISSION_DENIED')
-            throw new Error('ACCOUNT_ADMISSION_DENIED')
+        if (
+            error === 'ACCOUNT_ADMISSION_DENIED'
+            || error === 'ACCOUNT_ADMISSION_UNAVAILABLE'
+        )
+            throw new Error(error)
 
         if (
             error
@@ -54,7 +57,10 @@ export const jwtAuthMiddleware: NatsMiddleware = async (
             msg,
         }
     } catch (error: any) {
-        if (error.message === 'ACCOUNT_ADMISSION_DENIED')
+        if (
+            error.message === 'ACCOUNT_ADMISSION_DENIED'
+            || error.message === 'ACCOUNT_ADMISSION_UNAVAILABLE'
+        )
             throw error
 
         throw new Error(`Authentication failed: ${error.message}`)

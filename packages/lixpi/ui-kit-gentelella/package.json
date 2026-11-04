@@ -133,7 +133,7 @@
         "gentelella": "4.2.0"
     },
     "devDependencies": {
-        "happy-dom": "20.14.5",
-        "vitest": "5.0.1"
+        "happy-dom": "21.0.4",
+        "vitest": "5.0.5"
     }
 }

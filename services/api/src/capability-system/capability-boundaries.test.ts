@@ -84,6 +84,8 @@ describe('Capability module architecture boundaries', () => {
         expect(moduleDirectories).toEqual([
             'action-timeline',
             'character-creator',
+            'media-pipeline',
+            'media-sequence',
             'style-extraction',
         ])
         await expect(access(new URL('../capability-modules/', import.meta.url))).rejects.toThrow()

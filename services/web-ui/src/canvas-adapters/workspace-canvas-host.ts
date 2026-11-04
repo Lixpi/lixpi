@@ -5,6 +5,7 @@ import {
     type AuthClientInstance,
 } from '@lixpi/auth-client'
 import { WorkspaceMediaAdapter } from './workspace-media.ts'
+import { ConversationWorkspaceClient } from './conversation-workspace-client.ts'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { createWorkspaceCanvasEditors } from './workspace-editors.ts'
 import { createConversationProjectionFetch } from './conversation-projection.ts'
@@ -134,6 +135,7 @@ export const createWorkspaceCanvasHost = ({
             stopConversation: request => stopAiChatMessageForThread(auth, request),
             describeMedia: request => describeMedia(auth, request),
         },
+        conversations: new ConversationWorkspaceClient(auth, assetService).ports,
         workspace: {
             organizationId: () => workspaceStore.getData('organizationId'),
             userId: () => auth.userStore.getData('userId'),

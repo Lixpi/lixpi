@@ -11,6 +11,7 @@ import {
     type Asset,
     type CanvasState,
     type ImageCanvasNode,
+    type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
     type MediaGenerationProgressState,
 } from '@lixpi/constants'
@@ -117,7 +118,7 @@ const fixture = () => {
         progressDetails: {},
         now: () => 1234,
     }
-    const mount = (node: ImageCanvasNode | CapabilityArtifactCanvasNode | BranchMarkerNode = media()) => {
+    const mount = (node: ImageCanvasNode | AudioCanvasNode | CapabilityArtifactCanvasNode | BranchMarkerNode = media()) => {
         const owner = new WorkspaceOutputDetails(body, node, ports)
         owners.push(owner)
 
@@ -146,6 +147,18 @@ afterEach(() => {
 })
 
 describe('WorkspaceOutputDetails', () => {
+    it('opens audio Asset metadata without inventing generated-media history', () => {
+        const f = fixture()
+        f.mount({
+            ...media(false),
+            type: 'audio',
+        })
+        expect(f.ports.assets.mountEditor).toHaveBeenCalledOnce()
+        expect(mocks.details).toHaveLength(1)
+        expect(f.ports.mountMediaHistory).not.toHaveBeenCalled()
+        expect(f.ports.mountArtifactHistory).not.toHaveBeenCalled()
+    })
+
     it('owns metadata and the selected media history without creating a duplicate progress timeline', () => {
         const f = fixture()
         const progress = {

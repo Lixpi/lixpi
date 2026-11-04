@@ -5,7 +5,10 @@ import {
 import * as process from 'node:process'
 
 import NATS_Service from '@lixpi/nats-service'
-import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
+import {
+    isTransactionConditionalCheckFailure,
+    type TransactOperation,
+} from '@lixpi/dynamodb-service'
 import {
     ASSET_DOCUMENT_ROLES,
     getDynamoDbTableStageName,
@@ -914,14 +917,29 @@ const replaceSystemSnapshot = async ({
     role,
     doc,
     version,
+    commitWith,
+    validateArtifactMutation,
+    title,
 }: {
     asset: Asset
     role: AssetDocumentRole
     doc: object
     version: number
+    title?: string
+    commitWith?: (operations: TransactOperation[]) => Promise<void>
+    validateArtifactMutation?: (
+        previous: object,
+        proposed: object,
+    ) => void
 }): Promise<AssetDocumentPointer> => {
     if (role === 'provenance')
         throw new Error('USE_PROVENANCE_MATERIALIZER')
+
+    if (
+        title !== undefined
+        && !title.trim()
+    )
+        throw new Error('TITLE_REQUIRED')
 
     new HeadlessProseMirrorEngine(
         getHeadlessEngineConfig(
@@ -941,7 +959,7 @@ const replaceSystemSnapshot = async ({
         const previous = await loadSnapshot(asset, role)
 
         if (previous?.doc)
-            definition.assertEditableMutation(previous.doc, doc)
+            (validateArtifactMutation ?? definition.assertEditableMutation)(previous.doc, doc)
         else
             definition.assertInitialDocument(doc)
     }
@@ -1003,6 +1021,7 @@ const replaceSystemSnapshot = async ({
 
     const next: Asset = {
         ...asset,
+        ...(title !== undefined ? { title } : {}),
         documents: {
             ...asset.documents,
             [role]: pointer,
@@ -1017,6 +1036,7 @@ const replaceSystemSnapshot = async ({
             key: { assetId: asset.assetId },
             updates: {
                 documents: next.documents,
+                ...(title !== undefined ? { title: next.title } : {}),
                 revision: next.revision,
                 updatedAt: now,
             },
@@ -1026,10 +1046,15 @@ const replaceSystemSnapshot = async ({
         },
         ...await buildAssetProjectionOperations(next),
     )
-    await dynamoDBService.transactWrite({
-        operations,
-        origin: 'AssetDocumentService.replaceSystemSnapshot',
-    })
+
+    if (commitWith)
+        await commitWith(operations)
+    else
+        await dynamoDBService.transactWrite({
+            operations,
+            origin: 'AssetDocumentService.replaceSystemSnapshot',
+        })
+
     publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
 
     if (
@@ -1051,6 +1076,54 @@ const AssetDocumentService = {
         ...collectEmbeddedAssetIds(doc, role),
     ],
     replaceSystemSnapshot,
+    applySystemSteps: async ({
+        asset,
+        role,
+        baseVersion,
+        steps,
+        commitWith,
+    }: {
+        asset: Asset
+        role: AssetDocumentRole
+        baseVersion: number
+        steps: object[]
+        commitWith: (operations: TransactOperation[]) => Promise<void>
+    }): Promise<AssetDocumentPointer> => {
+        if (
+            !Number.isSafeInteger(baseVersion)
+            || baseVersion < 0
+            || steps.length < 1
+            || steps.length > 50
+        )
+            throw new Error('INVALID_SYSTEM_STEP_BATCH')
+
+        const snapshot = await loadSnapshot(asset, role)
+
+        if ((snapshot?.version ?? 0) !== baseVersion)
+            throw new Error('SYSTEM_DOCUMENT_VERSION_CONFLICT')
+
+        const engine = new HeadlessProseMirrorEngine(
+            getHeadlessEngineConfig(
+                asset,
+                role,
+                snapshot?.doc,
+                baseVersion,
+            ),
+        )
+
+        for (const step of steps)
+            engine.applyStepJson(step)
+
+        engine.doc.check()
+
+        return await replaceSystemSnapshot({
+            asset,
+            role,
+            doc: engine.snapshot(),
+            version: engine.version,
+            commitWith,
+        })
+    },
     assertAssetBackedMediaNodes,
     submitSteps: async ({
         payload,
@@ -1088,6 +1161,12 @@ const AssetDocumentService = {
 
         if ('error' in authorized)
             return authorized
+
+        if (
+            payload.role === 'conversation'
+            && authorized.conversationRuntime === 'deep-agents'
+        )
+            return { error: 'CONVERSATION_TRANSCRIPT_IS_SERVER_MANAGED' }
 
         const asset = authorized
 

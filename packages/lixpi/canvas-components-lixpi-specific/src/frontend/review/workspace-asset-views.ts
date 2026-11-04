@@ -7,7 +7,7 @@ import {
     type WorkspaceAssetDetailsPorts,
 } from './workspace-asset-details.ts'
 
-type AssetNode = Extract<CanvasNode, { type: 'image' | 'video' | 'capabilityArtifact' }>
+type AssetNode = Extract<CanvasNode, { type: 'image' | 'video' | 'audio' | 'capabilityArtifact' }>
 
 // Each canvas chrome or details sidebar owns its own collection of Asset views.
 export class WorkspaceAssetViews {

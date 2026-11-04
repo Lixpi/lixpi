@@ -119,7 +119,7 @@
         "@lixpi/test-utils": "workspace:*",
         "@types/d3-selection": "3.0.12",
         "@types/d3-transition": "3.0.9",
-        "happy-dom": "20.14.5",
-        "vitest": "5.0.1"
+        "happy-dom": "21.0.4",
+        "vitest": "5.0.5"
     }
 }

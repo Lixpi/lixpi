@@ -112,6 +112,13 @@ beforeEach(() => {
 })
 
 describe('createAiPromptComposer', () => {
+    it('enables Enter submission only when the workspace requests conversation behavior', () => {
+        createComposer({ submitOnEnter: true })
+        expect(getLastEditor().options.promptSubmitOnEnter).toBe(true)
+        createComposer()
+        expect(getLastEditor().options.promptSubmitOnEnter).toBeUndefined()
+    })
+
     it('forwards the prompt-reference catalog to the editor plugin boundary', () => {
         const promptReferenceCatalog = {
             list: vi.fn(),

@@ -18,7 +18,7 @@ services:
     # No container_name: this service is invoked via `docker compose run --rm`
     # (never `up`/`exec`), so concurrent invocations never collide on a fixed name.
     lixpi-aws-cli:
-        image: amazon/aws-cli:2.36.46
+        image: amazon/aws-cli:2.39.3
         volumes:
             - aws-config:/root/.aws    # AWS SSO credentials
             - ./.aws/config:/root/.aws/config:ro,cached    # AWS SSO profile definitions

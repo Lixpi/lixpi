@@ -113,7 +113,7 @@ export const createWorkspaceApplication = (config: {
             })
         },
         destroyDependencies: async ({ nats }) => await nats.disconnect(),
-        initializeServices: ({
+        initializeServices: async ({
             dependencies: {
                 auth,
                 nats,
@@ -139,18 +139,18 @@ export const createWorkspaceApplication = (config: {
                 }),
                 organizationService: new OrganizationService(),
             })
-        },
-        startServices: async ({ dependencies: {
-            auth,
-            nats,
-        } }) => {
+
             if (auth.features.currentUser)
                 await auth.loadCurrentUser({
                     requestClient: {
                         request: (subject, payload) => nats.request(subject, payload),
                     },
                 })
-
+        },
+        startServices: async ({ dependencies: {
+            auth,
+            nats,
+        } }) => {
             if (
                 import.meta.env.VITE_ACCOUNT_ONBOARDING_ENABLED === 'true'
                 && import.meta.env.VITE_MOCK_AUTH !== 'true'

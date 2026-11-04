@@ -24,6 +24,8 @@ import AssetModel, {
     publishAssetEvent,
 } from '../models/asset.ts'
 import { enqueueBlobDeletion } from './asset-maintenance-queue.ts'
+import { AgentStateMaintenance } from '../llm/agent/agent-state-maintenance.ts'
+import { cleanupMediaRenderAsset } from '../capability-system/media-render-maintenance.ts'
 
 const {
     ORG_NAME,
@@ -283,6 +285,8 @@ const AssetMaintenance = {
         })
 
         const accessRows = await listAssetAccess(assetId)
+        await new AgentStateMaintenance().deleteAsset(asset)
+        await cleanupMediaRenderAsset(asset)
         await purgeDocumentSubjects(asset)
         await deleteAccessProjections(asset, accessRows)
         const blobRemoval = await buildAssetBlobRemovalOperations(asset)

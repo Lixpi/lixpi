@@ -5,13 +5,13 @@ services:
         extends:
             file: dev-tools/versions-registry/runner-compose/versions-registry.base.yml
             service: versions-registry-base
-        image: node:24.21.0-alpine
+        image: node:24.22.2-alpine
         volumes:
             - .:/workspace
     versions-registry-update:
         extends:
             file: dev-tools/versions-registry/runner-compose/versions-registry.base.yml
             service: versions-registry-update-base
-        image: node:24.21.0-alpine
+        image: node:24.22.2-alpine
         volumes:
             - .:/workspace

@@ -23,6 +23,7 @@ import {
 } from './capability-system/capability-model-input-adapter.ts'
 import { persistActionTimelineArtifact } from './capability-system/action-timeline-persistence-adapter.ts'
 import { createStyleExtractionRuntimePort } from './capability-system/style-extraction-runtime/style-extraction-actions.ts'
+import { installMediaWorkspace } from './installed-media-workspace.ts'
 
 export type InstalledCapabilityDependencies = {
     natsService: NatsService
@@ -59,6 +60,18 @@ export const createDefaultCapabilityModuleCatalog = (dependencies: InstalledCapa
             capabilityStorage,
         }),
     )
+
+    const mediaWorkspace = installMediaWorkspace(
+        catalog,
+        dependencies.natsService,
+        capabilityStorage,
+        dependencies.providerUsage,
+    )
+    const sequenceModule = catalog.getModule('media-sequence')!
+    sequenceModule.extensions = {
+        ...sequenceModule.extensions,
+        platform: mediaWorkspace,
+    }
 
     return catalog
 }

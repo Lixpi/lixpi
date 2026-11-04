@@ -26,10 +26,10 @@
         "The synchronized default is 1:1. The model matrix validates the selected value against this exact nine-value list before provider execution."
     ],
     "usage": {
-        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and services/api/src/llm/providers/stability-provider.ts:308, :315, :324, :421",
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and services/api/src/llm/providers/stability-provider.ts:308, :315, :324, :421; services/api/src/llm/providers/stability-bedrock-call.ts; services/api/src/capability-system/stability-pipeline-executor.ts",
         "code": "STABILITY_IMAGE_CONTROLS publishes imageSize; the provider sends aspect_ratio only on routes where Stability accepts it",
-        "from": "the Stability image model configuration row",
-        "what": "Shows the Aspect ratio dropdown, persists its value per selected Stability model, validates it in the matrix, and sends it on compatible direct API and Bedrock requests."
+        "from": "the Stability image model configuration row The pipeline checks accepted model-specific and global image-size preferences and rejects a conflicting node size before authorization.",
+        "what": "Shows the Aspect ratio dropdown, persists its value per selected Stability model, validates it in the matrix, and sends it on compatible direct API and Bedrock requests. The typed image.generate pipeline operation uses one Bedrock text-to-image request with durable authorization, native-result persistence, and a stable output slot."
     },
     "supportedModels": [
         "stability-ultra",

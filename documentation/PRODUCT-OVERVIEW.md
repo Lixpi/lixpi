@@ -2,7 +2,7 @@
 
 Lixpi is a visual, node-based workflow engine engineered for building advanced AI image and video generation pipelines. Functionally, it sits at the intersection of an infinite spatial canvas (similar to Miro) and a visual logic execution pipeline (similar to n8n). Conceived and architected well before n8n's public release, Lixpi introduces a fundamental paradigm shift for generative AI tools: **spatial arrangement IS the workflow**.
 
-Instead of writing complex workflow DSLs or using linear chat prompts, users map out ideas topologically. The spatial relationships between documents and media nodes, plus explicit chat-panel context chips, dictate the context extraction, dependency chains, and execution sequence of the underlying AI models.
+Users combine canvas relationships with persistent conversations to plan, inspect and execute media work. Explicit source references and the selected context mode determine what the assistant may read. Capability modules validate executable media graphs and sequence edits before committing changes.
 
 ---
 
@@ -18,7 +18,7 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using Canvas Engine for geometry and native viewport input. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws document, image, video, branch origin, branch fork, and branch line nodes. Standalone conversation Assets render in the right-side AI Chat panel instead of as canvas nodes.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using Canvas Engine for geometry and native viewport input. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws documents, media, Capability Artifacts and branch lineage markers. In conversational workspaces, conversation Assets appear in a persistent transcript above the composer without requiring canvas nodes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -30,9 +30,9 @@ graph TB
         Branch[Branch Lineage Markers<br/>Origin · fork · line<br/>API-planned media topology]
     end
 
-    subgraph "AI Chat Panel"
-        Panel[Right-side panel<br/>standalone chats + Capability library]
-        Chips[Explicit context chips<br/>plus workspace relevance]
+    subgraph "Workspace Conversation"
+        Panel[Transcript and conversation picker<br/>above the composer]
+        Chips[Explicit context chips<br/>plus permitted discovery]
         Composer[Composer<br/>documentType: 'aiPromptInput']
     end
 
@@ -63,17 +63,20 @@ graph TB
 | **Audio** | DOM `<audio>` playback surface | Fixed strip | Asset original rendition + workspace node geometry |
 | **Uploaded Document Media** | None (PDF/text/document preview) | Aspect-ratio locked | Asset document-media renditions + workspace node geometry |
 | **Branch Origin / Fork / Line** | None | API-positioned topology markers | Workspace `canvasState`; conversation/output relationships use Asset IDs |
-| **Conversation** | ProseMirror Asset `conversation` role in the panel | Panel-owned | Asset snapshot Blob + workspace panel/surface reference |
+| **Conversation** | Transcript above the composer; server-projected ProseMirror `conversation` role | Panel-owned | Asset snapshot Blob, durable commands/events and workspace membership |
+| **Media Sequence** | Read-only summary card; edits come from the conversation agent | Fixed card | Versioned Artifact snapshot, frozen source bindings and revision history |
 
 **Edges** are directional connections stored in `canvasState.edges`. Each edge records a context relationship between canvas nodes. Edges can be created by explicit handle drag or by **Proximity Connect**, which previews and commits a connection when a node is dragged within range of a target.
 
-**AI Chat Panel Composer** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) inside the right-side panel. It provides rich-text composition, model controls, image/video generation settings, and Cmd/Ctrl+Enter to submit. The composer is decoupled from durable sessions; the panel creates a standalone chat only on first submit.
+**Workspace Composer** is a ProseMirror editor (`documentType: 'aiPromptInput'`) with rich text, reference mentions, model controls and Cmd/Ctrl+Enter submission. Conversational workspaces send ordinary messages to the conversation runtime. A model preference does not trigger generation, and the first accepted message creates the conversation Asset. The draft clears only after acceptance.
 
 **Media Library** is the Asset catalog in the canvas-owned right-side panel. Reusing media attaches the same Asset under a fresh node ID; it never copies bytes. Scope/catalog/workspace references determine visibility and lifetime.
 
 **Capabilities, Tools, and Skills** are reusable AI behavior in the adjacent library surface. A Capability is a source-registered top-level module with one entry package and explicitly contained Tool/Skill packages. A Skill contributes sealed instructions and resources; a Tool runs an allowlisted declarative workflow. `/` selects top-level Capability modules. The media-first `@` picker references authorized media by default and can switch to Capability modules or standalone Tools and Skills. Module-internal packages never appear as standalone rows. Prompt references persist as typed atoms in the conversation document and are reauthorized by the API; choosing a library Asset does not add it to the canvas. Tool progress is durable and renders through the same projection in chat and in the side panel. Style Extraction is a built-in Capability that saves reusable visual behavior as a standalone Tool without introducing a separate storage model.
 
-**AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, explicit context chips, and whether the Sessions list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
+**Conversations** provide persistent history, a workspace conversation picker, background run status, context settings, steering, queue controls and Stop. History opens at the latest messages and loads earlier pages without interrupting streaming. Drafts, active conversation, explicit context chips and scroll/read positions are private to the user and workspace. The right-side panel holds Asset details and libraries. The conversational path is enabled per workspace; the generation composer remains available outside that rollout. See [Workspace Conversations and Generated Output Details](ai-chat/CHAT-PANEL-AND-SESSIONS.md).
+
+**Media Sequences** combine video, images, audio and text on multiple tracks. Manual edits and assistant edits share the same revisioned patch API, track locks and conflict checks. The editor provides synchronized preview, transforms, crop, keyframes, gain and pan, transitions, and undo/redo history. Export renders an exact immutable revision through the media worker and stores its result as an Asset.
 
 ---
 

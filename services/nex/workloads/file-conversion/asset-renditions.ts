@@ -29,6 +29,10 @@ export type ConversionStorage = {
     getObject: (
         bucketName: string,
         objectKey: string,
+        options?: {
+            signal?: AbortSignal
+            maxBytes?: number
+        },
     ) => Promise<Uint8Array | null>
     putObject: (
         bucketName: string,

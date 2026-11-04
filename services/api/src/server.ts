@@ -32,6 +32,14 @@ import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-s
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
 import { mediaGenerationRequestSubjects } from './NATS/subscriptions/media-generation-request-subjects.ts'
+import { conversationSubjects } from './NATS/subscriptions/conversation-subjects.ts'
+import { ConversationRepository } from './llm/agent/conversation-repository.ts'
+import { ConversationRuntime } from './llm/agent/conversation-runtime.ts'
+import { ConversationDispatcher } from './llm/agent/conversation-dispatcher.ts'
+import { AgentConfiguration } from './llm/agent/agent-configuration.ts'
+import {
+    type MediaWorkspacePlatform,
+} from './installed-media-workspace.ts'
 import {
     capabilitySubjects,
     setCapabilityRunDispatcher,
@@ -149,6 +157,7 @@ const subscriptions = composeApiSubscriptions({
     asset: assetSubjects,
     capability: capabilitySubjects,
     'prompt-reference': promptReferenceSubjects,
+    conversation: conversationSubjects,
 })
 
 infoStr([`NATS policy schema=${policySchemaVersion} digest=${policyDigest}`])
@@ -255,6 +264,25 @@ setCapabilityRunDispatcher({
 })
 setLlmModule(llmModule)
 
+const agentConfiguration = new AgentConfiguration(process.env)
+const conversationRepository = new ConversationRepository()
+const mediaWorkspace = llmModule.capabilityModuleCatalog.getExtension<MediaWorkspacePlatform>('media-sequence', 'platform')
+const conversationRuntime = new ConversationRuntime(
+    conversationRepository,
+    agentConfiguration,
+    llmModule.capabilityModuleCatalog,
+    providerUsage,
+    mediaWorkspace?.operations,
+)
+const conversationDispatcher = new ConversationDispatcher(
+    providerUsageConnection,
+    conversationRepository,
+    job => conversationRuntime.execute(job),
+)
+
+await conversationDispatcher.start()
+await mediaWorkspace?.start()
+
 const app = express()
 const httpServer = createServer(app)
 
@@ -326,6 +354,9 @@ httpServer.listen(
 
 // Graceful shutdown (for your application termination handlers)
 process.on('SIGINT', async () => {
+    conversationDispatcher.stop()
+    conversationRuntime.stop()
+    mediaWorkspace?.stop()
     accountWorkPolicy?.stop()
     accountAdmissionRuntime?.stop()
     log('Shutting down...')

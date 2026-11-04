@@ -42,5 +42,11 @@
     "unsupportedApis": [],
     "sources": [
         "https://platform.claude.com/docs/en/build-with-claude/thinking"
-    ]
+    ],
+    "usage": {
+        "what": "Carries trusted orchestration instructions separately from user and referenced content.",
+        "setIn": "services/api/src/llm/providers/anthropic-provider.ts; services/api/src/llm/agent/agent-bedrock-model.ts; services/api/src/capability-system/media-pipeline-prompt-adapter.ts",
+        "from": "Provider prompts or scoped DeepAgents system instructions and pinned context.",
+        "code": "system: converted.system"
+    }
 }

@@ -236,8 +236,21 @@ describe('WorkspaceHistory', () => {
 
     it('validates a details target against both node identity and kind', () => {
         const image = media('one')
+        const audio = {
+            ...image,
+            nodeId: 'audio',
+            type: 'audio' as const,
+        }
         const origin = marker('branchOrigin')
-        const f = fixture([image, origin])
+        const f = fixture([image, audio, origin])
+        expect(f.history.resolveGeneratedOutputDetailsNode({
+            kind: 'output',
+            nodeId: audio.nodeId,
+        })).toBe(audio)
+        expect(f.history.resolveGeneratedOutputDetailsNode({
+            kind: 'branch-marker',
+            nodeId: audio.nodeId,
+        })).toBeNull()
         expect(f.history.resolveGeneratedOutputDetailsNode({
             kind: 'branch-marker',
             nodeId: image.nodeId,

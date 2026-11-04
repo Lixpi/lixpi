@@ -1529,45 +1529,113 @@ export default class NatsService {
     async getObject(
         bucketName: string,
         name: string,
+        options: {
+            signal?: AbortSignal
+            maxBytes?: number
+        } = {},
     ): Promise<Uint8Array | null> {
+        options.signal?.throwIfAborted()
+
+        if (
+            options.maxBytes !== undefined
+            && (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0)
+        )
+            throw new Error('NATS_OBJECT_INVALID_BYTE_LIMIT')
+
         const os = await this.openObjectStoreOrNull(bucketName)
+        options.signal?.throwIfAborted()
 
         if (!os)
             return null
 
         const result = await os.get(name)
 
-        if (!result)
-            return null
+        if (!result) {
+            options.signal?.throwIfAborted()
 
-        // Read the data from the result
+            return null
+        }
+
         const chunks: Uint8Array[] = []
         const reader = result.data.getReader()
+        let totalLength = 0
+        let complete = false
+        let cancellation: Promise<void> | undefined
+        const cancel = (): Promise<void> => {
+            cancellation ??= (async () => {
+                try { await reader.cancel(options.signal?.reason) } catch {
+                    // An errored stream rejects cancel with its original read error.
+                }
+            })()
 
-        while (true) {
-            const {
-                done,
-                value,
-            } = await reader.read()
-
-            if (done)
-                break
-
-            if (value)
-                chunks.push(value)
+            return cancellation
         }
+        const abort = (): void => void cancel()
+        const completion = (async () => {
+            try { return await result.error } catch (error) { return error }
+        })()
+        options.signal?.addEventListener(
+            'abort',
+            abort,
+            { once: true },
+        )
 
-        // Combine chunks
-        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0)
-        const combined = new Uint8Array(totalLength)
-        let offset = 0
+        try {
+            options.signal?.throwIfAborted()
 
-        for (const chunk of chunks) {
-            combined.set(chunk, offset)
-            offset += chunk.length
+            if (
+                options.maxBytes !== undefined
+                && result.info?.size > options.maxBytes
+            )
+                throw new Error('NATS_OBJECT_BYTE_LIMIT')
+
+            while (true) {
+                const {
+                    done,
+                    value,
+                } = await reader.read()
+                options.signal?.throwIfAborted()
+
+                if (done)
+                    break
+
+                if (value) {
+                    totalLength += value.byteLength
+
+                    if (
+                        options.maxBytes !== undefined
+                        && totalLength > options.maxBytes
+                    )
+                        throw new Error('NATS_OBJECT_BYTE_LIMIT')
+
+                    chunks.push(value)
+                }
+            }
+
+            const error = await completion
+
+            if (error)
+                throw error
+
+            options.signal?.throwIfAborted()
+            complete = true
+            const combined = new Uint8Array(totalLength)
+            let offset = 0
+
+            for (const chunk of chunks) {
+                combined.set(chunk, offset)
+                offset += chunk.length
+            }
+
+            return combined
+        } finally {
+            options.signal?.removeEventListener('abort', abort)
+
+            if (!complete)
+                await cancel()
+
+            reader.releaseLock()
         }
-
-        return combined
     }
 
     async getObjectStream(

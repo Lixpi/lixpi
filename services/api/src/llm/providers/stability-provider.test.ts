@@ -77,7 +77,6 @@ const createOversizedJpegDataUrl = async (background: string): Promise<string> =
     })
         .jpeg({
             quality: 92,
-            mozjpeg: true,
         })
         .toBuffer()
 

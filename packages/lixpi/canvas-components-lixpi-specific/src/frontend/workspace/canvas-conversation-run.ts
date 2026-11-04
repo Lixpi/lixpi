@@ -6,6 +6,7 @@ import {
     type ImageGenerationSize,
     type MediaGenerationConfigSelectionGroup,
     type MediaBranchCandidateSnapshot,
+    type ConversationOperationSummary,
 } from '@lixpi/constants'
 import {
     extractPromptTextFromContentJSON,
@@ -71,11 +72,21 @@ export type CanvasConversationEditor = {
     activate: () => void
     readContent: () => object | undefined
     submitPersisted: () => void
+    renderOperations?: (
+        operations: ConversationOperationSummary[],
+        outputPorts?: WorkspaceConversationOutputPorts,
+    ) => void
     destroy: () => void
+}
+
+export type WorkspaceConversationOutputPorts = {
+    resolve: (assetId: string) => Promise<{ title: string }>
+    open: (assetId: string) => Promise<void>
 }
 
 export type CanvasConversationEditorMount = {
     container: HTMLElement
+    readOnly?: boolean
     workspaceId: string
     thread: CanvasConversationThread
     onChange: (content: object) => void

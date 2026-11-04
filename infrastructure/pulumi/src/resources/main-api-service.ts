@@ -60,6 +60,9 @@ export type MainApiServiceArgs = {
         ACCOUNT_ADMISSION_ENABLED: string
         ACCOUNT_ADMISSION_STREAM: string
         SAVE_LLM_RESPONSES_TO_DEBUG_DIR: string
+        AGENT_MAX_MODEL_CALLS: string
+        AGENT_MAX_TOOL_CALLS: string
+        AGENT_MAX_SPECIALIST_CALLS: string
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
         ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: string

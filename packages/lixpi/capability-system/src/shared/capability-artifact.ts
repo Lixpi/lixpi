@@ -11,6 +11,14 @@ export type CapabilityArtifactModelInput = {
     referencedAssetIds: string[]
 }
 
+export type CapabilityArtifactSourceReference = {
+    assetId: string
+    role: 'content' | 'media' | 'artifact'
+    renditionId?: string
+    blobHash?: string
+    documentVersion?: number
+}
+
 export type CapabilityArtifactSharedDefinition = {
     artifactTypeId: string
     displayName: string
@@ -23,6 +31,8 @@ export type CapabilityArtifactSharedDefinition = {
         proposedDoc: object,
     ) => void
     collectReferencedAssetIds: (doc: object) => string[]
+    collectSourceReferences?: (doc: object) => CapabilityArtifactSourceReference[]
+    collectOperationKeys?: (doc: object) => string[]
     serializeForModel: (
         doc: object,
         labels: ReadonlyMap<string, string>,

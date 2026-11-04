@@ -17,18 +17,18 @@ type MockAnchor = HTMLAnchorElement & {
 }
 
 let appendChildSpy: ReturnType<typeof vi.spyOn>
-let removeChildSpy: ReturnType<typeof vi.spyOn>
 let createObjectUrlSpy: ReturnType<typeof vi.spyOn>
 let revokeObjectUrlSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
+    vi.useFakeTimers()
     appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node)
-    removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node)
     createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/fake-blob')
     revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
 })
 
-afterEach(() => {
+afterEach(async () => {
+    await vi.runOnlyPendingTimersAsync()
     vi.restoreAllMocks()
     vi.useRealTimers()
 })
@@ -47,11 +47,26 @@ const createMockIFrame = (): HTMLIFrameElement => document.createElement('iframe
 // =============================================================================
 
 describe('downloadImage — data: and blob: URLs (fetch path)', () => {
+    it('revokes the object URL even when the download anchor was removed before delayed cleanup', async () => {
+        appendChildSpy.mockRestore()
+        const blob = new Blob(['data'], { type: 'image/png' })
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(blob, { status: 200 }))
+        const anchor = createMockAnchor()
+        vi.spyOn(document, 'createElement').mockReturnValue(anchor)
+        await downloadImage('data:image/png;base64,data')
+        expect(anchor.isConnected).toBe(true)
+        anchor.remove()
+        await vi.advanceTimersByTimeAsync(100)
+        expect(anchor.isConnected).toBe(false)
+        expect(revokeObjectUrlSpy).toHaveBeenCalledExactlyOnceWith('blob:http://localhost/fake-blob')
+    })
+
     it('fetches a data URL, creates a blob anchor, and clicks it', async () => {
         const blob = new Blob(['png-data'], { type: 'image/png' })
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(blob, { status: 200 }))
 
         const anchor = createMockAnchor()
+        const remove = vi.spyOn(anchor, 'remove')
         vi.spyOn(document, 'createElement').mockReturnValue(anchor as unknown as HTMLAnchorElement)
         vi.useFakeTimers()
 
@@ -66,7 +81,7 @@ describe('downloadImage — data: and blob: URLs (fetch path)', () => {
         expect(appendChildSpy).toHaveBeenCalledWith(anchor)
 
         await vi.advanceTimersByTimeAsync(200)
-        expect(removeChildSpy).toHaveBeenCalledWith(anchor)
+        expect(remove).toHaveBeenCalledOnce()
         expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:http://localhost/fake-blob')
     })
 
@@ -166,15 +181,16 @@ describe('downloadImage — HTTP(S) URLs (navigation path)', () => {
 
     it('removes the iframe after the cleanup timeout', async () => {
         const iframe = createMockIFrame()
+        const remove = vi.spyOn(iframe, 'remove')
         vi.spyOn(document, 'createElement').mockReturnValue(iframe as unknown as HTMLIFrameElement)
         vi.useFakeTimers()
 
         await downloadImage('http://localhost:3005/api/images/ws1/file1')
 
-        expect(removeChildSpy).not.toHaveBeenCalled()
+        expect(remove).not.toHaveBeenCalled()
 
         await vi.advanceTimersByTimeAsync(30000)
-        expect(removeChildSpy).toHaveBeenCalledWith(iframe)
+        expect(remove).toHaveBeenCalledOnce()
     })
 })
 

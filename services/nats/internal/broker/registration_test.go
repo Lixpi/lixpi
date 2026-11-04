@@ -2,6 +2,7 @@ package broker
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -125,7 +126,10 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 	}
 
 	select {
-	case <-policyErrors:
+	case err := <-policyErrors:
+		if !errors.Is(err, nats.ErrPermissionViolation) {
+			t.Fatalf("expected a permissions violation: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("policy connection published an application message")
 	}
@@ -162,7 +166,10 @@ func TestRuntimeRegistersUnfamiliarApplicationWithoutBrokerPolicy(t *testing.T) 
 	}
 
 	select {
-	case <-violations:
+	case err := <-violations:
+		if !errors.Is(err, nats.ErrPermissionViolation) {
+			t.Fatalf("expected a permissions violation: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("bootstrap accessed storage API")
 	}

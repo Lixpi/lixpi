@@ -38,10 +38,16 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Provider/model-managed. Lixpi sends adaptive thinking only for reviewed legacy models where it is not enabled by default; it does not expose an on/off switch.",
+    "note": "Provider/model-managed. The provider workflow explicitly enables adaptive thinking for reviewed earlier profiles that require it. The DeepAgents Bedrock adapter sends adaptive thinking when synchronized inferenceCapabilities.thinkingMode is anthropic-adaptive. Neither exposes an on/off control or enables manual budget thinking.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
         "https://platform.claude.com/docs/en/build-with-claude/thinking"
-    ]
+    ],
+    "usage": {
+        "what": "Selects the adaptive thinking mode supported by the synchronized model profile. Conversational turns persist the accepted model profile, controls, and resolved Bedrock inference-profile ID; recovery reuses them and rejects a changed registry model version. Matrix prompt preparations retain one snapshot per preparation and selected model.",
+        "setIn": "services/api/src/capability-system/media-pipeline-prompt-adapter.ts; services/api/src/llm/agent/agent-bedrock-model.ts; services/api/src/llm/agent/agent-model-snapshot.ts; services/api/src/llm/providers/anthropic-provider.ts",
+        "from": "Reviewed model behavior and synchronized inferenceCapabilities.thinkingMode.",
+        "code": "thinking: { type: adaptive }"
+    }
 }

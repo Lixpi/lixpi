@@ -6,6 +6,12 @@ import {
     CapabilityArtifactSharedRegistry,
     actionTimelineArtifactDefinition,
     actionTimelineFrontendDefinition,
+    mediaSequenceFrontendDefinition,
+    mediaSequenceArtifactDefinition,
+    createMediaPipelineFrontendDefinition,
+    mediaPipelineSharedDefinition,
+    MEDIA_SEQUENCE_FRONTEND_STYLES,
+    MEDIA_SEQUENCE_MODULE_ID,
     type CapabilityPromptControls,
 } from '@lixpi/capability-system/frontend'
 
@@ -33,8 +39,14 @@ const installedModules: InstalledFrontendModule[] = [{
 
 export const capabilityArtifactFrontendRegistry = new CapabilityArtifactFrontendRegistry()
 capabilityArtifactFrontendRegistry.register(actionTimelineFrontendDefinition)
+capabilityArtifactFrontendRegistry.register(
+    createMediaPipelineFrontendDefinition(),
+)
+capabilityArtifactFrontendRegistry.register(mediaSequenceFrontendDefinition)
 export const capabilityArtifactSharedRegistry = new CapabilityArtifactSharedRegistry()
 capabilityArtifactSharedRegistry.register(actionTimelineArtifactDefinition)
+capabilityArtifactSharedRegistry.register(mediaSequenceArtifactDefinition)
+capabilityArtifactSharedRegistry.register(mediaPipelineSharedDefinition)
 
 const capabilityArtifactIcons = {
     'ordered-list': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 896" aria-hidden="true"><path d="${orderedListIcon}"></path></svg>`,
@@ -57,10 +69,17 @@ export const ensureCapabilityStyles = (document: Document): void => {
         return
 
     const documentHtml = createDocumentHtml(document)
-    const style = documentHtml`<style></style>` as HTMLStyleElement
-    style.dataset.capabilityStyles = ACTION_TIMELINE_MODULE_ID
-    style.textContent = ACTION_TIMELINE_FRONTEND_STYLES
-    document.head.appendChild(style)
+
+    for (const [moduleId, css] of [
+        [ACTION_TIMELINE_MODULE_ID, ACTION_TIMELINE_FRONTEND_STYLES],
+        [MEDIA_SEQUENCE_MODULE_ID, MEDIA_SEQUENCE_FRONTEND_STYLES],
+    ]) {
+        const style = documentHtml`<style></style>` as HTMLStyleElement
+        style.dataset.capabilityStyles = moduleId
+        style.textContent = css
+        document.head.appendChild(style)
+    }
+
     styledDocuments.add(document)
 }
 

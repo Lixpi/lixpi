@@ -78,9 +78,18 @@ const mocks = vi.hoisted(() => {
     const assetSubjects = [{ subject: 'asset-subject' }]
     const capabilitySubjects = [{ subject: 'capability-subject' }]
     const promptReferenceSubjects = [{ subject: 'prompt-reference-subject' }]
+    const conversationSubjects = [{ subject: 'conversation-subject' }]
     const setCapabilityRunDispatcher = vi.fn()
     const setPromptReferenceModuleCatalog = vi.fn()
-    const capabilityModuleCatalog = {}
+    const capabilityModuleCatalog = { getExtension: vi.fn(() => undefined) }
+    const conversationRuntime = {
+        execute: vi.fn(),
+        stop: vi.fn(),
+    }
+    const conversationDispatcher = {
+        start: vi.fn(),
+        stop: vi.fn(),
+    }
     const capabilityDispatcher = {
         startDetached: vi.fn(),
         stopDetached: vi.fn(),
@@ -150,6 +159,9 @@ const mocks = vi.hoisted(() => {
         assetSubjects,
         capabilitySubjects,
         promptReferenceSubjects,
+        conversationSubjects,
+        conversationRuntime,
+        conversationDispatcher,
         setCapabilityRunDispatcher,
         setPromptReferenceModuleCatalog,
         capabilityModuleCatalog,
@@ -254,6 +266,15 @@ vi.mock('./NATS/subscriptions/prompt-reference-subjects.ts', () => ({
     promptReferenceSubjects: mocks.promptReferenceSubjects,
     setPromptReferenceModuleCatalog: mocks.setPromptReferenceModuleCatalog,
 }))
+vi.mock('./NATS/subscriptions/conversation-subjects.ts', () => ({ conversationSubjects: mocks.conversationSubjects }))
+vi.mock('./llm/agent/conversation-runtime.ts', () => ({ ConversationRuntime: class {
+    execute = mocks.conversationRuntime.execute
+    stop = mocks.conversationRuntime.stop
+} }))
+vi.mock('./llm/agent/conversation-dispatcher.ts', () => ({ ConversationDispatcher: class {
+    start = mocks.conversationDispatcher.start
+    stop = mocks.conversationDispatcher.stop
+} }))
 vi.mock('./capability-system/capability-runtime.ts', () => ({
     getCapabilityDispatcher: () => mocks.capabilityDispatcher,
 }))
@@ -361,6 +382,10 @@ const resetMockState = (): void => {
     mocks.app.get.mockClear()
     mocks.httpServer.listen.mockClear()
     mocks.capabilityRunEventRelayStart.mockClear()
+    mocks.conversationRuntime.execute.mockClear()
+    mocks.conversationRuntime.stop.mockClear()
+    mocks.conversationDispatcher.start.mockClear()
+    mocks.conversationDispatcher.stop.mockClear()
 }
 
 describe('services/api server startup', () => {
@@ -375,6 +400,7 @@ describe('services/api server startup', () => {
         ...mocks.assetSubjects,
         ...mocks.capabilitySubjects,
         ...mocks.promptReferenceSubjects,
+        ...mocks.conversationSubjects,
     ]
 
     beforeEach(() => {
@@ -482,6 +508,8 @@ describe('services/api server startup', () => {
         await sigint?.handler()
 
         expect(mocks.getLlmModule()?.shutdown).toHaveBeenCalledTimes(1)
+        expect(mocks.conversationRuntime.stop).toHaveBeenCalledTimes(1)
+        expect(mocks.conversationDispatcher.stop).toHaveBeenCalledTimes(1)
         expect(mocks.natsInstance.drain).toHaveBeenCalledTimes(1)
         expect(processExitSpy).toHaveBeenCalledWith(0)
 

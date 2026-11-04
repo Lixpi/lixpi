@@ -89,6 +89,25 @@ beforeAll(async () => {
 })
 
 describe('API deployment with native NATS storage', () => {
+    it('uses the same conversation table definition locally and in deployment', async () => {
+        const { getTableDefinitions } = await import('./db/DynamoDB-tables.ts')
+        const definition = getTableDefinitions().agentConversationsTable
+        const deployed = resources.find(resource => resource.type === 'aws:dynamodb/table:Table' && resource.inputs.name === definition.name)
+        expect(definition).toMatchObject({
+            hashKey: 'pk',
+            rangeKey: 'sk',
+            attributes: [{
+                name: 'pk',
+                type: 'S',
+            }, {
+                name: 'sk',
+                type: 'S',
+            }],
+        })
+        expect(deployed?.inputs).toMatchObject(definition)
+        expect(definition).not.toHaveProperty('globalSecondaryIndexes')
+    })
+
     it('creates domain tables without an application journal or content bucket', () => {
         expect(resources.some(resource => resource.type.startsWith('aws:s3/'))).toBe(false)
         const tables = resources.filter(resource => resource.type === 'aws:dynamodb/table:Table')

@@ -53,14 +53,14 @@ describe('read-only request authentication', () => {
         expect(await jwtVerifier.verify('missing')).toEqual({ error: 'ACCOUNT_ADMISSION_DENIED' })
     })
 
-    it('denies if control delivery fails before or during the read', async () => {
+    it('reports temporary unavailability if control delivery fails before or during the read', async () => {
         const { jwtVerifier } = await import('./auth.ts')
-        mocks.currentAdmission.mockImplementationOnce(() => { throw new Error('unavailable') })
-        expect(await jwtVerifier.verify('token')).toEqual({ error: 'ACCOUNT_ADMISSION_DENIED' })
+        mocks.currentAdmission.mockImplementationOnce(() => { throw new Error('ACCOUNT_ADMISSION_UNAVAILABLE') })
+        expect(await jwtVerifier.verify('token')).toEqual({ error: 'ACCOUNT_ADMISSION_UNAVAILABLE' })
         expect(mocks.admitVerifiedToken).not.toHaveBeenCalled()
         mocks.currentAdmission.mockReturnValueOnce({ admission: { admitVerifiedToken: mocks.admitVerifiedToken } })
-            .mockImplementationOnce(() => { throw new Error('disconnected') })
-        expect(await jwtVerifier.verify('token')).toEqual({ error: 'ACCOUNT_ADMISSION_DENIED' })
+            .mockImplementationOnce(() => { throw new Error('ACCOUNT_ADMISSION_UNAVAILABLE') })
+        expect(await jwtVerifier.verify('token')).toEqual({ error: 'ACCOUNT_ADMISSION_UNAVAILABLE' })
     })
 
     it('denies real Auth0 when coordinated admission is disabled', async () => {

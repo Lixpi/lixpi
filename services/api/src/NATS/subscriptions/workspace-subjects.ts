@@ -14,10 +14,14 @@ import { MediaGenerationRequestService } from '../../services/media-generation-r
 export const workspaceSubjects = createNatsSubscriptions(
     'workspace',
     {
-        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.GET_WORKSPACE)]: async (data: any) => await Workspace.getWorkspace({
-            userId: data.user.userId,
-            workspaceId: data.workspaceId,
-        }),
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.GET_WORKSPACE)]: async (data: any) => {
+            const workspace = await Workspace.getWorkspace({
+                workspaceId: data.workspaceId,
+                userId: data.user.userId,
+            })
+
+            return workspace
+        },
         [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.CREATE_WORKSPACE)]: async (data: any) => {
             const organizations = await Organization.getUserOrganizations({ userId: data.user.userId })
 

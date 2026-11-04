@@ -3947,7 +3947,10 @@ class AiChatThreadPluginClass {
                 if (!tr.docChanged)
                     return true
 
-                if (this.renderContext.readOnly)
+                if (
+                    this.renderContext.readOnly
+                    && !tr.getMeta('proseMirrorAuthorityRemote')
+                )
                     return false
 
                 let valid = true
@@ -4080,6 +4083,9 @@ class AiChatThreadPluginClass {
                 _oldState: EditorState,
                 newState: EditorState,
             ) => {
+                if (this.renderContext.readOnly)
+                    return null
+
                 // Handle AI chat requests
                 const chatTransaction = transactions.find(tr => tr.getMeta(USE_AI_CHAT_META))
 

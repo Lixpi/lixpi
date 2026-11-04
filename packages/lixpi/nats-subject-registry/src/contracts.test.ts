@@ -36,6 +36,22 @@ const publications = permissionTemplates.flatMap(permissions => permissions.pub?
 const subscriptions = permissionTemplates.flatMap(permissions => permissions.sub?.allow ?? [])
 
 describe('endpoint permissions', () => {
+    it('keeps conversation events private to the authenticated user and internal work private to services', () => {
+        const conversation = NATS_SUBJECTS.CONVERSATION_SUBJECTS
+        expect(endpoint(conversation.SUBMIT).permissions).toEqual({
+            pub: { allow: [conversation.SUBMIT] },
+            sub: { allow: [`${conversation.STATUS}.{userIdToken}.>`] },
+        })
+
+        for (const subject of [conversation.DISPATCH, conversation.OPERATION_COMPLETED]) {
+            expect(publications).not.toContain(subject)
+            expect(subscriptions).not.toContain(subject)
+        }
+
+        expect(subscriptions).not.toContain(`${conversation.STATUS}.>`)
+        expect(publications.some(subject => subject.startsWith(conversation.STATUS))).toBe(false)
+    })
+
     it('grants a public request its own subject', () => {
         expect(endpoint(USER_SUBJECTS.GET_USER)).toMatchObject({
             type: 'reply',

@@ -226,11 +226,14 @@ describe('ProseMirrorEditor — plugin wiring', () => {
 
     it('adds AI prompt input plugin only for aiPromptInput documents', () => {
         const editor = createEditorShim(DOCUMENT_TYPE.AI_PROMPT_INPUT)
+        editor.promptSubmitOnEnter = true
         const plugins = editor.createPlugins({}, false)
 
         expect(spyCreateAiPromptInputPlugin).toHaveBeenCalledOnce()
         expect(spyCreateAiChatThreadPlugin).not.toHaveBeenCalled()
         const args = spyCreateAiPromptInputPlugin.mock.calls[0][0]
+        expect(args.submitOnEnter).toBe(true)
+        expect(plugins[0]).toBe(aiPromptInputPluginMock)
         args.onSubmit('payload')
         expect(editor.onPromptSubmit).toHaveBeenCalledWith('payload')
         expect(args.createContextTray).toBe(editor.promptControlFactories.createContextTray)

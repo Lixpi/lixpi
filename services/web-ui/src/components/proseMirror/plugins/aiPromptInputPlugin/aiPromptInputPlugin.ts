@@ -57,6 +57,7 @@ type SubmitHandler = (data: {
 
 type AiPromptInputPluginOptions = {
     onSubmit: SubmitHandler
+    submitOnEnter?: boolean
     createContextTray?: Parameters<typeof createAiPromptInputNodeView>[0]['createContextTray']
     mountMediaModeSwitch?: Parameters<typeof createAiPromptInputNodeView>[0]['mountMediaModeSwitch']
     mountModelMenuControl?: Parameters<typeof createAiPromptInputNodeView>[0]['mountModelMenuControl']
@@ -272,7 +273,11 @@ export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): 
         }
     }
 
-    const handleSubmit = (view: EditorView) => {
+    let submitting = false
+    const submitAccepted = async (view: EditorView): Promise<void> => {
+        if (submitting)
+            return
+
         const contentJSON = extractContentJSON(view.state)
 
         if (!contentJSON)
@@ -283,12 +288,33 @@ export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): 
         if (!attrs.aiReasoningModels[0])
             return
 
-        onSubmit(
-            buildSubmitPayload(contentJSON, attrs),
-        )
+        const submittedDocument = view.state.doc
+        submitting = true
 
-        clearInputContent(view)
+        try {
+            const result: unknown = onSubmit(
+                buildSubmitPayload(contentJSON, attrs),
+            )
+
+            if (
+                result
+                && typeof (result as Promise<unknown>).then === 'function'
+            )
+                await result
+
+            // A slow acknowledgement must not erase text typed meanwhile.
+            if (
+                !view.isDestroyed
+                && view.state.doc.eq(submittedDocument)
+            )
+                clearInputContent(view)
+        } catch {
+            // The caller presents transport/rejection details. The draft remains.
+        } finally {
+            submitting = false
+        }
     }
+    const handleSubmit = (view: EditorView): void => void submitAccepted(view)
 
     let editorViewRef: EditorView | null = null
 
@@ -305,9 +331,31 @@ export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): 
         },
 
         props: {
+            handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+                if (
+                    !options.submitOnEnter
+                    || event.key !== 'Enter'
+                    || event.shiftKey
+                    || event.altKey
+                    || event.ctrlKey
+                    || event.metaKey
+                    || event.isComposing
+                    || view.composing
+                )
+                    return false
+
+                event.preventDefault()
+                handleSubmit(view)
+
+                return true
+            },
             handleDOMEvents: {
                 keydown: (_view: EditorView, event: KeyboardEvent) => {
-                    if (KeyboardHandler.isModEnter(event)) {
+                    if (
+                        KeyboardHandler.isModEnter(event)
+                        && !event.isComposing
+                        && !_view.composing
+                    ) {
                         event.preventDefault()
                         handleSubmit(_view)
 

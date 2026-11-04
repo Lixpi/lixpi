@@ -51,6 +51,7 @@ services:
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/repository/packages/lixpi/constants/ts/aws-resources.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/repository/packages/lixpi/constants/ts/index.ts:cached
             - ./packages/lixpi/constants/ts/account-admission.ts:/usr/src/repository/packages/lixpi/constants/ts/account-admission.ts:cached
+            - ./packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/repository/packages/lixpi/constants/ts/agent-conversation.ts:cached
             - ./packages/lixpi/constants/ts/account-admission.test.ts:/usr/src/repository/packages/lixpi/constants/ts/account-admission.test.ts:cached
             - ./packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/repository/packages/lixpi/constants/ts/nats-subject-path.test.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-layout-settings.ts:cached

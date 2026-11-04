@@ -73,6 +73,38 @@ afterEach(() => {
 })
 
 describe('worker account execution', () => {
+    it.each(['job', 'account'])('propagates %s cancellation into an active Object Store read', async cause => {
+        const f = fixture()
+        const caller = new AbortController()
+        const entered = Promise.withResolvers<AbortSignal>()
+        const getObject = vi.fn(async (_bucket: string, _key: string, options: {
+            signal: AbortSignal
+            maxBytes: number
+        }) => await new Promise((_resolve, reject) => {
+            entered.resolve(options.signal)
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+        }))
+        const storage = new AccountWorkStorage({
+            getObject,
+            putObject: vi.fn(),
+        } as never)
+        const running = f.scopes.run({ accountContext: account }, async () => await storage.getObject('bucket', 'source', {
+            signal: caller.signal,
+            maxBytes: 3,
+        }))
+        const signal = await entered.promise
+        const denied = expect(running).rejects.toThrow(cause === 'job' ? 'stopped' : 'ACCOUNT_ADMISSION_DENIED')
+
+        if (cause === 'job')
+            caller.abort(new Error('stopped'))
+        else
+            f.transport.change()
+
+        await denied
+        expect(signal.aborted).toBe(true)
+        expect(getObject.mock.calls[0][2].maxBytes).toBe(3)
+    })
+
     it('checks policy on dequeue and completion and refuses missing context', async () => {
         const f = fixture()
         const operation = vi.fn(async assertActive => { assertActive()

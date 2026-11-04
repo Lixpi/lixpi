@@ -47,5 +47,11 @@
     "sources": [
         "https://platform.claude.com/docs/en/build-with-claude/effort",
         "https://platform.claude.com/docs/en/build-with-claude/thinking"
-    ]
+    ],
+    "usage": {
+        "what": "Sets the user-selected reasoning effort for a compatible model. Conversational turns persist the accepted model profile, controls, and resolved Bedrock inference-profile ID; recovery reuses them and rejects a changed registry model version. Matrix prompt preparations retain one snapshot per preparation and selected model.",
+        "setIn": "services/api/src/capability-system/media-pipeline-prompt-adapter.ts; services/api/src/llm/agent/agent-bedrock-model.ts; services/api/src/llm/agent/agent-model-snapshot.ts; services/api/src/llm/providers/anthropic-provider.ts",
+        "from": "The selected model reasoning configuration or its synchronized default, validated by resolveAgentReasoningOptions; explicit unsupported or conflicting controls are rejected.",
+        "code": "output_config: { effort: reasoningEffort }"
+    }
 }

@@ -10,8 +10,8 @@
 #
 # Node 24 runs TypeScript directly through native type stripping, so skill scripts are .ts files with
 # no tsconfig, no tsc, and no build step. Type annotations are erased at load; they are never checked.
-ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.21.0-alpine
-ARG PNPM_VERSION=12.5.1
+ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.22.2-alpine
+ARG PNPM_VERSION=12.16.1
 
 FROM ${NODE_JS_ALPINE_IMAGE_REFERENCE}
 ARG PNPM_VERSION

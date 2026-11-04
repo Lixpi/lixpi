@@ -74,7 +74,7 @@ The [dropdown](src/components/dropdown/README.md) accepts custom trigger content
 | `/components/canvas-node-footer` | Details/progress controls plus caller-supplied content sections. Pass info markup and ripple artwork through `icons`. | `/styles/canvas-node-footer` and `/styles/progress-ripple` |
 | `/components/progress-ripple` | Three-layer ripple animation over caller-supplied paths and view box. Disposing interrupts transitions and timers. | `/styles/progress-ripple` |
 | `/components/help-tooltip` | Rich tooltips and delegated providers with explicit roots, portal roots, delays and visibility guards. | `/styles/help-tooltip` |
-| `/components/video-controls` | Accessible SVG play, seek, volume, speed and fullscreen controls over a supplied native video. | SVG attributes plus host properties |
+| `/components/video-controls` | Accessible SVG play, seek, volume and speed controls over supplied native audio or video, plus fullscreen for video. | SVG attributes plus host properties |
 | `/components/preview` | Inline or floating preview surfaces with supplied content and explicit portal positioning. | `/styles/preview` |
 
 Import the required styles once per application surface. Footers expose `--canvas-node-footer-icon-size`, `--canvas-node-footer-color`, `--canvas-node-footer-hover-color` and `--canvas-node-footer-separator-gradient`. Tooltip presentation uses `--help-tooltip-*` variables. Shared transition functions come from UI Primitives.

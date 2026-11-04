@@ -20,6 +20,7 @@ describe('generated output chrome collision insets', () => {
         expect(imageInsets.top).toBeGreaterThan(chrome.titleCollisionHeight)
         expect(imageInsets.bottom).toBeGreaterThan(chrome.topGap + chrome.iconSize)
         expect(artifactInsets).toEqual(imageInsets)
+        expect(getGeneratedOutputChromeCollisionInsets('audio')).toEqual(imageInsets)
         expect(getGeneratedOutputChromeCollisionHeight('image')).toBe(imageInsets.bottom)
     })
 

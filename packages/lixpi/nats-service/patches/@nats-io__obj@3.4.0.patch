@@ -1,0 +1,72 @@
+diff --git a/lib/objectstore.js b/lib/objectstore.js
+index 7031702cd478df1fe6888759d6c539db002df236..8db4b3204647d45f1caae4c8e575e380e89c4cc6 100644
+--- a/lib/objectstore.js
++++ b/lib/objectstore.js
+@@ -555,8 +555,18 @@ class ObjectStoreImpl {
+         cc.idle_heartbeat = (0, internal_1.nanos)(30_000);
+         cc.flow_control = true;
+         const oc = await this.js.consumers.getPushConsumer(this.stream, cc);
+-        const iter = await oc.consume();
++        let iter;
++        try {
++            iter = await oc.consume();
++        }
++        catch (err) {
++            await oc.delete();
++            throw err;
++        }
++        let cancelled = false;
+         (async () => {
++            let complete = false;
++            try {
+             for await (const jm of iter) {
+                 if (jm.data.length > 0) {
+                     sha.update(jm.data);
+@@ -567,28 +577,41 @@ class ObjectStoreImpl {
+                     if (!(0, sha_digest_parser_1.checkSha256)(digest, computedDigest)) {
+                         const hex = Array.from(computedDigest)
+                             .map((b) => b.toString(16).padStart(2, "0")).join("");
+-                        controller.error(new Error(`received a corrupt object, digests do not match\n  expected: ${info.digest}\n  computed: SHA-256 ${hex}`));
+-                    }
+-                    else {
+-                        controller.close();
++                        throw new Error(`received a corrupt object, digests do not match\n  expected: ${info.digest}\n  computed: SHA-256 ${hex}`);
+                     }
++                    complete = true;
+                     break;
+                 }
+             }
++            if (!complete && !cancelled) {
++                throw new Error("object read ended before all chunks were received");
++            }
++            }
++            finally {
++                iter.stop();
++                await oc.delete();
++            }
++            if (!cancelled) {
++                controller.close();
++            }
+         })()
+             .then(() => {
+-            d.resolve();
++            d.resolve(null);
+         })
+             .catch((err) => {
+             controller.error(err);
+-            d.reject(err);
++            d.resolve(err);
+         });
+         r.data = new ReadableStream({
+             start(c) {
+                 controller = c;
+             },
+             cancel() {
++                cancelled = true;
+                 iter.stop();
++                return d.then((err) => {
++                    if (err) throw err;
++                });
+             },
+         });
+         return r;

@@ -8,6 +8,7 @@ import {
 } from 'vitest'
 
 import { createCanvasNodeFooter } from './index.ts'
+import { createSidePanel } from '../sidePanel/sidePanel.ts'
 
 const icons = {
     info: '<span>i</span>',
@@ -83,6 +84,49 @@ describe('canvas node footer', () => {
         expect(onOpenDetails).toHaveBeenCalledTimes(2)
         expect(onParentClick).not.toHaveBeenCalled()
         footer.destroy()
+    })
+
+    it('routes details controls past an open side panel while ordinary outside clicks still close it', () => {
+        vi.useFakeTimers()
+        const onOpenDetails = vi.fn()
+        const onOpenChange = vi.fn()
+        const panelElement = document.createElement('aside')
+        const outside = document.createElement('div')
+        const sidePanel = createSidePanel({
+            side: 'right',
+            offset: 0,
+            grabWidth: 20,
+            minWidth: 320,
+            defaultWidth: 380,
+            getMaxWidth: () => 900,
+            onResize: vi.fn(),
+            overlay: { enabled: false },
+            onOpenChange,
+        })
+        const footer = createCanvasNodeFooter({
+            icons,
+            infoLabel: 'Media details',
+            progressActive: true,
+            selected: false,
+            onOpenDetails,
+        })
+        document.body.append(panelElement, outside, footer.element)
+        sidePanel.mountOpen(panelElement)
+
+        try {
+            footer.element.querySelector<HTMLButtonElement>('.canvas-node-footer-info-button')!.click()
+            footer.element.querySelector<HTMLButtonElement>('.canvas-node-footer-progress-button')!.click()
+
+            expect(onOpenDetails).toHaveBeenCalledTimes(2)
+            expect(onOpenChange).not.toHaveBeenCalled()
+            outside.click()
+            expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
+        } finally {
+            footer.destroy()
+            sidePanel.destroy()
+            panelElement.remove()
+            outside.remove()
+        }
     })
 
     it('hides terminal progress and reflects details selection on both entry controls', () => {

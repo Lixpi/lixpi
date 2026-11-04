@@ -9,6 +9,7 @@ import { contracts as workspace } from './subjects/workspace.ts'
 import { contracts as asset } from './subjects/asset.ts'
 import { contracts as capability } from './subjects/capability.ts'
 import { contracts as references } from './subjects/prompt-reference.ts'
+import { contracts as conversation } from './subjects/conversation.ts'
 import {
     type SubjectPermissions,
     type EndpointContract,
@@ -25,6 +26,7 @@ export const activeContractGroups = {
     asset,
     capability,
     'prompt-reference': references,
+    conversation,
 } as const
 
 export type ContractGroup = keyof typeof activeContractGroups
