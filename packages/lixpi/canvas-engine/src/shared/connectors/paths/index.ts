@@ -507,7 +507,7 @@ const buildOrthogonalPoints = (
         : points
 }
 
-const buildOrthogonalPath = (
+export const getOrthogonalRoutePoints = (
     sourceX: number,
     sourceY: number,
     targetX: number,
@@ -521,7 +521,8 @@ const buildOrthogonalPath = (
     targetNodeId: string | undefined,
     laneIndex: number,
     laneCount: number,
-): string => {
+    minimumLeadLength: number = 0,
+): OrthogonalPoint[] => {
     const obstacles = obstacleNodes.filter(node => node.id !== sourceNodeId && node.id !== targetNodeId)
 
     if (bendPoints?.length) {
@@ -540,7 +541,7 @@ const buildOrthogonalPath = (
         if (!isOrthogonalRouteClear(points, obstacles))
             throw new OrthogonalRoutingError()
 
-        return buildMultiSegmentPath(points, borderRadius)
+        return points
     }
 
     const sourceVertical = sourcePosition === 'top' || sourcePosition === 'bottom'
@@ -604,7 +605,10 @@ const buildOrthogonalPath = (
         adjacent: OrthogonalPoint | undefined,
         position: AnchorPosition,
     ): boolean => {
-        if (!adjacent)
+        if (
+            !adjacent
+            || Math.abs(adjacent.x - endpoint.x) + Math.abs(adjacent.y - endpoint.y) < minimumLeadLength
+        )
             return false
 
         switch (position) {
@@ -637,12 +641,16 @@ const buildOrthogonalPath = (
             targetPosition,
         )
     )
-        return buildMultiSegmentPath(points, borderRadius)
+        return points
 
     // Backward, equal-side or obstructed mixed ports need outward leads before
     // crossing to the other endpoint. Reuse the same obstacle solver between
     // those leads, now including endpoint bodies as intermediate obstacles.
-    const leadLength = Math.max(20, borderRadius)
+    const leadLength = Math.max(
+        20,
+        borderRadius,
+        minimumLeadLength,
+    )
     const lead = (
         point: OrthogonalPoint,
         position: AnchorPosition,
@@ -697,8 +705,14 @@ const buildOrthogonalPath = (
     if (!isOrthogonalRouteClear(directed, obstacles))
         throw new OrthogonalRoutingError()
 
-    return buildMultiSegmentPath(directed, borderRadius)
+    return directed
 }
+
+// Layout planners share the native point solver; rendering rounds the same route.
+const buildOrthogonalPath = (...args: Parameters<typeof getOrthogonalRoutePoints>): string => buildMultiSegmentPath(
+    getOrthogonalRoutePoints(...args),
+    args[6],
+)
 
 // Compute SVG path between two points using specified path type
 // Returns computed path with SVG string and label coordinates

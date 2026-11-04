@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import fixtures from './path-baseline.json'
 import {
     computePath,
+    getOrthogonalRoutePoints,
     OrthogonalRoutingError,
 } from './index.ts'
 import { type AnchorPosition, type PathType } from '../path-types.ts'
@@ -367,5 +368,29 @@ describe('orthogonal connector routing with mixed endpoint directions', () => {
         )
 
         expectPathClearOfObstacles(result.path, [obstacle])
+    })
+})
+
+describe('shared orthogonal route point planner', () => {
+    it('keeps endpoint leads at the requested minimum length', () => {
+        const points = getOrthogonalRoutePoints(
+            100,
+            0,
+            0,
+            0,
+            'right',
+            'left',
+            24,
+            undefined,
+            [],
+            undefined,
+            undefined,
+            0,
+            1,
+            64,
+        )
+
+        expect(Math.abs(points[1].x - points[0].x)).toBeGreaterThanOrEqual(64)
+        expect(Math.abs(points.at(-1)!.x - points.at(-2)!.x)).toBeGreaterThanOrEqual(64)
     })
 })
