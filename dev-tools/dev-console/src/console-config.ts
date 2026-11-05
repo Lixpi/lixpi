@@ -49,6 +49,10 @@ export type ConsoleAction = {
     // LIXPI_CONSOLE_OPTION_<NAME>.
     params?: Record<string, string>
 
+    // Comes back to the menu after the script finishes, for an action that prepares
+    // something the next action uses. Every other action ends the console.
+    returnToMenu?: boolean
+
     // An environment file every run uses, instead of asking for one.
     envFile?: string
     steps?: ConsoleStep[]

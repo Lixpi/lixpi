@@ -24,6 +24,7 @@ Every repository has the same layout, so a developer finds things in the same pl
 | `id`, `label`, `hint` | How the menu identifies and shows the action |
 | `script` | `shared:<name>` runs `actions/<name>.sh` from this directory, and `local:<name>` runs the repository's own |
 | `params` | Fixed values for the script |
+| `returnToMenu` | Comes back to the menu after the script finishes, instead of ending the console |
 | `envFile` | An environment file every run uses, instead of asking |
 | `steps` | What to ask before running, in order |
 
@@ -54,7 +55,9 @@ A script runs from the repository root. It receives the selected services or pru
 
 Every action that needs an environment file uses the same picker. It lists the repository's `.env.*` files and leaves out the `.env.example` template. There is no default environment file, and the console doesn't remember a choice between actions.
 
-You can return to the main menu from any step. Esc, Ctrl+C and the **Back to main menu** option all abandon the current action without changing anything. Esc or Ctrl+C on the main menu itself exits. The configuration wizard and the skill installer treat those keys as cancelling, which ends them and brings the menu back. A finished action also returns to the menu, including a stack you stop with Ctrl+C or an action that fails.
+You can return to the main menu from any step. Esc, Ctrl+C and the **Back to main menu** option all abandon the current action without changing anything, and Esc or Ctrl+C on the main menu itself exits. The configuration wizard and the skill installer treat those keys as cancelling.
+
+Submitting an action ends the console when its script finishes, with that script's exit status, because a stack left running shouldn't share a terminal with a menu. The exception is an action with `returnToMenu` set, such as creating or editing a configuration, which the next action usually needs. That action comes back to the menu even when it fails.
 
 ## Starting services
 
@@ -72,7 +75,7 @@ A group with only some of its services selected shows a half-filled checkbox, an
 
 The `infrastructure/docker/docker-compose.yml` file holds only the `include` list and the shared volumes and networks. Each service lives in a partial file for its group, such as `docker-compose.ui.yml` or `docker-compose.databases.yml`.
 
-If a rebuild was chosen, the selected containers are removed and their images are built without cache. The previous images are then left dangling, so the console deletes dangling images. That cleanup covers the whole Docker host, not only this project, although images still in use are kept. Dependencies that weren't selected keep their existing images. A failed rebuild returns to the menu without starting anything, and the previous image stays in place.
+If a rebuild was chosen, the selected containers are removed and their images are built without cache. The previous images are then left dangling, so the console deletes dangling images. That cleanup covers the whole Docker host, not only this project, although images still in use are kept. Dependencies that weren't selected keep their existing images. A failed rebuild starts nothing, and the previous image stays in place.
 
 ## Pruning Docker
 

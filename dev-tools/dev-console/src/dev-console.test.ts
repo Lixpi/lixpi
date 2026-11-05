@@ -413,6 +413,16 @@ describe('dev console', () => {
             })).toBe('ACTION=run\nSCRIPT=local:deploy\n')
         })
 
+        it('asks the host to come back to the menu only when the action says so', () => {
+            expect(renderConsolePlan({
+                action: 'run',
+                script: 'local:init-config',
+                returnToMenu: true,
+                options: {},
+                selected: [],
+            })).toBe('ACTION=run\nSCRIPT=local:init-config\nRETURN_TO_MENU=true\n')
+        })
+
         it('names the action to reopen after measuring Docker', () => {
             expect(renderConsolePlan({
                 action: 'measure-docker',
@@ -485,6 +495,22 @@ describe('dev console', () => {
                 options: { greeting: 'hello' },
                 selected: [],
             })
+        })
+
+        it('carries an action\'s return to the menu setting into its plan', async () => {
+            const config = {
+                title: 'Test',
+                actions: [{
+                    id: 'configure',
+                    label: 'Configure',
+                    script: 'local:init-config',
+                    returnToMenu: true,
+                }],
+            }
+
+            answer('configure')
+
+            expect(await new DevConsoleWizard(workspace, config).run()).toMatchObject({ returnToMenu: true })
         })
 
         it('reuses the environment picker', async () => {

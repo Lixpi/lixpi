@@ -7,8 +7,9 @@
 #
 # The Dockerized console reads that repository's console.config.json, shows the menu
 # and returns a plan on stdout. Everything that touches the host happens here, after
-# each field of that plan has been validated, and every finished action comes back to
-# the menu.
+# each field of that plan has been validated. Backing out of an action returns to the
+# menu, and submitting one ends the console when it finishes unless its config sets
+# returnToMenu.
 
 set -euo pipefail
 
@@ -61,6 +62,7 @@ parse_plan() {
     ENTRY=""
     SCRIPT=""
     ENV_FILE=""
+    RETURN_TO_MENU=""
     OPTIONS=()
     SELECTED=()
 
@@ -83,6 +85,10 @@ parse_plan() {
             ENV_FILE)
                 [[ "${plan_value}" =~ ^(\.env(\.[A-Za-z0-9._-]+)?|env\.lixpi)$ && -f "${WORKSPACE_PATH}/${plan_value}" ]] || fail "The console plan contains an invalid environment file."
                 ENV_FILE="${plan_value}"
+                ;;
+            RETURN_TO_MENU)
+                [[ "${plan_value}" == "true" ]] || fail "The console plan contains an invalid menu setting."
+                RETURN_TO_MENU="${plan_value}"
                 ;;
             OPTION)
                 [[ "${plan_value}" =~ ^[a-z0-9-]+=[A-Za-z0-9._/:,-]*$ ]] || fail "The console plan contains an invalid option."
@@ -130,8 +136,8 @@ run_script() (
     exec bash "$1" ${SELECTED[@]+"${SELECTED[@]}"}
 )
 
-# Ctrl+C belongs to the running action, which stops it. The menu comes back
-# afterwards, so an interrupted or failed action never ends the console.
+# Ctrl+C belongs to the running action, which stops it. Submitting an action ends the
+# console with that action's status, unless the action asks to come back to the menu.
 run_action() {
     local path
     local status=0
@@ -142,6 +148,10 @@ run_action() {
     trap ':' INT
     run_script "${path}" || status=$?
     trap handle_signal INT
+
+    if [[ -z "${RETURN_TO_MENU}" ]]; then
+        exit "${status}"
+    fi
 
     if [[ "${status}" -ne 0 && "${status}" -ne 130 ]]; then
         printf '\nThat action stopped with exit status %s. Back to the main menu.\n\n' "${status}" >&2

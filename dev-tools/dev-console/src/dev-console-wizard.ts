@@ -41,6 +41,7 @@ export type ConsolePlan =
         action: 'run'
         script: string
         envFile?: string
+        returnToMenu?: boolean
         options: Record<string, string>
         selected: string[]
     }
@@ -94,6 +95,9 @@ export const renderConsolePlan = (plan: ConsolePlan): string => {
         if (plan.envFile)
             lines.push(`ENV_FILE=${plan.envFile}`)
 
+        if (plan.returnToMenu)
+            lines.push('RETURN_TO_MENU=true')
+
         lines.push(
             ...Object.entries(plan.options).map(([name, value]) => `OPTION=${name}${OPTION_VALUE_SEPARATOR}${value}`),
             ...plan.selected.map(value => `SELECTED=${value}`),
@@ -103,9 +107,9 @@ export const renderConsolePlan = (plan: ConsolePlan): string => {
     return `${lines.join('\n')}\n`
 }
 
-// Every action starts and ends at the main menu. Esc, Ctrl+C or "Back to main menu"
-// abandons the current action from any of its steps, and only leaving the main menu
-// itself ends the console.
+// Esc, Ctrl+C or "Back to main menu" abandons the current action from any of its steps
+// and comes back to the menu. Submitting an action ends the console once its script
+// finishes, unless the action sets returnToMenu.
 export class DevConsoleWizard {
     private readonly output: NodeJS.WritableStream
 
@@ -196,6 +200,7 @@ export class DevConsoleWizard {
             action: 'run',
             script: action.script,
             envFile: answers.envFile,
+            returnToMenu: action.returnToMenu,
             options: answers.options,
             selected: answers.selected,
         }

@@ -52,7 +52,7 @@
                 }
             ]
         },
-        { "id": "configure", "label": "Create or edit a configuration", "script": "local:init-config" },
+        { "id": "configure", "label": "Create or edit a configuration", "script": "local:init-config", "returnToMenu": true },
         {
             "id": "infrastructure",
             "label": "Initialize infrastructure",

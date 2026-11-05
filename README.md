@@ -36,7 +36,7 @@ This is the one entry point for local development. It opens a menu that runs ins
 2. **Initialize infrastructure** sets up TLS certificates and DynamoDB tables. It's needed once, before starting the application for the first time.
 3. **Start services** asks which `.env.*` file to use, then shows one page: rebuild or use existing containers, base or all services, and the service tree for picking individual services or groups.
 
-The menu also signs in to AWS SSO, prunes Docker and installs agent skills. Esc or Ctrl+C leaves any step and returns to the menu, and finished actions return there too.
+The menu also signs in to AWS SSO, prunes Docker and installs agent skills. Esc or Ctrl+C leaves any step and returns to the menu. Submitting an action ends the console when it finishes, except creating or editing a configuration, which comes back to the menu.
 
 There is no default environment file, so the console asks for one whenever an action needs it. All Compose files live in `infrastructure/docker/`. To run one by hand, do it from the repository root and name both files, as in `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml up lixpi-api`. To rebuild an image, switch **Containers** to **Rebuild** and select only that service. See the [dev console](dev-tools/dev-console/README.md).
 
