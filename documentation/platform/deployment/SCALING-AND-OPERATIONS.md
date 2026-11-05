@@ -76,14 +76,14 @@ Every developer and environment has its own full AWS copy — there are no share
 3. Writes an `.env.<name>-<environment>` file at the repo root.
 4. Optionally writes AWS SSO config.
 
-From there the top-level scripts (`start.sh`, `init-infrastructure.sh`) pick up the env file and run the Pulumi Docker container with the right command.
+From there the dev console (`run.sh`) picks up the env file and run the Pulumi Docker container with the right command.
 
 ## Operational Workflow
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-    Dev["Developer"] -->|init-infrastructure.sh| Init[config-utils Docker]
+    Dev["Developer"] -->|run.sh| Init[config-utils Docker]
     Init -->|writes| ENV[".env.{name}-{env}"]
     Dev -->|pulumi preview| Pulumi[Pulumi Docker]
     Pulumi -->|reads| ENV
@@ -103,7 +103,7 @@ flowchart LR
 | `pulumi refresh` | Reconcile state with real AWS |
 | `pulumi destroy` | Tear down everything in the stack |
 | `pulumi force-destroy` | Clean ECR images first, then destroy (ECR repos refuse to delete while they hold images) |
-| `pulumi clean-ecr` | Delete all images from the stack's ECR repos |
+| `pulumi clean-ecr` | Not implemented yet, so this currently deletes nothing |
 | `pulumi outputs` | Show stack outputs (endpoint URLs, IDs) |
 
 ## Observability

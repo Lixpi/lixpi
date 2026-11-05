@@ -1,0 +1,15 @@
+{
+    "name": "@lixpi/dev-console",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Dockerized terminal UI that chooses how ./run.sh runs the application stack",
+    "dependencies": {
+        "@clack/prompts": "1.8.1",
+        "@lixpi/cli-ui": "workspace:*",
+        "yaml": "2.9.1"
+    },
+    "devDependencies": {
+        "vitest": "5.0.5"
+    }
+}

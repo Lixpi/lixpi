@@ -63,7 +63,7 @@ Catalog values can derive one release from another. For example, Node.js contain
 
 ## Why synchronization is strict
 
-The registry discovers `package.json`, `go.mod`, Dockerfiles, root Compose files, and GitHub Actions workflows by format. An unknown package, module, external image, Action, or managed Docker build argument fails synchronization instead of keeping a second untracked version. Dockerfiles must use registered image-reference arguments for external base images, and managed tool installations cannot hardcode their own versions.
+The registry discovers `package.json`, `go.mod`, Dockerfiles, Compose files under `infrastructure/docker/`, and GitHub Actions workflows by format. An unknown package, module, external image, Action, or managed Docker build argument fails synchronization instead of keeping a second untracked version. Dockerfiles must use registered image-reference arguments for external base images, and managed tool installations cannot hardcode their own versions.
 
 Local declarations keep their native meaning. `workspace:`, `file:`, and `link:` package dependencies are not replaced. Local `lixpi/*` Compose images stay local build outputs. Docker build stages can still refer to `scratch`, an earlier stage, or a registered local image argument.
 
@@ -78,6 +78,6 @@ Local declarations keep their native meaning. `workspace:`, `file:`, and `link:`
 | Which catalog owns a value, how references work, which selectors exist, and what the containers accept | [Configuration](documentation/CONFIGURATION.md) |
 | How to list dependencies, dry-run an update, apply it, edit an exact version, check drift, and diagnose failures | [Operations](documentation/OPERATIONS.md) |
 
-All registry commands run through [`docker-compose.versions-registry.yml`](../../docker-compose.versions-registry.yml). CI runs the same offline drift check described in [Operations](documentation/OPERATIONS.md#check-repository-drift). Native Go dependency graph maintenance still uses the [Go Testing and Tooling guide](../../documentation/code-quality/testing/GO.md) after a selected Go requirement changes.
+All registry commands run through [`infrastructure/docker/docker-compose.versions-registry.yml`](../../infrastructure/docker/docker-compose.versions-registry.yml). CI runs the same offline drift check described in [Operations](documentation/OPERATIONS.md#check-repository-drift). Native Go dependency graph maintenance still uses the [Go Testing and Tooling guide](../../documentation/code-quality/testing/GO.md) after a selected Go requirement changes.
 
 The shared runner definition lives in [`runner-compose/versions-registry.base.yml`](runner-compose/versions-registry.base.yml). A separate repository can extend that service, mount its own checkout at `/workspace`, and keep its catalogs under `dev-tools/versions-registry/`. The runner reads `VERSIONS_REGISTRY_REPOSITORY_ROOT` to locate that checkout while executing the synchronizers from this repository. The catalogs hold selected releases; they do not copy registry implementation code. Native-file discovery skips archived source alongside build outputs and fixtures.

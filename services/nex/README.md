@@ -31,15 +31,15 @@ With `ACCOUNT_ADMISSION_ENABLED=true`, conversion and fidelity requests must car
 
 ## Run it locally
 
-The commands below assume `.env` is symlinked to your `.env.<stage>` file via `./set-env.sh` at the repo root (Docker Compose only auto-loads a file literally named `.env`) — run it once, or add `--env-file .env.<stage>` to each command instead.
+Every `docker compose` command names its configuration with `--env-file .env.<stage>`. There is no default environment file, so a command without one runs with its variables unset. Replace `.env.<stage>` below with one of your `.env.*` files.
 
 ```bash
-docker compose --profile main up        # brings up NATS x3, then lixpi-nex-1
-docker compose --profile main up -d --build lixpi-nex-1   # rebuild just this node
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main up        # brings up NATS x3, then lixpi-nex-1
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main up -d --build lixpi-nex-1   # rebuild just this node
 docker logs -f lixpi-nex-1              # node + workload startup output
 ```
 
-Required env (supplied by [`docker-compose.nex.yml`](../../docker-compose.nex.yml) from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
+Required env (supplied by [`infrastructure/docker/docker-compose.nex.yml`](../../infrastructure/docker/docker-compose.nex.yml) from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
 
 Credential ownership matters:
 
@@ -87,8 +87,8 @@ The API persists private render progress only while the matching attempt owns a 
 The entrypoint passes `NATS_MEDIA_RENDER_NKEY_SEED` and the render limits into the native workload. Environment setup generates the dedicated key pair. Run the FFmpeg fixture tests through the documented test runner:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared capability-system src/capabilities/media-sequence/backend/render/sequence-render-compiler.runtime.test.ts
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex workloads/media-render/media-render-worker.runtime.test.ts
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared capability-system src/capabilities/media-sequence/backend/render/sequence-render-compiler.runtime.test.ts
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex workloads/media-render/media-render-worker.runtime.test.ts
 ```
 
 ## Adding a workload

@@ -17,20 +17,20 @@ The registry API deliberately refuses identity creation, renaming, and deletion.
 Do not use host `curl`, `jq`, Node, Python, or direct filesystem commands to inspect or mutate registry data. Start the service through Docker Compose, then execute the maintenance tool inside `lixpi-ai-model-registry`.
 
 ```bash
-docker compose --profile dev --profile main up -d lixpi-ai-model-registry
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main up -d lixpi-ai-model-registry
 ```
 
 The image includes `curl` and `jq`. Read the assembled registry like this:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsS http://127.0.0.1:3010/api/catalog
 ```
 
 The only permitted mutation path for existing parameter and group data is `PATCH /api/params` from inside the container:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsS -X PATCH http://127.0.0.1:3010/api/params \
   -H 'content-type: application/json' \
   --data-binary '{
@@ -79,7 +79,7 @@ For Seedance, start with the create-task reference (`ModelArk/1520757`), retriev
 Google Gemini documentation pages expose plain-text twins by appending `.md.txt`. Fetch them through the registry container. The versioned SDK remains the most reliable source for exact field names, accepted values, defaults, and API-surface restrictions.
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsSL https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts
 ```
 
@@ -90,10 +90,10 @@ The SDK phrase "This field is not supported in Gemini API" means Vertex only. Li
 OpenAI's API reference may reject a plain fetch. Read the installed SDK types or fetch the published type declarations through the registry container:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsSL https://cdn.jsdelivr.net/npm/openai/resources/responses/responses.d.ts
 
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsSL https://cdn.jsdelivr.net/npm/openai/resources/images.d.ts
 ```
 
@@ -149,7 +149,7 @@ If code changes a model ID, model list, parameter, default, option, compatibilit
 Check that every parameter accounts for every model in its group and that no model appears in both compatibility lists:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry sh -lc '
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry sh -lc '
   curl -fsS http://127.0.0.1:3010/api/catalog |
   jq -e "[
     .providers[].groups[] as \$group |

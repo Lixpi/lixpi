@@ -30,7 +30,7 @@ Read `LIXPI_REPOSITORY_PATH` from the consuming repository's `env.lixpi` and use
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
     <skill-name> "${LIXPI_REPOSITORY_PATH}/skills/<skill-name>/scripts/<script-name>" [args...]
 ```
 
@@ -38,7 +38,7 @@ docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
     fetch-byteplus-documentation "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" ModelArk/2377608
 ```
 
@@ -50,7 +50,7 @@ Build the image once, and again after any change to the Dockerfile:
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" build lixpi-utils
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" build lixpi-utils
 ```
 
 Editing a skill script or `${LIXPI_REPOSITORY_PATH}/dev-tools/lixpi-utils/run-skill.sh` needs no rebuild. Both are bind-mounted, so the next run picks up the change.
@@ -65,7 +65,7 @@ Editing a skill script or `${LIXPI_REPOSITORY_PATH}/dev-tools/lixpi-utils/run-sk
 | Network | Outbound HTTPS, with `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` passed through from the host if set. |
 | Signals | `tini` is PID 1, so Ctrl-C stops a long-running script instead of detaching it. |
 
-The image includes the Clack and Chalk packages used by the Dockerized `${LIXPI_REPOSITORY_PATH}/setup-skills.sh` prompt UI. Those packages live under the utility setup runtime and are not a dependency surface for skill scripts. A skill that needs a package installs it into its own directory against the shared `lixpi-utils-pnpm-store` volume, which keeps one skill's dependencies out of every other skill's runtime. Prefer the Node standard library: every skill in the tree today needs nothing else.
+The image includes the Clack and Chalk packages used by the Dockerized skill installer prompt UI. Those packages live under the utility setup runtime and are not a dependency surface for skill scripts. A skill that needs a package installs it into its own directory against the shared `lixpi-utils-pnpm-store` volume, which keeps one skill's dependencies out of every other skill's runtime. Prefer the Node standard library: every skill in the tree today needs nothing else.
 
 ## Adding a script to a skill
 
@@ -88,4 +88,4 @@ The image includes the Clack and Chalk packages used by the Dockerized `${LIXPI_
 
 ## Running these skills from another repository
 
-Another repository can install the skills in `${LIXPI_REPOSITORY_PATH}/skills/` as symlinks into that project through the interactive [`setup-skills.sh`](../../setup-skills.sh) installer. Use the same commands above with the main checkout's configured path. [Agent Skill Organization](AGENT-SKILLS.md) covers the installer and the direction of the dependency.
+Another repository can install the skills in `${LIXPI_REPOSITORY_PATH}/skills/` as symlinks into that project through the interactive **Install agent skills** action in `${LIXPI_REPOSITORY_PATH}/run.sh` installer. Use the same commands above with the main checkout's configured path. [Agent Skill Organization](AGENT-SKILLS.md) covers the installer and the direction of the dependency.

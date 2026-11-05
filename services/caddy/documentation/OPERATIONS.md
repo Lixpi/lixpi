@@ -40,7 +40,7 @@ A separately deployed portal must use the same `VITE_USER_PORTAL_URL` and set `V
 With the local certificate issuer completed and application services running, start only the gateway:
 
 ```bash
-docker compose --env-file .env.shelby-local --profile local-https up -d --no-deps --build lixpi-local-https
+docker compose -f infrastructure/docker/docker-compose.yml --env-file .env.shelby-local --profile local-https up -d --no-deps --build lixpi-local-https
 ```
 
 The gateway reuses the trusted CA from NATS and stores its automatically renewed, 12-hour browser certificates under `/certificates/https`. The NATS issuer's certificate cache and exports remain separate. Changing a browser origin creates a separate SDK cache, so its first visit uses Auth0 authentication; Profile and workspace links then continue the authenticated session across origins. Rollback requires restoring the previous app URLs and Auth0 allowlists together, then stopping the gateway. Preserve its certificate volume.

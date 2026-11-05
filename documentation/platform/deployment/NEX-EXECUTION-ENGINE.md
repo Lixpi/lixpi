@@ -108,7 +108,7 @@ NEX 0.4.1 also supports `nats://<bucket>/<object>` Object Store artifacts in the
 
 ## Local development
 
-`docker compose --profile main up` starts the three NATS nodes and then `lixpi-nex-1` (assumes `.env` is symlinked via `./set-env.sh` at the repo root — see `services/nex/README.md`). The node connects over plain `nats://lixpi-nats-*:4222` — the client port is not TLS locally. Watch it with:
+`docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main up` starts the three NATS nodes and then `lixpi-nex-1` (replace `.env.<stage>` with one of your `.env.*` files; see `services/nex/README.md`). The node connects over plain `nats://lixpi-nats-*:4222` — the client port is not TLS locally. Watch it with:
 
 ```bash
 docker logs -f lixpi-nex-1     # node registration + workload deploys

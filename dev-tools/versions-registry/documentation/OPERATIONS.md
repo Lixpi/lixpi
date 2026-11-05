@@ -5,7 +5,7 @@ description: Docker commands for release review, apply, exact selections, drift 
 
 # Dependency Version Registry Operations
 
-Run every registry command from the repository root through [`docker-compose.versions-registry.yml`](../../../docker-compose.versions-registry.yml). The offline service checks or synchronizes committed declarations. The update service contacts publishers and requires a release review before it changes a selected release.
+Run every registry command from the repository root through [`infrastructure/docker/docker-compose.versions-registry.yml`](../../../infrastructure/docker/docker-compose.versions-registry.yml). The offline service checks or synchronizes committed declarations. The update service contacts publishers and requires a release review before it changes a selected release.
 
 [Configuration](CONFIGURATION.md) defines catalogs, selectors, references, and container inputs. [Architecture](ARCHITECTURE.md) explains what each command does before it writes.
 
@@ -13,11 +13,11 @@ Run every registry command from the repository root through [`docker-compose.ver
 
 | Task | Command |
 |---|---|
-| List update selectors | `docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update list` |
-| Dry-run selected updates | `docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run <selectors...>` |
-| Apply selected updates | `docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply <selectors...>` |
-| Synchronize manually edited catalogs | `docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync` |
-| Check repository drift | `docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check` |
+| List update selectors | `docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update list` |
+| Dry-run selected updates | `docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run <selectors...>` |
+| Apply selected updates | `docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply <selectors...>` |
+| Synchronize manually edited catalogs | `docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync` |
+| Check repository drift | `docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check` |
 
 The `run` commands create disposable containers and do not start application services. `--no-deps` prevents Compose from starting unrelated services. `-T` disables pseudo-terminal allocation so CI and agent runs receive stable output.
 
@@ -26,7 +26,7 @@ The `run` commands create disposable containers and do not start application ser
 Run `list` before constructing a selector when you do not know the exact group or canonical name:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update list
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update list
 ```
 
 The output lists each group followed by qualified selectors such as `npmPackages:typescript`, `goModules:github.com/nats-io/nats.go`, `runtimes:node`, and `containerImages:alpine`. Those names come from the live catalogs and resolver, so the list remains accurate when dependencies are added or removed.
@@ -38,25 +38,25 @@ A dry run is the review step. It resolves the newest stable publisher release, i
 Review one dependency:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
 ```
 
 Review a complete group:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run goTools
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run goTools
 ```
 
 Review several dependencies and groups as one union:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript goTools:gopls containerImages:alpine
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript goTools:gopls containerImages:alpine
 ```
 
 Review every update coordinate:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run all
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run all
 ```
 
 The command prints changed dependencies only after resolving the full selected scope. Each changed dependency includes the selected version, proposed version, release-history source, and release bodies, official Node.js changelog sections, or commit messages. The same structured result is written to the ignored `reports/update-plan.json` inspection artifact.
@@ -91,7 +91,7 @@ Update the affected repository code before actual apply when the release review 
 Apply the same selector after the compatibility work is ready:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
 ```
 
 `apply` performs a fresh target and release-history lookup. It prints that fresh review before writes, rejects missing release information, creates prospective catalog data in memory, and plans every native consumer change. If planning succeeds, it writes the report, catalogs, and planned native declarations.
@@ -107,8 +107,8 @@ After apply, perform the build, quality, module, or service verification require
 Use a manual edit when the desired release is already known and publisher-latest selection is not appropriate. Edit the catalog that owns the dependency, then synchronize:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
 ```
 
 Manual editing does not fetch release notes. Obtain and review the relevant upstream migration material separately before selecting the version.
@@ -141,10 +141,10 @@ Use the appropriate Dockerized module-maintenance command from [Go Testing and T
 
 ## Check repository drift
 
-Run the offline check after any catalog, synchronizer, native dependency declaration, Dockerfile, root Compose file, or workflow change:
+Run the offline check after any catalog, synchronizer, native dependency declaration, Dockerfile, Compose file, or workflow change:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
 ```
 
 The command prints `Version declarations match the registry.` when the planned change map is empty. Otherwise it lists stale native files and exits unsuccessfully. It can also fail earlier with the file and declaration that uses an unregistered dependency, external image, Action, Docker argument, or unsupported syntax.

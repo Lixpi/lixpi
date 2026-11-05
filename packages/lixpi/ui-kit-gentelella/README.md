@@ -53,6 +53,6 @@ Read [Component Coverage](documentation/COMPONENT-COVERAGE.md) for the module ma
 Run the package tests and quality checks through the repository's Docker runners:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared ui-kit-gentelella
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared ui-kit-gentelella validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared ui-kit-gentelella
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared ui-kit-gentelella validate
 ```

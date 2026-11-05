@@ -43,7 +43,7 @@ When the architecture changes, update this map and the affected domain pages tog
 |-----------|----------|
 | `services/` | Application services, including the TypeScript web UI and API plus the Go NATS and Caddy services |
 | `packages/lixpi/` | Shared TypeScript libraries, contracts, UI packages, and constants |
-| `dev-tools/` | Configuration and dependency utilities, the code-quality runner toolchain, and the shared skill utility runner |
+| `dev-tools/` | Configuration and dependency utilities, the dev console, the code-quality runner toolchain, and the shared skill utility runner |
 | `infrastructure/` | Pulumi infrastructure code |
 | `documentation/` | Product, architecture, platform, code-quality, and development workflow documentation |
 | `documentation/memory/` | Active implementation plans, spike reports, and task continuity files |
@@ -62,6 +62,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [NATS Service](../services/nats/README.md) | Embedded broker architecture, peer admission, runtime configuration, certificates, health, maintenance commands and Docker development |
 | [Caddy Certificate Service](../services/caddy/README.md) | Embedded certificate issuance, local CA trust, public renewal, durable ACME state and serving-secret publication |
 | [NATS Subject Registry](../packages/lixpi/nats-subject-registry/README.md) | Subject ownership, endpoint permissions, service allowlists, subscription creation, validation, and release identity |
+| [Dev Console](../dev-tools/dev-console/README.md) | The `./run.sh` menu, its environment picker, service tree and actions, and how its plan reaches the host |
 | [Dependency Version Registry](../dev-tools/versions-registry/README.md) | Central versions, generated native declarations, release discovery, and update commands |
 | [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | Provider request authorization, measured usage, and provider tariff metadata |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |

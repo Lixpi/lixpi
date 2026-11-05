@@ -19,6 +19,13 @@ import {
     envLiteral,
     EnvFileUpdates,
 } from './environment-file.ts'
+import { listEnvironmentFiles } from '@lixpi/cli-ui/environment-files'
+import { selectMenu } from '@lixpi/cli-ui/select-menu'
+import {
+    PromptCancelled,
+    showWizardIntro,
+    unwrapPrompt,
+} from '@lixpi/cli-ui/prompt-session'
 
 const WORKSPACE_DIR = '/workspace'
 const TEMPLATES_DIR = new URL('./templates', import.meta.url).pathname
@@ -172,8 +179,6 @@ const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     arkApiKey: ['ARK_API_KEY'],
 }
 
-class SetupCancelled extends Error {}
-
 // Creation and editing use the same field prompts and branches. This class adds
 // group selection, reuse choices, and a record of explicitly changed fields.
 class WizardFields {
@@ -290,7 +295,7 @@ class WizardFields {
     }
 
     async group(name: string): Promise<void> {
-        this.enabled = !this.partial || this.unwrap(await prompts.confirm({
+        this.enabled = !this.partial || unwrapPrompt(await prompts.confirm({
             message: `Edit ${name}?`,
             initialValue: false,
         }))
@@ -301,13 +306,6 @@ class WizardFields {
                     c.blue(name),
                 ),
             )
-    }
-
-    private unwrap<T>(value: T | symbol): T {
-        if (prompts.isCancel(value))
-            throw new SetupCancelled()
-
-        return value as T
     }
 
     private async replace(
@@ -321,8 +319,8 @@ class WizardFields {
             return true
 
         const exists = this.stored.has(field)
-        const action = this.unwrap(
-            await prompts.select({
+        const action = unwrapPrompt(
+            await selectMenu({
                 message,
                 options: exists ? [
                     {
@@ -353,7 +351,7 @@ class WizardFields {
         if (!(await this.replace(field, options.message)))
             return current
 
-        const value = this.unwrap(await prompts.text({
+        const value = unwrapPrompt(await prompts.text({
             ...options,
             defaultValue: current,
         }))
@@ -371,7 +369,7 @@ class WizardFields {
         if (!(await this.replace(field, options.message)))
             return current
 
-        const value = this.unwrap(await prompts.confirm({
+        const value = unwrapPrompt(await prompts.confirm({
             ...options,
             initialValue: current,
         }))
@@ -397,7 +395,7 @@ class WizardFields {
         if (!(await this.replace(field, options.message)))
             return current
 
-        const value = this.unwrap(await prompts.select({
+        const value = unwrapPrompt(await selectMenu({
             ...options,
             initialValue: current,
         }))
@@ -407,7 +405,7 @@ class WizardFields {
     }
 
     async optionalGroup(options: Parameters<typeof prompts.confirm>[0]): Promise<boolean> {
-        return this.enabled && this.unwrap(await prompts.confirm(options))
+        return this.enabled && unwrapPrompt(await prompts.confirm(options))
     }
 
     async keyPair(
@@ -438,8 +436,8 @@ class WizardFields {
             this.partial
             && (!existing.seed || !existing.public)
         )
-            this.unwrap(
-                await prompts.select({
+            unwrapPrompt(
+                await selectMenu({
                     message: fieldVariables[seedField][0],
                     options: [{
                         value: 'generate',
@@ -651,10 +649,10 @@ const printHelp = (): void => {
 
             ${c.bold('Usage:')}
             ${c.dim('# Interactive mode')}
-            ./init-config.sh
+            ./run.sh
 
             ${c.dim('# Non-interactive mode (CI/automation)')}
-            ./init-config.sh --non-interactive --name=<name> --env=<env>
+            dev-tools/dev-console/actions/init-config.sh --non-interactive --name=<name> --env=<env>
 
             ${c.bold('Options:')}
             -h, --help              Show this help message
@@ -663,8 +661,8 @@ const printHelp = (): void => {
             --env=<environment>     Environment type: local, dev, production
 
             ${c.bold('Examples:')}
-            ./init-config.sh
-            ./init-config.sh --non-interactive --name=kitty --env=local
+            ./run.sh
+            dev-tools/dev-console/actions/init-config.sh --non-interactive --name=kitty --env=local
 
             ${c.bold('Output:')}
             Creates .env.<name>-<env> file in the project root
@@ -809,7 +807,7 @@ const generateSecurePassword = (length: number = 32): string => {
 // ============================================================================
 
 const chooseConfigUpdate = async (envFilePath: string): Promise<'partial' | 'overwrite' | null> => {
-    const mode = await prompts.select({
+    const mode = await selectMenu({
         message: `How do you want to update ${path.basename(envFilePath)}?`,
         options: [
             {
@@ -835,13 +833,9 @@ const chooseConfigUpdate = async (envFilePath: string): Promise<'partial' | 'ove
 }
 
 const selectConfiguration = async (): Promise<EnvConfig | null> => {
-    prompts.intro(
-        c.bgCyan(
-            c.black(' Lixpi Environment Setup '),
-        ),
-    )
+    showWizardIntro('Lixpi Environment Setup')
 
-    const action = await prompts.select({
+    const action = await selectMenu({
         message: 'Generate a new configuration or edit an existing one?',
         options: [
             {
@@ -866,12 +860,7 @@ const selectConfiguration = async (): Promise<EnvConfig | null> => {
     let partial = false
 
     if (action === 'edit') {
-        const configs = fs.readdirSync(WORKSPACE_DIR).filter(name => name.startsWith('.env.')).filter(name => {
-            const filePath = path.join(WORKSPACE_DIR, name)
-
-            return fs.existsSync(filePath) && fs.statSync(filePath).isFile()
-        })
-            .sort()
+        const configs = listEnvironmentFiles(WORKSPACE_DIR)
 
         if (!configs.length) {
             prompts.cancel('No existing .env configurations found. Run setup again and choose Generate new.')
@@ -879,7 +868,7 @@ const selectConfiguration = async (): Promise<EnvConfig | null> => {
             return null
         }
 
-        const selected = await prompts.select({
+        const selected = await selectMenu({
             message: 'Select a configuration to edit',
             options: configs.map(
                 name => ({
@@ -917,7 +906,7 @@ export const runInteractivePrompts = async (): Promise<EnvConfig | null> => {
     try {
         return await selectConfiguration()
     } catch (error) {
-        if (!(error instanceof SetupCancelled))
+        if (!(error instanceof PromptCancelled))
             throw error
 
         prompts.cancel('Setup cancelled')
@@ -2257,10 +2246,10 @@ const main = async (): Promise<void> => {
             `  Before starting services, provision the Auth0 custom domain configured in ${c.cyan(envFileName)}. DNS verification and HTTPS discovery must succeed.`,
         )
 
-    debugLog(`  1. Run ${c.cyan(`docker compose --env-file ${envFileName} up`)}`)
+    debugLog(`  1. Run ${c.cyan(`docker compose -f infrastructure/docker/docker-compose.yml --env-file ${envFileName} up`)}`)
 
     if (config.configureAwsSso)
-        debugLog(`  2. Run ${c.cyan('./aws-sso-login.sh')} to sign in to AWS SSO`)
+        debugLog(`  2. Run ${c.cyan('./run.sh')} and choose Sign in to AWS SSO`)
 
     debugLog()
 }

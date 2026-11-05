@@ -17,7 +17,7 @@ The source separates three jobs. `shared` reads registry data and repository fil
 
 The update command resolves and reviews every selected dependency before it builds prospective data. Actual apply refuses changed dependencies whose release review is `unavailable`. It creates the native-file plan before writing the catalogs, so an unregistered or unsupported native declaration fails the command before an authoritative catalog change.
 
-Both commands are plain Node entry points. [`docker-compose.versions-registry.yml`](../../../docker-compose.versions-registry.yml) supplies the repository mount, Node image, working directory, network policy, optional GitHub token, and entrypoint. The offline service has no network. The update service has network access because publisher resolution requires it.
+Both commands are plain Node entry points. [`infrastructure/docker/docker-compose.versions-registry.yml`](../../../infrastructure/docker/docker-compose.versions-registry.yml) supplies the repository mount, Node image, working directory, network policy, optional GitHub token, and entrypoint. The offline service has no network. The update service has network access because publisher resolution requires it.
 
 ## Repository and catalog access
 
@@ -28,7 +28,7 @@ Both commands are plain Node entry points. [`docker-compose.versions-registry.ym
 - `package.json` files anywhere outside ignored directories;
 - `go.mod` files anywhere outside ignored directories;
 - files whose names contain `Dockerfile` or `dockerfile`;
-- root `docker-compose*.yml` and `docker-compose*.yaml` files;
+- `docker-compose*.yml` and `docker-compose*.yaml` files under `infrastructure/docker/`;
 - `.github/workflows/*.yml` and `.github/workflows/*.yaml`.
 
 [`src/shared/version-catalog.ts`](../src/shared/version-catalog.ts) loads the five catalog files and the Docker build-argument adapter. `VersionCatalog` exposes the typed catalog data, resolves `{{...}}` templates, applies supported transforms, expands image tags, and builds the final Docker argument values.
@@ -63,7 +63,7 @@ Every external `FROM` must use a registered argument. The accepted exceptions ar
 
 ### Compose files and workflows
 
-[`src/sync/docker-compose-synchronizer.ts`](../src/sync/docker-compose-synchronizer.ts) extracts an image repository from each root Compose `image:` declaration and writes the complete selected reference. External repositories must exist in `container-images.json`. Local repositories starting with `lixpi/` remain untouched.
+[`src/sync/docker-compose-synchronizer.ts`](../src/sync/docker-compose-synchronizer.ts) extracts an image repository from each Compose `image:` declaration and writes the complete selected reference. External repositories must exist in `container-images.json`. Local repositories starting with `lixpi/` remain untouched.
 
 [`src/sync/github-actions-synchronizer.ts`](../src/sync/github-actions-synchronizer.ts) rewrites external `uses:` declarations from `github-actions.json`. Local `./...` actions and `docker://...` actions retain their native references. Any other unregistered Action fails with its file and line number.
 

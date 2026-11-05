@@ -11,7 +11,7 @@ Run it through `lixpi-utils`. Never run it on the host, and never install Node t
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
     fetch-byteplus-documentation "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" \
     https://docs.byteplus.com/en/docs/ModelArk/2377608
 ```

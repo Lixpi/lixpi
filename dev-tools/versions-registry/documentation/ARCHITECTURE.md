@@ -55,7 +55,7 @@ graph TB
 | `RepositoryFiles` | Discovers supported native files and confines registry and repository paths |
 | Format synchronizers | Validate one native format and return its complete expected source text |
 
-The synchronizers do not maintain a file-by-file mapping. Discovery recognizes `package.json`, `go.mod`, Dockerfile names, root Compose files, and workflow YAML under `.github/workflows/`. Dependency caches, build output, fixtures, vendored test data, and the registry itself are excluded from discovery.
+The synchronizers do not maintain a file-by-file mapping. Discovery recognizes `package.json`, `go.mod`, Dockerfile names, `infrastructure/docker` Compose files, and workflow YAML under `.github/workflows/`. Dependency caches, build output, fixtures, vendored test data, and the registry itself are excluded from discovery.
 
 ## Reference resolution
 
@@ -78,7 +78,7 @@ Each native format keeps its own syntax and semantics:
 | `package.json` | Replaces registered dependency fields, workspace package versions, and `pnpm@...`; preserves `workspace:`, `file:`, and `link:` declarations |
 | `go.mod` | Replaces the single `go` directive and every registered requirement; keeps comments and indirect markers |
 | Dockerfile | Generates registered `ARG` defaults, requires external `FROM` images to use registered arguments, and rejects direct managed tool versions |
-| Root Compose YAML | Replaces registered external image references and preserves local `lixpi/*` image names |
+| Compose YAML | Replaces registered external image references and preserves local `lixpi/*` image names |
 | GitHub Actions workflow | Replaces external `uses:` releases and preserves local actions and `docker://` actions |
 
 ## Dry run and apply

@@ -153,7 +153,7 @@ export class RepositoryFiles {
 
     private isNativeConsumer(path: string): boolean {
         return /(?:^|\/)(?:package\.json|go\.mod|[^/]*[Dd]ockerfile[^/]*)$/.test(path)
-            || /^docker-compose[^/]*\.ya?ml$/.test(path)
+            || /^infrastructure\/docker\/docker-compose[^/]*\.ya?ml$/.test(path)
             || /^\.github\/workflows\/[^/]+\.ya?ml$/.test(path)
     }
 }

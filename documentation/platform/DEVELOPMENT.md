@@ -5,7 +5,7 @@ description: Local development quick start for Lixpi — environment setup, infr
 
 # Development Guide
 
-This guide gets Lixpi running locally. Everything runs in **Docker** via `docker-compose` — you do not install Node, pnpm, or Pulumi on the host. For what each service is and how they fit together, see [System Architecture](./SYSTEM-ARCHITECTURE.md); for AWS deployment, see [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md).
+This guide gets Lixpi running locally. Everything runs in **Docker** via Docker Compose — you do not install Node, pnpm, or Pulumi on the host. For what each service is and how they fit together, see [System Architecture](SYSTEM-ARCHITECTURE.md); for AWS deployment, see [Infrastructure Overview](deployment/INFRASTRUCTURE-OVERVIEW.md).
 
 ## Services at a glance
 
@@ -26,15 +26,9 @@ The [AI Model Registry](../../services/ai-model-registry/documentation/AI-MODEL-
 
 ### 1. Environment setup
 
-Run the interactive setup wizard to generate your `.env` file:
+Run the interactive setup wizard to generate your `.env.<stage-name>` file:
 
-```bash
-# macOS / Linux
-./init-config.sh
-
-# Windows
-init-config.bat
-```
+Run `./run.sh` and choose **Create or edit a configuration**.
 
 For CI/automation (non-interactive), see [`dev-tools/config-utils/README.md`](../../dev-tools/config-utils/README.md).
 
@@ -42,21 +36,7 @@ The shared configuration runner writes the ignored repository metadata file `env
 
 `env.lixpi` also sets `CODING_AGENTS_TEST_EXECUTION_MODE` and `CODING_AGENTS_TEST_LINTER_MODE`. Agents read these values before writing, modifying, or running tests and before formatting and lint checks; the [code-quality skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) defines what `true`, `false`, and `auto` mean. Test-file edits have no separate permission gate when the test mode is `true` or `auto`.
 
-### 2. Point Docker Compose at your environment file
-
-The wizard above writes `.env.<stage-name>` (e.g. `.env.shelby-local`), not a plain `.env` — and Docker Compose only auto-loads a file literally named `.env`. Without one, every `docker compose` command in this repo needs `--env-file .env.<stage-name>` typed out explicitly, or variables across the root Compose file and its included partials come back unset with a wall of `variable is not set` warnings.
-
-Run the picker once to symlink `.env` to your chosen file — after that, every command below works with no `--env-file` flag needed:
-
-```bash
-# macOS / Linux
-./set-env.sh
-
-# Windows
-set-env.bat
-```
-
-Safe to re-run whenever you want to switch environments; it only ever replaces a symlink it created itself, never a real file.
+### 2. Review the generated environment
 
 The generated local environment sets `METRICS_ENABLED=false`. Enable it only when the deployed stack includes a responder for `metrics.provider.request.authorize`; otherwise the API rejects generation before it calls a model.
 
@@ -64,13 +44,7 @@ The generated local environment sets `METRICS_ENABLED=false`. Enable it only whe
 
 Set up TLS certificates and DynamoDB tables. This is required before starting the application for the first time:
 
-```bash
-# macOS / Linux
-./init-infrastructure.sh
-
-# Windows (run as Administrator for certificate installation)
-init-infrastructure.bat
-```
+Run `./run.sh` and choose **Initialize infrastructure**, then pick the environment file to use.
 
 This script will:
 
@@ -80,43 +54,30 @@ This script will:
 
 ### 4. Start the application
 
-Run the startup script and select an environment when prompted:
-
-```bash
-# macOS / Linux
-./start.sh
-
-# Windows
-start.bat
-```
+Run `./run.sh` and choose **Start services**. It asks which environment file to use, then shows one page with the container and service choices above the service tree. See the [dev console](../../dev-tools/dev-console/README.md).
 
 ## AWS sign-in
 
-Containers that call AWS locally, such as `api` for Bedrock inference and `pulumi` for deployments, read your AWS SSO session from the `lixpi-aws-config` Docker volume mounted at `/root/.aws`. The profiles come from `.aws/config`, which the setup wizard writes from `dev-tools/config-utils/templates/aws-config.template`. Sign in, or refresh an expired session, with:
+Containers that call AWS locally, such as `api` for Bedrock inference and `pulumi` for deployments, read your AWS SSO session from the `lixpi-aws-config` Docker volume mounted at `/root/.aws`. The profiles come from `.aws/config`, which the setup wizard writes from `dev-tools/config-utils/templates/aws-config.template`. To sign in or refresh an expired session, run `./run.sh`, choose **Sign in to AWS SSO** and pick the environment file whose `AWS_PROFILE` you want.
 
-```bash
-./aws-sso-login.sh              # pick a .env.* stage and use its AWS_PROFILE
-./aws-sso-login.sh <profile>    # sign in as a named profile from .aws/config
-```
+The login runs in the standalone `lixpi-aws-cli` container from [`infrastructure/docker/docker-compose.aws-cli.yml`](../../infrastructure/docker/docker-compose.aws-cli.yml), its own Compose project, so it never starts the application stack. The CLI prints a URL and a code, and you approve the code in the browser on your host. Restart running containers afterwards.
 
-The login runs in the standalone `lixpi-aws-cli` container from [`docker-compose.aws-cli.yml`](../../docker-compose.aws-cli.yml), its own Compose project, so it never starts the application stack. The CLI prints a URL and a code, and you approve the code in the browser on your host. Restart running containers afterwards.
-
-The volume has a fixed name rather than a Compose-project prefix, so other repositories share the same session. Their Compose files declare an `aws-config` volume named `lixpi-aws-config`, mount it at `/root/.aws`, and bind-mount this checkout's `.aws/config` over `/root/.aws/config`. They sign in by running this repository's `aws-sso-login.sh` with their profile name. The Pulumi image keeps its own AWS CLI because deployments need it.
+The volume has a fixed name rather than a Compose-project prefix, so other repositories share the same session. Their Compose files declare an `aws-config` volume named `lixpi-aws-config`, mount it at `/root/.aws`, and bind-mount this checkout's `.aws/config` over `/root/.aws/config`. They sign in by running this repository's `dev-tools/dev-console/actions/aws-sso-login.sh` with their profile name. The Pulumi image keeps its own AWS CLI because deployments need it.
 
 ## Dependency versions
 
 Inspect a dependency update and its complete upstream release information before applying it:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
 ```
 
 The selector can name one dependency, several dependencies, a dependency group, or `all`. The update command can cross major versions and synchronizes the committed native declarations after applying a reviewed release. To select an exact version manually, edit the type-specific JSON catalog under `dev-tools/versions-registry/`, then run:
 
 ```bash
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
-docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
+docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
 ```
 
 These commands run inside standalone Node containers without installing dependencies or starting application services. The check is read-only. Native Dockerfiles, package manifests, Go modules, and CI workflows remain usable by their ordinary tools. See [Dependency Version Registry](../../dev-tools/versions-registry/README.md) for selectors, release-note sources, generated reports, catalog ownership, and failure behavior.
@@ -126,18 +87,15 @@ These commands run inside standalone Node containers without installing dependen
 ### Web UI
 
 ```shell
-# Remove all previous builds (including dangling images) and force a re-build
-./rebuild-containers.sh lixpi-web-ui
-
-# Then run the single service
-docker compose up lixpi-web-ui   # requires .env set (./set-env.sh); override with --env-file otherwise
+# Switch Containers to Rebuild and select only lixpi-web-ui
+./run.sh
 ```
 
 ### User portal
 
 ```shell
-./rebuild-containers.sh lixpi-web-ui-user-portal
-docker compose up lixpi-web-ui-user-portal
+# Switch Containers to Rebuild and select only lixpi-web-ui-user-portal
+./run.sh
 ```
 
 The portal is served at `http://localhost:3002`. `VITE_USER_PORTAL_URL` is required in the environment file and supplies the URL to both browser clients, so the avatar in `web-ui` opens the portal in a new tab and the portal uses the same value as its distinct OAuth redirect URI. Both clients continue to use the same identity-provider tenant, client ID, and API audience.
@@ -145,15 +103,12 @@ The portal is served at `http://localhost:3002`. `VITE_USER_PORTAL_URL` is requi
 ### API
 
 ```shell
-# Remove all previous builds (including dangling images) and force a re-build
-./rebuild-containers.sh lixpi-api
-
-# Then run the single service
-docker compose up lixpi-api   # requires .env set (./set-env.sh); override with --env-file otherwise
+# Switch Containers to Rebuild and select only lixpi-api
+./run.sh
 ```
 
 {% callout type="note" %}
-Some dependencies are baked into a service's image at build time (for example, the `ffmpeg` binary in the `api` image used for video poster extraction) rather than bind-mounted. After changing a service's `Dockerfile` or its system/package dependencies, rebuild that container with `./rebuild-containers.sh <name>` — a plain `up` will keep running the stale image.
+Some dependencies are baked into a service's image at build time (for example, the `ffmpeg` binary in the `api` image used for video poster extraction) rather than bind-mounted. After changing a service's `Dockerfile` or its system/package dependencies, rebuild that container by running `./run.sh`, switching **Containers** to **Rebuild** and selecting only it — a plain `up` will keep running the stale image.
 {% /callout %}
 
 ## Deploying to production (Web UI build)
@@ -170,7 +125,7 @@ For the full AWS deployment story (Pulumi, ECS/Fargate, CloudFront, the NATS clu
 
 LocalAuth0 provides zero-config Auth0 mocking for offline development — it generates RS256 keypairs, issues JWTs matching production Auth0's OAuth flows, and persists state in a Docker volume. No Auth0 account or internet connection is required.
 
-- **Configuration:** set `VITE_MOCK_AUTH=true` in your `.env` file (the default in the local environment).
+- **Configuration:** set `VITE_MOCK_AUTH=true` in your `.env.<stage-name>` file (the default in the local environment).
 - **Default user:** `test@local.dev` / `local|test-user-001`.
 - **Image / language:** the Rust `public.ecr.aws/primaassicurazioni/localauth0` image (upstream [`primait/localauth0`](https://github.com/primait/localauth0)).
 
@@ -190,13 +145,13 @@ First, create two S3 buckets for Pulumi state:
 To rebuild the Pulumi container from scratch:
 
 ```shell
-./rebuild-containers.sh lixpi-pulumi
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile deploy build --no-cache lixpi-pulumi
 ```
 
 To run Pulumi:
 
 ```shell
-docker compose up lixpi-pulumi   # requires .env set (./set-env.sh); override with --env-file otherwise
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml up lixpi-pulumi
 ```
 
-For how the Pulumi program is structured and the full set of commands (`up`, `preview`, `destroy`, …), see [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md).
+For how the Pulumi program is structured and the full set of commands (`up`, `preview`, `destroy`, …), see [Infrastructure Overview](deployment/INFRASTRUCTURE-OVERVIEW.md).

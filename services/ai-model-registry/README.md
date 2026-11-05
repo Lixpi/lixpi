@@ -100,7 +100,7 @@ Any source that cannot answer fails the whole fetch. Not just a dead credential:
 
 That is the point of failing rather than continuing. A source that is broken and a source that has nothing to say look identical once written to disk, and continuing would silently reprice models onto whichever sources still answered.
 
-An expired or missing AWS session goes through `err` and stops the run, naming the call that hit it. The message states only that the session expired, without the profile or a command; sign in again with the repository's `./aws-sso-login.sh`. The CLI exits with status 2.
+An expired or missing AWS session goes through `err` and stops the run, naming the call that hit it. The message states only that the session expired, without the profile or a command; sign in again with the repository's `./run.sh` (choose **Sign in to AWS SSO**). The CLI exits with status 2.
 
 Every run records its outcome in `data/_last-sync.json`, whether it finished or failed and which sources failed. The catalog page reads it and shows a banner naming each failed source and what it said, so a stale catalog announces itself instead of looking current.
 
@@ -113,7 +113,7 @@ A run reports four things: `SOURCES DIFFER` where two catalogs disagree with eac
 Run one by hand inside the container:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   node --experimental-transform-types ./src/catalog/cli.ts --no-write
 ```
 
@@ -124,10 +124,10 @@ The scheduled loop is off unless `MODEL_CATALOG_SYNC_ENABLED=true`, so starting 
 ## Running it
 
 ```bash
-docker compose --profile dev --profile main up -d lixpi-ai-model-registry
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main up -d lixpi-ai-model-registry
 ```
 
-Open http://localhost:3010. Stop it with `docker compose --profile dev --profile main stop lixpi-ai-model-registry`. The second profile makes the Compose project parse because `lixpi-dynamodb-admin` sits in the dev profile and depends on `lixpi-dynamodb` in main.
+Open http://localhost:3010. Stop it with `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main stop lixpi-ai-model-registry`. The second profile makes the Compose project parse because `lixpi-dynamodb-admin` sits in the dev profile and depends on `lixpi-dynamodb` in main.
 
 Node runs `src/server.ts` directly through `--experimental-transform-types`, so the server needs no build step. The TypeScript and SCSS client under `src/client` is served by Vite in development, and the deployed image builds it at container start through `pnpm run build-and-serve`, the same shape `services/api` and `services/web-ui` use.
 
@@ -138,8 +138,8 @@ The service hot reloads. Vite serves the page on 3010 and proxies `/api` to the 
 Run the browser-client tests and service quality checks through the repository runners:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
 ```
 
 ## Pages
@@ -177,7 +177,7 @@ Registry data must be read and changed through commands that execute inside `lix
 The image includes `curl` and `jq`. A read uses this shape:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsS http://127.0.0.1:3010/api/catalog
 ```
 

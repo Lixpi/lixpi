@@ -7,7 +7,7 @@ description: Docker image, mount contract, and commands for Go formatting, linti
 
 This directory builds the shared Go quality image. A repository-specific Compose adapter mounts one or more Go modules into the image and invokes [`run-quality.sh`](run-quality.sh) with a target name and action.
 
-The reusable service is defined in [`../runner-compose/go-quality.base.yml`](../runner-compose/go-quality.base.yml). The main repository extends it from [`../../../docker-compose.go-quality-runner.yml`](../../../docker-compose.go-quality-runner.yml). Other repositories extend the same base file and supply their own target mounts.
+The reusable service is defined in [`../runner-compose/go-quality.base.yml`](../runner-compose/go-quality.base.yml). The main repository extends it from [`../../../infrastructure/docker/docker-compose.go-quality-runner.yml`](../../../infrastructure/docker/docker-compose.go-quality-runner.yml). Other repositories extend the same base file and supply their own target mounts.
 
 ## Target mount contract
 
@@ -34,7 +34,7 @@ The base service provides separate module, build, and GolangCI-Lint cache volume
 Run a main-repository target from the repository root:
 
 ```bash
-docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner <target> <fix|validate|dependencies>
+docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner <target> <fix|validate|dependencies>
 ```
 
 [`golangci.yml`](golangci.yml) selects specialized GolangCI-Lint analyzers and the syntax-aware `gofumpt`, `goimports`, and `golines` formatters. [`source-conventions.go`](source-conventions.go) parses Go syntax to reject block comments and keep a validation `if` attached to the assignment whose value it checks.
@@ -50,10 +50,10 @@ Both quality actions run syntax, formatting, GolangCI-Lint, and semantic checks 
 The `go-quality-tools` target mounts this module into the shared runners. Its tests cover import aliases, dot imports, shadowed names, standard and unrelated methods, function references, constant error strings, panic exceptions, generated files, and exact error assertions in tests.
 
 ```bash
-docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner go-quality-tools dependencies
-docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner go-quality-tools fix
-docker compose -f docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner go-quality-tools
-docker compose -f docker-compose.go-quality-runner.yml --profile dev build lixpi-go-quality-runner
+docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner go-quality-tools dependencies
+docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner go-quality-tools fix
+docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner go-quality-tools
+docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev build lixpi-go-quality-runner
 ```
 
 After changing either checker, rebuild the quality image before validating consuming services. Source and configuration mounts do not replace the compiled analyzer executables.

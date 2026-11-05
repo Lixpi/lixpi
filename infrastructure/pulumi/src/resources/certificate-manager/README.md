@@ -32,7 +32,7 @@ The [NATS deployment adapter](../NATS-cluster/README.md) reads the published pai
 The colocated Pulumi tests use mocked resources to check concurrency, scheduling, retention and alarms. Run them through the shared infrastructure test domain:
 
 ```bash
-docker compose -f docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner infrastructure src/resources/certificate-manager/lambda-certificate-manager.test.ts
+docker compose -f infrastructure/docker/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner infrastructure src/resources/certificate-manager/lambda-certificate-manager.test.ts
 ```
 
 The [Go Testing and Tooling guide](../../../../../documentation/code-quality/testing/GO.md) documents the Caddy runtime suite. Public ACME issuance and deployed IAM permissions are verified through the target account's deployment process.

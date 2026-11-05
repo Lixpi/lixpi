@@ -29,8 +29,7 @@ trap cleanup EXIT
 # Prove that invalid import layout fails, fixes to the exact expected text, then passes both
 # the formatter and the dedicated import-order checker without another change.
 cp "$fixture_dir/import-layout-input.txt" "$temporary_dir/import-layout.ts"
-if node "$typescript_format_runner" check "$temporary_dir/import-layout.ts" >/dev/null 2>&1 \
-    && node "$import_order_checker" check "$temporary_dir/import-layout.ts" >/dev/null 2>&1; then
+if node "$typescript_format_runner" check "$temporary_dir/import-layout.ts" >/dev/null 2>&1 && node "$import_order_checker" check "$temporary_dir/import-layout.ts" >/dev/null 2>&1; then
     echo "Expected the composite formatter to reject the invalid import fixture" >&2
     exit 1
 fi
@@ -89,9 +88,7 @@ cp "$fixture_dir/source-extension-alias-importer.txt" "$source_extension_project
 cp "$fixture_dir/source-extension-alias-module.txt" "$source_extension_project/client/src/value.js"
 source_extension_aliases="[{\"specifierPrefix\":\"\$src\",\"importerScope\":\"$source_extension_project\",\"targetDirectory\":\"$source_extension_project/shared\"},{\"specifierPrefix\":\"\$src\",\"importerScope\":\"$source_extension_project/client\",\"targetDirectory\":\"$source_extension_project/client/src\"}]"
 node "$source_extension_runner" fix --aliases "$source_extension_aliases" -- "$source_extension_project" >/dev/null
-if [ ! -f "$source_extension_project/client/src/value.ts" ] \
-    || [ -f "$source_extension_project/client/src/value.js" ] \
-    || ! grep -F 'from "$src/value.ts"' "$source_extension_project/client/src/importer.ts" >/dev/null; then
+if [ ! -f "$source_extension_project/client/src/value.ts" ] || [ -f "$source_extension_project/client/src/value.js" ] || ! grep -F 'from "$src/value.ts"' "$source_extension_project/client/src/importer.ts" >/dev/null; then
     echo "The source extension runner did not use the configured importer scope and alias target" >&2
     exit 1
 fi

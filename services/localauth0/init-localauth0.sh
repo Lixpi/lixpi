@@ -17,9 +17,7 @@ echo "Setting custom claims..."
         { "name": "family_name", "value": { "String": "User" } },
         { "name": "email_verified", "value": { "Json": true } }
     ]
-}' \
-    --header="Content-Type: application/json" \
-    "$LOCALAUTH0_URL/oauth/token/custom_claims" > /dev/null
+}' --header="Content-Type: application/json" "$LOCALAUTH0_URL/oauth/token/custom_claims" > /dev/null
 
 # Set user info
 echo "Setting user info..."
@@ -31,9 +29,7 @@ echo "Setting user info..."
     "email": "test@local.dev",
     "email_verified": true,
     "picture": ""
-}' \
-    --header="Content-Type: application/json" \
-    "$LOCALAUTH0_URL/oauth/token/user_info" > /dev/null
+}' --header="Content-Type: application/json" "$LOCALAUTH0_URL/oauth/token/user_info" > /dev/null
 
 # Set permissions for the API audience
 echo "Setting permissions for audience: $AUDIENCE..."
@@ -51,8 +47,6 @@ echo "Setting permissions for audience: $AUDIENCE..."
         \"organization:read\",
         \"organization:write\"
     ]
-}" \
-    --header="Content-Type: application/json" \
-    "$LOCALAUTH0_URL/permissions" > /dev/null
+}" --header="Content-Type: application/json" "$LOCALAUTH0_URL/permissions" > /dev/null
 
 echo "LocalAuth0 configuration complete!"

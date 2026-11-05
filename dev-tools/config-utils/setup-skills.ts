@@ -2,6 +2,13 @@ import * as prompts from '@clack/prompts'
 import c from 'chalk'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { selectMenu } from '@lixpi/cli-ui/select-menu'
+import { TreeMultiSelectPrompt } from '@lixpi/cli-ui/tree-multiselect-prompt'
+import {
+    PromptCancelled,
+    showWizardIntro,
+    unwrapPrompt,
+} from '@lixpi/cli-ui/prompt-session'
 
 const SKILLS_ROOT = '/skills'
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -49,8 +56,6 @@ const HARNESS_CHOICES: HarnessChoice[] = [
     },
 ]
 
-class SetupCancelled extends Error {}
-
 class SkillSetupWizard {
     private readonly hostRoot: string
 
@@ -59,16 +64,11 @@ class SkillSetupWizard {
     }
 
     async run(): Promise<string> {
-        prompts.intro(
-            c.bgCyan(
-                c.black(' Lixpi Skill Setup '),
-            ),
-            { output: process.stderr },
-        )
+        showWizardIntro('Lixpi Skill Setup', process.stderr)
 
         const skillNames = this.readSkillNames()
-        const scope = this.unwrap<InstallScope>(
-            await prompts.select({
+        const scope = unwrapPrompt<InstallScope>(
+            await selectMenu({
                 message: 'Where should the skills be installed?',
                 options: [
                     {
@@ -89,7 +89,7 @@ class SkillSetupWizard {
 
         const suggestedProjectPath = this.hostRoot
         const projectPath = scope === 'project'
-            ? this.unwrap<string>(
+            ? unwrapPrompt<string>(
                 await prompts.autocomplete({
                     message: 'Type a project path, or press Tab to use the suggestion',
                     options() {
@@ -119,10 +119,10 @@ class SkillSetupWizard {
             )
             : ''
 
-        const harnesses = this.unwrap<string[]>(
-            await prompts.multiselect({
+        const harnesses = unwrapPrompt<string[]>(
+            await new TreeMultiSelectPrompt({
                 message: 'Which harnesses should receive the skills?',
-                options: HARNESS_CHOICES.map(
+                roots: HARNESS_CHOICES.map(
                     choice => ({
                         value: choice.value,
                         label: choice.label,
@@ -132,26 +132,29 @@ class SkillSetupWizard {
                         ),
                     }),
                 ),
-                required: true,
+                initialValues: [],
+                requiredMessage: 'Select at least one harness.',
                 output: process.stderr,
-            }),
+            }).prompt(),
         )
 
-        const skills = this.unwrap<string[]>(
-            await prompts.groupMultiselect({
+        const skills = unwrapPrompt<string[]>(
+            await new TreeMultiSelectPrompt({
                 message: 'Which skills should be installed?',
-                options: {
-                    'All skills': skillNames.map(
+                roots: [{
+                    value: 'group:all-skills',
+                    label: 'All skills',
+                    children: skillNames.map(
                         skillName => ({
                             value: skillName,
                             label: skillName,
                         }),
                     ),
-                },
-                selectableGroups: true,
-                required: true,
+                }],
+                initialValues: [],
+                requiredMessage: 'Select at least one skill.',
                 output: process.stderr,
-            }),
+            }).prompt(),
         )
 
         const plan: SelectionPlan = {
@@ -171,7 +174,7 @@ class SkillSetupWizard {
             { output: process.stderr },
         )
 
-        const confirmed = this.unwrap<boolean>(
+        const confirmed = unwrapPrompt<boolean>(
             await prompts.confirm({
                 message: 'Install these skill links?',
                 initialValue: true,
@@ -180,7 +183,7 @@ class SkillSetupWizard {
         )
 
         if (!confirmed)
-            throw new SetupCancelled()
+            throw new PromptCancelled()
 
         prompts.outro(
             c.green('Selection confirmed. Installing links on the host.'),
@@ -239,13 +242,6 @@ class SkillSetupWizard {
 
         return `${lines.join('\n')}\n`
     }
-
-    private unwrap<T>(value: T | symbol): T {
-        if (prompts.isCancel(value))
-            throw new SetupCancelled()
-
-        return value as T
-    }
 }
 
 const run = async (): Promise<void> => {
@@ -257,7 +253,7 @@ const run = async (): Promise<void> => {
 try {
     await run()
 } catch (error) {
-    if (error instanceof SetupCancelled)
+    if (error instanceof PromptCancelled)
         prompts.cancel('Setup cancelled', { output: process.stderr })
     else
         prompts.cancel(error instanceof Error ? error.message : String(error), { output: process.stderr })

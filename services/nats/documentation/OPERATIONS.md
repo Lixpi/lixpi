@@ -16,15 +16,15 @@ Local Compose starts a one-shot Caddy job before the broker services. A broker c
 Build and start the broker services from the repository root after the [environment setup](../../../documentation/platform/DEVELOPMENT.md):
 
 ```bash
-docker compose --profile main up -d --build lixpi-nats lixpi-nats-2 lixpi-nats-3
-docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health ready
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main up -d --build lixpi-nats lixpi-nats-2 lixpi-nats-3
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health ready
 ```
 
 This command starts the configured application cluster and its certificate dependency. For development tests, use the synthetic isolated setup in [Go Testing and Tooling](../../../documentation/code-quality/testing/GO.md), which has its own credentials and volumes. API and NEX wait for broker admission readiness. NATS can start without the API, DynamoDB or a successful JWKS fetch, so those dependencies do not form a startup cycle.
 
 ## Applying registration changes
 
-The normal [init-config wizard](../../../dev-tools/config-utils/README.md) derives and signs the application manifest whenever it saves a new configuration or a partial update. For an existing environment, choose **Edit existing** and **Partial update**; keep existing credentials unless you intend to replace them. After changing endpoint permission code, a partial save with every group skipped still prepares the updated declaration. API startup submits it automatically. The private registration authority seed stays in deployment configuration, outside the API and broker containers.
+The normal [configuration wizard](../../../dev-tools/config-utils/README.md) derives and signs the application manifest whenever it saves a new configuration or a partial update. For an existing environment, choose **Edit existing** and **Partial update**; keep existing credentials unless you intend to replace them. After changing endpoint permission code, a partial save with every group skipped still prepares the updated declaration. API startup submits it automatically. The private registration authority seed stays in deployment configuration, outside the API and broker containers.
 
 The broker accepts a repeated identical manifest without changing its revision. A changed declaration requires a higher application version and an atomic registry revision match. An older API replica cannot replace a newer declaration with its startup payload. Give replicas the same approved manifest during rollout; a replica carrying an obsolete manifest fails startup.
 
@@ -52,8 +52,8 @@ Installed TLS files have their own lifecycle. The broker requires a readable, va
 The bundled health command reads its password from the container environment and probes loopback port 3020:
 
 ```bash
-docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health broker
-docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health ready
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health broker
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats health ready
 ```
 
 Use `/broker` to check whether the message broker can run, and `/ready` to check whether new connections have a working authentication path with available capacity. Existing clients can still exchange messages when `/ready` fails because the verifier is saturated. Restarting the broker solely for that condition would interrupt those clients and remove more capacity.
@@ -113,8 +113,8 @@ The data directory contains JetStream state, `server-name`, `placement-zone` and
 Before removing a host, the scaling controller must stop new eligible placements onto it and move its stream/consumer replicas elsewhere. The local `fence` command handles only the placement part, through a mode-0600 Unix socket:
 
 ```bash
-docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats fence enable
-docker compose --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats fence disable
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats fence enable
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main exec -T lixpi-nats /usr/local/bin/lixpi-nats fence disable
 ```
 
 `enable` records the fence and removes the normal placement tags. `disable` restores them. If the change fails, the command attempts to preserve the prior state. A successful fence does not move existing data or prove that the disk is safe to discard. Unlike certificate refresh, it reloads server options and can cause authenticated clients to reconnect.
