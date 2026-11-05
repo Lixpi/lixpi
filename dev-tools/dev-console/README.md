@@ -83,6 +83,12 @@ If a rebuild was chosen, the selected containers are removed and their images ar
 
 **Prune Docker** first measures disk usage with `docker system df` on the host, because the console container has no Docker access. It shows the size and reclaimable space per category in a table and beside the matching tree rows. Networks take no measurable space, so they show no size. In the tree, Space on a group selects everything in it. **Resources** holds stopped containers, images, unused networks, volumes and build cache, with images, volumes and build cache as their own groups. **System** holds `docker system prune` in three strengths: the default, with `--all`, and with `--all --volumes`, which removes anonymous volumes but keeps named ones. Nothing is preselected, because pruning covers the whole Docker host and so also affects other projects on the machine. The console asks for confirmation with No as the default, and warns separately before **All unused volumes**, which deletes named volumes such as DynamoDB and NATS data once their containers are removed. Afterwards it prints `docker system df`.
 
+## Expired AWS sessions
+
+Any action can stop because the AWS session has expired, so the handling sits in `run-console.sh` around every action. When an action fails and an environment file was chosen, the console runs `aws-sso-login.sh --check-session` for that file's `AWS_PROFILE`. If the session is gone, it signs in with the same script the menu uses, then reruns the action with the same choices. A repository's file without `AWS_PROFILE` falls back to Lixpi's file of the same name.
+
+A failure that isn't about the session ends the action as usual, and so does Ctrl+C. The console gives up after 3 sign-ins for one action, so a repeated failure can't loop forever. Rerunning assumes the action can safely start again, which holds for Pulumi and Compose.
+
 ## Deploying
 
 A `service-commands` step holds no list of commands. The console calls the action's script with `LIXPI_CONSOLE_QUERY=catalog`, and the script asks the service itself. The service answers with one line of JSON holding its deployment target and its commands, each with a label, an effect of `read`, `change` or `destroy`, any arguments it needs, and whether it can run with this configuration. A new command in the service therefore appears in the menu with no console change.

@@ -23,6 +23,10 @@ DOCKER_USAGE=""
 CONSOLE_CATALOG=""
 ENTRY_ENV_FILE=""
 
+# Must match aws-sso-login.sh --check-session.
+AWS_SESSION_EXPIRED_STATUS=10
+MAX_SESSION_RENEWALS=3
+
 cleanup() {
     if [[ -n "${TERMINAL_STATE}" ]]; then
         stty "${TERMINAL_STATE}" 2>/dev/null || true
@@ -142,17 +146,43 @@ run_script() (
     exec bash "$1" ${SELECTED[@]+"${SELECTED[@]}"} ${ARGUMENTS[@]+"${ARGUMENTS[@]}"}
 )
 
-# Ctrl+C belongs to the running action, which stops it. Submitting an action ends the
-# console with that action's status, unless the action asks to come back to the menu.
+# Whether a failed action is worth retrying after a sign-in. Only an action with an
+# environment file can use a session, and the sign-in action handles its own failures.
+session_has_expired() {
+    [[ -n "${ENV_FILE}" && "${SCRIPT}" != "shared:aws-sso-login" ]] || return 1
+
+    local status=0
+
+    bash "${CONSOLE_PATH}/actions/aws-sso-login.sh" --check-session --env-file "${WORKSPACE_PATH}/${ENV_FILE}" || status=$?
+    [[ "${status}" -eq "${AWS_SESSION_EXPIRED_STATUS}" ]]
+}
+
+# Any action that stops because the AWS session is gone continues after a sign-in, using
+# the same script as the menu's sign-in action. Ctrl+C belongs to the running action,
+# which stops it. Submitting an action ends the console with that action's status,
+# unless the action asks to come back to the menu.
 run_action() {
     local path
-    local status=0
+    local status
+    local renewals=0
 
     path="$(script_path)"
     [[ -f "${path}" ]] || fail "The console config names a script that does not exist: ${SCRIPT}."
 
     trap ':' INT
-    run_script "${path}" || status=$?
+
+    while true; do
+        status=0
+        run_script "${path}" || status=$?
+
+        [[ "${status}" -ne 0 && "${status}" -ne 130 && "${renewals}" -lt "${MAX_SESSION_RENEWALS}" ]] || break
+        session_has_expired || break
+
+        printf '\nThe AWS session has expired or is missing. Signing in, then continuing.\n\n' >&2
+        bash "${CONSOLE_PATH}/actions/aws-sso-login.sh" --env-file "${WORKSPACE_PATH}/${ENV_FILE}" || break
+        renewals=$((renewals + 1))
+    done
+
     trap handle_signal INT
 
     if [[ -z "${RETURN_TO_MENU}" ]]; then
