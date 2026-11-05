@@ -98,16 +98,16 @@ An approved row is not merely a documentation decision. Its exposure state and l
 Agents must not read or mutate registry data with host `curl`, `jq`, Node, Python, or direct file writes. Start the service with Docker Compose and run the client tool inside `lixpi-ai-model-registry`.
 
 ```bash
-docker compose --profile dev --profile main up -d lixpi-ai-model-registry
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main up -d lixpi-ai-model-registry
 
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   curl -fsS http://127.0.0.1:3010/api/catalog
 ```
 
 The model catalog has its own endpoints on the same server: `GET /api/models` returns the merged catalog, `GET /api/model-catalog/overview` returns the same models with their provenance, authored half, and drift attached, `GET /api/models/drift` returns where external sources disagree with the authored files, and `POST /api/models/sync` runs a sync. The service also serves two pages: `/model-parameters` for the parameter registry and `/model-catalog` for the model catalog. A manual run from inside the container is:
 
 ```bash
-docker compose exec -T lixpi-ai-model-registry \
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml exec -T lixpi-ai-model-registry \
   node --experimental-transform-types ./src/catalog/cli.ts --no-write
 ```
 

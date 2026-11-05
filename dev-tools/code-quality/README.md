@@ -12,7 +12,7 @@ This directory contains the Docker images, entrypoints, tool configuration, fixt
 | [`typescript-quality-runner/`](typescript-quality-runner/README.md) | TypeScript, HTML, Sass, and CSS formatter and linter toolchain |
 | [`runner-compose/`](runner-compose/README.md) | Reusable Compose service definitions with no application source mounts |
 
-The repository-root `docker-compose.*-runner.yml` files are Lixpi's mount adapters. Another repository keeps its own adapters and extends the same base services through an absolute path to this checkout.
+The `infrastructure/docker/docker-compose.*-runner.yml` files are Lixpi's mount adapters. Another repository keeps its own adapters and extends the same base services through an absolute path to this checkout.
 
 ## How the Compose layers fit together
 

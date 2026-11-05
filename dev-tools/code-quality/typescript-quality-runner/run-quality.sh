@@ -42,8 +42,7 @@ run_oxlint_fixes() {
         fingerprint=$(source_fingerprint "$@")
         "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --threads=1 --fix --silent "$@" || true
         node "$typescript_format_runner" fix "$@"
-        if "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --silent "$@" \
-            && node "$typescript_format_runner" check "$@"; then
+        if "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --silent "$@" && node "$typescript_format_runner" check "$@"; then
             return 0
         fi
 
@@ -130,26 +129,7 @@ run_shared() {
     fi
 
     selected_paths=""
-    for package_path in \
-        auth-service \
-        capability-system \
-        canvas-engine \
-        canvas-components \
-        canvas-components-lixpi-specific \
-        constants/ts \
-        debug-tools/ts \
-        dynamodb-service \
-        nats-subject-registry \
-        nats-service/ts \
-        prosemirror \
-        test-utils \
-        ui-kit \
-        ui-kit-gentelella \
-        ui-primitives \
-        auth-client \
-        user-portal \
-        web-client-service-factory \
-        usage-reporter
+    for package_path in auth-service capability-system canvas-engine canvas-components canvas-components-lixpi-specific constants/ts debug-tools/ts dynamodb-service nats-subject-registry nats-service/ts prosemirror cli-ui test-utils ui-kit ui-kit-gentelella ui-primitives auth-client user-portal web-client-service-factory usage-reporter
     do
         package_name=${package_path%%/*}
         if [ -n "$package_filter" ] && [ "$package_filter" != "$package_name" ] && [ "$package_filter" != "$package_path" ]; then
@@ -195,9 +175,7 @@ run_domain() {
             run_action "$action" '[]' random-useful-things
             ;;
         quality-runner)
-            run_action "$action" '[]' \
-                "$tool_dir/src" \
-                "$tool_dir/stylelint.config.ts"
+            run_action "$action" '[]' "$tool_dir/src" "$tool_dir/stylelint.config.ts"
             ;;
         *)
             echo "Unknown domain: $domain" >&2
@@ -210,49 +188,7 @@ run_domain() {
 # the quality boundary accidentally through a broad repository glob.
 run_all() {
     action="${1:-validate}"
-    run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/web-ui","targetDirectory":"services/web-ui/src"},{"specifierPrefix":"$src","importerScope":"services/web-ui-user-portal","targetDirectory":"services/web-ui-user-portal/src"},{"specifierPrefix":"$src","importerScope":"services/ai-model-registry","targetDirectory":"services/ai-model-registry/src/client"}]' \
-        services/web-ui/src \
-        services/web-ui/index.html \
-        services/web-ui/vite.config.ts \
-        services/web-ui/vitest.config.ts \
-        services/web-ui-user-portal/src \
-        services/web-ui-user-portal/index.html \
-        services/web-ui-user-portal/vite.config.ts \
-        services/web-ui-user-portal/vitest.config.ts \
-        services/api/src \
-        services/api/vitest.config.ts \
-        services/nex/workloads \
-        services/nex/vitest.config.ts \
-        services/ai-model-registry/src \
-        services/ai-model-registry/vite.config.ts \
-        services/ai-model-registry/vitest.config.ts \
-        dev-tools/config-utils/setup-env.ts \
-        dev-tools/config-utils/environment-file.ts \
-        dev-tools/config-utils/run-config.ts \
-        dev-tools/config-utils/setup-skills.ts \
-        infrastructure/pulumi/src \
-        random-useful-things \
-        "$tool_dir/src" \
-        "$tool_dir/stylelint.config.ts" \
-        packages/lixpi/auth-service \
-        packages/lixpi/capability-system \
-        packages/lixpi/canvas-engine \
-        packages/lixpi/canvas-components \
-        packages/lixpi/canvas-components-lixpi-specific \
-        packages/lixpi/constants/ts \
-        packages/lixpi/debug-tools/ts \
-        packages/lixpi/dynamodb-service \
-        packages/lixpi/nats-subject-registry \
-        packages/lixpi/nats-service/ts \
-        packages/lixpi/prosemirror \
-        packages/lixpi/test-utils \
-        packages/lixpi/ui-kit \
-        packages/lixpi/ui-kit-gentelella \
-        packages/lixpi/ui-primitives \
-        packages/lixpi/auth-client \
-        packages/lixpi/user-portal \
-        packages/lixpi/web-client-service-factory \
-        packages/lixpi/usage-reporter
+    run_action "$action" '[{"specifierPrefix":"$src","importerScope":"services/web-ui","targetDirectory":"services/web-ui/src"},{"specifierPrefix":"$src","importerScope":"services/web-ui-user-portal","targetDirectory":"services/web-ui-user-portal/src"},{"specifierPrefix":"$src","importerScope":"services/ai-model-registry","targetDirectory":"services/ai-model-registry/src/client"}]' services/web-ui/src services/web-ui/index.html services/web-ui/vite.config.ts services/web-ui/vitest.config.ts services/web-ui-user-portal/src services/web-ui-user-portal/index.html services/web-ui-user-portal/vite.config.ts services/web-ui-user-portal/vitest.config.ts services/api/src services/api/vitest.config.ts services/nex/workloads services/nex/vitest.config.ts services/ai-model-registry/src services/ai-model-registry/vite.config.ts services/ai-model-registry/vitest.config.ts dev-tools/config-utils/setup-env.ts dev-tools/config-utils/environment-file.ts dev-tools/config-utils/run-config.ts dev-tools/config-utils/setup-skills.ts dev-tools/dev-console/src dev-tools/dev-console/vitest.config.ts infrastructure/pulumi/src random-useful-things "$tool_dir/src" "$tool_dir/stylelint.config.ts" packages/lixpi/auth-service packages/lixpi/capability-system packages/lixpi/canvas-engine packages/lixpi/canvas-components packages/lixpi/canvas-components-lixpi-specific packages/lixpi/constants/ts packages/lixpi/debug-tools/ts packages/lixpi/dynamodb-service packages/lixpi/nats-subject-registry packages/lixpi/nats-service/ts packages/lixpi/prosemirror packages/lixpi/cli-ui packages/lixpi/test-utils packages/lixpi/ui-kit packages/lixpi/ui-kit-gentelella packages/lixpi/ui-primitives packages/lixpi/auth-client packages/lixpi/user-portal packages/lixpi/web-client-service-factory packages/lixpi/usage-reporter
 }
 
 cd "$repository_dir"

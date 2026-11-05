@@ -120,7 +120,7 @@ Consumers import TypeScript source directly through the package export map, foll
 The shared test runner runs the colocated engine tests:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared canvas-engine
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared canvas-engine
 ```
 
 Tests cover behavior and the server-safe shared import boundary. Source under `shared` must not import another Lixpi package, browser modules or application code.

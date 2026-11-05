@@ -1,0 +1,25 @@
+{
+    "name": "@lixpi/cli-ui",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "description": "Terminal prompts and listing helpers shared by the Dockerized developer tools",
+    "exports": {
+        "./environment-files": "./src/environment-files.ts",
+        "./prompt-session": "./src/prompt-session.ts",
+        "./select-menu": "./src/select-menu.ts",
+        "./secret-input": "./src/secret-input.ts",
+        "./tree-multiselect-prompt": "./src/tree-multiselect-prompt.ts",
+        "./tree-selection": "./src/tree-selection.ts"
+    },
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "dependencies": {
+        "@clack/core": "1.5.1",
+        "@clack/prompts": "1.8.1"
+    },
+    "devDependencies": {
+        "vitest": "5.0.5"
+    }
+}

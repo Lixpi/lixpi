@@ -24,57 +24,21 @@ A few things make it unusual:
 git clone <repository-url>
 ```
 
-### 2. Environment setup
+### 2. Open the dev console
 
 ```bash
-# macOS / Linux
-./init-config.sh
-
-# Windows
-init-config.bat
+./run.sh
 ```
 
-For CI/automation, see [`dev-tools/config-utils/README.md`](dev-tools/config-utils/README.md).
+This is the one entry point for local development. It opens a menu that runs inside Docker, so the host needs nothing but Docker, and it takes you through the rest of the setup:
 
-Configuration setup first generates the ignored machine-local `env.lixpi` from the repository template, then runs the environment wizard. The shared runner and its repository mount contract are documented with the automation options.
+1. **Create or edit a configuration** generates the ignored machine-local `env.lixpi`, then runs the environment wizard, which writes `.env.<stage-name>`. For CI and other automation, see [`dev-tools/config-utils/README.md`](dev-tools/config-utils/README.md).
+2. **Initialize infrastructure** sets up TLS certificates and DynamoDB tables. It's needed once, before starting the application for the first time.
+3. **Start services** asks which `.env.*` file to use, then shows one page: rebuild or use existing containers, base or all services, and the service tree for picking individual services or groups.
 
-### 3. Point Docker Compose at your environment file
+The menu also signs in to AWS SSO, prunes Docker and installs agent skills. Esc or Ctrl+C leaves any step and returns to the menu, and finished actions return there too.
 
-`./init-config.sh` writes a `.env.<stage-name>` file (e.g. `.env.shelby-local`), not a plain `.env` — but Docker Compose only *auto-loads* a file literally named `.env`. Without one, every `docker compose`/`docker-compose` command in this repo (and there are many: `start.sh`, `rebuild-containers.sh`, the test runner, Pulumi, individual service commands in the docs) either needs `--env-file .env.<stage-name>` typed out explicitly every time, or variables across the root Compose file and its included partials come back unset with a wall of `variable is not set` warnings.
-
-`./set-env.sh` fixes this once: it lists your `.env.*` files, and symlinks `.env` to whichever one you pick. After that, every command in this repo works with no extra flags — Compose finds `.env` on its own. Safe to re-run any time you want to switch which environment file is active; it only ever replaces a symlink it created itself, never a real file.
-
-```bash
-# macOS / Linux
-./set-env.sh
-
-# Windows
-set-env.bat
-```
-
-### 4. Initialize infrastructure
-
-First-time setup for TLS certificates and DynamoDB tables:
-
-```bash
-# macOS / Linux
-./init-infrastructure.sh
-
-# Windows (run as Administrator)
-init-infrastructure.bat
-```
-
-### 5. Start
-
-```bash
-# macOS / Linux
-./start.sh
-
-# Windows
-start.bat
-```
-
-For an image rebuild, use `./rebuild-containers.sh <service>`. The helper stops on the first failed Docker command and returns a nonzero exit status; its completion message appears only after every requested rebuild succeeds.
+There is no default environment file, so the console asks for one whenever an action needs it. All Compose files live in `infrastructure/docker/`. To run one by hand, do it from the repository root and name both files, as in `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml up lixpi-api`. To rebuild an image, switch **Containers** to **Rebuild** and select only that service. See the [dev console](dev-tools/dev-console/README.md).
 
 The avatar at the bottom of the left sidebar opens the account menu. Navigation menus mount outside the sidebar and render above its surface and backdrop. **Profile** opens the configured user portal in a new tab and resumes authentication if that origin has no session for the same account. The user portal's **Back to workspace** link uses the same handoff. **Sign out** ends the application's Auth0 session. With a standard Auth0 tenant hostname, the application login page waits for Sign in. With a custom Auth0 hostname, logout leads directly to hosted sign-in without returning through the application. After authentication, the workspace router resolves `/login` and other unmatched paths to its intro view while preserving valid workspace destinations.
 

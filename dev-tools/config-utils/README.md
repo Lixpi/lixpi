@@ -19,11 +19,11 @@ lixpi/dev-tools/config-utils/
     └── aws-config.template
 ```
 
-The files at the top of the directory are runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. `${LIXPI_REPOSITORY_PATH}/dev-tools/config-utils/setup-skills.ts` is the separate prompt used by `${LIXPI_REPOSITORY_PATH}/setup-skills.sh`; it shares the container dependencies but is not part of the repository adapter contract. The installer reads `LIXPI_REPOSITORY_PATH` from `env.lixpi`, so configuration setup must run first.
+The files at the top of the directory are runner infrastructure. The `setup-env.ts` and `templates/` paths are the Lixpi repository adapter. `${LIXPI_REPOSITORY_PATH}/dev-tools/config-utils/setup-skills.ts` is the separate prompt used by the dev console's skill installer action; it shares the container dependencies but is not part of the repository adapter contract. The installer reads `LIXPI_REPOSITORY_PATH` from `env.lixpi`, so configuration setup must run first.
 
 ## Mount contract
 
-[`runner-compose/config-utils.base.yml`](runner-compose/config-utils.base.yml) builds the shared image and mounts the shared runtime into `/usr/src/config-utils`. A repository-level `docker-compose.config-utils.yml` extends that service and supplies these mounts:
+[`runner-compose/config-utils.base.yml`](runner-compose/config-utils.base.yml) builds the shared image and mounts the shared runtime into `/usr/src/config-utils`. The repository's `infrastructure/docker/docker-compose.config-utils.yml` extends that service and supplies these mounts:
 
 | Container path | Access | Owner | Purpose |
 |---|---|---|---|
@@ -31,11 +31,11 @@ The files at the top of the directory are runner infrastructure. The `setup-env.
 | `/usr/src/config-utils/repository/setup-env.ts` | read-only | consuming repository | Repository-specific wizard entry point |
 | `/usr/src/config-utils/repository/templates/` | read-only | consuming repository | Repository-specific `env.lixpi` and runtime env templates |
 | `/usr/src/config-utils/repository/environment-file.ts` | read-only | shared runner | Environment-file editor used by adapters |
-| `/usr/src/config-utils/repository/secret-input.ts` | read-only | shared runner | Chunk-based secret input with character-count feedback |
+| `/usr/src/config-utils/packages/lixpi/cli-ui/src/` | read-only | shared runner | [Shared terminal prompts and listing helpers](../../packages/lixpi/cli-ui/README.md) |
 
 An adapter may declare additional read-only or read/write mounts. Checkout paths come from generated repository configuration and are not inferred from directory placement.
 
-The adapter file and directory names are part of the runner contract. A new repository can plug in by creating the same `dev-tools/config-utils/setup-env.ts` and `dev-tools/config-utils/templates/` paths, then adding a root Compose adapter that extends the shared base service.
+The adapter file and directory names are part of the runner contract. A new repository can plug in by creating the same `dev-tools/config-utils/setup-env.ts` and `dev-tools/config-utils/templates/` paths, then adding a Compose adapter that extends the shared base service.
 
 ## Startup order
 
@@ -51,7 +51,7 @@ The container entry point is [`run-config.ts`](run-config.ts). It performs setup
 
 Environment assignments use `KEY = value`. The shared `envLiteral` helper leaves values unquoted whenever the unquoted form round-trips through the environment-file parser, and adds double quotes only when they are required to preserve the value. Repository adapters must use that helper instead of quoting every value.
 
-Adapters that collect long credentials can use `SecretInputPrompt` from `./secret-input.ts`. It requires an interactive terminal, reads input in chunks, and displays a bounded character count without echoing the secret. It supports ordinary and bracketed paste, Backspace, Ctrl+U to clear, and Ctrl+C to cancel. Bracketed clipboard newlines stay in the value until validation; they do not submit the prompt. The adapter supplies validation and handles the Clack cancellation symbol. Submission and cancellation restore terminal mode and remove the prompt's listeners. There is no configured input-length cap.
+Adapters that collect long credentials can use `SecretInputPrompt` from [`@lixpi/cli-ui/secret-input`](../../packages/lixpi/cli-ui/README.md). The adapter supplies validation and handles the Clack cancellation symbol.
 
 The Lixpi template writes:
 
@@ -76,20 +76,14 @@ For end-to-end sign-in verification, follow [Local authentication](../../documen
 The hosted account release can prepare a local configuration without reopening the wizard:
 
 ```bash
-docker compose --env-file env.lixpi -f docker-compose.config-utils.yml --profile dev build lixpi-config-utils
-docker compose --env-file env.lixpi -f docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils preview-local-account-auth .env.shelby-local
-docker compose --env-file env.lixpi -f docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils setup-local-account-auth .env.shelby-local
+docker compose --env-file env.lixpi -f infrastructure/docker/docker-compose.config-utils.yml --profile dev build lixpi-config-utils
+docker compose --env-file env.lixpi -f infrastructure/docker/docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils preview-local-account-auth .env.shelby-local
+docker compose --env-file env.lixpi -f infrastructure/docker/docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils setup-local-account-auth .env.shelby-local
 ```
 
 The setup command requires `ENVIRONMENT=local` and an existing signed registration. It atomically sets `MOCK_AUTH0=false`, `VITE_MOCK_AUTH=false` and `ACCOUNT_ADMISSION_ENABLED=true`, selects the configured Auth0 login hostname and signs the matching browser permissions. It validates the generated account requirement before saving and rejects a stale configuration image. It preserves unrelated values and refuses a concurrent file change. It does not restart services. Run it only after the deployment's Auth0 resources and account gateway are ready; restart enforcing APIs and brokers before activating the login Action, then restart browser clients. Keep enforcement enabled when recovering a failed release.
 
-Run from the Lixpi root:
-
-```bash
-./init-config.sh
-```
-
-The wrapper starts `docker-compose.config-utils.yml`. The shared runner creates `env.lixpi`, then the Lixpi adapter creates or updates `.env.<developer>-<environment>` and optional `.aws/config` files.
+Run `./run.sh` and choose **Create or edit a configuration**. That action starts `infrastructure/docker/docker-compose.config-utils.yml`. The shared runner creates `env.lixpi`, then the Lixpi adapter creates or updates `.env.<developer>-<environment>` and optional `.aws/config` files.
 
 The Lixpi wizard offers **Generate new** and **Edit existing**. Existing files can be replaced or edited by group. Partial edits preserve unrelated variables, comments, quoting, interpolation, multiline values, and line endings. NATS keys and passwords are reused unless replacement is selected. Every save regenerates or refreshes the signed NATS application registration from the resulting configuration.
 
@@ -99,10 +93,10 @@ Local real Auth0 defaults to `AUTH0_USE_DEVELOPER_KEYS=true`. The authentication
 
 Saving authentication changes also refreshes the signed browser issuer and JWKS settings. Keep LocalAuth0 enabled until the external identity provider and account service are ready. The account service's issuer, gateway and DNS configuration belong to its deployment; changing the browser login hostname does not provision those resources.
 
-Non-interactive creation uses the same wrapper and refuses to overwrite an existing configuration:
+Non-interactive creation calls that action's script directly and refuses to overwrite an existing configuration:
 
 ```bash
-./init-config.sh --non-interactive --name=shelby --env=local
+dev-tools/dev-console/actions/init-config.sh --non-interactive --name=shelby --env=local
 ```
 
 Supported options are `--help`, `--non-interactive`, `--name=<name>`, and `--env=local|dev|production`.
@@ -115,8 +109,8 @@ A repository adapter is an executable TypeScript module, not a branch in the sha
 
 1. Add `dev-tools/config-utils/setup-env.ts` in that repository.
 2. Add `dev-tools/config-utils/templates/env.lixpi.template` and `env.template` there.
-3. Add a root `docker-compose.config-utils.yml` that extends `config-utils-base` and mounts the repository adapter paths.
-4. Add a root launcher that supplies any bootstrap variables required to locate the shared Lixpi checkout, then invokes the Compose adapter.
+3. Add `infrastructure/docker/docker-compose.config-utils.yml` that extends `config-utils-base` and mounts the repository adapter paths.
+4. Add a launcher that supplies any bootstrap variables required to locate the shared Lixpi checkout, then invokes the Compose adapter.
 5. Keep repository-specific prompts, defaults, file names, and side effects inside the adapter.
 
 Do not add consuming-repository switches to `run-config.ts`. Shared behavior belongs in the runner only when every adapter needs it.
@@ -126,7 +120,7 @@ Do not add consuming-repository switches to `run-config.ts`. Shared behavior bel
 When `CODING_AGENTS_TEST_EXECUTION_MODE` permits configuration tests, run them through the shared TypeScript test runner:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner init-config
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner init-config
 ```
 
-The tests use synthetic content and isolated prompts; they must not read or update a developer's generated configuration files. Secret-input regressions also use the test image's `script` utility to exercise a real pseudo-terminal, including typing, a 1 MiB paste, cancellation, and the preceding and following Clack prompts. Rebuild `lixpi-typescript-test-runner` if an older local image lacks `script`.
+The tests use synthetic content and isolated prompts; they must not read or update a developer's generated configuration files. The shared prompts have their own tests in [`@lixpi/cli-ui`](../../packages/lixpi/cli-ui/README.md).

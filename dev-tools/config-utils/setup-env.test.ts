@@ -16,6 +16,12 @@ import {
 vi.mock('node:fs', async importOriginal => ({ ...await importOriginal<typeof fs>() }))
 vi.mock('@lixpi/nats-subject-registry/registration', () => ({ registrationEnvironment: vi.fn(() => ({})) }))
 vi.mock('@nats-io/nkeys', async importOriginal => ({ ...await importOriginal<typeof nkeys>() }))
+vi.mock('@lixpi/cli-ui/select-menu', async () => {
+    const clack = await import('@clack/prompts')
+
+    return { selectMenu: (options: Parameters<typeof clack.select>[0]) => clack.select(options) }
+})
+
 vi.mock('@clack/prompts', () => ({
     intro: vi.fn(),
     outro: vi.fn(),

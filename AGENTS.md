@@ -62,8 +62,11 @@ Start at the documentation index, then read [Maintaining Documentation](document
 
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
 - Writing, modifying, and running tests follow `CODING_AGENTS_TEST_EXECUTION_MODE` in this repository's `env.lixpi`. Formatting and lint checks follow the independent `CODING_AGENTS_TEST_LINTER_MODE`. Apply the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md); `true` and `auto` do not require a separate request to edit tests.
-- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. When the test execution mode permits web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/code-quality/testing/TYPESCRIPT.md`.
+- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. When the test execution mode permits web-ui tests, use `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/code-quality/testing/TYPESCRIPT.md`.
 - Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review or permitted automated test commands.
+- All Docker Compose files live in `infrastructure/docker/`. Run `docker compose` from the repository root and name the file with `-f`, as in `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml ...`.
+- Shell scripts never split a command across lines with a trailing backslash, because it makes them hard to read. Keep each command on one line.
+- `./run.sh` is the only entry point for developer workflows. Its actions live in `dev-tools/dev-console/actions/`.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.
 

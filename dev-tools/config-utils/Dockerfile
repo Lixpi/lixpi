@@ -13,6 +13,7 @@ WORKDIR /usr/src/config-utils
 COPY packages/lixpi/debug-tools/ts ./packages/lixpi/debug-tools/ts
 COPY packages/lixpi/constants ./packages/lixpi/constants
 COPY packages/lixpi/nats-subject-registry ./packages/lixpi/nats-subject-registry
+COPY packages/lixpi/cli-ui ./packages/lixpi/cli-ui
 COPY dev-tools/config-utils/pnpm-workspace.yaml ./
 COPY dev-tools/config-utils/package.json ./
 RUN pnpm install --prod
@@ -22,7 +23,6 @@ RUN pnpm install --prod
 COPY dev-tools/config-utils/run-config.ts ./
 RUN mkdir -p repository
 COPY dev-tools/config-utils/environment-file.ts ./repository/environment-file.ts
-COPY dev-tools/config-utils/secret-input.ts ./repository/secret-input.ts
 
 # Set environment for colored output
 ENV FORCE_COLOR=1

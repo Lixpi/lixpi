@@ -11,13 +11,13 @@ Read the [`code-quality` skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKI
 
 ## Test Runner Container
 
-All TypeScript service and package tests run inside `lixpi-typescript-test-runner`, defined in `docker-compose.typescript-test-runner.yml` and included by the root `docker-compose.yml`. Application containers do not ship a test runner. The reusable service definition lives in `dev-tools/code-quality/runner-compose/typescript-test.base.yml`; the repository-root Compose file extends it and supplies the main repository's workspace mounts and cache volumes. [Code Quality Runners](../../../dev-tools/code-quality/README.md) explains how another repository supplies its own workspace mounts.
+All TypeScript service and package tests run inside `lixpi-typescript-test-runner`, defined in `infrastructure/docker/docker-compose.typescript-test-runner.yml` and included by `infrastructure/docker/docker-compose.yml`. Application containers do not ship a test runner. The reusable service definition lives in `dev-tools/code-quality/runner-compose/typescript-test.base.yml`; the runner's Compose file in `infrastructure/docker/` extends it and supplies the main repository's workspace mounts and cache volumes. [Code Quality Runners](../../../dev-tools/code-quality/README.md) explains how another repository supplies its own workspace mounts.
 
 The test runner is invoked as a one-shot `docker compose run --rm` command. Each invocation gets the current Compose configuration and a generated container name, so concurrent runs do not collide.
 
-The commands below assume `.env` is already symlinked via `./set-env.sh` (see the repository `README.md`). Docker Compose only auto-loads a file named `.env`; otherwise pass `--env-file .env.<your-env>`.
+Every `docker compose` command names its configuration with `--env-file .env.<stage>`. There is no default environment file, so a command without one runs with its variables unset. Replace `.env.<stage>` below with one of your `.env.*` files.
 
-Every invocation runs `pnpm install` before the test command, but this is normally fast, not a full reinstall: a shared `typescript-test-runner-pnpm-store` volume caches downloaded package content, and a `typescript-test-runner-node-modules-*` volume per workspace directory (domain root plus each bind-mounted `packages/lixpi/*` member) persists the linked `node_modules` output across runs, so `pnpm install` is normally an incremental no-op ("Already up to date") rather than a from-scratch install. Both volume groups are declared in `docker-compose.typescript-test-runner.yml`.
+Every invocation runs `pnpm install` before the test command, but this is normally fast, not a full reinstall: a shared `typescript-test-runner-pnpm-store` volume caches downloaded package content, and a `typescript-test-runner-node-modules-*` volume per workspace directory (domain root plus each bind-mounted `packages/lixpi/*` member) persists the linked `node_modules` output across runs, so `pnpm install` is normally an incremental no-op ("Already up to date") rather than a from-scratch install. Both volume groups are declared in `infrastructure/docker/docker-compose.typescript-test-runner.yml`.
 
 If the cache is corrupt or keeps a stale workspace link after a dependency rename or removal, wipe it with `./dev-tools/code-quality/typescript-test-runner/nuke-cache.sh`. The next run performs a clean install. Routine dependency changes do not need this because each invocation reconciles `node_modules` against the lockfile.
 
@@ -26,7 +26,7 @@ Each service uses its own `package.json`, `pnpm-workspace.yaml`, and `vitest.con
 Use the same command for every configured service. The optional test path is relative to that service:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain> [test-path]
 ```
 
 Every ordinary mounted workspace is runnable without adding its name to the dispatcher. Its adapter mounts `package.json`, test configuration, and source under `/usr/src/service/<workspace>`, and stages an optional workspace manifest at `/usr/src/service/workspace-manifests/<workspace>/pnpm-workspace.yaml`. Workspace names are restricted to lowercase letters, digits, and internal hyphens. The adapter also owns the named `node_modules` volumes for its mounted workspace members.
@@ -42,14 +42,14 @@ With NEX workloads running, add `LIXPI_NATS_WORKLOAD_RUNTIME_TEST=true` to verif
 For `shared`, the optional package name comes before the optional test path:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared [package] [test-path]
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared [package] [test-path]
 ```
 
 Without a package name, `shared` runs every shared package that defines `test:run`. Package tests follow the same colocation rule as service tests.
 
 ## Vitest Configuration
 
-The `infrastructure` domain copies the Pulumi sources into the disposable runner and uses Pulumi mocks and synthetic AWS responses. Run `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner infrastructure`. It does not preview or deploy a stack, build or publish images, or contact AWS.
+The `infrastructure` domain copies the Pulumi sources into the disposable runner and uses Pulumi mocks and synthetic AWS responses. Run `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner infrastructure`. It does not preview or deploy a stack, build or publish images, or contact AWS.
 
 The [Go test runner](GO.md) covers snapshot and restore acceptance with disposable brokers, temporary filesystem directories and an in-memory snapshot store. It also verifies compatibility in both directions with the pinned NATS CLI. The broker production image contains no CLI or shell. The infrastructure suite separately verifies the deployment adapter with mocked provider APIs.
 
@@ -59,7 +59,7 @@ The API's native storage acceptance uses a disposable NATS 2.15 server. It verif
 
 ```bash
 docker run --rm -d --name lixpi-nats-native-storage-test --network nats nats:2.15.0-alpine@sha256:017eb6d9ec0eda3b7ba4d7858298ef58e4ccebdf7257692b97059dadf29d4552 --jetstream --store_dir /tmp/native-storage-test
-docker compose --profile dev --profile main run --rm --no-deps -T -e NATIVE_NATS_TEST_SERVER=nats://lixpi-nats-native-storage-test:4222 lixpi-typescript-test-runner api src/services/native-nats-storage.runtime.test.ts
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T -e NATIVE_NATS_TEST_SERVER=nats://lixpi-nats-native-storage-test:4222 lixpi-typescript-test-runner api src/services/native-nats-storage.runtime.test.ts
 docker stop lixpi-nats-native-storage-test
 ```
 
@@ -67,7 +67,7 @@ Each domain owns its Vitest environment, include patterns, setup files, and alia
 
 ## GitHub Actions
 
-The `CI` workflow groups TypeScript checks under `typescript-tests` and `typescript-quality`, with `TypeScript / Tests` and `TypeScript / Formatting and linting` status names. Each configured service and shared-package test domain runs as an independent matrix job. Each test job invokes the same test-runner image through `docker-compose.typescript-test-runner.yml`; the GitHub host does not install pnpm, service dependencies, or Vitest.
+The `CI` workflow groups TypeScript checks under `typescript-tests` and `typescript-quality`, with `TypeScript / Tests` and `TypeScript / Formatting and linting` status names. Each configured service and shared-package test domain runs as an independent matrix job. Each test job invokes the same test-runner image through `infrastructure/docker/docker-compose.typescript-test-runner.yml`; the GitHub host does not install pnpm, service dependencies, or Vitest.
 
 CI sets non-secret local placeholder values for the Vite variables required by the test-runner Compose service and still uses `--no-deps`, so no application, NATS, auth, or database service starts. Pointing Compose at the one-shot runner file preserves the local image, mounts, dispatcher, and domain boundary without requiring a developer `.env` file or parsing the root application graph. Both TypeScript matrices and the separate Go quality, test, and build jobs must succeed for the stable `Required CI gate` status used by branch rules.
 

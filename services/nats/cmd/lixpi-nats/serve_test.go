@@ -24,11 +24,11 @@ func TestServeReportsRegistrationConfigurationBeforeStarting(t *testing.T) {
 	for _, test := range []struct {
 		name, authorities, password, want string
 	}{
-		{"missing authorities", "", "", "NATS_REGISTRATION_AUTHORITIES is required; save the selected environment through init-config's partial-update flow"},
-		{"blank authorities", " \n ", "", "NATS_REGISTRATION_AUTHORITIES is required; save the selected environment through init-config's partial-update flow"},
+		{"missing authorities", "", "", "NATS_REGISTRATION_AUTHORITIES is required; save the selected environment through the configuration wizard's partial-update flow"},
+		{"blank authorities", " \n ", "", "NATS_REGISTRATION_AUTHORITIES is required; save the selected environment through the configuration wizard's partial-update flow"},
 		{"malformed authorities", "not-json", "synthetic", "NATS_REGISTRATION_AUTHORITIES must be a JSON array"},
 		{"empty authority scope", "[]", "synthetic", "invalid NATS_REGISTRATION_AUTHORITIES: registration authorities required"},
-		{"missing password", authorities, "", "NATS_REGISTRATION_PASSWORD is required; save the selected environment through init-config's partial-update flow"},
+		{"missing password", authorities, "", "NATS_REGISTRATION_PASSWORD is required; save the selected environment through the configuration wizard's partial-update flow"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("NATS_REGISTRATION_AUTHORITIES", test.authorities)

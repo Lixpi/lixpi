@@ -36,10 +36,7 @@ host_mount_present() {
 # -rlptD rather than -a: ownership is meaningless here (everything runs as root in
 # the container) and copying it from the host mount only produces churn.
 sync_once() {
-    rsync -rlptD --delete \
-        --exclude 'node_modules/' \
-        --exclude '.DS_Store' \
-        "$HOST_PACKAGES_DIR/" "$SERVICE_PACKAGES_DIR/"
+    rsync -rlptD --delete --exclude 'node_modules/' --exclude '.DS_Store' "$HOST_PACKAGES_DIR/" "$SERVICE_PACKAGES_DIR/"
 }
 
 # inotify does not fire across bind mounts on macOS or Windows, which is the whole

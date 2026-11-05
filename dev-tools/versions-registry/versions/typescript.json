@@ -22,6 +22,7 @@
         "@aws-sdk/lib-dynamodb": "3.1159.0",
         "@aws-sdk/lib-storage": "3.1159.0",
         "@aws-sdk/util-dynamodb": "3.996.9",
+        "@clack/core": "1.5.1",
         "@clack/prompts": "1.8.1",
         "@codemirror/autocomplete": "6.20.4",
         "@codemirror/buildhelper": "1.0.2",
@@ -150,6 +151,7 @@
         "uuid": "14.0.3",
         "vite": "8.3.5",
         "vitest": "5.0.5",
+        "yaml": "2.9.1",
         "yargs": "18.2.0"
     },
     "workspacePackages": {
@@ -165,6 +167,8 @@
         "@lixpi/nats-service": "0.0.1",
         "@lixpi/nats-subject-registry": "0.0.1",
         "@lixpi/prosemirror": "0.0.1",
+        "@lixpi/dev-console": "1.0.0",
+        "@lixpi/cli-ui": "0.0.1",
         "@lixpi/setup-env": "1.0.0",
         "@lixpi/test-utils": "0.0.1",
         "@lixpi/ui-kit": "0.0.1",

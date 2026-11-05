@@ -1,0 +1,153 @@
+services:
+
+    lixpi-pulumi:
+        extends:
+            file: ../../infrastructure/pulumi/runner-compose/pulumi.base.yml
+            service: pulumi-base
+        container_name: lixpi-pulumi
+        restart: always
+        environment:
+            MOCK_AUTH0: ${MOCK_AUTH0}
+            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            MOCK_AUTH0_DOMAIN: ${MOCK_AUTH0_DOMAIN}
+            # Force color output in the terminal, required for chalk.js to work
+            FORCE_COLOR: 1
+
+            # Node 24 strips erasable TypeScript by default, but Pulumi loads
+            # @lixpi/constants, which exports runtime enums. Transform types is
+            # still required and still emits ExperimentalWarning.
+            NODE_OPTIONS: '--trace-deprecation --abort-on-uncaught-exception --trace-warnings --disable-warning=ExperimentalWarning --experimental-transform-types'
+
+            # General config
+            DOMAIN_NAME: ${DOMAIN_NAME}
+
+            # SST & Pulumi shared
+            STAGE: ${STAGE}
+            ORG_NAME: ${ORG_NAME}
+            ENVIRONMENT: ${ENVIRONMENT}
+
+            # PULUMI
+            STATE_STORAGE_URL: ${STATE_STORAGE_URL}
+            PULUMI_CONFIG_PASSPHRASE: ${PULUMI_CONFIG_PASSPHRASE}
+            HOSTED_ZONE_DNS_ROLE_ARN: ${HOSTED_ZONE_DNS_ROLE_ARN}
+            PULUMI_DEBUG_COMMANDS: true
+
+            # AWS
+            AWS_REGION: ${AWS_REGION}
+            AWS_PROFILE: ${AWS_PROFILE}
+            HOSTED_ZONE_NAME: ${HOSTED_ZONE_NAME}
+            AWS_ROUTE53_HOSTED_ZONE_ID: ${AWS_ROUTE53_HOSTED_ZONE_ID}
+            AWS_ROUTE53_PARENT_HOSTED_ZONE_ID: ${AWS_ROUTE53_PARENT_HOSTED_ZONE_ID}
+            CLOUDWATCH_LOG_RETENTION_DAYS: ${CLOUDWATCH_LOG_RETENTION_DAYS}
+            CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED: ${CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED}
+
+            # DynamoDB config
+            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT}
+
+            # NATS config
+            NATS_DEBUG_MODE: ${NATS_DEBUG_MODE}
+            NATS_TRACE_MODE: ${NATS_TRACE_MODE}
+            NATS_SERVERS: ${NATS_SERVERS}
+            NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
+            NATS_CALLOUT_PASSWORD: ${NATS_CALLOUT_PASSWORD}
+            NATS_BACKUP_NKEY_PUBLIC: ${NATS_BACKUP_NKEY_PUBLIC}
+            NATS_AUTH_NKEY_ISSUER_SEED: ${NATS_AUTH_NKEY_ISSUER_SEED}
+            NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
+            NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
+            NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_LLM_SERVICE_NKEY_SEED: ${NATS_LLM_SERVICE_NKEY_SEED}
+            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
+            # NEX node nkey — passed through so `createNexNodeService` can put it in the node's task definition
+            NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC: ${NATS_AI_MODEL_REGISTRY_NKEY_PUBLIC}
+            NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
+
+            # App host addresses
+            NATS_SERVICE_AUTH_REGISTRATIONS: ${NATS_SERVICE_AUTH_REGISTRATIONS:-[]}
+            NATS_REGISTRATION_AUTHORITIES: ${NATS_REGISTRATION_AUTHORITIES}
+            NATS_REGISTRATION_PASSWORD: ${NATS_REGISTRATION_PASSWORD}
+            NATS_APPLICATION_REGISTRATION: ${NATS_APPLICATION_REGISTRATION}
+            USER_PORTAL_ARTIFACT_MANAGEMENT: ${USER_PORTAL_ARTIFACT_MANAGEMENT:-infrastructure}
+            ORIGIN_HOST_URL: ${ORIGIN_HOST_URL}
+            API_HOST_URL: ${API_HOST_URL}
+
+            # Auth0 config
+            AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+            AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
+
+            # AI config
+            SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE:-false}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            # Veo person-generation policy profile (standard|restricted). Required for any
+            # Veo call — the Google media profile fails the run when it is unset.
+            GOOGLE_VEO_PERSON_GENERATION_PROFILE: ${GOOGLE_VEO_PERSON_GENERATION_PROFILE}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
+            STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            # BytePlus ModelArk (Seedance) — passed through so Pulumi can put it on the
+            # deployed API task definition (see pulumiProgram.ts). Both names forwarded.
+            ARK_API_KEY: ${ARK_API_KEY:-}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
+
+            # Web-UI config
+            VITE_API_URL: ${VITE_API_URL}
+            VITE_AUTH0_LOGIN_URL: ${VITE_AUTH0_LOGIN_URL}
+            VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+            VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+            VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+            VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
+            VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
+            VITE_NATS_SERVER: ${VITE_NATS_SERVER}
+            NATS_API_NKEY_SEED: ${NATS_API_NKEY_SEED}
+            NATS_API_NKEY_PUBLIC: ${NATS_API_NKEY_PUBLIC}
+            NATS_FILE_CONVERSION_NKEY_SEED: ${NATS_FILE_CONVERSION_NKEY_SEED}
+            NATS_FILE_CONVERSION_NKEY_PUBLIC: ${NATS_FILE_CONVERSION_NKEY_PUBLIC}
+            NATS_CHARACTER_FIDELITY_NKEY_SEED: ${NATS_CHARACTER_FIDELITY_NKEY_SEED}
+            NATS_CHARACTER_FIDELITY_NKEY_PUBLIC: ${NATS_CHARACTER_FIDELITY_NKEY_PUBLIC}
+            NATS_MEDIA_RENDER_NKEY_SEED: ${NATS_MEDIA_RENDER_NKEY_SEED:-}
+            NATS_MEDIA_RENDER_NKEY_PUBLIC: ${NATS_MEDIA_RENDER_NKEY_PUBLIC:-}
+            NATS_BACKUP_NKEY_SEED: ${NATS_BACKUP_NKEY_SEED}
+            NATS_OPERATOR_NKEY_SEED: ${NATS_OPERATOR_NKEY_SEED}
+            NATS_OPERATOR_NKEY_PUBLIC: ${NATS_OPERATOR_NKEY_PUBLIC}
+
+        volumes:
+            # AWS SSO credentials and profile definitions
+            - aws-config:/root/.aws:cached
+            - ../../.aws/config:/root/.aws/config:cached
+
+            # Pulumi infrastructure
+            - pulumi-local-state:/var/opt/lixpi/.pulumi-local-state
+
+            # Allow container to access docker on the host machine so that it can build docker images inside the container utilizing docker on the host machine
+            - /var/run/docker.sock:/var/run/docker.sock:cached
+        working_dir: /usr/src/service
+        entrypoint: /bin/bash
+        # command: -c "pnpm install && pulumi up --stack dev --non-interactive"
+        command: >
+            -c "sleep infinity"
+        networks:
+            - nats
+
+    lixpi-pulumi-init:
+        container_name: lixpi-pulumi-init
+        profiles: ["main", "deploy"]
+        image: lixpi/pulumi-init
+        extends:
+            service: lixpi-pulumi
+        restart: "no"
+        environment:
+            LOCAL_DYNAMODB_FORCE_RECREATE: ${LOCAL_DYNAMODB_FORCE_RECREATE:-false}
+        entrypoint: []
+        working_dir: /usr/src/service/infrastructure/pulumi
+        command: ["pnpm", "run", "deploy:local"]
+        depends_on:
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+            lixpi-caddy:
+                condition: service_completed_successfully

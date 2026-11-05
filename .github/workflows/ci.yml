@@ -26,7 +26,7 @@ jobs:
               uses: actions/checkout@v7.0.1
 
             - name: Check generated dependency declarations
-              run: docker compose -f docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+              run: docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
 
     # -------------------------------------------------------------------------
     # TypeScript
@@ -54,6 +54,8 @@ jobs:
                       command: quality-runner validate
                     - name: versions-registry
                       command: files validate dev-tools/versions-registry/src
+                    - name: dev-console
+                      command: files validate dev-tools/dev-console/src dev-tools/dev-console/vitest.config.ts
                     - name: shared
                       command: shared validate
                     - name: infrastructure
@@ -65,10 +67,10 @@ jobs:
               uses: actions/checkout@v7.0.1
 
             - name: Build TypeScript quality runner
-              run: docker compose -f docker-compose.typescript-quality-runner.yml --profile dev build lixpi-typescript-quality-runner
+              run: docker compose -f infrastructure/docker/docker-compose.typescript-quality-runner.yml --profile dev build lixpi-typescript-quality-runner
 
             - name: Validate ${{ matrix.name }} formatting and lint rules
-              run: docker compose -f docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner ${{ matrix.command }}
+              run: docker compose -f infrastructure/docker/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner ${{ matrix.command }}
 
     typescript-tests:
         name: TypeScript / Tests / ${{ matrix.domain }}
@@ -85,6 +87,7 @@ jobs:
                     - shared
                     - infrastructure
                     - init-config
+                    - dev-console
         env:
             VITE_MOCK_AUTH: "true"
             VITE_MOCK_AUTH0_DOMAIN: http://localhost:3000
@@ -101,10 +104,10 @@ jobs:
               uses: actions/checkout@v7.0.1
 
             - name: Build TypeScript test runner
-              run: docker compose -f docker-compose.typescript-test-runner.yml --profile dev build lixpi-typescript-test-runner
+              run: docker compose -f infrastructure/docker/docker-compose.typescript-test-runner.yml --profile dev build lixpi-typescript-test-runner
 
             - name: Run ${{ matrix.domain }} tests
-              run: docker compose -f docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner ${{ matrix.domain }}
+              run: docker compose -f infrastructure/docker/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner ${{ matrix.domain }}
 
     # -------------------------------------------------------------------------
     # Go
@@ -121,10 +124,10 @@ jobs:
               uses: actions/checkout@v7.0.1
 
             - name: Build Go quality runner
-              run: docker compose -f docker-compose.go-quality-runner.yml --profile dev build lixpi-go-quality-runner
+              run: docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev build lixpi-go-quality-runner
 
             - name: Validate Go formatting and lint rules
-              run: docker compose -f docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner ${{ matrix.service }} validate
+              run: docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner ${{ matrix.service }} validate
 
     go-tests:
         name: Go / Tests / ${{ matrix.service }}
@@ -138,10 +141,10 @@ jobs:
               uses: actions/checkout@v7.0.1
 
             - name: Build Go test runner
-              run: docker compose -f docker-compose.go-test-runner.yml --profile dev build lixpi-go-test-runner
+              run: docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev build lixpi-go-test-runner
 
             - name: Run race-enabled Go tests
-              run: docker compose -f docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner ${{ matrix.service }}
+              run: docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner ${{ matrix.service }}
 
     go-build:
         name: Go / Build / ${{ matrix.service }}

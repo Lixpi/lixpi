@@ -1,0 +1,38 @@
+services:
+
+    lixpi-dynamodb:
+        container_name: lixpi-dynamodb
+        profiles: ["main", "deploy"]
+        image: amazon/dynamodb-local:3.3.2
+        user: "0:0"  # run as root so the volume is writable
+        command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data", "-cors", "*", "-delayTransientStatuses"]
+        ports:
+            - 8000:8000
+        volumes:
+            - dynamodb-data:/data
+        networks:
+            - nats
+        healthcheck:
+            test: ["CMD-SHELL", "java -version || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 5s
+
+    lixpi-dynamodb-admin:
+        container_name: lixpi-dynamodb-admin
+        profiles: ["dev"]
+        image: aaronshaf/dynamodb-admin:5.3.4
+        environment:
+            DYNAMO_ENDPOINT: http://lixpi-dynamodb:8000
+            AWS_REGION: us-east-1
+            AWS_ACCESS_KEY_ID: test
+            AWS_SECRET_ACCESS_KEY: test
+        ports:
+            - 8001:8001
+        networks:
+            - nats
+        depends_on:
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true

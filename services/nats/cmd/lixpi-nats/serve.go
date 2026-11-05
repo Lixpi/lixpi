@@ -36,7 +36,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	authorities := strings.TrimSpace(os.Getenv("NATS_REGISTRATION_AUTHORITIES"))
 	if authorities == "" {
-		return errors.New("NATS_REGISTRATION_AUTHORITIES is required; save the selected environment through init-config's partial-update flow")
+		return errors.New("NATS_REGISTRATION_AUTHORITIES is required; save the selected environment through the configuration wizard's partial-update flow")
 	}
 
 	if err := policy.Decode([]byte(authorities), &trust.Authorities); err != nil {
@@ -49,7 +49,7 @@ func serve(ctx context.Context, config, routes string, check bool) error {
 
 	password := os.Getenv("NATS_REGISTRATION_PASSWORD")
 	if password == "" {
-		return errors.New("NATS_REGISTRATION_PASSWORD is required; save the selected environment through init-config's partial-update flow")
+		return errors.New("NATS_REGISTRATION_PASSWORD is required; save the selected environment through the configuration wizard's partial-update flow")
 	}
 
 	encodedTrust, err := json.Marshal(trust)

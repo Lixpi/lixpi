@@ -10,6 +10,7 @@ packages:
   - "dynamodb-service"
   - "nats-service/ts"
   - "nats-subject-registry"
+  - "cli-ui"
   - "prosemirror"
   - "test-utils"
   - "ui-kit"

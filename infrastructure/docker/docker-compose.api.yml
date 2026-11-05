@@ -1,0 +1,153 @@
+services:
+
+    lixpi-api:
+        container_name: lixpi-api
+        labels:
+            lixpi.account-enforcement.scope: ${ORG_NAME}/${STAGE}
+            lixpi.account-enforcement.role: api
+        profiles: ["main"]
+        restart: always
+        image: lixpi/api
+        build:
+            dockerfile: services/api/Dockerfile
+            context: ../..
+        environment:
+            # Force color output in the terminal, required for chalk.js to work
+            FORCE_COLOR: 1
+
+            # Node 24 strips erasable TypeScript by default, but the API loads
+            # enums and parameter properties from workspace sources. Transform
+            # types is still required and still emits ExperimentalWarning.
+            NODE_OPTIONS: '--trace-deprecation --abort-on-uncaught-exception --trace-warnings --disable-warning=ExperimentalWarning --experimental-transform-types'
+
+            # Pulumi Config that's also used by the API
+            ORG_NAME: ${ORG_NAME}
+            STAGE: ${STAGE}
+            ENVIRONMENT: ${ENVIRONMENT}
+
+            # AWS credentials, used only for local development
+            AWS_REGION: ${AWS_REGION}
+            AWS_PROFILE: ${AWS_PROFILE}
+
+            # DynamoDB config
+            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT}
+
+            # App host addresses
+            ORIGIN_HOST_URL: ${ORIGIN_HOST_URL}
+            API_HOST_URL: ${API_HOST_URL}
+
+            # Auth0 config
+            AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+            AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
+            ACCOUNT_ADMISSION_ENABLED: ${ACCOUNT_ADMISSION_ENABLED:-false}
+            ACCOUNT_ADMISSION_STREAM: ${ACCOUNT_ADMISSION_STREAM:-}
+
+            # LocalAuth0 mock config
+            MOCK_AUTH0: ${MOCK_AUTH0}
+            MOCK_AUTH0_DOMAIN: ${MOCK_AUTH0_DOMAIN}
+            MOCK_AUTH0_JWKS_URI: ${MOCK_AUTH0_JWKS_URI}
+
+            # NATS config
+            NATS_SERVERS: ${NATS_SERVERS}
+            NATS_API_NKEY_SEED: ${NATS_API_NKEY_SEED}
+            NATS_APPLICATION_REGISTRATION: ${NATS_APPLICATION_REGISTRATION}
+            NATS_REGISTRATION_PASSWORD: ${NATS_REGISTRATION_PASSWORD}
+
+            # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE:-false}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            # Veo person-generation policy profile (standard|restricted). Required for any
+            # Veo call — the Google media profile fails the run when it is unset.
+            GOOGLE_VEO_PERSON_GENERATION_PROFILE: ${GOOGLE_VEO_PERSON_GENERATION_PROFILE}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
+            STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            # BytePlus ModelArk (Seedance 2.0 video). The provider reads BYTEPLUS_ARK_API_KEY
+            # or ARK_API_KEY; forward both so whichever name the .env sets reaches the
+            # container (the unset one defaults to empty and is ignored by the provider's ||).
+            ARK_API_KEY: ${ARK_API_KEY:-}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
+            LLM_TIMEOUT_SECONDS: 1200
+            AGENT_MAX_MODEL_CALLS: ${AGENT_MAX_MODEL_CALLS:-24}
+            AGENT_MAX_TOOL_CALLS: ${AGENT_MAX_TOOL_CALLS:-64}
+            AGENT_MAX_SPECIALIST_CALLS: ${AGENT_MAX_SPECIALIST_CALLS:-4}
+            SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
+
+            METRICS_ENABLED: ${METRICS_ENABLED:-false}
+
+        volumes:
+            - aws-config:/root/.aws:cached    # AWS SSO credentials
+            - ../../.aws/config:/root/.aws/config:cached    # AWS SSO profile definitions
+            - ../../services/api/package.json:/usr/src/service/package.json:cached
+            # NOT mounted: pnpm@12 rewrites pnpm-workspace.yaml during install (write-temp + atomic
+            # rename), which fails EBUSY against a single-file bind mount on Docker Desktop/Windows.
+            # The image bakes this file (services/api/Dockerfile), so the container uses the baked
+            # copy and pnpm's rewrite lands in the writable layer. Rebuild the image to pick up edits.
+            # - ./services/api/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
+            - ../../services/api/nodemon.json:/usr/src/service/nodemon.json:cached
+
+            # tsconfig.json is needed for the IDE to understand the project structure, but NOT used by default by Node.js
+            - ../../services/api/tsconfig.json:/usr/src/service/tsconfig.json:cached
+
+            - ../../services/api/config:/usr/src/service/config:cached
+            # nodemon's `exec` wrapper, which decides whether a crashed app should
+            # take the container down. Mounted next to nodemon.json so editing it
+            # does not need an image rebuild. See services/api/scripts/nodemon-exec.sh.
+            - ../../services/api/scripts:/usr/src/service/scripts:cached
+            - ../../services/api/src:/usr/src/service/src:cached
+            - ../../services/api/temp-ai-responses:/usr/src/service/temp-ai-responses:cached
+
+            # Host packages, mounted READ-ONLY and outside the pnpm workspace root. The
+            # copy the service actually uses lives in the container's writable layer at
+            # /usr/src/service/packages/lixpi and is rsynced from here every second, so
+            # host edits reach a running service without a restart and pnpm can write
+            # each package's node_modules without ever touching the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ../../packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ../../scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
+
+        networks:
+            - nats
+
+        working_dir: /usr/src/service
+        # making sure we install the packages before running the dev server
+        # --config.confirm-modules-purge=false: let pnpm purge+reinstall a stale node_modules
+        # non-interactively (no TTY in the container) instead of aborting. Narrower than CI=true,
+        # which would also force --frozen-lockfile.
+        command: >
+            /usr/local/bin/workspace-package-sync.sh run
+            sh -c "pnpm i --config.confirm-modules-purge=false
+            && pnpm run dev"
+        # command: >
+        #     pnpm run dev
+        stop_signal: SIGTERM
+        ports:
+            - 3005:3000
+            - 35795:35795
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health-check || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        depends_on:
+            lixpi-pulumi-init:
+                condition: service_completed_successfully
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+            lixpi-localauth0:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-1:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-2:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-3:
+                condition: service_healthy
+                restart: true

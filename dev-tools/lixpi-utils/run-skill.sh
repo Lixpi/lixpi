@@ -2,9 +2,7 @@
 # Universal entrypoint for lixpi-utils.
 #
 # Usage:
-#   docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-#       -f "${LIXPI_REPOSITORY_PATH}/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
-#       <skill-name> <script> [args...]
+#   docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils <skill-name> <script> [args...]
 #
 # <skill-name> is a directory under ${LIXPI_REPOSITORY_PATH}/skills/. <script> is an
 # absolute path under that skill's directory. Both are checked here so a typo fails with a
@@ -58,8 +56,7 @@ if [ ! -f "$script_path" ]; then
     echo "No script: $script" >&2
     echo "" >&2
     echo "Scripts in $source_skill_dir:" >&2
-    find "$skill_dir" -type f \( -name '*.ts' -o -name '*.mjs' -o -name '*.js' -o -name '*.sh' \) \
-        | while IFS= read -r candidate; do
+    find "$skill_dir" -type f \( -name '*.ts' -o -name '*.mjs' -o -name '*.js' -o -name '*.sh' \) | while IFS= read -r candidate; do
             printf '  %s/%s\n' "$source_skill_dir" "${candidate#"$skill_dir/"}" >&2
         done
     exit 1

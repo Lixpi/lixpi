@@ -44,6 +44,6 @@ Read [Using the Web Client Service Factory](documentation/USING-WEB-CLIENT-SERVI
 Run its tests and quality checks through the repository Docker runners:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared web-client-service-factory
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared web-client-service-factory validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared web-client-service-factory
+docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared web-client-service-factory validate
 ```

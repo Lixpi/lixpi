@@ -6,7 +6,7 @@ This document defines how Lixpi keeps project guidance available to coding agent
 
 Every shared agent skill lives under `${LIXPI_REPOSITORY_PATH}/skills/`. Read `LIXPI_REPOSITORY_PATH` from the consuming repository's `env.lixpi` before resolving these paths. A skill may contain its own rules or scripts, or it may point to an authoritative document elsewhere in the repository. Its frontmatter states when the guidance applies, and its body tells the agent what to read or run.
 
-[`setup-skills.sh`](../../setup-skills.sh) optionally installs tool-specific discovery links for native skill selectors. Agents can discover the canonical skills directly without running it. Generated links are local configuration. Git ignores them, and the repository does not track their contents.
+The dev console's **Install agent skills** action ([`run.sh`](../../run.sh)) optionally installs tool-specific discovery links for native skill selectors. Agents can discover the canonical skills directly without running it. Generated links are local configuration. Git ignores them, and the repository does not track their contents.
 
 For each task, use any skill names and descriptions already supplied by the harness, then inspect the frontmatter of `${LIXPI_REPOSITORY_PATH}/skills/*/SKILL.md` files that are not already represented. Resolve harness links to their canonical files before comparing them. Read a selected skill's full instructions once; do not load every skill body or rescan unchanged directories during the same task.
 
@@ -23,14 +23,14 @@ If the canonical skill cannot be resolved or read, the agent must stop immediate
 If you want native harness skill selectors, run configuration setup after cloning so `env.lixpi` exists, then invoke the installer using its configured `LIXPI_REPOSITORY_PATH`:
 
 ```bash
-"${LIXPI_REPOSITORY_PATH}/setup-skills.sh"
+"${LIXPI_REPOSITORY_PATH}/run.sh"
 ```
 
 The installer is interactive and takes no arguments. It first asks for the installation scope. Global installation is the default; project installation asks for one Git checkout, defaulting to this repository.
 
 The harness page supports multiple selections. Move with the arrow keys, toggle Codex, Claude Code, Cursor, or GitHub Copilot with Space, then press Enter. The skill page uses the same controls and shows `All skills` beside every individual skill, so you can choose all skills or a subset in one step.
 
-The prompt UI runs inside the `lixpi-utils` container and uses the same Clack components as `init-config.sh`. It renders through stderr and returns the confirmed selection through stdout. The host launcher validates that value and creates the selected links. The container does not mount the user's home directory or the selected project's Git metadata.
+The prompt UI runs inside the `lixpi-utils` container and uses the same Clack components as the configuration wizard. It renders through stderr and returns the confirmed selection through stdout. The host launcher validates that value and creates the selected links. The container does not mount the user's home directory or the selected project's Git metadata.
 
 Global discovery links live in each harness's user configuration directory. Project discovery links use the selected checkout's configured path. For the main Lixpi checkout:
 
@@ -62,7 +62,7 @@ TypeScript, HTML, Sass, and CSS formatting and linting use the Docker-only comma
 1. Create or update the canonical skill at `${LIXPI_REPOSITORY_PATH}/skills/<name>/SKILL.md`.
 2. Keep shared routing and constraints in that skill file. Put substantial mode-specific procedures in `${LIXPI_REPOSITORY_PATH}/skills/<name>/references/` and link them with the same repository path variable.
 3. Give the skill a description that names the work and task signals that should load it.
-4. To expose the skill in a harness's native selector, run `${LIXPI_REPOSITORY_PATH}/setup-skills.sh`, choose the installation scope and harnesses, then select the updated skill or `All skills`.
+4. To expose the skill in a harness's native selector, run `${LIXPI_REPOSITORY_PATH}/run.sh`, choose **Install agent skills**, then the installation scope and harnesses, then select the updated skill or `All skills`.
 
 Do not copy a skill into tool-specific directories or add it to a manually maintained inventory. The `${LIXPI_REPOSITORY_PATH}/skills/` directory defines what agents can discover; the installer only adds native harness links.
 

@@ -23,18 +23,17 @@
 # compose file has a cross-profile depends_on elsewhere that Compose
 # validates regardless of which service you're targeting.
 #
-# Usage (assumes .env is symlinked via ./set-env.sh at the repo root; add
-# --env-file .env.<your-env> to each command instead if you haven't run it):
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui-user-portal
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/canvas-adapters/workspace-canvas.test.ts
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared auth-service
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared debug-tools src/debug-tools.test.ts
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner all
+# Usage (replace .env.<stage> with one of your .env.* files):
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui-user-portal
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/canvas-adapters/workspace-canvas.test.ts
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared auth-service
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared debug-tools src/debug-tools.test.ts
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner all
 #
 # For "shared", an optional first argument selects a single package by its
 # directory name under packages/lixpi (e.g. "auth-service", "debug-tools",
@@ -117,6 +116,9 @@ case "$domain" in
         cp -R /usr/src/service/shared/constants /usr/src/service/shared/debug-tools /usr/src/service/init-config/packages/lixpi/
         cp /usr/src/service/shared/nats-subject-registry/package.json /usr/src/service/init-config/packages/lixpi/nats-subject-registry/
         cp -R /usr/src/service/shared/nats-subject-registry/src /usr/src/service/init-config/packages/lixpi/nats-subject-registry/
+        mkdir -p /usr/src/service/init-config/packages/lixpi/cli-ui
+        cp /usr/src/service/shared/cli-ui/package.json /usr/src/service/init-config/packages/lixpi/cli-ui/
+        cp -R /usr/src/service/shared/cli-ui/src /usr/src/service/init-config/packages/lixpi/cli-ui/
         run_domain init-config "$@"
         ;;
     shared)

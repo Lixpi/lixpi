@@ -39,37 +39,13 @@ SERVICE_DIR="${SERVICE_DIR:-/usr/src/service}"
 # optionally NATS_TLS_FIRST=true) and use tls:// URLs in NATS_SERVERS.
 run_nex() {
     if [ -n "${NATS_TLS_CA_FILE:-}" ] && [ "${NATS_TLS_FIRST:-false}" = "true" ]; then
-        nex \
-            --nats.servers "${NATS_SERVERS}" \
-            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
-            --nats.jsdomain "${NATS_JS_DOMAIN}" \
-            --nats.tlsca "${NATS_TLS_CA_FILE}" \
-            --nats.tlsfirst \
-            "$@"
+        nex --nats.servers "${NATS_SERVERS}" --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" --nats.jsdomain "${NATS_JS_DOMAIN}" --nats.tlsca "${NATS_TLS_CA_FILE}" --nats.tlsfirst "$@"
     elif [ -n "${NATS_TLS_CA_FILE:-}" ]; then
-        nex \
-            --nats.servers "${NATS_SERVERS}" \
-            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
-            --nats.jsdomain "${NATS_JS_DOMAIN}" \
-            --nats.tlsca "${NATS_TLS_CA_FILE}" \
-            "$@"
+        nex --nats.servers "${NATS_SERVERS}" --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" --nats.jsdomain "${NATS_JS_DOMAIN}" --nats.tlsca "${NATS_TLS_CA_FILE}" "$@"
     elif [ "${NATS_TLS_FIRST:-false}" = "true" ]; then
-        nex \
-            --nats.servers "${NATS_SERVERS}" \
-            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
-            --nats.jsdomain "${NATS_JS_DOMAIN}" \
-            --nats.tlsfirst \
-            "$@"
+        nex --nats.servers "${NATS_SERVERS}" --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" --nats.jsdomain "${NATS_JS_DOMAIN}" --nats.tlsfirst "$@"
     else
-        nex \
-            --nats.servers "${NATS_SERVERS}" \
-            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
-            --nats.jsdomain "${NATS_JS_DOMAIN}" \
-            "$@"
+        nex --nats.servers "${NATS_SERVERS}" --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" --nats.jsdomain "${NATS_JS_DOMAIN}" "$@"
     fi
 }
 
@@ -90,8 +66,7 @@ run_nex() {
 # workload as `node ... index.ts` and have its imports resolve from node_modules.
 if [ -f "${SERVICE_DIR}/package.json" ]; then
     echo "=== Installing workload dependencies (pnpm) ==="
-    ( cd "${SERVICE_DIR}" && pnpm install --prefer-offline ) \
-        || echo "WARN: pnpm install failed; falling back to baked node_modules"
+    ( cd "${SERVICE_DIR}" && pnpm install --prefer-offline ) || echo "WARN: pnpm install failed; falling back to baked node_modules"
 fi
 
 echo "=== Starting NEX node '${NEX_NODE_NAME}' (namespace=${NEX_NAMESPACE}, jsdomain=${NATS_JS_DOMAIN}) ==="
@@ -112,14 +87,7 @@ echo "Connecting to: ${NATS_SERVERS}"
 # re-deploys the workload on every boot (idempotent), which would double-run the
 # workload if KV also replayed it — and a random per-boot node id would leak a
 # new KV bucket each restart.
-run_nex \
-    --namespace "${NEX_NAMESPACE}" \
-    node up \
-    --node-name "${NEX_NODE_NAME}" \
-    --events nats \
-    --tags "${LIXPI_NODE_TAGS}" \
-    --issuer-nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-    --issuer-nkey-seed "${NATS_NEX_NODE_NKEY_SEED}" &
+run_nex --namespace "${NEX_NAMESPACE}" node up --node-name "${NEX_NODE_NAME}" --events nats --tags "${LIXPI_NODE_TAGS}" --issuer-nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" --issuer-nkey-seed "${NATS_NEX_NODE_NKEY_SEED}" &
 NODE_PID=$!
 
 # Forward termination to the node for a clean shutdown (compose stop_signal=SIGTERM).
@@ -168,10 +136,7 @@ deploy_workload() {
     i=0
     while [ "$i" -lt 30 ]; do
         i=$((i + 1))
-        if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
-            --type native --lifecycle service --name "${wl_name}" \
-            --tags "${LIXPI_NODE_TAGS}" \
-            --start-request "${wl_start_request}" 2>&1)"; then
+        if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start --type native --lifecycle service --name "${wl_name}" --tags "${LIXPI_NODE_TAGS}" --start-request "${wl_start_request}" 2>&1)"; then
             case "${DEPLOY_OUTPUT}" in
                 *"error:"*|*"no NATS connection available"*)
                     ;;
@@ -204,12 +169,9 @@ MEDIA_RENDER_ENTRY="${SERVICE_DIR}/workloads/media-render/index.ts"
 MEDIA_RENDER_KEYS="NATS_SERVERS NATS_MEDIA_RENDER_NKEY_SEED ACCOUNT_ADMISSION_ENABLED MEDIA_RENDER_MAX_DURATION_SECONDS MEDIA_RENDER_MAX_PIXELS MEDIA_RENDER_MAX_FPS MEDIA_RENDER_MAX_CONCURRENT_JOBS MEDIA_RENDER_TEMP_LIMIT_BYTES MEDIA_RENDER_TIMEOUT_SECONDS"
 
 # shellcheck disable=SC2086  # intentional word-splitting of the key lists
-deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" \
-    "$(build_start_request "${FILE_CONVERSION_ENTRY}" ${FILE_CONVERSION_KEYS})"
-deploy_workload "character-fidelity" "${CHARACTER_FIDELITY_ENTRY}" \
-    "$(build_start_request "${CHARACTER_FIDELITY_ENTRY}" ${CHARACTER_FIDELITY_KEYS})"
-deploy_workload "media-render" "${MEDIA_RENDER_ENTRY}" \
-    "$(build_start_request "${MEDIA_RENDER_ENTRY}" ${MEDIA_RENDER_KEYS})"
+deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" "$(build_start_request "${FILE_CONVERSION_ENTRY}" ${FILE_CONVERSION_KEYS})"
+deploy_workload "character-fidelity" "${CHARACTER_FIDELITY_ENTRY}" "$(build_start_request "${CHARACTER_FIDELITY_ENTRY}" ${CHARACTER_FIDELITY_KEYS})"
+deploy_workload "media-render" "${MEDIA_RENDER_ENTRY}" "$(build_start_request "${MEDIA_RENDER_ENTRY}" ${MEDIA_RENDER_KEYS})"
 
 # Supervise the node in the foreground; exits when the node exits or on signal.
 wait "$NODE_PID"

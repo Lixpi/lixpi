@@ -8,5 +8,7 @@ services:
         volumes:
             - ../run-config.ts:/usr/src/config-utils/run-config.ts:ro,cached
             - ../environment-file.ts:/usr/src/config-utils/repository/environment-file.ts:ro,cached
-            - ../secret-input.ts:/usr/src/config-utils/repository/secret-input.ts:ro,cached
+            - ../../../packages/lixpi/cli-ui/src:/usr/src/config-utils/packages/lixpi/cli-ui/src:ro,cached
+        environment:
+            NODE_OPTIONS: --disable-warning=ExperimentalWarning
         working_dir: /usr/src/config-utils

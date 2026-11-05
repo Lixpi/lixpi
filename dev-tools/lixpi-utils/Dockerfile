@@ -2,10 +2,10 @@
 #
 # Every skill under ${LIXPI_REPOSITORY_PATH}/skills/ that needs to execute code executes it here, never on the host. See
 # ${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md. The canonical skills tree is bind-mounted at /skills
-# (docker-compose.lixpi-utils.yml), so a script edit applies on the next run with no rebuild.
+# (infrastructure/docker/docker-compose.lixpi-utils.yml), so a script edit applies on the next run with no rebuild.
 #
 # The shared setup UI reuses the dependency manifest from dev-tools/config-utils so it renders
-# with the same Clack and Chalk components as init-config. Skill scripts still ship their own
+# with the same Clack and Chalk components as the configuration wizard. Skill scripts still ship their own
 # dependencies instead of adding them to this image.
 #
 # Node 24 runs TypeScript directly through native type stripping, so skill scripts are .ts files with
@@ -28,6 +28,7 @@ WORKDIR /opt/lixpi-utils
 COPY packages/lixpi/debug-tools/ts ./packages/lixpi/debug-tools/ts
 COPY packages/lixpi/constants ./packages/lixpi/constants
 COPY packages/lixpi/nats-subject-registry ./packages/lixpi/nats-subject-registry
+COPY packages/lixpi/cli-ui ./packages/lixpi/cli-ui
 COPY dev-tools/config-utils/pnpm-workspace.yaml ./
 COPY dev-tools/config-utils/package.json ./
 RUN pnpm install --prod
