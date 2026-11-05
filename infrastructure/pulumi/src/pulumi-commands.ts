@@ -274,6 +274,33 @@ export const describeTarget = (
     }
 }
 
+const AWS_SESSION_FAILURE = /refresh cached SSO|SSO session|ExpiredToken|token has expired|get credentials: failed|could not find credentials|no EC2 IMDS role/iu
+
+// Pulumi's automation errors start with a bare `code: -2` line and hold the real cause in
+// their stderr. Identity is left out: a failure names the condition, not the profile,
+// account or bucket it happened with.
+export const describeFailure = (error: unknown): string => {
+    const message = (error as Error)?.message ?? String(error)
+
+    if (AWS_SESSION_FAILURE.test(message))
+        return 'The AWS session has expired or is missing.'
+
+    const cause = message
+        .split('\n').map(line => line.trim()).find(line => line.startsWith('error:'))
+
+    if (cause)
+        return cause
+            .replace(/^error:\s*/u, '')
+            .replace(/s3:\/\/\S+/gu, '<state backend>')
+            .replace(/\b\d{12}\b/gu, '<account>')
+
+    return (
+        message
+            .split('\n').find(line => line.trim() && !/^\s*code:/u.test(line))
+            ?.trim() ?? 'The command failed.'
+    )
+}
+
 // The service's own description of itself, which the dev console renders as a menu.
 // Commands that can't apply to this program at all are left out.
 export const buildCatalog = (env: NodeJS.ProcessEnv = process.env) => ({

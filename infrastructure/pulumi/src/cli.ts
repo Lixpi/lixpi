@@ -9,6 +9,7 @@ import { endOutputSession } from './outputFormatter.ts'
 import {
     blockedReason,
     buildCatalog,
+    describeFailure,
     PULUMI_COMMANDS,
 } from './pulumi-commands.ts'
 import { StackManager } from './stackManager.ts'
@@ -83,7 +84,7 @@ const execCommand = async () => {
     } catch (error) {
         // End any dedupe session so next command starts fresh
         endOutputSession()
-        const msg = (error as Error)?.message?.split('\n')[0] || String(error)
+        const msg = describeFailure(error)
         err('Pulumi Command Failed', msg)
         process.exit(1)
     }
@@ -92,7 +93,7 @@ const execCommand = async () => {
 try {
     await execCommand()
 } catch (e) {
-    const msg = (e as Error)?.message?.split('\n')[0] || String(e)
+    const msg = describeFailure(e)
     err('Unexpected Error', msg)
     process.exit(1)
 }

@@ -12,6 +12,7 @@ import {
 import {
     blockedReason,
     buildCatalog,
+    describeFailure,
     describeTarget,
     PULUMI_COMMANDS,
 } from './pulumi-commands.ts'
@@ -127,6 +128,23 @@ describe('pulumi commands', () => {
         expect(names).toContain('up')
         expect(names).not.toContain('clean-ecr')
         expect(names).not.toContain('local-init')
+    })
+
+    it('reports an expired AWS session instead of the bare exit code', () => {
+        const error = new Error('code: -2\n stdout: \n stderr: error: read ".pulumi/meta.yaml": get credentials: failed to refresh cached credentials, refresh cached SSO token failed for profile production')
+
+        expect(describeFailure(error)).toBe('The AWS session has expired or is missing.')
+    })
+
+    it('shows the real cause of another failure, without identities', () => {
+        const error = new Error('code: 255\n stdout: \n stderr: Command failed\nerror: no stack named dev in s3://private-bucket for account 529088280712')
+
+        expect(describeFailure(error)).toBe('no stack named dev in <state backend> for account <account>')
+    })
+
+    it('never answers with only an exit code', () => {
+        expect(describeFailure(new Error('code: -2\nsomething else broke'))).toBe('something else broke')
+        expect(describeFailure(new Error('code: -2'))).toBe('The command failed.')
     })
 
     it('reports blocked commands with their reason in the catalog', () => {
