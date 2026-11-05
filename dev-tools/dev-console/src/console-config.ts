@@ -21,6 +21,7 @@ export type ConsoleOption = {
 export type ConsoleStep =
     | { type: 'env-file' }
     | { type: 'docker-prune' }
+    | { type: 'service-commands' }
     | {
         type: 'confirm'
         message: string

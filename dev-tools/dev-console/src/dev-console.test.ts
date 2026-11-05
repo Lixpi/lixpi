@@ -35,6 +35,7 @@ vi.mock('@clack/prompts', async importOriginal => ({
     outro: vi.fn(),
     select: vi.fn(),
     confirm: vi.fn(),
+    text: vi.fn(),
     log: { warn: vi.fn() },
 }))
 
@@ -134,6 +135,15 @@ const CONFIG: ConsoleConfig = {
             steps: [{ type: 'docker-prune' }],
         },
         {
+            id: 'deploy-service',
+            label: 'Deploy service',
+            script: 'local:pulumi',
+            steps: [
+                { type: 'env-file' },
+                { type: 'service-commands' },
+            ],
+        },
+        {
             id: 'plain',
             label: 'Plain',
             script: 'local:plain',
@@ -141,6 +151,48 @@ const CONFIG: ConsoleConfig = {
         },
     ],
 }
+
+const CATALOG = JSON.stringify({
+    target: {
+        summary: 'stack production in AWS account 1 (profile production)',
+        rows: [{
+            label: 'Deploys to',
+            value: 'AWS account 1',
+        }],
+    },
+    commands: [
+        {
+            name: 'preview',
+            label: 'Preview',
+            effect: 'read',
+            available: true,
+        },
+        {
+            name: 'up',
+            label: 'Deploy',
+            effect: 'change',
+            available: true,
+        },
+        {
+            name: 'destroy',
+            label: 'Destroy',
+            effect: 'destroy',
+            available: false,
+            blockedReason: 'Only for production',
+        },
+        {
+            name: 'repair',
+            label: 'Repair',
+            effect: 'change',
+            available: true,
+            takesEnvFile: true,
+            arguments: [{
+                name: 'organization',
+                prompt: 'Which?',
+            }],
+        },
+    ],
+})
 
 const ROOT_COMPOSE_PATH = 'infrastructure/docker/docker-compose.yml'
 
@@ -473,7 +525,7 @@ describe('dev console', () => {
             const options = vi.mocked(prompts.select).mock.calls[0][0]
             const values = (options.options as { value: string }[]).map(option => option.value)
 
-            expect(values).toEqual(['login', 'start', 'mode', 'deploy', 'fixed', 'prune', 'plain', 'exit'])
+            expect(values).toEqual(['login', 'start', 'mode', 'deploy', 'fixed', 'prune', 'deploy-service', 'plain', 'exit'])
             expect(options.initialValue).toBeUndefined()
         })
 
@@ -494,6 +546,7 @@ describe('dev console', () => {
                 envFile: undefined,
                 options: { greeting: 'hello' },
                 selected: [],
+                arguments: [],
             })
         })
 
@@ -555,6 +608,7 @@ describe('dev console', () => {
                 envFile: '.env.alice-local',
                 options: { rebuild: 'true' },
                 selected: ['web'],
+                arguments: [],
             })
             expect(prompts.select).toHaveBeenCalledTimes(2)
         })
@@ -636,6 +690,116 @@ describe('dev console', () => {
 
             treePrompt.mockResolvedValueOnce(CANCEL)
             expect(await runPrune()).toEqual({ action: 'menu' })
+        })
+
+        describe('service commands', () => {
+            const reopen = (catalog = CATALOG) => new DevConsoleWizard(
+                workspace,
+                CONFIG,
+                {
+                    entry: 'deploy-service',
+                    entryEnvFile: '.env.alice-local',
+                    catalog,
+                },
+            ).run()
+
+            it('asks the host for the catalog after the environment file is chosen', async () => {
+                answer('deploy-service', '.env.alice-local')
+
+                expect(await run()).toEqual({
+                    action: 'query',
+                    entry: 'deploy-service',
+                    script: 'local:pulumi',
+                    envFile: '.env.alice-local',
+                })
+            })
+
+            it('states the deployment target before offering anything', async () => {
+                vi.mocked(prompts.note).mockClear()
+                answer('preview')
+
+                await reopen()
+
+                expect(vi.mocked(prompts.note).mock.calls[0][0]).toContain('AWS account 1')
+            })
+
+            it('offers exactly what the service reports, disabling blocked commands with the reason', async () => {
+                answer('preview')
+
+                await reopen()
+
+                const options = vi.mocked(prompts.select).mock.calls[0][0].options as {
+                    value: string
+                    disabled?: boolean
+                    hint?: string
+                }[]
+
+                expect(options.map(option => option.value)).toEqual(['preview', 'up', 'destroy', 'repair', 'back-to-main-menu'])
+                expect(options[2]).toMatchObject({
+                    disabled: true,
+                    hint: 'Only for production',
+                })
+            })
+
+            it('runs a read command without asking, keeping the environment file', async () => {
+                vi.mocked(prompts.confirm).mockClear()
+                answer('preview')
+
+                expect(await reopen()).toMatchObject({
+                    action: 'run',
+                    script: 'local:pulumi',
+                    envFile: '.env.alice-local',
+                    selected: ['preview'],
+                })
+                expect(prompts.confirm).not.toHaveBeenCalled()
+            })
+
+            it('confirms a change, naming the target and defaulting to No', async () => {
+                answer('up')
+                vi.mocked(prompts.confirm).mockResolvedValueOnce(true)
+
+                await reopen()
+
+                const options = vi.mocked(prompts.confirm).mock.lastCall![0]
+
+                expect(options.message).toContain('AWS account 1')
+                expect(options.initialValue).toBe(false)
+            })
+
+            it('goes back to the menu when a change is declined', async () => {
+                answer('up')
+                vi.mocked(prompts.confirm).mockResolvedValueOnce(false)
+
+                expect(await reopen()).toEqual({ action: 'menu' })
+            })
+
+            it('asks for arguments and puts the environment file first when the service wants it', async () => {
+                answer('repair')
+                vi.mocked(prompts.text).mockResolvedValueOnce('org-1')
+                vi.mocked(prompts.confirm).mockResolvedValueOnce(true)
+
+                expect(await reopen()).toMatchObject({
+                    selected: ['repair'],
+                    arguments: ['.env.alice-local', 'org-1'],
+                })
+            })
+
+            it('warns and returns to the menu when the service reports nothing', async () => {
+                vi.mocked(prompts.log.warn).mockClear()
+
+                expect(await reopen('')).toEqual({ action: 'menu' })
+                expect(prompts.log.warn).toHaveBeenCalled()
+            })
+
+            it('renders the arguments in the plan after the command', () => {
+                expect(renderConsolePlan({
+                    action: 'run',
+                    script: 'local:pulumi',
+                    options: {},
+                    selected: ['repair'],
+                    arguments: ['org-1'],
+                })).toBe('ACTION=run\nSCRIPT=local:pulumi\nSELECTED=repair\nARGUMENT=org-1\n')
+            })
         })
 
         it('warns before pruning named volumes', async () => {

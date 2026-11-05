@@ -119,6 +119,7 @@ services:
             # AWS SSO credentials and profile definitions
             - aws-config:/root/.aws:cached
             - ../../.aws/config:/root/.aws/config:cached
+            - ../../infrastructure/pulumi/src:/usr/src/service/infrastructure/pulumi/src:ro,cached
 
             # Pulumi infrastructure
             - pulumi-local-state:/var/opt/lixpi/.pulumi-local-state

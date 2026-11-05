@@ -20,6 +20,8 @@ CONSOLE_COMPOSE=(docker compose -f "${LIXPI_REPOSITORY_PATH}/infrastructure/dock
 TERMINAL_STATE=""
 CONSOLE_ENTRY=""
 DOCKER_USAGE=""
+CONSOLE_CATALOG=""
+ENTRY_ENV_FILE=""
 
 cleanup() {
     if [[ -n "${TERMINAL_STATE}" ]]; then
@@ -53,7 +55,7 @@ read_plan() {
     # ISIG stays off so Ctrl+C reaches the prompt as a key and returns to the main
     # menu instead of killing the console.
     stty -icanon -echo -icrnl -isig min 1 time 0
-    CONSOLE_PLAN="$("${CONSOLE_COMPOSE[@]}" --progress quiet run --rm --no-deps -i -T -e "LIXPI_TERMINAL_COLUMNS=${columns}" -e "LIXPI_TERMINAL_ROWS=${rows}" -e "LIXPI_CONSOLE_ENTRY=${CONSOLE_ENTRY}" -e "LIXPI_DOCKER_USAGE=${DOCKER_USAGE}" dev-console < /dev/tty)"
+    CONSOLE_PLAN="$("${CONSOLE_COMPOSE[@]}" --progress quiet run --rm --no-deps -i -T -e "LIXPI_TERMINAL_COLUMNS=${columns}" -e "LIXPI_TERMINAL_ROWS=${rows}" -e "LIXPI_CONSOLE_ENTRY=${CONSOLE_ENTRY}" -e "LIXPI_DOCKER_USAGE=${DOCKER_USAGE}" -e "LIXPI_CONSOLE_CATALOG=${CONSOLE_CATALOG}" -e "LIXPI_CONSOLE_ENTRY_ENV_FILE=${ENTRY_ENV_FILE}" dev-console < /dev/tty)"
     cleanup
 }
 
@@ -65,12 +67,13 @@ parse_plan() {
     RETURN_TO_MENU=""
     OPTIONS=()
     SELECTED=()
+    ARGUMENTS=()
 
     while IFS='=' read -r plan_key plan_value; do
         case "${plan_key}" in
             ACTION)
                 case "${plan_value}" in
-                    exit|menu|measure-docker|run) ACTION="${plan_value}" ;;
+                    exit|menu|measure-docker|query|run) ACTION="${plan_value}" ;;
                     *) fail "The console plan contains an unknown action." ;;
                 esac
                 ;;
@@ -97,6 +100,9 @@ parse_plan() {
             SELECTED)
                 [[ "${plan_value}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]] || fail "The console plan contains an invalid selection."
                 SELECTED+=("${plan_value}")
+                ;;
+            ARGUMENT)
+                ARGUMENTS+=("${plan_value}")
                 ;;
             '')
                 ;;
@@ -133,7 +139,7 @@ run_script() (
     done
 
     cd "${WORKSPACE_PATH}"
-    exec bash "$1" ${SELECTED[@]+"${SELECTED[@]}"}
+    exec bash "$1" ${SELECTED[@]+"${SELECTED[@]}"} ${ARGUMENTS[@]+"${ARGUMENTS[@]}"}
 )
 
 # Ctrl+C belongs to the running action, which stops it. Submitting an action ends the
@@ -177,6 +183,8 @@ while true; do
     parse_plan
     CONSOLE_ENTRY=""
     DOCKER_USAGE=""
+    CONSOLE_CATALOG=""
+    ENTRY_ENV_FILE=""
 
     case "${ACTION}" in
         exit)
@@ -188,6 +196,22 @@ while true; do
             echo "Measuring Docker disk usage..."
             DOCKER_USAGE="$(docker system df --format '{{json .}}' 2>/dev/null || true)"
             CONSOLE_ENTRY="${ENTRY}"
+            ;;
+        query)
+            path="$(script_path)"
+            [[ -f "${path}" ]] || fail "The console config names a script that does not exist: ${SCRIPT}."
+            echo "Asking the service for its commands..."
+
+            # Only the catalog line crosses back, so what a build prints stays out of the prompt.
+            # A failure prints the service's own error and leaves the console without a catalog.
+            QUERY_ERRORS="$(mktemp)"
+            CONSOLE_CATALOG="$(LIXPI_CONSOLE_QUERY=catalog run_script "${path}" 2>"${QUERY_ERRORS}" | grep '^{' | tail -n 1 || true)"
+            if [[ -z "${CONSOLE_CATALOG}" ]]; then
+                grep -v 'variable is not set' "${QUERY_ERRORS}" | tail -n 8 >&2 || true
+            fi
+            rm -f "${QUERY_ERRORS}"
+            CONSOLE_ENTRY="${ENTRY}"
+            ENTRY_ENV_FILE="${ENV_FILE}"
             ;;
         run)
             run_action

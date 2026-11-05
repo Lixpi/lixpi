@@ -34,6 +34,7 @@ Every repository has the same layout, so a developer finds things in the same pl
 | `choices` | One page with radio rows from `options` above an optional service tree from `services` |
 | `confirm` | A yes or no `message` that defaults to No |
 | `docker-prune` | The prune tree with measured disk usage, then a confirmation |
+| `service-commands` | Asks the action's script for its catalog, then offers the commands it reports |
 
 Under `services`, `composeFile` names the Compose file, `baseProfile` names the profile that makes up **Base**, and `groups` arranges the services. A service with no profile is always part of **Base**.
 
@@ -49,6 +50,7 @@ A script runs from the repository root. It receives the selected services or pru
 | Start services | Asks for an environment file, then shows one page with the container and service choices above the service tree, then starts them |
 | Create or edit a configuration | Opens the [configuration wizard](../config-utils/README.md) |
 | Initialize infrastructure | Asks for an environment file, then sets up TLS certificates and DynamoDB tables |
+| Deploy and manage infrastructure | Asks for an environment file, states the deployment target, then offers every command the Pulumi service reports |
 | Prune Docker | Asks what to prune, confirms, then reclaims disk space |
 | Install agent skills | Opens the skill installer |
 | Exit | Leaves the console |
@@ -80,6 +82,14 @@ If a rebuild was chosen, the selected containers are removed and their images ar
 ## Pruning Docker
 
 **Prune Docker** first measures disk usage with `docker system df` on the host, because the console container has no Docker access. It shows the size and reclaimable space per category in a table and beside the matching tree rows. Networks take no measurable space, so they show no size. In the tree, Space on a group selects everything in it. **Resources** holds stopped containers, images, unused networks, volumes and build cache, with images, volumes and build cache as their own groups. **System** holds `docker system prune` in three strengths: the default, with `--all`, and with `--all --volumes`, which removes anonymous volumes but keeps named ones. Nothing is preselected, because pruning covers the whole Docker host and so also affects other projects on the machine. The console asks for confirmation with No as the default, and warns separately before **All unused volumes**, which deletes named volumes such as DynamoDB and NATS data once their containers are removed. Afterwards it prints `docker system df`.
+
+## Deploying
+
+A `service-commands` step holds no list of commands. The console calls the action's script with `LIXPI_CONSOLE_QUERY=catalog`, and the script asks the service itself. The service answers with one line of JSON holding its deployment target and its commands, each with a label, an effect of `read`, `change` or `destroy`, any arguments it needs, and whether it can run with this configuration. A new command in the service therefore appears in the menu with no console change.
+
+The console shows the target before offering anything, including the AWS account and profile or a plain statement that a stack stays local. A blocked command stays visible but can't be chosen, and shows the reason. Anything other than `read` asks for confirmation, naming the target, with No as the default.
+
+The service decides what's allowed, so a direct call is refused the same way. Lixpi's Pulumi service reads `PULUMI_ALLOWED_AWS_PROFILES` from its Compose service. When it's set, `change` and `destroy` commands only run if the selected environment's `AWS_PROFILE` is on the list, while `read` commands stay available. The website sets it to `production`.
 
 ## How the container reaches the host
 

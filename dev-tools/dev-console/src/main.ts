@@ -31,6 +31,8 @@ try {
         {
             entry: process.env.LIXPI_CONSOLE_ENTRY,
             dockerUsage: process.env.LIXPI_DOCKER_USAGE,
+            catalog: process.env.LIXPI_CONSOLE_CATALOG,
+            entryEnvFile: process.env.LIXPI_CONSOLE_ENTRY_ENV_FILE,
         },
     ).run()
 

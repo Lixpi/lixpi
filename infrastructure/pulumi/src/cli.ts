@@ -6,6 +6,11 @@ import { hideBin } from 'yargs/helpers'
 import { err } from '@lixpi/debug-tools'
 import { endOutputSession } from './outputFormatter.ts'
 
+import {
+    blockedReason,
+    buildCatalog,
+    PULUMI_COMMANDS,
+} from './pulumi-commands.ts'
 import { StackManager } from './stackManager.ts'
 
 const {
@@ -35,85 +40,46 @@ const cli = yargs(
             type: 'string',
         },
     )
-    .command('init', 'Initialize stack')
-    .command('up', 'Update stack')
-    .command('preview', 'Preview stack changes')
-    .command('destroy', 'Destroy stack')
-    .command('force-destroy', 'Force destroy stack resources')
-    .command('clean-ecr', 'Delete all images from ECR repositories before destroying')
-    .command('refresh', 'Refresh the stack state')
-    .command('outputs', 'Show stack outputs')
-    .command('list-stacks', 'List stacks')
-    .command('create-stack', 'Create a stack explicitly')
-    .command('remove-stack', 'Explicitly remove stack')
-    .command('cancel', 'Cancel ongoing Pulumi operation')
+    .command('catalog', 'Print the commands and deployment target as JSON')
     .example('$0 init --stack=dev', 'Init stack named "dev"')
     .demandCommand(1, 'Please supply a valid command.')
     .help()
     .alias('help', 'h')
 
+for (const command of PULUMI_COMMANDS)
+    cli.command(command.name, command.description)
+
 const execCommand = async () => {
     const argv = await cli.parseAsync()
-    const command = argv._[0] as string
-    const manager = new StackManager(argv.stack, argv.region)
+    const name = argv._[0] as string
+
+    if (name === 'catalog') {
+        process.stdout.write(`${JSON.stringify(
+            buildCatalog(),
+        )}\n`)
+
+        return
+    }
+
+    const command = PULUMI_COMMANDS.find(candidate => candidate.name === name)
+
+    if (!command) {
+        err('Invalid command', name)
+        process.exit(1)
+    }
+
+    const blocked = blockedReason(command)
+
+    if (blocked) {
+        err('Pulumi Command Refused', blocked)
+        process.exit(1)
+    }
 
     try {
-        switch (command) {
-            case 'init':
-                await manager.init()
-
-                break
-            case 'up':
-                await manager.up()
-
-                break
-            case 'preview':
-                await manager.preview()
-
-                break
-            case 'destroy':
-                await manager.destroy()
-
-                break
-            case 'force-destroy':
-                await manager.cleanEcrRepositories()
-                await manager.destroy({ destroy: true })
-
-                break
-            case 'clean-ecr':
-                await manager.cleanEcrRepositories()
-
-                break
-            case 'refresh':
-                await manager.refresh({
-                    clearPendingCreates: true,
-                })
-
-                break
-            case 'outputs':
-                await manager.outputs()
-
-                break
-            case 'list-stacks':
-                await manager.listStacks()
-
-                break
-            case 'create-stack':
-                await manager.createStack()
-
-                break
-            case 'remove-stack':
-                await manager.removeStack()
-
-                break
-            case 'cancel':
-                await manager.cancel()
-
-                break
-            default:
-                err('Invalid command', command)
-                process.exit(1)
-        }
+        await command.run(
+            new StackManager(argv.stack, argv.region),
+            argv._.slice(1).map(String),
+        )
     } catch (error) {
         // End any dedupe session so next command starts fresh
         endOutputSession()

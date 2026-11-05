@@ -27,12 +27,20 @@ import {
     renderDockerUsage,
 } from './docker-usage.ts'
 import { ServiceTree } from './service-tree.ts'
+import { parseServiceCatalog } from './service-catalog.ts'
 
 // What run-console.sh does next. It validates every field and acts on the host, so
 // the container only ever describes values and never a command line.
 export type ConsolePlan =
     | { action: 'exit' }
     | { action: 'menu' }
+    | {
+        // Ask the action's own script for its catalog, then reopen this action with it.
+        action: 'query'
+        entry: string
+        script: string
+        envFile?: string
+    }
     | {
         action: 'measure-docker'
         entry: string
@@ -44,6 +52,7 @@ export type ConsolePlan =
         returnToMenu?: boolean
         options: Record<string, string>
         selected: string[]
+        arguments?: string[]
     }
 
 type WizardOptions = {
@@ -53,12 +62,16 @@ type WizardOptions = {
     // chooses pruning, then starts the console again on that action.
     entry?: string
     dockerUsage?: string
+    catalog?: string
+    entryEnvFile?: string
 }
 
 type StepAnswers = {
     envFile?: string
     options: Record<string, string>
     selected: string[]
+    arguments: string[]
+    leadingEnvFile?: boolean
 }
 
 // start-services.sh and the other scripts enforce this same shape on the host.
@@ -86,6 +99,13 @@ export const readEnvironmentFiles = (workspacePath: string): string[] => listEnv
 export const renderConsolePlan = (plan: ConsolePlan): string => {
     const lines = [`ACTION=${plan.action}`]
 
+    if (plan.action === 'query')
+        lines.push(
+            `ENTRY=${plan.entry}`,
+            `SCRIPT=${plan.script}`,
+            ...(plan.envFile ? [`ENV_FILE=${plan.envFile}`] : []),
+        )
+
     if (plan.action === 'measure-docker')
         lines.push(`ENTRY=${plan.entry}`)
 
@@ -101,6 +121,7 @@ export const renderConsolePlan = (plan: ConsolePlan): string => {
         lines.push(
             ...Object.entries(plan.options).map(([name, value]) => `OPTION=${name}${OPTION_VALUE_SEPARATOR}${value}`),
             ...plan.selected.map(value => `SELECTED=${value}`),
+            ...(plan.arguments ?? []).map(value => `ARGUMENT=${value}`),
         )
     }
 
@@ -187,14 +208,35 @@ export class DevConsoleWizard {
     }
 
     private async planAction(action: ConsoleAction): Promise<ConsolePlan> {
+        const reopened = action.id === this.options.entry
         const answers: StepAnswers = {
-            envFile: action.envFile,
+            envFile: action.envFile ?? (reopened ? this.options.entryEnvFile : undefined),
             options: { ...action.params },
             selected: [],
+            arguments: [],
         }
 
-        for (const step of action.steps ?? [])
+        for (const step of action.steps ?? []) {
+            if (
+                step.type === 'env-file'
+                && reopened
+                && answers.envFile
+            )
+                continue
+
+            if (
+                step.type === 'service-commands'
+                && !reopened
+            )
+                return {
+                    action: 'query',
+                    entry: action.id,
+                    script: action.script,
+                    envFile: answers.envFile,
+                }
+
             await this.runStep(step, answers)
+        }
 
         return {
             action: 'run',
@@ -203,6 +245,10 @@ export class DevConsoleWizard {
             returnToMenu: action.returnToMenu,
             options: answers.options,
             selected: answers.selected,
+            arguments: answers.leadingEnvFile
+                && answers.envFile
+                ? [answers.envFile, ...answers.arguments]
+                : answers.arguments,
         }
     }
 
@@ -221,6 +267,10 @@ export class DevConsoleWizard {
                 break
             case 'docker-prune':
                 answers.selected = await this.askPruneTargets()
+
+                break
+            case 'service-commands':
+                await this.askServiceCommand(answers)
 
                 break
             case 'choices':
@@ -310,6 +360,70 @@ export class DevConsoleWizard {
         await this.askConfirmation('This affects every project on this Docker host, not only this repository. Prune now?')
 
         return targets
+    }
+
+    private async askServiceCommand(answers: StepAnswers): Promise<void> {
+        const catalog = parseServiceCatalog(this.options.catalog ?? '')
+
+        if (!catalog) {
+            prompts.log.warn('The service did not report its commands, so there is nothing to offer.', { output: this.output })
+
+            throw new PromptCancelled()
+        }
+
+        prompts.note(
+            catalog.target.rows.map(row => `${row.label}: ${row.value}`).join('\n'),
+            'Deployment target',
+            { output: this.output },
+        )
+
+        const name = unwrapPrompt<string>(
+            await selectMenu<string>({
+                message: 'What should run against this target?',
+                instructions: STEP_INSTRUCTIONS,
+                options: [
+                    ...catalog.commands.map(
+                        command => ({
+                            value: command.name,
+                            label: command.label,
+                            hint: command.available ? command.description : command.blockedReason,
+                            disabled: !command.available,
+                        }),
+                    ),
+                    BACK_OPTION,
+                ],
+                output: this.output,
+            }),
+        )
+
+        if (name === BACK_TO_MENU)
+            throw new PromptCancelled()
+
+        const command = catalog.commands.find(candidate => candidate.name === name)!
+
+        for (const argument of command.arguments ?? [])
+            answers.arguments.push(
+                unwrapPrompt<string>(
+                    await prompts.text({
+                        message: argument.prompt,
+                        validate: value => value?.trim()
+                            && !/[\r\n]/u.test(value)
+                            ? undefined
+                            : 'Enter one line of text.',
+                        output: this.output,
+                    }),
+                ).trim(),
+            )
+
+        if (command.effect !== 'read')
+            await this.askConfirmation(
+                command.effect === 'destroy'
+                    ? `${command.label} DELETES resources in ${catalog.target.summary}. Continue?`
+                    : `${command.label} on ${catalog.target.summary}?`,
+            )
+
+        answers.selected = [name]
+        answers.leadingEnvFile = command.takesEnvFile
     }
 
     private async askChoices(

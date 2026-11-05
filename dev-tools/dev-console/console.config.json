@@ -61,6 +61,13 @@
             "steps": [{ "type": "env-file" }]
         },
         {
+            "id": "pulumi",
+            "label": "Deploy and manage infrastructure",
+            "hint": "Everything the Pulumi service offers",
+            "script": "local:pulumi",
+            "steps": [{ "type": "env-file" }, { "type": "service-commands" }]
+        },
+        {
             "id": "prune",
             "label": "Prune Docker",
             "hint": "Reclaim disk space from containers, images, volumes and build cache",

@@ -103,7 +103,7 @@ flowchart LR
 | `pulumi refresh` | Reconcile state with real AWS |
 | `pulumi destroy` | Tear down everything in the stack |
 | `pulumi force-destroy` | Clean ECR images first, then destroy (ECR repos refuse to delete while they hold images) |
-| `pulumi clean-ecr` | Delete all images from the stack's ECR repos |
+| `pulumi clean-ecr` | Not implemented yet, so this currently deletes nothing |
 | `pulumi outputs` | Show stack outputs (endpoint URLs, IDs) |
 
 ## Observability
