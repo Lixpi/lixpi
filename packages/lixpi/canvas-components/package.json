@@ -261,6 +261,7 @@
     "devDependencies": {
         "vitest": "5.0.5",
         "happy-dom": "21.0.4",
+        "sass": "1.107.0",
         "@lixpi/test-utils": "workspace:*",
         "@types/d3-selection": "3.0.12"
     }

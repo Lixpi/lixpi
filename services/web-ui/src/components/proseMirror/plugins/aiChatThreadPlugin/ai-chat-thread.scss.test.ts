@@ -6,10 +6,8 @@ import {
 } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import {
-    compileThemedStylesheet,
-    withoutLayout,
-} from '@lixpi/test-utils'
+import { withoutLayout } from '@lixpi/test-utils'
+import { compileThemedStylesheet } from '@lixpi/test-utils/stylesheets'
 
 const expectSourceToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 

@@ -38,10 +38,8 @@ import {
     geminiIcon,
     plusIcon,
 } from '@lixpi/ui-kit/svg'
-import {
-    compileThemedStylesheet,
-    withoutLayout,
-} from '@lixpi/test-utils'
+import { withoutLayout } from '@lixpi/test-utils'
+import { compileThemedStylesheet } from '@lixpi/test-utils/stylesheets'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep

@@ -16,6 +16,9 @@ packages:
   - "packages/lixpi/usage-reporter"
 
 allowBuilds:
+  # Sass reaches this workspace through a shared package's dev dependencies. Its
+  # native file watcher only serves `sass --watch`, which nothing here runs.
+  "@parcel/watcher": false
   "@google/genai": true
   protobufjs: true
 

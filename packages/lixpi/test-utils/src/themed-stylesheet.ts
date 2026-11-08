@@ -6,6 +6,9 @@
 // rendered value is unchanged. Compiling the stylesheet and replacing each
 // theme variable with its light default lets the test check the value the
 // default theme actually renders.
+//
+// This entry point is separate from the package root so that only workspaces
+// that compile stylesheets need `sass`, an optional peer dependency.
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { pathToFileURL } from 'url'

@@ -6,10 +6,8 @@ import {
     expect,
     it,
 } from 'vitest'
-import {
-    compileThemedStylesheet,
-    withoutLayout,
-} from '@lixpi/test-utils'
+import { withoutLayout } from '@lixpi/test-utils'
+import { compileThemedStylesheet } from '@lixpi/test-utils/stylesheets'
 
 const extractFlatRule = (source: string, selector: string): string => {
     const start = source.indexOf(`${selector} {`)
