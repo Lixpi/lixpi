@@ -28,7 +28,8 @@ export type WorkspaceRightPanelSettings = {
     layout: { contentInset: number }
     resizeHandle: Pick<SidePanelConfig, 'offset' | 'grabWidth' | 'styles'>
     toggle: Omit<NonNullable<SidePanelConfig['toggle']>, 'iconSvg' | 'className' | 'onToggle'>
-    animation: SidePanelConfig['animation']
+    // Slide timing and the swipe thresholds the drag config leaves out come
+    // from `uiKitSettings.sidePanel`.
     overlay: SidePanelConfig['overlay']
     drag: SidePanelConfig['drag']
 }

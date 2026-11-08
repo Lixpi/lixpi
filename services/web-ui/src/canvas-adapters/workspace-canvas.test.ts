@@ -5,7 +5,10 @@ import {
 } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { withoutLayout } from '@lixpi/test-utils'
+import {
+    compileThemedStylesheet,
+    withoutLayout,
+} from '@lixpi/test-utils'
 
 // =============================================================================
 // HELPERS
@@ -2055,7 +2058,7 @@ describe('Right side panel — TS infrastructure', () => {
         expect(close.indexOf('rightPanel.close()')).toBeLessThan(close.indexOf('persistAiChatSidebarState()'))
         expectExcerptToContain(close, 'await closing', 'panel close')
     })
-    it('uses content-agnostic right side panel sizing for right-edge surfaces', () => {
+    it('uses content-agnostic right side panel sizing for right-edge surfaces', async () => {
         const scss = loadScss()
         const workspaceCanvasViewSource = loadWorkspaceCanvasView()
         const layout = loadLayout()
@@ -2072,8 +2075,12 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
         expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-backdrop-z-index, 90)')
         expectSourceToContain(sidePanelScss, '--side-panel-backdrop-width')
-        expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
-        expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
+        // The blur comes from a theme token, so it is read from what the
+        // default theme renders.
+        const sidePanelCss = await compileThemedStylesheet(resolve(import.meta.dirname, '../../packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss'))
+        sourceFileNames.set(sidePanelCss, 'compiled side-panel.scss')
+        expectSourceToContain(sidePanelCss, 'backdrop-filter: blur(24px) saturate(145%)')
+        expectSourceToContain(sidePanelCss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
         expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-media-library-panel')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel-right')
@@ -2084,9 +2091,10 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceToContain(scss, 'right: calc(var(--workspace-right-side-panel-width) + 5px)')
         expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
         expectSourceToContain(scss, 'bottom: calc(0px - var(--workspace-canvas-padding-bottom))')
-        expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
-        expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: var(--canvas-panel-radius, 10px)', 'outer chat panel')
-        expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
+        const rightPanelCss = await compileThemedStylesheet(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-right-panel.scss'))
+        expectExcerptToContain(extractBlock(rightPanelCss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
+        expectExcerptToContain(extractBlock(rightPanelCss, '.workspace-ai-chat-floating-panel'), 'border-radius: var(--canvas-panel-radius, 10px)', 'outer chat panel')
+        expectExcerptToContain(extractBlock(rightPanelCss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
         expectSourceToContain(loadWorkspaceComposerStyles(), '.ai-prompt-input-floating.workspace-canvas-global-composer')
         expectExcerptToContain(
             extractBlock(loadWorkspaceComposerStyles(), '.ai-prompt-input-floating.workspace-canvas-global-composer'),

@@ -34,7 +34,7 @@
     padding: 0 var(--workspace-right-side-panel-content-inset);
     z-index: var(--side-panel-surface-z-index, 10030);
     pointer-events: auto;
-    border-radius: #{themeScope.token("components-right-panel-floating-panel-base-border-radius", themePalette.$roles)};
+    border-radius: var(--canvas-panel-radius, #{themeScope.token("components-right-panel-floating-panel-base-border-radius", themePalette.$roles)});
     background: transparent;
     overflow: visible;
 

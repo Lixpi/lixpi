@@ -5,5 +5,8 @@
     "type": "module",
     "exports": {
         ".": "./src/index.ts"
+    },
+    "dependencies": {
+        "sass": "1.107.0"
     }
 }

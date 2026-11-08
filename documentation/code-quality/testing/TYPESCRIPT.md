@@ -144,6 +144,8 @@ Always prefer testing pure, exported functions. If a class has complex logic bur
 
 Some regression tests inspect source text directly when a behavior depends on code structure that is hard to exercise through a small unit test. Keep these assertions terse on failure.
 
+A stylesheet value, such as a color, size or weight, usually comes from a theme token, which compiles to `var(--theme-<role>, <light default>)`. Searching the `.scss` source for the literal breaks every time a value moves into a token, though nothing renders differently. Check values against `compileThemedStylesheet(path)` from `@lixpi/test-utils` instead: it compiles the stylesheet the way the application does and replaces each theme variable with its light default, so the assertion sees what the default theme renders. Keep structural checks, such as which selectors, mixins and imports exist, on the source. Sass simplifies some expressions as it compiles, for example `calc()` inside `min()`, so a literal value written directly in the source is still checked there.
+
 Never use direct `.toContain(...)` or `.not.toContain(...)` assertions on whole files or large extracted function/block strings. Vitest prints the entire received source when these fail, which makes failures noisy and hard to read.
 
 Required pattern:
