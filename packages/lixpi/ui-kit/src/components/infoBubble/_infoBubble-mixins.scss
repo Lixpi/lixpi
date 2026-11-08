@@ -169,6 +169,18 @@
     }
 }
 
+// A configured border colour wins; otherwise the border is the surface
+// colour adjusted by borderLightnessAdjustment.
+@function infoBubbleBorderColor($settings) {
+    $configured: map.get($settings, borderColor);
+
+    @if $configured != null {
+        @return $configured;
+    }
+
+    @return color.adjust(map.get($settings, surfaceBg), $lightness: map.get($settings, borderLightnessAdjustment));
+}
+
 // 3) Bubble Theme - All colors, shadows, and visual treatments
 // --------------------------------------------------------------
 @mixin infoBubbleTheme($config: ()) {
@@ -182,10 +194,7 @@
     );
     $s: map.merge($defaults, $config);
 
-    $borderColor: map.get($s, borderColor);
-    @if $borderColor == null {
-        $borderColor: color.adjust(map.get($s, surfaceBg), $lightness: map.get($s, borderLightnessAdjustment));
-    }
+    $borderColor: infoBubbleBorderColor($s);
     $surfaceBg: map.get($s, surfaceBg);
 
     .bubble-wrapper {

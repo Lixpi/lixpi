@@ -52,14 +52,14 @@
 .capability-description-card h2 {
     color: var(--context-preview-popover-title-color, #{themeScope.token("components-context-preview-styles-popover-title-color", themePalette.$roles)});
     font-size: #{themeScope.token("components-context-preview-elements-description-title-base-font-size", themePalette.$roles)};
-    font-weight: #{themeScope.token("components-context-preview-elements-description-title-base-font-weight", themePalette.$roles)};
+    font-weight: var(--canvas-title-font-weight, #{themeScope.token("components-context-preview-elements-description-title-base-font-weight", themePalette.$roles)});
     line-height: #{themeScope.token("components-context-preview-elements-description-title-base-line-height", themePalette.$roles)};
 }
 
 .capability-description-card h3 {
     color: var(--context-preview-popover-title-color, #{themeScope.token("components-context-preview-styles-popover-title-color", themePalette.$roles)});
     font-size: #{themeScope.token("components-context-preview-elements-description-section-title-base-font-size", themePalette.$roles)};
-    font-weight: #{themeScope.token("components-context-preview-elements-description-section-title-base-font-weight", themePalette.$roles)};
+    font-weight: var(--canvas-title-font-weight, #{themeScope.token("components-context-preview-elements-description-section-title-base-font-weight", themePalette.$roles)});
     line-height: #{themeScope.token("components-context-preview-elements-description-section-title-base-line-height", themePalette.$roles)};
 }
 

@@ -38,7 +38,10 @@ import {
     geminiIcon,
     plusIcon,
 } from '@lixpi/ui-kit/svg'
-import { withoutLayout } from '@lixpi/test-utils'
+import {
+    compileThemedStylesheet,
+    withoutLayout,
+} from '@lixpi/test-utils'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -62,13 +65,16 @@ const expectSourceToContain = (source: string, snippet: string): void => void ex
 
 const expectSourceNotToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 
-const promptStylesSource = (): string => {
-    const packagePath = "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/"
+const promptStylesheetPaths = ["native-prompt-controls.scss", "prompt-input.scss"]
+    .map(fileName => resolve(import.meta.dirname, "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/", fileName))
 
-    return ["native-prompt-controls.scss", "prompt-input.scss"]
-        .map(fileName => readFileSync(resolve(import.meta.dirname, packagePath + fileName), "utf-8"))
-        .join("\n")
-}
+const promptStylesSource = (): string => promptStylesheetPaths
+    .map(path => readFileSync(path, "utf-8"))
+    .join("\n")
+
+// Colors and sizes come from theme tokens, so value checks read what the
+// default theme renders.
+const promptStylesCss = async (): Promise<string> => (await Promise.all(promptStylesheetPaths.map(compileThemedStylesheet))).join("\n")
 
 const createEditorStateWithPlugins = (document: ProseMirrorNode, plugins: any[] = []) => {
     return EditorState.create({
@@ -1130,8 +1136,8 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             nv.destroy!()
         })
 
-        it('uses a compact canvas-text circle around the Add model plus icon', () => {
-            const stylesSource = promptStylesSource()
+        it('uses a compact canvas-text circle around the Add model plus icon', async () => {
+            const stylesSource = await promptStylesCss()
             const iconRule = stylesSource.match(/\.ai-model-config-add-icon \{[\s\S]*?\n\}/)?.[0] ?? ''
 
             expectSourceToContain(iconRule, 'flex: 0 0 12px;')
@@ -2760,7 +2766,7 @@ describe('Visual — receiving state CSS expectations', () => {
         // It's a red-ish color for "danger/stop" semantics
     })
 
-    it('SCSS uses the shared text role for active prompt controls', () => {
+    it('SCSS uses the shared text role for active prompt controls', async () => {
         // SCSS: &[data-empty="false"] targets controls when text is present
         // The active color follows the canvas text role
         const scss = promptStylesSource()
@@ -2769,7 +2775,7 @@ describe('Visual — receiving state CSS expectations', () => {
         expect(scss).toMatch(/data-empty="false".*\.ai-submit-button\s+\.send-icon\s+svg/)
         // Model dropdown button text and SVG
         expect(scss).toMatch(/data-empty="false".*\.dropdown-menu-tag-pill-wrapper/)
-        expect(scss).toMatch(/var\(--canvas-text, #42494f\)/)
+        expect(await promptStylesCss()).toMatch(/var\(--canvas-text, #42494f\)/)
     })
 })
 

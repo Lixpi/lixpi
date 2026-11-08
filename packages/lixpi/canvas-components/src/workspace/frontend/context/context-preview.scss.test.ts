@@ -1,11 +1,15 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
+    beforeAll,
     describe,
     expect,
     it,
 } from 'vitest'
-import { withoutLayout } from '@lixpi/test-utils'
+import {
+    compileThemedStylesheet,
+    withoutLayout,
+} from '@lixpi/test-utils'
 
 const extractFlatRule = (source: string, selector: string): string => {
     const start = source.indexOf(`${selector} {`)
@@ -28,13 +32,19 @@ const expectRuleToContain = (rule: string, snippet: string, selector: string): v
 }
 
 describe('context-preview.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'context-preview.scss'), 'utf-8')
+    const stylesheetPath = resolve(import.meta.dirname, 'context-preview.scss')
+    const scss = readFileSync(stylesheetPath, 'utf-8')
+    // Typography comes from theme tokens, so it is read from what the default
+    // theme renders rather than from the source text.
+    let css = ''
+
+    beforeAll(async () => void (css = await compileThemedStylesheet(stylesheetPath)))
 
     it('keeps capability description cards wide with media-preview typography', () => {
         const popoverRule = extractFlatRule(scss, '.capability-description-popover')
-        const cardRule = extractFlatRule(scss, '.capability-description-card')
-        const titleRule = extractFlatRule(scss, '.capability-description-card h2')
-        const sectionTitleRule = extractFlatRule(scss, '.capability-description-card h3')
+        const cardRule = extractFlatRule(css, '.capability-description-card')
+        const titleRule = extractFlatRule(css, '.capability-description-card h2')
+        const sectionTitleRule = extractFlatRule(css, '.capability-description-card h3')
 
         expectRuleToContain(popoverRule, 'width: min(520px, calc(100vw - 24px));', '.capability-description-popover')
         expectRuleToContain(popoverRule, 'max-width: min(520px, calc(100vw - 24px));', '.capability-description-popover')

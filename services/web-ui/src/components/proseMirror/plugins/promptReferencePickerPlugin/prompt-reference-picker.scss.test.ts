@@ -1,11 +1,15 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
+    beforeAll,
     describe,
     expect,
     it,
 } from 'vitest'
-import { withoutLayout } from '@lixpi/test-utils'
+import {
+    compileThemedStylesheet,
+    withoutLayout,
+} from '@lixpi/test-utils'
 
 const extractFlatRule = (source: string, selector: string): string => {
     const start = source.indexOf(`${selector} {`)
@@ -27,7 +31,17 @@ const expectRuleNotToContain = (rule: string, declaration: string): void => void
 const expectSourceToContain = (source: string, snippet: string, label = 'source excerpt'): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 
 describe('prompt-reference-picker.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/prompt-reference-picker.scss"), 'utf-8')
+    const composerDirectory = resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer')
+    const scss = readFileSync(resolve(composerDirectory, 'prompt-reference-picker.scss'), 'utf-8')
+    // Typography and chip colors come from theme tokens, so value checks read
+    // what the default theme renders. The source keeps the structural checks.
+    let css = ''
+    let darkSurfaceCss = ''
+
+    beforeAll(async () => {
+        css = await compileThemedStylesheet(resolve(composerDirectory, 'prompt-reference-picker.scss'))
+        darkSurfaceCss = await compileThemedStylesheet(resolve(composerDirectory, 'chat-thread.scss'))
+    })
 
     it('uses the default app and browser scrollbar appearance', () => {
         const pickerRule = extractFlatRule(scss, '.prompt-reference-picker')
@@ -66,7 +80,7 @@ describe('prompt-reference-picker.scss', () => {
         expectRuleToContain(chipRule, 'border: 0;')
         expectRuleToContain(chipRule, 'background: transparent;')
         expectRuleToContain(chipRule, 'font-size: inherit;')
-        expectRuleToContain(chipRule, 'line-height: 1;')
+        expectRuleToContain(extractFlatRule(css, '.prompt-reference-chip'), 'line-height: 1;')
         expectRuleToContain(chipRule, 'vertical-align: baseline;')
         expectRuleNotToContain(chipRule, 'border-radius:')
         expectRuleNotToContain(chipRule, 'height: 20px;')
@@ -87,7 +101,7 @@ describe('prompt-reference-picker.scss', () => {
         expectRuleToContain(iconRule, 'width: 14px;')
         expectRuleToContain(iconRule, 'height: 14px;')
         expectRuleToContain(iconSvgRule, 'fill: currentColor;')
-        expectRuleToContain(nameRule, 'font-weight: 500;')
+        expectRuleToContain(extractFlatRule(css, '.prompt-reference-chip-name'), 'font-weight: 500;')
         expectRuleToContain(nameRule, 'line-height: inherit;')
         expectRuleToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color);')
         expectRuleToContain(toolRule, 'color: var(--prompt-reference-tool-color);')
@@ -100,10 +114,9 @@ describe('prompt-reference-picker.scss', () => {
         expectSourceToContain(scss, '@import "./prompt-reference-colors";')
         expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
 
-        const partial = readFileSync(
-            resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/prompt-reference-colors.scss'),
-            'utf-8',
-        )
+        // The light palette renders in the picker and the dark one in the chat
+        // thread, both from the shared partial.
+        const partial = `${css}\n${darkSurfaceCss}`
 
         for (
             const declaration of [

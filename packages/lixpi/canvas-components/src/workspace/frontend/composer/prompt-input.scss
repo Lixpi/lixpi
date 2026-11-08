@@ -113,7 +113,7 @@
     padding: 0 0 4px 0; // Bottom padding for controls
 
     &[data-empty="false"] .ai-prompt-input-controls .ai-submit-button .send-icon svg {
-        fill: #{themeScope.token("components-composer-input-send-icon-base-fill", themePalette.$roles)};
+        fill: var(--canvas-text, #{themeScope.token("components-composer-input-send-icon-base-fill", themePalette.$roles)});
     }
 
     &[data-empty="false"] .ai-prompt-input-controls .dropdown-menu-tag-pill-wrapper .dots-dropdown-menu {
@@ -503,7 +503,7 @@
     width: 12px;
     height: 12px;
     border-radius: #{themeScope.token("components-composer-input-model-config-add-icon-base-border-radius", themePalette.$roles)};
-    background-color: #{themeScope.token("components-composer-input-model-config-add-icon-base-background-color", themePalette.$roles)};
+    background-color: var(--canvas-text, #{themeScope.token("components-composer-input-model-config-add-icon-base-background-color", themePalette.$roles)});
 }
 
 .ai-model-config-add-icon svg {
