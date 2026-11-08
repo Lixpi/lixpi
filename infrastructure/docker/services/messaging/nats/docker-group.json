@@ -1,0 +1,1 @@
+{ "label": "NATS cluster", "order": 10, "description": "Three NATS nodes and the NATS CLI." }

@@ -31,7 +31,7 @@ import {
     SUBMIT_AI_PROMPT_META,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     bytedanceIcon,
@@ -61,6 +61,14 @@ const makeChain = (): any => {
 const expectSourceToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 
 const expectSourceNotToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
+
+const promptStylesSource = (): string => {
+    const packagePath = "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/"
+
+    return ["native-prompt-controls.scss", "prompt-input.scss"]
+        .map(fileName => readFileSync(resolve(import.meta.dirname, packagePath + fileName), "utf-8"))
+        .join("\n")
+}
 
 const createEditorStateWithPlugins = (document: ProseMirrorNode, plugins: any[] = []) => {
     return EditorState.create({
@@ -319,6 +327,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const getPos = () => 0
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -395,11 +404,11 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             selectedOptionColor: '#000000',
             indicatorBoxShadow: 'none',
         })
-        expect(track.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.trackBackgroundColor)
+        expect(track.getAttribute('fill')).toBe(`var(--canvas-surface-hover, ${  settings.aiPromptInput.mediaModeSwitch.styles.trackBackgroundColor  })`)
         expect(indicator.getAttribute('width')).toBe('36')
         expect(indicator.getAttribute('height')).toBe('36')
         expect(indicator.getAttribute('rx')).toBe('18')
-        expect(indicator.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.indicatorBackgroundColor)
+        expect(indicator.getAttribute('fill')).toBe(`var(--canvas-surface, ${  settings.aiPromptInput.mediaModeSwitch.styles.indicatorBackgroundColor  })`)
         expect(indicator.style.filter).toBe('')
         expect(svg.querySelector('.sliding-switch-indicator-inset-shadow')?.getAttribute('fill')).toBe('transparent')
         expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['video', 'image'])
@@ -415,14 +424,14 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const videoOption = svg.querySelector('.sliding-switch-option-group[data-value="video"]')!
         const imageIconPath = imageOption.querySelector('path')
         const videoIconPath = videoOption.querySelector('path')
-        expect(imageIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor)
-        expect(videoIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.unselectedOptionColor)
+        expect(imageIconPath?.getAttribute('fill')).toBe(`var(--canvas-text, ${  settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor  })`)
+        expect(videoIconPath?.getAttribute('fill')).toBe(`var(--canvas-text-muted, ${  settings.aiPromptInput.mediaModeSwitch.styles.unselectedOptionColor  })`)
 
         videoOption.dispatchEvent(new MouseEvent('mouseenter', {
             bubbles: true,
             cancelable: true,
         }))
-        expect(videoIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.hoveredOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe(`var(--canvas-text, ${  settings.aiPromptInput.mediaModeSwitch.styles.hoveredOptionColor  })`)
 
         videoOption.dispatchEvent(new MouseEvent('click', {
             bubbles: true,
@@ -432,7 +441,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(mockView.state.doc.firstChild!.attrs.mediaGenerationMode).toBe('video')
         expect(imageOption.getAttribute('aria-checked')).toBe('false')
         expect(videoOption.getAttribute('aria-checked')).toBe('true')
-        expect(videoIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe(`var(--canvas-text, ${  settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor  })`)
     })
 
     it('mounts the icon switch outside the input wrapper when requested and removes it on destroy', () => {
@@ -485,70 +494,66 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
     it('applies model menu CSS variables from settings.aiPromptInput.modelMenu.styles', () => {
         const contextTrayDom = document.createElement('div')
         const { nv } = createNodeView('Hello world', {}, { createContextTray: () => contextTrayDom })
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(
-            settings.aiPromptInput.modelMenu.styles.triggerColor,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-active-color')).toBe(
-            settings.aiPromptInput.modelMenu.styles.triggerActiveColor,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-active-background')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toContain(`var(--canvas-lixpi-menu-trigger, var(--canvas-text-muted, ${  settings.aiPromptInput.modelMenu.styles.triggerColor  }))`)
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-active-color')).toContain(`var(--canvas-text, ${  settings.aiPromptInput.modelMenu.styles.triggerActiveColor  })`)
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-active-background')).toContain(
             settings.aiPromptInput.modelMenu.styles.triggerActiveBackground,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-focus-outline')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-focus-outline')).toContain(
             settings.aiPromptInput.modelMenu.styles.triggerFocusOutline,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-width')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-width')).toContain(
             settings.aiPromptInput.modelMenu.styles.infoBubbleWidth,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toContain(
             settings.aiPromptInput.modelMenu.styles.infoBubbleBorderRadius,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-background')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-background')).toContain(
             settings.aiPromptInput.modelMenu.styles.infoBubbleBackground,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-divider-height')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-divider-height')).toContain(
             settings.aiPromptInput.modelMenu.styles.sectionDividerHeight,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-title-color')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-title-color')).toContain(
             settings.aiPromptInput.modelMenu.styles.sectionTitleColor,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toContain(
             settings.aiPromptInput.modelMenu.styles.controlLabelColor,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-font-size')).toBe(
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-font-size')).toContain(
             settings.aiPromptInput.modelMenu.styles.controlLabelFontSize,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-border')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-border')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerBorder,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-background')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-background')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerBackground,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-color')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-color')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerColor,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-hover-background')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-hover-background')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerHoverBackground,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-hover-color')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-hover-color')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerHoverColor,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-focus-outline')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-focus-outline')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerFocusOutline,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-background')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-background')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipBackground,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-border')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-border')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipBorder,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-border-radius')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-border-radius')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipBorderRadius,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-box-shadow')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-box-shadow')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipBoxShadow,
         )
-        expect(nv.dom.style.getPropertyValue('--help-tooltip-color')).toBe(
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-color')).toContain(
             settings.aiPromptInput.modelMenu.styles.helpTooltipColor,
         )
     })
@@ -559,7 +564,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
 
         try {
             const { nv } = createNodeView()
-            expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe('#ff00ff')
+            expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe('var(--canvas-lixpi-menu-trigger, var(--canvas-text-muted, #ff00ff))')
         } finally {
             settings.aiPromptInput.modelMenu.styles.triggerColor = originalTriggerColor
         }
@@ -588,9 +593,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(trigger.getAttribute('aria-label')).toBe('Generation settings')
         expect(trigger.dataset.helpTooltip).toBe('aria-label')
         expect(trigger.getAttribute('title')).toBeNull()
-        expect(trigger.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(
-            settings.aiPromptInput.modelMenu.styles.triggerColor,
-        )
+        expect(trigger.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(`var(--canvas-lixpi-menu-trigger, var(--canvas-text-muted, ${  settings.aiPromptInput.modelMenu.styles.triggerColor  }))`)
 
         document.body.append(nv.dom, modelMenuControlMountEl)
         trigger.dispatchEvent(new MouseEvent('click', {
@@ -1127,14 +1130,14 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             nv.destroy!()
         })
 
-        it('uses a compact nightBlue circle around the Add model plus icon', () => {
-            const stylesSource = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
+        it('uses a compact canvas-text circle around the Add model plus icon', () => {
+            const stylesSource = promptStylesSource()
             const iconRule = stylesSource.match(/\.ai-model-config-add-icon \{[\s\S]*?\n\}/)?.[0] ?? ''
 
             expectSourceToContain(iconRule, 'flex: 0 0 12px;')
             expectSourceToContain(iconRule, 'width: 12px;')
             expectSourceToContain(iconRule, 'height: 12px;')
-            expectSourceToContain(iconRule, 'background-color: $nightBlue;')
+            expectSourceToContain(iconRule, 'background-color: var(--canvas-text, #42494f);')
         })
 
         it('uses the same row renderer and remove-button slot for reasoning, image, and video models', () => {
@@ -1243,7 +1246,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 resolve(import.meta.dirname, '../../../aiModelControls/modelConfigurationRow.ts'),
                 'utf-8',
             )
-            const stylesSource = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
+            const stylesSource = promptStylesSource()
 
             expectSourceToContain(modelControlsSource, 'return createModelConfigurationRow({')
             expectSourceNotToContain(nodeSource, 'className="ai-model-config-remove"')
@@ -1329,6 +1332,7 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
         const inputNode = state.doc.firstChild!
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -1371,6 +1375,7 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
         const state = createBaseEditorState(testDoc)
         const inputNode = state.doc.firstChild!
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -1419,6 +1424,7 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
         const inputNode = state.doc.firstChild!
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -1499,6 +1505,7 @@ describe('createAiPromptInputNodeView — ignoreMutation', () => {
         const inputNode = state.doc.firstChild!
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -1572,6 +1579,7 @@ describe('createAiPromptInputNodeView — update', () => {
         const inputNode = state.doc.firstChild!
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -1658,6 +1666,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1685,6 +1694,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1718,6 +1728,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1747,6 +1758,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1775,6 +1787,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1817,6 +1830,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1874,6 +1888,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -1884,7 +1899,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
     })
 
     it('SCSS keeps placeholder rendering on contentDOM instead of the decorated wrapper', () => {
-        const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
+        const scss = promptStylesSource()
 
         expectSourceToContain(scss, '.ai-prompt-input-wrapper.empty-node-placeholder[data-placeholder]::before')
         expectSourceToContain(scss, 'content: none;')
@@ -1922,6 +1937,7 @@ describe('Visual proportions — SCSS sizing expectations', () => {
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, {
+            dom: document.createElement("div"),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView, () => 0)
@@ -2007,6 +2023,7 @@ describe('createAiPromptInputPlugin — plugin creation', () => {
         const nv = nodeViewFactory!(
             state.doc.firstChild!,
             {
+                dom: document.createElement("div"),
                 state,
                 dispatch: vi.fn(),
             } as unknown as EditorView,
@@ -2100,6 +2117,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2142,6 +2160,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         }, p('Create a clip')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2186,6 +2205,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2227,6 +2247,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2249,6 +2270,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const testDoc = doc(promptInput(p('Hello')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2295,6 +2317,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const testDoc = doc(promptInput(p()))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2317,6 +2340,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2339,6 +2363,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const testDoc = doc(promptInput(p('Keep this prompt')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2366,6 +2391,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const testDoc = doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Keep this draft')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2388,6 +2414,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const plugin = createAiPromptInputPlugin(options)
         const state = createEditorStateWithPlugins(doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Sent text'))), [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2424,6 +2451,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2468,6 +2496,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2497,6 +2526,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn((tr: Transaction) => {
                 ;(mockView as any).state = (mockView as any).state.apply(tr)
@@ -2571,6 +2601,7 @@ describe('createAiPromptInputPlugin — view lifecycle', () => {
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
+            dom: document.createElement('div'),
             state,
             dispatch: vi.fn(),
         } as unknown as EditorView
@@ -2729,19 +2760,16 @@ describe('Visual — receiving state CSS expectations', () => {
         // It's a red-ish color for "danger/stop" semantics
     })
 
-    it('SCSS send button and model dropdown use $nightBlue fill when input has content', () => {
+    it('SCSS uses the shared text role for active prompt controls', () => {
         // SCSS: &[data-empty="false"] targets controls when text is present
-        // $nightBlue is #42494f — used to indicate active state when text is present
-        const scss = readFileSync(
-            resolve(import.meta.dirname, 'ai-prompt-input.scss'),
-            'utf-8',
-        )
+        // The active color follows the canvas text role
+        const scss = promptStylesSource()
         expectSourceToContain(scss, 'data-empty="false"')
         // Send button
         expect(scss).toMatch(/data-empty="false".*\.ai-submit-button\s+\.send-icon\s+svg/)
         // Model dropdown button text and SVG
         expect(scss).toMatch(/data-empty="false".*\.dropdown-menu-tag-pill-wrapper/)
-        expect(scss).toMatch(/fill:\s*\$nightBlue/)
+        expect(scss).toMatch(/var\(--canvas-text, #42494f\)/)
     })
 })
 
@@ -2777,7 +2805,7 @@ describe('Visual — image size dropdown SCSS expectations', () => {
 
 describe('Visual — static-position dropdown SCSS expectations', () => {
     it('anchors static-position info bubbles inside the prompt node instead of the viewport', () => {
-        const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
+        const scss = promptStylesSource()
 
         expectSourceToContain(scss, '.info-bubble-wrapper.static-position')
         expectSourceToContain(scss, 'position: absolute !important;')
@@ -2787,7 +2815,7 @@ describe('Visual — static-position dropdown SCSS expectations', () => {
     })
 
     it('overrides nested InfoBubble positioning and hides arrows for M3-style dropdown menus', () => {
-        const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
+        const scss = promptStylesSource()
 
         expectSourceToContain(scss, '.bubble-wrapper')
         expectSourceToContain(scss, 'position: static !important;')

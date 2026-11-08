@@ -2,7 +2,7 @@ import {
     createDefaultCanvasState,
     workspaceCanvasLoadPatch,
     workspaceCanvasStatePatch,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 import {
     LoadingStatus,
     type CanvasState,

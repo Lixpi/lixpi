@@ -78,4 +78,4 @@ The bar writes SVG attributes and exposes host style properties through `applyVi
 
 Destroy the controls before releasing the borrowed video element. Destruction removes SVG nodes, media/document listeners and in-flight scrub handlers. It does not own an Asset, transport subscription or canvas session.
 
-The [Lixpi workspace integration](../../canvas-components-lixpi-specific/docs/WORKSPACE.md) places controls below browser-composited canvas videos. Other consumers can mount them below any native video surface.
+The [Lixpi workspace integration](../../canvas-components/docs/workspace/WORKSPACE.md) places controls below browser-composited canvas videos. Other consumers can mount them below any native video surface.

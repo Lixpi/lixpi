@@ -1,0 +1,5 @@
+{
+    "kind": "utilities",
+    "label": "Utilities",
+    "description": "Tools that run on demand from their own Compose files. The application stack never includes them."
+}

@@ -158,7 +158,6 @@
         "@lixpi/auth-client": "0.0.1",
         "@lixpi/auth-service": "0.0.1",
         "@lixpi/canvas-components": "0.0.1",
-        "@lixpi/canvas-components-lixpi-specific": "0.0.1",
         "@lixpi/canvas-engine": "0.0.1",
         "@lixpi/capability-system": "0.0.1",
         "@lixpi/constants": "0.0.1",
@@ -167,9 +166,9 @@
         "@lixpi/nats-service": "0.0.1",
         "@lixpi/nats-subject-registry": "0.0.1",
         "@lixpi/prosemirror": "0.0.1",
+        "@lixpi/setup-env": "1.0.0",
         "@lixpi/dev-console": "1.0.0",
         "@lixpi/cli-ui": "0.0.1",
-        "@lixpi/setup-env": "1.0.0",
         "@lixpi/test-utils": "0.0.1",
         "@lixpi/ui-kit": "0.0.1",
         "@lixpi/ui-kit-gentelella": "0.0.1",
@@ -191,6 +190,7 @@
         "lixpi-web-ui": "0.0.1",
         "lixpi-web-ui-user-portal": "0.0.1",
         "nats-scaling-controller": "1.0.0",
-        "nats-service-discovery-sidecar": "1.0.0"
+        "nats-service-discovery-sidecar": "1.0.0",
+        "@lixpi/themes": "0.0.1"
     }
 }

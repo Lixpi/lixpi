@@ -27,6 +27,7 @@ import {
     renderDockerUsage,
 } from './docker-usage.ts'
 import { ServiceTree } from './service-tree.ts'
+import { DockerLayout } from './docker-layout.ts'
 import { parseServiceCatalog } from './service-catalog.ts'
 
 // What run-console.sh does next. It validates every field and acts on the host, so
@@ -430,16 +431,20 @@ export class DevConsoleWizard {
         step: Extract<ConsoleStep, { type: 'choices' }>,
         answers: StepAnswers,
     ): Promise<void> {
-        const catalog = step.services ? new ComposeCatalog(this.workspacePath, step.services.composeFile) : undefined
-        const tree = step.services
+        const layout = step.services ? DockerLayout.read(this.workspacePath) : undefined
+        const catalog = layout ? new ComposeCatalog(this.workspacePath, layout.stackFile) : undefined
+        const tree = layout
             && catalog
-            ? new ServiceTree(
-                catalog,
-                step.services.groups,
-                step.services.composeFile,
-                step.services.baseProfile,
-            )
+            ? new ServiceTree(catalog, layout)
             : undefined
+
+        if (layout) {
+            answers.options['compose-file'] ??= layout.stackFile
+
+            if (layout.baseProfile)
+                answers.options.profile ??= layout.baseProfile
+        }
+
         const optionRows = (step.options ?? []).map(option => this.optionRow(option))
         const selected = unwrapPrompt<string[]>(
             await new TreeMultiSelectPrompt({

@@ -1,3 +1,4 @@
+import { lixpiLightTheme } from '@lixpi/themes'
 import { xIcon } from '../../svg/svgIcons.ts'
 import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 
@@ -20,6 +21,7 @@ export type TagPillSizing = {
     size?: number
     minWidth?: number
     fontSize?: number
+    fontFamily?: string
     fontWeight?: number
     horizontalPadding?: number
     closeSize?: number
@@ -83,6 +85,7 @@ export type TagPillRenderState =
             | 'size'
             | 'minWidth'
             | 'fontSize'
+            | 'fontFamily'
             | 'fontWeight'
             | 'horizontalPadding'
             | 'closeSize'
@@ -112,8 +115,8 @@ export type TagPillInstance = {
 
 const DEFAULT_HEIGHT = 24
 const DEFAULT_MIN_WIDTH = 0
-const FONT_SIZE = 12
-const FONT_WEIGHT = 400
+const FONT_SIZE = lixpiLightTheme.components.tagPill.fontSize
+const FONT_WEIGHT = lixpiLightTheme.components.tagPill.fontWeight
 const HORIZONTAL_PADDING = 4
 const CLOSE_SIZE = 14
 const CLOSE_ICON_SIZE = 7
@@ -126,37 +129,9 @@ const TEXT_WIDTH_FACTOR = 0.58
 
 type TagPillPalette = Required<TagPillColors>
 
-const COLORS: Readonly<Record<TagPillVariant, TagPillPalette>> = {
-    neutral: {
-        fill: 'rgba(108, 117, 135, 0.08)',
-        fillActive: 'rgba(255, 255, 255, 0.72)',
-        fillHover: 'rgba(255, 255, 255, 0.72)',
-        stroke: 'transparent',
-        strokeActive: 'rgba(105, 115, 133, 0.12)',
-        text: '#1a2744',
-        closeHover: 'rgba(26, 39, 68, 0.1)',
-    },
-    explicit: {
-        fill: 'rgba(130, 178, 192, 0.18)',
-        fillActive: 'rgba(130, 178, 192, 0.24)',
-        fillHover: 'rgba(130, 178, 192, 0.24)',
-        stroke: 'rgba(130, 178, 192, 0.32)',
-        strokeActive: 'rgba(130, 178, 192, 0.42)',
-        text: '#1a3a47',
-        closeHover: 'rgba(26, 58, 71, 0.16)',
-    },
-    auto: {
-        fill: 'rgba(246, 199, 179, 0.22)',
-        fillActive: 'rgba(246, 199, 179, 0.3)',
-        fillHover: 'rgba(246, 199, 179, 0.3)',
-        stroke: 'rgba(212, 149, 106, 0.72)',
-        strokeActive: 'rgba(212, 149, 106, 0.82)',
-        text: '#5a3a2a',
-        closeHover: 'rgba(90, 58, 42, 0.16)',
-    },
-}
+const COLORS: Readonly<Record<TagPillVariant, TagPillPalette>> = lixpiLightTheme.components.tagPill.variants
 
-const CONTENT_HOVER_FILL = 'rgba(105, 115, 133, 0.055)'
+const CONTENT_HOVER_FILL = lixpiLightTheme.components.tagPill.contentHoverFill
 
 const estimateLabelWidth = (
     label: string,
@@ -211,6 +186,7 @@ class TagPill implements TagPillInstance {
     private closeAriaLabel: string
     private minWidth: number
     private fontSize: number
+    private fontFamily: string
     private fontWeight: number
     private horizontalPadding: number
     private closeSize: number
@@ -256,6 +232,7 @@ class TagPill implements TagPillInstance {
         this.closeAriaLabel = config.closeAriaLabel ?? `Remove ${config.label}`
         this.minWidth = config.minWidth ?? DEFAULT_MIN_WIDTH
         this.fontSize = config.fontSize ?? FONT_SIZE
+        this.fontFamily = config.fontFamily ?? ''
         this.fontWeight = config.fontWeight ?? FONT_WEIGHT
         this.horizontalPadding = config.horizontalPadding ?? HORIZONTAL_PADDING
         this.closeSize = config.closeSize ?? CLOSE_SIZE
@@ -296,6 +273,7 @@ class TagPill implements TagPillInstance {
             .append('text')
             .attr('class', 'tag-pill-label')
             .attr('font-size', this.fontSize)
+            .attr('font-family', this.fontFamily || null)
             .attr('font-weight', this.fontWeight)
             .attr('dominant-baseline', 'central')
 
@@ -371,6 +349,7 @@ class TagPill implements TagPillInstance {
             closable: this.closable,
             minWidth: this.minWidth,
             fontSize: this.fontSize,
+            fontFamily: this.fontFamily,
             fontWeight: this.fontWeight,
             horizontalPadding: this.horizontalPadding,
             closeSize: this.closeSize,
@@ -516,6 +495,7 @@ class TagPill implements TagPillInstance {
             ?? this.height
         this.minWidth = state.minWidth ?? this.minWidth
         this.fontSize = state.fontSize ?? this.fontSize
+        this.fontFamily = state.fontFamily ?? this.fontFamily
         this.fontWeight = state.fontWeight ?? this.fontWeight
         this.horizontalPadding = state.horizontalPadding ?? this.horizontalPadding
         this.closeSize = state.closeSize ?? this.closeSize
@@ -533,6 +513,10 @@ class TagPill implements TagPillInstance {
         this.textWidthFactor = state.textWidthFactor ?? this.textWidthFactor
 
         const palette = this.getPalette()
+
+        if (this.closeBackground.attr('fill') !== 'transparent')
+            this.closeBackground.attr('fill', palette.closeHover).style('fill', palette.closeHover)
+
         this.text
             .attr('font-size', this.fontSize)
             .attr('font-weight', this.fontWeight)

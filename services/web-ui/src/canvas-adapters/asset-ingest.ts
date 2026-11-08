@@ -1,7 +1,7 @@
 import {
     type CanvasIngestReply,
     type CanvasUploadRequest,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import {
     type AuthTokenProvider,
 } from '@lixpi/auth-client'

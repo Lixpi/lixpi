@@ -249,6 +249,11 @@ const DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE: CircularGlassMaterialStyle = {
     innerShadowVeilStrength: 0.1,
 }
 
+export const createCircularGlassMaterialStyle = (overrides: Partial<CircularGlassMaterialStyle> = {}): CircularGlassMaterialStyle => ({
+    ...DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE,
+    ...overrides,
+})
+
 export const interpolateTravelingOutlineColor = (
     colors: ReadonlyArray<string>,
     progress: number,

@@ -20,7 +20,7 @@ Choose the rendering approach by where the UI lives and what it does.
 |-----------|--------------|----------|
 | Canvas scene content | PIXI | Nodes, images, videos, sprites, shapes, hit-tested scene objects, high-frequency transforms, zoomed world content |
 | Canvas-adjacent controls | D3 SVG | Menus, switches, sliders, playback controls, control bars, badges, handles, and similar UI that must track canvas geometry but needs precise interactive controls |
-| Normal app UI | TypeScript `html` tagged template | Panels, dialogs, forms, settings, inspectors, app navigation, persistent screens, ProseMirror node views, and plugins covered by [`TYPESCRIPT.md`](./TYPESCRIPT.md) |
+| Normal app UI | TypeScript `html` tagged template | Panels, dialogs, forms, settings, inspectors, app navigation, persistent screens, ProseMirror node views, and plugins covered by [`TYPESCRIPT.md`](TYPESCRIPT.md) |
 | Static icon or decorative SVG in DOM | Existing icon system | Import from [`@lixpi/ui-kit/svg`](../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts), then inject or parse according to the host renderer |
 
 Do not use D3 for ordinary application DOM. Do not use HTML templates for canvas chrome when the control is expected to live in an SVG overlay. Do not use PIXI for form-like UI, menus, segmented switches, media controls, or text-heavy widgets unless there is a concrete rendering reason.
@@ -117,7 +117,7 @@ The public API should usually be `createX(parent, config)`. It appends one top-l
 
 ## Factory Or Class
 
-Follow [`TYPESCRIPT.md`](./TYPESCRIPT.md) for class usage.
+Follow [`TYPESCRIPT.md`](TYPESCRIPT.md) for class usage.
 
 Use a class by default for UI components. A component that owns cohesive state, selections, layout, lifecycle cleanup, listeners, or a public imperative API must be class-backed. Keep the factory as the public entry point:
 
@@ -173,7 +173,7 @@ button.append('rect')
 
 ## HTML Rules
 
-Use the `html` tagged template from [`TYPESCRIPT.md`](./TYPESCRIPT.md) for `.ts` files that create normal DOM elements. This is mandatory for application UI, ProseMirror plugins, NodeViews, shared DOM utilities, and other TypeScript-built HTML.
+Use the `html` tagged template from [`TYPESCRIPT.md`](TYPESCRIPT.md) for `.ts` files that create normal DOM elements. This is mandatory for application UI, ProseMirror plugins, NodeViews, shared DOM utilities, and other TypeScript-built HTML.
 
 Do not mix approaches inside one component without a clear boundary:
 

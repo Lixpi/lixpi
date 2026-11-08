@@ -25,7 +25,7 @@ import {
 import {
     CapabilityModulePromiseCache,
     getPromptReferenceIcon,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import {
     createStateWithNodeSelection,

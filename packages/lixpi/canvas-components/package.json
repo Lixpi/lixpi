@@ -7,6 +7,14 @@
     "main": "./src/index.ts",
     "exports": {
         ".": "./src/index.ts",
+        "./theme": "./src/frontend/theme/canvas-theme.ts",
+        "./library": "./src/library/presentation.ts",
+        "./styles/library-examples": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/library/examples.scss",
+            "style": "./src/library/examples.scss",
+            "default": "./src/library/examples.scss"
+        },
         "./effects/glass": "./src/frontend/effects/glass/index.ts",
         "./effects/outline": "./src/frontend/effects/outline/index.ts",
         "./loading": "./src/frontend/loading/index.ts",
@@ -26,6 +34,214 @@
             "sass": "./src/frontend/diagram/diagram-canvas.scss",
             "style": "./src/frontend/diagram/diagram-canvas.scss",
             "default": "./src/frontend/diagram/diagram-canvas.scss"
+        },
+        "./nodes/shell": "./src/frontend/nodes/node-shell.ts",
+        "./styles/node-shell": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/frontend/nodes/node-shell.scss",
+            "style": "./src/frontend/nodes/node-shell.scss",
+            "default": "./src/frontend/nodes/node-shell.scss"
+        },
+        "./workspace/shared": "./src/workspace/shared/index.ts",
+        "./workspace/settings": "./src/workspace/frontend/settings/index.ts",
+        "./workspace/connectors": "./src/workspace/frontend/connectors/index.ts",
+        "./workspace/loading": "./src/workspace/frontend/loading/workspace-loading-outline.ts",
+        "./workspace/media": "./src/workspace/frontend/media/index.ts",
+        "./workspace/nodes": "./src/workspace/frontend/nodes/index.ts",
+        "./workspace/menus": "./src/workspace/frontend/menus/index.ts",
+        "./workspace/progress": "./src/workspace/frontend/progress/index.ts",
+        "./workspace/review": "./src/workspace/frontend/review/index.ts",
+        "./workspace/library": "./src/workspace/frontend/library/index.ts",
+        "./workspace/context": "./src/workspace/frontend/context/index.ts",
+        "./workspace/composer": "./src/workspace/frontend/composer/index.ts",
+        "./workspace": "./src/workspace/frontend/workspace/index.ts",
+        "./styles/workspace": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/workspace/workspace-canvas.scss",
+            "style": "./src/workspace/frontend/workspace/workspace-canvas.scss",
+            "default": "./src/workspace/frontend/workspace/workspace-canvas.scss"
+        },
+        "./styles/workspace/canvas-chrome": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/workspace/workspace-canvas-chrome.scss",
+            "style": "./src/workspace/frontend/workspace/workspace-canvas-chrome.scss",
+            "default": "./src/workspace/frontend/workspace/workspace-canvas-chrome.scss"
+        },
+        "./styles/workspace/output-details-content": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/review/workspace-output-details.scss",
+            "style": "./src/workspace/frontend/review/workspace-output-details.scss",
+            "default": "./src/workspace/frontend/review/workspace-output-details.scss"
+        },
+        "./styles/workspace/right-panel": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/workspace/workspace-right-panel.scss",
+            "style": "./src/workspace/frontend/workspace/workspace-right-panel.scss",
+            "default": "./src/workspace/frontend/workspace/workspace-right-panel.scss"
+        },
+        "./styles/workspace/workspace-composer": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/workspace-prompt-composer.scss",
+            "style": "./src/workspace/frontend/composer/workspace-prompt-composer.scss",
+            "default": "./src/workspace/frontend/composer/workspace-prompt-composer.scss"
+        },
+        "./styles/workspace/context-preview": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/context/context-preview.scss",
+            "style": "./src/workspace/frontend/context/context-preview.scss",
+            "default": "./src/workspace/frontend/context/context-preview.scss"
+        },
+        "./styles/workspace/library-panels": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/library/workspace-library-panels.scss",
+            "style": "./src/workspace/frontend/library/workspace-library-panels.scss",
+            "default": "./src/workspace/frontend/library/workspace-library-panels.scss"
+        },
+        "./styles/workspace/document-node": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/document-node.scss",
+            "style": "./src/workspace/frontend/nodes/document-node.scss",
+            "default": "./src/workspace/frontend/nodes/document-node.scss"
+        },
+        "./styles/workspace/branch-marker": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/branch-marker-content.scss",
+            "style": "./src/workspace/frontend/nodes/branch-marker-content.scss",
+            "default": "./src/workspace/frontend/nodes/branch-marker-content.scss"
+        },
+        "./styles/workspace/operation-status": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/operation-status-node.scss",
+            "style": "./src/workspace/frontend/nodes/operation-status-node.scss",
+            "default": "./src/workspace/frontend/nodes/operation-status-node.scss"
+        },
+        "./styles/workspace/progress": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/progress/media-generation-progress.scss",
+            "style": "./src/workspace/frontend/progress/media-generation-progress.scss",
+            "default": "./src/workspace/frontend/progress/media-generation-progress.scss"
+        },
+        "./styles/workspace/output-details": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/review/generated-output-details-sidebar.scss",
+            "style": "./src/workspace/frontend/review/generated-output-details-sidebar.scss",
+            "default": "./src/workspace/frontend/review/generated-output-details-sidebar.scss"
+        },
+        "./styles/workspace/workspace-layer": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/media/workspace-media-layer.scss",
+            "style": "./src/workspace/frontend/media/workspace-media-layer.scss",
+            "default": "./src/workspace/frontend/media/workspace-media-layer.scss"
+        },
+        "./styles/workspace/video-chrome": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/media/workspace-video-chrome.scss",
+            "style": "./src/workspace/frontend/media/workspace-video-chrome.scss",
+            "default": "./src/workspace/frontend/media/workspace-video-chrome.scss"
+        },
+        "./styles/workspace/asset-views": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/review/workspace-asset-views.scss",
+            "style": "./src/workspace/frontend/review/workspace-asset-views.scss",
+            "default": "./src/workspace/frontend/review/workspace-asset-views.scss"
+        },
+        "./styles/workspace/output-chrome": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/media/generated-output-node-chrome.scss",
+            "style": "./src/workspace/frontend/media/generated-output-node-chrome.scss",
+            "default": "./src/workspace/frontend/media/generated-output-node-chrome.scss"
+        },
+        "./styles/workspace/nodes": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/workspace-node-shells.scss",
+            "style": "./src/workspace/frontend/nodes/workspace-node-shells.scss",
+            "default": "./src/workspace/frontend/nodes/workspace-node-shells.scss"
+        },
+        "./workspace/diagram": "./src/workspace/frontend/diagram/index.ts",
+        "./workspace/shared/diagram": "./src/workspace/shared/diagram/workspace-diagram.ts",
+        "./styles/workspace/diagram": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/diagram/workspace-diagram.scss",
+            "style": "./src/workspace/frontend/diagram/workspace-diagram.scss",
+            "default": "./src/workspace/frontend/diagram/workspace-diagram.scss"
+        },
+        "./styles/workspace/theme": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/settings/canvas-theme.scss",
+            "style": "./src/workspace/frontend/settings/canvas-theme.scss",
+            "default": "./src/workspace/frontend/settings/canvas-theme.scss"
+        },
+        "./styles/workspace/native-prompt-controls": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/native-prompt-controls.scss",
+            "style": "./src/workspace/frontend/composer/native-prompt-controls.scss",
+            "default": "./src/workspace/frontend/composer/native-prompt-controls.scss"
+        },
+        "./styles/workspace/chat-thread": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/chat-thread.scss",
+            "style": "./src/workspace/frontend/composer/chat-thread.scss",
+            "default": "./src/workspace/frontend/composer/chat-thread.scss"
+        },
+        "./styles/workspace/message-bubbles": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/message-bubbles.scss",
+            "style": "./src/workspace/frontend/composer/message-bubbles.scss",
+            "default": "./src/workspace/frontend/composer/message-bubbles.scss"
+        },
+        "./styles/workspace/prompt-reference-colors": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/prompt-reference-colors.scss",
+            "style": "./src/workspace/frontend/composer/prompt-reference-colors.scss",
+            "default": "./src/workspace/frontend/composer/prompt-reference-colors.scss"
+        },
+        "./styles/workspace/execution-trace": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/progress/execution-trace.scss",
+            "style": "./src/workspace/frontend/progress/execution-trace.scss",
+            "default": "./src/workspace/frontend/progress/execution-trace.scss"
+        },
+        "./styles/workspace/capability-run": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/progress/capability-run.scss",
+            "style": "./src/workspace/frontend/progress/capability-run.scss",
+            "default": "./src/workspace/frontend/progress/capability-run.scss"
+        },
+        "./styles/workspace/chat-animations": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/chat-animations.scss",
+            "style": "./src/workspace/frontend/composer/chat-animations.scss",
+            "default": "./src/workspace/frontend/composer/chat-animations.scss"
+        },
+        "./styles/workspace/editor": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/editor.scss",
+            "style": "./src/workspace/frontend/nodes/editor.scss",
+            "default": "./src/workspace/frontend/nodes/editor.scss"
+        },
+        "./styles/workspace/editor-link-tooltip": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/editor-link-tooltip.scss",
+            "style": "./src/workspace/frontend/nodes/editor-link-tooltip.scss",
+            "default": "./src/workspace/frontend/nodes/editor-link-tooltip.scss"
+        },
+        "./styles/workspace/editor-image": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/nodes/editor-image.scss",
+            "style": "./src/workspace/frontend/nodes/editor-image.scss",
+            "default": "./src/workspace/frontend/nodes/editor-image.scss"
+        },
+        "./styles/workspace/prompt-reference-picker": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/workspace/frontend/composer/prompt-reference-picker.scss",
+            "style": "./src/workspace/frontend/composer/prompt-reference-picker.scss",
+            "default": "./src/workspace/frontend/composer/prompt-reference-picker.scss"
+        },
+        "./styles/playback-controls": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/frontend/media/playback-chrome.scss",
+            "style": "./src/frontend/media/playback-chrome.scss",
+            "default": "./src/frontend/media/playback-chrome.scss"
         }
     },
     "scripts": {
@@ -33,10 +249,19 @@
     },
     "dependencies": {
         "@lixpi/canvas-engine": "workspace:*",
-        "@lixpi/ui-primitives": "workspace:*"
+        "@lixpi/ui-primitives": "workspace:*",
+        "d3-selection": "3.0.0",
+        "prosemirror-view": "1.42.8",
+        "@lixpi/prosemirror": "workspace:*",
+        "@lixpi/capability-system": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/themes": "workspace:*"
     },
     "devDependencies": {
         "vitest": "5.0.5",
-        "happy-dom": "21.0.4"
+        "happy-dom": "21.0.4",
+        "@lixpi/test-utils": "workspace:*",
+        "@types/d3-selection": "3.0.12"
     }
 }

@@ -8,6 +8,8 @@ Dependency versions in `package.json` are generated from [the version registry](
 
 Shared DOM, SVG, gradients and easing utilities belong to [UI Primitives](../ui-primitives/README.md). Browser engine modules import the utilities they need from that package; engine exports do not expose copies or forwarding aliases.
 
+The interaction stylesheet isolates each `.canvas-engine-pane` and places its GPU canvas behind DOM node content. This ordering also applies when the renderer initializes after the scene DOM, so labels and native playback remain visible without consumer-specific z-index fixes.
+
 ## Using the source package
 
 Add Canvas Engine and UI Primitives to the consuming workspace. Imports resolve directly to TypeScript; there is no generated distribution or package build. The consumer's frontend tooling must handle TypeScript, Sass package exports and module workers created with `new URL(..., import.meta.url)`. The image decoder also accepts a `workerFactory` when a host needs explicit worker construction.
@@ -42,7 +44,7 @@ Shared modules contain:
 - `tree-layout`: tidy-tree layout over abstract boxes.
 - `zoom-scaling`: bounded sizing for controls and connector geometry.
 
-Lixpi branch lineage and generated-output admission belong to `@lixpi/canvas-components-lixpi-specific/shared`. Their adapters supply measurements and constraints to the engine.
+Lixpi branch lineage and generated-output admission belong to `@lixpi/canvas-components/workspace/shared`. Their adapters supply measurements and constraints to the engine.
 
 ## Browser entrypoints
 
@@ -63,7 +65,9 @@ Connector policies can supply centering, alternate geometry, source anchors and 
 
 Use `installConnections` when connection setup follows controller construction. It returns controls for selection, deletion, menu/handle gestures and connector geometry queries. The controller owns graph synchronization and disposal. Supply `onEdgesChange` to translate changes back into an external wire format, including fractional attachment positions; without it, the controller emits connection intents. Failed installation releases its resources and permits a retry. Proximity connections require an explicit policy opt-in.
 
-`CanvasScene` coordinates registered views on an existing renderer. It resolves parent-relative positions before passing nodes to geometry measurement, indexes visual bounds for culling, and propagates live parent transforms to descendants. Pass the visible screen size to `setViewport`, and configure `visibilityMargin` and `prefetchBatchSize` for the host's loading policy. Scene switches dispose node scopes; metadata updates preserve their views. Drawing contexts remove subscriptions and mounted overlays with their scope. Destroy the scene before destroying its renderer.
+Connector settings are copied when installed. Use `CanvasController.setConnectionSettings(settings)` or the installed controls' `updateSettings(settings)` to apply a complete new settings snapshot. The update refreshes route geometry, marker and stroke scaling, hit areas and proximity distance without replacing the controller or node views. A changed proximity distance clears a pending candidate so it must be checked against the new distance before it can connect; other active gestures remain intact.
+
+`CanvasScene` coordinates registered views on an existing renderer. It resolves parent-relative positions before passing nodes to geometry measurement, indexes visual bounds for culling, and propagates live parent transforms to descendants. Pass the visible screen size to `setViewport`, and configure `visibilityMargin` and `prefetchBatchSize` for the host's loading policy. Scene switches dispose node scopes; metadata updates preserve their views. Drawing contexts remove subscriptions and mounted overlays with their scope. Destroy the scene before destroying its renderer. `getStatistics()` returns scene node/edge counts, retained mounted views and nodes inside the engine's visibility region. Viewport visibility includes the configured margin. Culling hides presentation and resources; it does not dispose the node view. Read these constant-time counts after a scene or viewport update to inspect large scenes without walking DOM elements.
 
 `getNodeGeometry` returns copies of raw world geometry and the registration's visual, hit, selection, collision and connector footprints. Pass a shared `GeometryOverrides` owner when interaction and presentation need the same coordinates. Call `refreshGeometry` after a batch of scoped changes. Same-scene updates retain externally owned scopes; a scene switch expires their writers. `setLiveBounds` supplies an owned presentation override that resets on snapshot adoption.
 
@@ -77,7 +81,7 @@ Scene snapshots reject nonfinite or negative geometry, duplicate IDs, missing/cy
 
 `/frontend/runtime` exports `GestureController`, `GeometryOverrides`, `InteractionLocks`, `CanvasScrollLock` and `NodeLayerManager`. Gestures own document listeners, optional pointer capture and leased cursor styles. They end once or cancel on Escape, window blur, pointer cancellation or explicit owner disposal. Call `cancelAll('scene-change')` before replacing interaction state. Each geometry override scope can affect only its own entries; higher priorities override lower ones, and ending a gesture reveals an underlying product projection. Clearing the owner expires its scopes, so late callbacks cannot change a replacement scene.
 
-Shared resize functions accept explicit minimum/maximum dimensions, handle direction and aspect policy. Drag planning accepts container and movement policies without knowing a node's product type. `computeConnectorDatum()` resolves connector paths and endpoints using caller-supplied colors, sizes and marker-body length; it contains no icon artwork.
+Shared resize functions accept explicit minimum/maximum dimensions, handle direction and aspect policy. Drag planning accepts container and movement policies without knowing a node's product type. `computeConnectorDatum()` resolves connector paths and endpoints using caller-supplied colors, sizes and marker-body length; it contains no icon artwork. `computeConnectorEndpoints()` exposes the same anchor, offset and arrow-length compensation for hosts that plan world-space waypoints before rendering. Both functions use the same endpoint calculation.
 
 `CanvasKeyboardController` handles Escape and deletion only for its root, optional owned portal targets, or the canvas that most recently received a background pointer interaction. It respects handled events and leaves deletion in editable content alone. Destroy it with the surface to remove its document listeners.
 
@@ -87,13 +91,15 @@ Shared resize functions accept explicit minimum/maximum dimensions, handle direc
 
 `MarqueeController` owns the movement threshold, rectangle normalization and gesture lock. It reports activation only after movement crosses the threshold, and cancellation does not call its completion callback. `SelectionOverlay` owns the marquee DOM and invisible group drag target; import `/styles/interaction` for structural positioning. The caller supplies marquee colors and radius. The group surface has no visual skin and can be paired with `RectangleOverlay` drawing.
 
+Automatic node interaction keeps invisible connection and resize hit targets. The framework does not paint port circles or corner ornaments when a node is selected. Dragging, named-port connections and corner resize gestures retain their existing geometry and intent contracts.
+
 `NodeShell` owns canvas placement, a drag overlay and optional resize handles. Its callbacks supply selection and content behavior. `NodeResizeHandles` owns handle listeners, custom content disposal and zoom-dependent dimensions; callers provide artwork or a content mount without moving that artwork into engine. `NodeHandles` combines the same resize owner with named-port hit targets for registered scenes.
 
 `ConnectionManager` accepts structural graph projections, connector settings and explicit root/viewport elements. A node may supply named ports in local world units on any of the four sides. Port roles preserve input/output direction even when a drag starts at an input. The default structural projection uses left/right handles. Product adapters supply centered-anchor, source-content anchor, marker and optional proximity policies. Proximity is disabled unless `canConnectProximity` is supplied.
 
 A finite `sourceAnchorT` returned by the content policy overrides the vertical position of a left/right named port and aligns an eligible target. Returning null or a nonfinite value preserves the configured port. Top/bottom ports retain their explicit coordinates.
 
-`ConnectionGeometry` stages complete extent-aware graph snapshots and caches resolved port centers. `PortMeasurement` reads fallback DOM ports with explicitly supplied zoom; registered ports bypass DOM measurement. Shared path and coordinate helpers have no browser dependencies. Automatic orthogonal paths use endpoint runs and a perpendicular lane, transposing the same obstacle solver for top/bottom port pairs. Detours absorb newly encountered blockers into a bounded envelope; exhausted local routes report `OrthogonalRoutingError` through the manager's existing error callback without drawing a known crossing or deleting the edge. Scene edges may supply world-space `bendPoints` computed by a shared layout. Explicit routes are checked for orthogonal segments and intermediate node clearance before rounding; endpoint bodies are excluded from obstacle checks. Shared planners can call `getOrthogonalRoutePoints` to reserve the same native route before rounding and request a minimum outward lead for bounded endpoint offsets. `isOrthogonalRouteSimple` rejects self-crossings and retraced legs using the same orthogonal clearance primitive. Internal connector callers import path functions and types directly from their defining modules under `src/shared/connectors/`.
+`ConnectionGeometry` stages complete extent-aware graph snapshots and caches resolved port centers. `PortMeasurement` reads fallback DOM ports with explicitly supplied zoom; registered ports bypass DOM measurement. Shared path and coordinate helpers have no browser dependencies. Automatic orthogonal paths use endpoint runs and a perpendicular lane, transposing the same obstacle solver for top/bottom port pairs. Detours absorb newly encountered blockers into a bounded envelope; exhausted local routes report `OrthogonalRoutingError` through the manager's existing error callback without drawing a known crossing or deleting the edge. Scene edges may supply world-space `bendPoints` computed by a shared layout. Explicit routes are checked for orthogonal segments and intermediate node clearance before rounding; endpoint bodies are excluded from obstacle checks. Shared planners can call `getOrthogonalRoutePoints` to reserve the same native route before rounding and request a minimum outward lead for bounded endpoint offsets. `isOrthogonalRouteSimple` rejects self-crossings and retraced legs using the same orthogonal clearance primitive. Automatic routing checks simplicity before accepting a path and tries directed bridges around the endpoint escapes when the first route would double back. Center anchors choose an outward direction toward the opposite endpoint; their fallback escape extends beyond the node body before routing around other nodes. Internal connector callers import path functions and types directly from their defining modules under `src/shared/connectors/`.
 
 Each connection manager has its own flow identity and owns connector hover/click listeners, handle gestures and auto-pan work. `cancelTransientConnection()` ends a gesture without treating it as an empty-space reconnect drop. Escape, blur, source-node removal and disposal cancel the same way. An actual reconnect drop in empty space removes its edge. Late auto-pan completion cannot resume a cancelled gesture.
 
@@ -120,7 +126,7 @@ Consumers import TypeScript source directly through the package export map, foll
 The shared test runner runs the colocated engine tests:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared canvas-engine
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared canvas-engine
 ```
 
 Tests cover behavior and the server-safe shared import boundary. Source under `shared` must not import another Lixpi package, browser modules or application code.

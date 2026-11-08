@@ -27,7 +27,7 @@ import {
     type PromptReferencePreviewRenderer,
     type PromptReferenceChipDescriptor,
     type ContextPreviewTileInstance,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import { html } from '@lixpi/ui-primitives/dom'
 import {
     capabilityArtifactFrontendRegistry,

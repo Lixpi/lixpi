@@ -30,6 +30,8 @@ import {
     ElementStyleLease,
 } from '@lixpi/ui-primitives/dom'
 
+import { uiKitSettings } from '../../runtime-settings.ts'
+
 export type SidePanelSide = 'left' | 'right'
 
 export type SidePanelToggleMotion = 'slide' | 'fixed'
@@ -56,8 +58,9 @@ export type SidePanelToggleConfig = {
     onToggle: () => void
 }
 
+// Per-panel motion override. Omitted fields use `uiKitSettings.sidePanel.animation`.
 export type SidePanelAnimationConfig = {
-    durationMs: number
+    durationMs?: number
     easing?: string
     openEasing?: string
     closeEasing?: string
@@ -167,6 +170,9 @@ export type SidePanelInstance = {
     setResizing: (resizing: boolean) => void
     setOpen: (open: boolean) => void
     mountOpen: (panelElement: HTMLElement) => void
+    // Place the panel, backdrop, and optional overlay in their closed resting
+    // state without animating, so a later `playOpen` slides in from the edge.
+    mountClosed: (panelElement: HTMLElement) => void
     // Put the panel/backdrop and optional overlay in their start state before the
     // host appends them. Call immediately before mounting for a visible open slide.
     prepareOpen: (panelElement: HTMLElement) => void
@@ -193,17 +199,9 @@ const clamp = (
     )
 }
 
-const SLIDE_DEFAULT_DURATION_MS = 500
-const SLIDE_DEFAULT_OPEN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
-const SLIDE_DEFAULT_CLOSE_EASING = 'cubic-bezier(0.64, 0, 0.78, 0)'
 const SLIDE_FALLBACK_BUFFER_MS = 80
 const SLIDE_TRANSITION = 'var(--side-panel-slide-transition)'
 const OVERLAY_TRANSITION = 'var(--side-panel-overlay-transition)'
-const OVERLAY_DEFAULT_OPACITY = 1
-const DRAG_CLOSE_THRESHOLD = 0.25
-const DRAG_VELOCITY_THRESHOLD = 0.4
-const DRAG_MOUSE_START_THRESHOLD = 2
-const DRAG_TOUCH_START_THRESHOLD = 10
 const OVERLAY_CLICK_DISTANCE = 4
 const SIDE_PANEL_INTERACTION_BLOCK_SELECTOR = '[data-side-panel-no-drag]'
 
@@ -412,24 +410,21 @@ class SidePanel implements SidePanelInstance {
             && Number.isFinite(durationMs)
             && durationMs >= 0
             ? durationMs
-            : SLIDE_DEFAULT_DURATION_MS
+            : uiKitSettings.sidePanel.animation.durationMs
     }
 
     private getSlideEasing = (direction?: 'in' | 'out'): string => {
+        const animation = this.config.animation
+        const defaults = uiKitSettings.sidePanel.animation
         const easing = direction === 'in'
-            ? this.config.animation?.openEasing?.trim()
+            ? animation?.openEasing?.trim()
             : direction === 'out'
-                ? this.config.animation?.closeEasing?.trim()
-                : this.config.animation?.easing?.trim()
-        const fallback = this.config.animation?.easing?.trim()
+                ? animation?.closeEasing?.trim()
+                : undefined
 
-        if (easing)
-            return easing
-
-        if (fallback)
-            return fallback
-
-        return direction === 'in' ? SLIDE_DEFAULT_OPEN_EASING : SLIDE_DEFAULT_CLOSE_EASING
+        return easing
+            || animation?.easing?.trim()
+            || (direction === 'in' ? defaults.openEasing : defaults.closeEasing)
     }
 
     private applyAnimationSettings = (
@@ -464,7 +459,7 @@ class SidePanel implements SidePanelInstance {
             && Number.isFinite(opacity)
             && opacity >= 0
             ? opacity
-            : OVERLAY_DEFAULT_OPACITY
+            : uiKitSettings.sidePanel.overlay.opacity
     }
 
     private isOutsideCloseEnabled = (): boolean => Boolean(this.config.overlay && this.config.overlay.closeOnPointerDown !== false)
@@ -593,6 +588,7 @@ class SidePanel implements SidePanelInstance {
                 className=${`side-panel-toggle side-panel-toggle-${this.config.side} nopan${toggleConfig.className ? ` ${toggleConfig.className}` : ''}`}
                 type="button"
                 style=${toggleStyle}
+                data-help-tooltip="aria-label"
                 innerHTML=${toggleConfig.iconSvg}
                 onclick=${this.handleToggleClick}
             ></button>
@@ -728,6 +724,29 @@ class SidePanel implements SidePanelInstance {
         }
 
         this.prepareOverlayOpen()
+    }
+
+    mountClosed = (panelElement: HTMLElement): void => {
+        this.finishSlideWait?.()
+        this.finishSlideWait = null
+        this.slideRunId++
+        this.setAnimatedPanel(panelElement)
+        this.setOpen(false)
+        const targets = this.getSlideTargets(panelElement, 'out')
+
+        for (const target of targets) {
+            this.applyAnimationSettings(target.element, 'out')
+            target.element.classList.add('side-panel-slide')
+            applyStyle(
+                target.element,
+                {
+                    transition: 'none',
+                    transform: target.endTransform,
+                },
+            )
+        }
+
+        this.prepareOverlayClosed()
     }
 
     prepareOpen = (panelElement: HTMLElement): void => {
@@ -1024,11 +1043,12 @@ class SidePanel implements SidePanelInstance {
 
     private getPanelDragStartThreshold = (pointerType: string): number => {
         const drag = this.config.drag
+        const defaults = uiKitSettings.sidePanel.drag
 
         if (pointerType === 'touch')
-            return drag?.touchSwipeStartThreshold ?? DRAG_TOUCH_START_THRESHOLD
+            return drag?.touchSwipeStartThreshold ?? defaults.touchSwipeStartThreshold
 
-        return drag?.pointerSwipeStartThreshold ?? DRAG_MOUSE_START_THRESHOLD
+        return drag?.pointerSwipeStartThreshold ?? defaults.pointerSwipeStartThreshold
     }
 
     private getPanelDragCloseDistance = (
@@ -1219,8 +1239,8 @@ class SidePanel implements SidePanelInstance {
         )
         const timeTakenMs = Math.max(Date.now() - state.startTimeMs, 1)
         const velocity = closeDistance / timeTakenMs
-        const closeThreshold = this.config.drag?.closeThreshold ?? DRAG_CLOSE_THRESHOLD
-        const velocityThreshold = this.config.drag?.velocityThreshold ?? DRAG_VELOCITY_THRESHOLD
+        const closeThreshold = this.config.drag?.closeThreshold ?? uiKitSettings.sidePanel.drag.closeThreshold
+        const velocityThreshold = this.config.drag?.velocityThreshold ?? uiKitSettings.sidePanel.drag.velocityThreshold
         const shouldClose = state.hasStarted
             && (
             velocity > velocityThreshold

@@ -20,7 +20,7 @@ import {
 import {
     getMediaGenerationOperationNodeId,
     getPendingGeneratedMediaNodeId,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 import { warn } from '@lixpi/debug-tools'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 

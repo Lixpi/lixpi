@@ -16,7 +16,7 @@ set -euo pipefail
 CONSOLE_PATH="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 LIXPI_REPOSITORY_PATH="$(CDPATH= cd -- "${CONSOLE_PATH}/../.." && pwd -P)"
 WORKSPACE_PATH="$(CDPATH= cd -- "${1:?Usage: run-console.sh <repository-root>}" && pwd -P)"
-CONSOLE_COMPOSE=(docker compose -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.dev-console.yml")
+CONSOLE_COMPOSE=(docker compose -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/utilities/setup/docker-compose.dev-console.yml")
 TERMINAL_STATE=""
 CONSOLE_ENTRY=""
 DOCKER_USAGE=""

@@ -11,6 +11,10 @@ import {
 
 import { type CanvasEngineRect, type CanvasEnginePoint, type SceneSnapshot, type CanvasViewport } from '@lixpi/canvas-engine/shared'
 import { createDiagramConnectorSettings } from '../connectors/connector-settings.ts'
+import {
+    CanvasThemeStore,
+    createCanvasTheme,
+} from '../theme/canvas-theme.ts'
 
 type DiagramNodeData = {
     label: string
@@ -36,6 +40,7 @@ const canvasMocks = vi.hoisted(() => {
         readonly installViewport = vi.fn((_options: unknown) => {})
         readonly setScene = vi.fn((scene: SceneSnapshot<DiagramNodeData>) => void (this.scene.scene = scene))
         readonly setViewport = vi.fn((viewport: CanvasViewport) => void (this.scene.viewport = viewport))
+        readonly setConnectionSettings = vi.fn()
         readonly resize = vi.fn()
         readonly destroy = vi.fn()
         readonly clientToWorld = vi.fn((point: CanvasEnginePoint): CanvasEnginePoint => {
@@ -177,6 +182,38 @@ describe('DiagramCanvas', () => {
         canvas.destroy()
     })
 
+
+    it('forwards shared theme connector updates to the mounted engine', () => {
+        const theme = new CanvasThemeStore(createCanvasTheme())
+        const canvas = createDiagramCanvas({
+            ariaLabel: 'Research diagram',
+            sceneKey: 'research-flow',
+            registerNodes: () => {},
+            theme,
+            onError: vi.fn(),
+        })
+        document.body.append(canvas.el)
+        canvas.mount()
+
+        const controller = canvasMocks.instances[0] as InstanceType<typeof canvasMocks.CanvasControllerMock>
+        const updateCount = controller.setConnectionSettings.mock.calls.length
+
+        theme.update({
+            connectors: {
+                scaling: {
+                    strokeWidth: 9,
+                },
+            },
+        })
+
+        expect(controller.setConnectionSettings).toHaveBeenCalledTimes(updateCount + 1)
+        expect(controller.setConnectionSettings).toHaveBeenLastCalledWith(expect.objectContaining({
+            scaling: expect.objectContaining({
+                strokeWidth: 9,
+            }),
+        }))
+        canvas.destroy()
+    })
 
     it('forwards custom arrowless scientific zoom scaling to the renderer', () => {
         const settings = createDiagramConnectorSettings()

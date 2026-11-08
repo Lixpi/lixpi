@@ -45,7 +45,7 @@ Text wrapping uses the modern CSS `shape-outside` property for smooth text flow 
 
 - `imageNodeView.ts` - Custom ProseMirror NodeView for images with four corner resize handles (handles both `image` and `aiGeneratedImage`)
 - `imageSelectionPlugin.ts` - Plugin that registers the custom NodeView for both node types
-- `imageSelection.scss` - Styles for image wrapper, image-only media frame, resize handles, alignment, and text wrap
+- package editor-image stylesheet - Styles for image wrapper, image-only media frame, resize handles, alignment, and text wrap
 - `index.ts` - Module exports
 
 **Adding a new image-like node type:**

@@ -7,6 +7,7 @@ import {
 import {
     validateScene,
     type CanvasViewport,
+    type BoundedZoomScalingOptions,
     type SceneSnapshot,
 } from '@lixpi/canvas-engine/shared'
 import {
@@ -14,6 +15,11 @@ import {
 } from '@lixpi/canvas-engine/frontend/connectors'
 import { html } from '@lixpi/ui-primitives/dom'
 import { createCanvasConnectorSettings } from '../connectors/connector-settings.ts'
+import {
+    bindCanvasTheme,
+    canvasThemeConnectorSettings,
+    type CanvasThemeSource,
+} from '../theme/canvas-theme.ts'
 import {
     LoadingOverlay,
     type LoadingOverlayOptions,
@@ -58,7 +64,11 @@ export type DiagramCanvasConfig = {
     ariaLabel: string
     sceneKey: string
     className?: string
-    registerNodes: (registry: NodeRegistry) => void
+    theme?: CanvasThemeSource
+    registerNodes: (
+        registry: NodeRegistry,
+        theme?: CanvasThemeSource,
+    ) => void
     connectionSettings?: CanvasConnectionOptions['settings'] | false
     connectionPolicy?: CanvasConnectionOptions['policy']
     connectionMarker?: DiagramConnectionMarker
@@ -256,6 +266,7 @@ export class DiagramCanvas implements DiagramCanvasInstance {
     private readonly lifetime = new Lifetime()
     private readonly error: HTMLDivElement
     private readonly connectionSettings: CanvasConnectionOptions['settings'] | false
+    private readonly connectorZoomScaling: BoundedZoomScalingOptions = { minZoom: 0.4 }
     private canvas: CanvasController | null = null
     private loadingOverlay: LoadingOverlay | null = null
     private pointers: DiagramPointerControls | null = null
@@ -274,7 +285,7 @@ export class DiagramCanvas implements DiagramCanvasInstance {
     }
 
     constructor(private readonly options: DiagramCanvasConfig) {
-        this.connectionSettings = options.connectionSettings ?? createCanvasConnectorSettings()
+        this.connectionSettings = options.connectionSettings ?? (options.theme ? canvasThemeConnectorSettings(options.theme.value) : createCanvasConnectorSettings())
         this.error = html`
             <div
                 className="diagram-canvas-error"
@@ -289,6 +300,16 @@ export class DiagramCanvas implements DiagramCanvasInstance {
                 aria-label=${options.ariaLabel}
             >${this.error}</div>
         ` as HTMLDivElement
+
+        if (options.theme)
+            this.lifetime.own(
+                bindCanvasTheme(
+                    this.el,
+                    options.theme,
+                    () => this.refresh(),
+                ),
+            )
+
         this.refreshAppearance()
     }
 
@@ -304,7 +325,7 @@ export class DiagramCanvas implements DiagramCanvasInstance {
 
         try {
             const registry = new NodeRegistry()
-            this.options.registerNodes(registry)
+            this.options.registerNodes(registry, this.options.theme)
             const canvas = new CanvasController({
                 root: this.el,
                 scene: {
@@ -319,7 +340,7 @@ export class DiagramCanvas implements DiagramCanvasInstance {
                 connectors: this.connectionSettings ? {
                     settings: this.connectionSettings,
                     renderer: {
-                        zoomScaling: this.connectionSettings.scaling.zoomScaling,
+                        zoomScaling: this.connectorZoomScaling,
                         ...(this.options.connectionMarker ? { marker: this.options.connectionMarker } : {}),
                     },
                     markerBodyLengthFraction: this.options.connectionMarker?.bodyLengthFraction,
@@ -478,8 +499,7 @@ export class DiagramCanvas implements DiagramCanvasInstance {
         this.canvas.setViewport(this.viewport)
     }
 
-    // Appearance subscriptions belong to the host. A refresh repaints retained
-    // views and connections without replacing their drawing resources.
+    // A refresh repaints retained views and connections without replacing their drawing resources.
     refresh(): void {
         if (this.destroyed)
             return
@@ -490,18 +510,52 @@ export class DiagramCanvas implements DiagramCanvasInstance {
     }
 
     private refreshAppearance(): void {
-        const appearance = typeof this.options.appearance === 'function'
-            ? this.options.appearance()
-            : this.options.appearance
-        const properties = {
-            '--diagram-canvas-background': appearance?.background,
-            '--diagram-canvas-text': appearance?.textColor,
-            '--diagram-canvas-muted': appearance?.mutedColor,
-            '--diagram-canvas-accent': appearance?.accentColor,
-            '--connector-line-default-color': appearance?.lineColor ?? (this.connectionSettings ? this.connectionSettings.styles.lineDefaultColor : undefined),
-            '--connector-line-focus-color': appearance?.lineFocusColor ?? (this.connectionSettings ? this.connectionSettings.styles.lineFocusColor : undefined),
+        const theme = this.options.theme?.value
+        const themeConnections = theme ? canvasThemeConnectorSettings(theme) : undefined
+
+        if (
+            themeConnections
+            && this.connectionSettings
+            && this.options.connectionSettings === undefined
+        ) for (const key of Object.keys(themeConnections) as Array<keyof typeof themeConnections>)
+            Reflect.set(
+                this.connectionSettings,
+                key,
+                themeConnections[key],
+            )
+
+        if (this.connectionSettings) {
+            this.connectorZoomScaling.minZoom = this.connectionSettings.scaling.zoomScaling.minZoom
+            this.connectorZoomScaling.lowZoomPower = this.connectionSettings.scaling.zoomScaling.lowZoomPower
+            this.connectionSettings.scaling.zoomScaling = this.connectorZoomScaling
         }
 
+        const overrides = typeof this.options.appearance === 'function' ? this.options.appearance() : this.options.appearance
+        const appearance: DiagramCanvasAppearance = {
+            ...(theme ? {
+                background: theme.colors.background,
+                textColor: theme.colors.text,
+                mutedColor: theme.colors.muted,
+                accentColor: theme.colors.accent,
+                lineColor: themeConnections?.styles.lineDefaultColor,
+                lineFocusColor: themeConnections?.styles.lineFocusColor,
+            } : {}),
+            ...overrides,
+        }
+
+        if (this.connectionSettings) {
+            this.connectionSettings.styles.lineDefaultColor = appearance.lineColor ?? this.connectionSettings.styles.lineDefaultColor
+            this.connectionSettings.styles.lineFocusColor = appearance.lineFocusColor ?? this.connectionSettings.styles.lineFocusColor
+        }
+
+        const properties = {
+            '--diagram-canvas-background': appearance.background,
+            '--diagram-canvas-text': appearance.textColor,
+            '--diagram-canvas-muted': appearance.mutedColor,
+            '--diagram-canvas-accent': appearance.accentColor,
+            '--connector-line-default-color': appearance.lineColor ?? (this.connectionSettings ? this.connectionSettings.styles.lineDefaultColor : undefined),
+            '--connector-line-focus-color': appearance.lineFocusColor ?? (this.connectionSettings ? this.connectionSettings.styles.lineFocusColor : undefined),
+        }
         this.pointers?.setAppearance(appearance)
 
         for (const [property, value] of Object.entries(properties)) {
@@ -510,6 +564,9 @@ export class DiagramCanvas implements DiagramCanvasInstance {
             else
                 this.el.style.removeProperty(property)
         }
+
+        if (this.connectionSettings)
+            this.canvas?.setConnectionSettings(this.connectionSettings)
     }
 
     private async watchReadiness(canvas: CanvasController): Promise<void> {

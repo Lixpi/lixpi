@@ -1,0 +1,5 @@
+{
+    "label": "Lixpi",
+    "description": "Docker Compose files for Lixpi. docker-compose.yml is the application stack and includes every partial under services/. utilities/ holds tools that run from their own files.",
+    "baseProfile": "main"
+}

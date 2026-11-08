@@ -618,6 +618,81 @@ describe('ConnectionManager gesture ownership', () => {
 })
 
 
+describe('ConnectionManager live settings', () => {
+    it('applies updated connector presentation and isolates settings from caller mutation', () => {
+        const {
+            manager,
+            config,
+            onConnectorGeometry,
+        } = setup()
+        manager.syncEdges([{
+            ...existingEdge,
+            marker: 'arrowhead',
+        }])
+        manager.render()
+        const before = onConnectorGeometry.mock.lastCall![0][0]
+        const settings = structuredClone(config.settings)
+
+        settings.scaling.strokeWidth = 7
+        settings.scaling.markerSize = 22
+        settings.lineCurve = 'bezier'
+        manager.updateSettings(settings)
+        settings.scaling.strokeWidth = 13
+        settings.scaling.markerSize = 30
+        manager.render()
+        const after = onConnectorGeometry.mock.lastCall![0][0]
+
+        expect(after.baseScreenStrokeWidth).toBe(7)
+        expect(after.arrowEnd?.baseScreenSize).toBe(22)
+        expect(after.svgPath).not.toBe(before.svgPath)
+    })
+
+    it('uses the new proximity threshold and clears candidates made with a stale threshold', () => {
+        const {
+            manager,
+            config,
+            onEdgesChange,
+        } = setup(0, { canConnectProximity: () => true })
+        const position = {
+            x: 250,
+            y: 100,
+        }
+        const dimensions = {
+            width: 100,
+            height: 100,
+        }
+        manager.checkProximity('a', position, dimensions)
+        manager.commitProximityConnection()
+        expect(onEdgesChange).not.toHaveBeenCalled()
+
+        const widerThreshold = structuredClone(config.settings)
+
+        widerThreshold.proximityConnectThreshold = 60
+        manager.updateSettings(widerThreshold)
+        widerThreshold.proximityConnectThreshold = 0
+        manager.checkProximity('a', position, dimensions)
+
+        const narrowerThreshold = structuredClone(config.settings)
+
+        narrowerThreshold.proximityConnectThreshold = 40
+        manager.updateSettings(narrowerThreshold)
+        manager.commitProximityConnection()
+        expect(onEdgesChange).not.toHaveBeenCalled()
+
+        const currentThreshold = structuredClone(config.settings)
+
+        currentThreshold.proximityConnectThreshold = 60
+        manager.updateSettings(currentThreshold)
+        currentThreshold.proximityConnectThreshold = 0
+        manager.checkProximity('a', position, dimensions)
+        manager.commitProximityConnection()
+
+        expect(onEdgesChange).toHaveBeenCalledWith([expect.objectContaining({
+            sourceNodeId: 'a',
+            targetNodeId: 'b',
+        })])
+    })
+})
 describe('ConnectionManager orthogonal routing failures', () => {
     it('reports a failed route, omits its geometry, and retries after nodes change', () => {
         const {

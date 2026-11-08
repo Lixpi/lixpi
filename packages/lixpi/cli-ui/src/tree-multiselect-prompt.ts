@@ -250,19 +250,14 @@ export class TreeMultiSelectPrompt extends Prompt<string[]> {
         const label = node.label.padEnd(labelWidth)
         const current = this.selection.activeChoice(node)
         const choices = (node.choices ?? []).map(choice => {
-            // A custom selection has no chosen value to highlight, so the circles show
-            // that this row has the focus.
             if (choice !== current)
-                return `${active
-                    && !current
-                    ? styleFocused(S_RADIO_INACTIVE)
-                    : styleText('dim', S_RADIO_INACTIVE)} ${styleText('dim', choice.label)}`
+                return `${styleText('dim', S_RADIO_INACTIVE)} ${styleText('dim', choice.label)}`
 
             return `${styleText('green', S_RADIO_ACTIVE)} ${active ? styleFocused(choice.label) : choice.label}`
         }).join(
             styleText('dim', ' / '),
         )
-        const hint = current?.hint ?? node.hint
+        const hint = current.hint ?? node.hint
 
         return `${renderPointer(active)}${label}  ${choices}${hint ? ` ${styleText('dim', `(${hint})`)}` : ''}`
     }
@@ -283,6 +278,13 @@ export class TreeMultiSelectPrompt extends Prompt<string[]> {
         active: boolean,
     ): string {
         const state = this.selection.stateOf(node)
+
+        if (node.selection) {
+            if (state === 'all')
+                return styleText('green', S_RADIO_ACTIVE)
+
+            return active ? styleFocused(S_RADIO_INACTIVE) : styleText('dim', S_RADIO_INACTIVE)
+        }
 
         if (state === 'all')
             return styleText('green', S_CHECKBOX_SELECTED)

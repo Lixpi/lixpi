@@ -1,0 +1,1 @@
+{ "label": "NEX workers", "order": 20, "description": "NEX nodes that run workloads on the NATS cluster." }

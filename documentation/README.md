@@ -79,11 +79,13 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 |------|----------------|
 | [Workspace Model](canvas/WORKSPACE-MODEL.md) | Core concepts, the `CanvasState`/`CanvasNode`/`WorkspaceEdge` data model, stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, storage durability, lazy loading |
 | [User Flows](canvas/USER-FLOWS.md) | Opening a workspace, creating documents, uploading/converting/saving/deleting/moving/editing media |
+| [Canvas Component Library](../services/design-system/documentation/CANVAS-LIBRARY.md) | Isolated live examples of canvas interactions, nodes, components and workspace composition |
 | [Canvas Engine](../packages/lixpi/canvas-engine/README.md) | Rendering, scene contracts, node registration, input, connectors, collisions and resource ownership |
 | [Canvas Components](../packages/lixpi/canvas-components/README.md) | Reusable media surfaces, glass, outlines, loading effects and examples |
-| [Lixpi Canvas Components](../packages/lixpi/canvas-components-lixpi-specific/README.md) | Workspace composition, product nodes, media events, host ports and persistence |
+| [Lixpi Canvas Components](../packages/lixpi/canvas-components/docs/workspace/README.md) | Workspace composition, product nodes, media events, host ports and persistence |
 | [UI Primitives](../packages/lixpi/ui-primitives/README.md) | Shared DOM templates, SVG utilities, colors, gradients and easing |
 | [UI Kit](../packages/lixpi/ui-kit/README.md) | Panels, menus, tooltips, controls, previews and icon artwork |
+| [Application Themes](../packages/lixpi/ui-kit/README.md#application-themes) | Standalone TypeScript theme definitions, preset registry, generated Sass and adapters |
 | [Gentelella UI Kit](../packages/lixpi/ui-kit-gentelella/README.md) | Gentelella theme styles, typed runtime facades, class contracts and composable DOM components |
 | [Auth Client](../packages/lixpi/auth-client/README.md) | Shared browser authentication, auth/user Nano Stores, and current-user loading |
 | [Web Client Service Factory](../packages/lixpi/web-client-service-factory/README.md) | Dependency-neutral browser startup, routing, base Nano Stores, route views, Vite, and Sass setup |

@@ -1,0 +1,1 @@
+{ "label": "Code quality", "order": 20, "description": "Test, lint and format runners." }

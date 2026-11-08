@@ -8,7 +8,7 @@ import {
     type CanvasPersistencePorts,
     type CanvasVersion,
     type WorkspaceCanvasSnapshot,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 import {
     type WebClientRouterService,
 } from '@lixpi/web-client-service-factory'

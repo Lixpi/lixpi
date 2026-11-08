@@ -27,7 +27,7 @@ const expectRuleNotToContain = (rule: string, declaration: string): void => void
 const expectSourceToContain = (source: string, snippet: string, label = 'source excerpt'): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 
 describe('prompt-reference-picker.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'prompt-reference-picker.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/prompt-reference-picker.scss"), 'utf-8')
 
     it('uses the default app and browser scrollbar appearance', () => {
         const pickerRule = extractFlatRule(scss, '.prompt-reference-picker')
@@ -97,11 +97,11 @@ describe('prompt-reference-picker.scss', () => {
     // Chip color has exactly one owner. Every surface reads these custom
     // properties; no stylesheet may restate a chip color literal of its own.
     it('reads its palette from the shared partial and emits the light defaults once', () => {
-        expectSourceToContain(scss, '@import "$src/sass/_prompt-reference-chip.scss";')
+        expectSourceToContain(scss, '@import "./prompt-reference-colors";')
         expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
 
         const partial = readFileSync(
-            resolve(import.meta.dirname, '../../../../sass/_prompt-reference-chip.scss'),
+            resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/prompt-reference-colors.scss'),
             'utf-8',
         )
 

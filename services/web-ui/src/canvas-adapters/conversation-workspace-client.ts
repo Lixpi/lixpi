@@ -9,7 +9,7 @@ import {
 import type NatsService from '@lixpi/nats-service'
 import {
     type WorkspaceConversationPorts,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import {

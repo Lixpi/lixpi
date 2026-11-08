@@ -11,7 +11,7 @@ The registry configuration consists of five version catalogs, one Docker build-a
 
 ## Version catalogs
 
-All catalog files live under [`versions/`](../versions/). Keys identify the upstream dependency. Values are exact selected releases, image tags, workspace package versions, or reference templates.
+All catalog files live under [`versions/`](../versions). Keys identify the upstream dependency. Values are exact selected releases, image tags, workspace package versions, or reference templates.
 
 | Catalog | Sections and values |
 |---|---|
@@ -81,7 +81,7 @@ Consumers are discovered from repository structure. There is no per-file registr
 | Package manifest | Any `package.json` outside ignored directories |
 | Go module | Any `go.mod` outside ignored directories |
 | Dockerfile | A file name containing `Dockerfile` or `dockerfile` |
-| Compose file | `docker-compose*.yml` or `docker-compose*.yaml` under `infrastructure/docker/` |
+| Compose file | `docker-compose*.yml` or `docker-compose*.yaml` anywhere under `infrastructure/docker/` |
 | GitHub Actions workflow | `.github/workflows/*.yml` or `.github/workflows/*.yaml` |
 
 The registry source directory, dependency caches, virtual environments, VCS metadata, agent configuration, build output, fixtures, test data, and common vendored output directories are excluded. Adding a supported native file outside those locations places it under drift checking automatically.
@@ -124,7 +124,7 @@ Changing a publisher or repository mapping belongs in those source modules, not 
 
 ## Command containers
 
-[`infrastructure/docker/docker-compose.versions-registry.yml`](../../../infrastructure/docker/docker-compose.versions-registry.yml) defines two services:
+[`infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml`](../../../infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml) defines two services:
 
 | Service | Network | Entrypoint | Purpose |
 |---|---|---|---|

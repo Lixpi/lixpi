@@ -60,7 +60,7 @@ Avoid:
 
 ## Package Documentation
 
-Rendering-engine manuals live in `packages/lixpi/canvas-engine/docs/`; reusable canvas surface and effect manuals live in `packages/lixpi/canvas-components/docs/`. Lixpi workspace composition belongs in `packages/lixpi/canvas-components-lixpi-specific/docs/`. Shared DOM, SVG and gradient guidance belongs in `ui-primitives`; generic control guidance belongs in `ui-kit`; Gentelella theme integration and upgrade guidance belongs in `ui-kit-gentelella/documentation/`. Each package README introduces its contracts and links to its manuals. Central canvas pages describe product behavior and persistence, then link to those package entry points.
+Rendering-engine manuals live in `packages/lixpi/canvas-engine/docs/`; reusable canvas surface and effect manuals live in `packages/lixpi/canvas-components/docs/`. Lixpi workspace composition belongs in `packages/lixpi/canvas-components/docs/workspace/`. Shared DOM, SVG and gradient guidance belongs in `ui-primitives`; generic control guidance belongs in `ui-kit`; shared named themes belong in the standalone `themes` package; Gentelella theme integration and upgrade guidance belongs in `ui-kit-gentelella/documentation/`. Each package README introduces its contracts and links to its manuals. Central canvas pages describe product behavior and persistence, then link to those package entry points.
 
 Do not copy package manuals into `documentation/`. Keep each manual beside the package it describes, link to it from the central documentation map, and keep links relative to the original file.
 

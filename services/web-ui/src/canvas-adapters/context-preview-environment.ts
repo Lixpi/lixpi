@@ -1,10 +1,10 @@
 import {
     type ContextPreviewEnvironment,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import {
     type AuthTokenProvider,
 } from '@lixpi/auth-client'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 import {

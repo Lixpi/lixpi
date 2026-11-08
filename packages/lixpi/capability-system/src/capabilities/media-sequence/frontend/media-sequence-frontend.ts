@@ -12,7 +12,7 @@ import { readMediaSequenceDocument } from '../shared/media-sequence-artifact.ts'
 import { ticksToSeconds } from '../shared/sequence-time.ts'
 
 export const MEDIA_SEQUENCE_FRONTEND_STYLES = `
-.media-sequence-card { display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 12px; background: hsl(var(--muted, 215 20% 94%)); color: hsl(var(--foreground, 220 20% 14%)); }
+.media-sequence-card { display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: var(--canvas-node-radius, 12px); background: var(--canvas-surface-raised, hsl(var(--muted, 215 20% 94%))); color: var(--canvas-text, hsl(var(--foreground, 220 20% 14%))); font: var(--canvas-font-size, 14px)/var(--canvas-line-height, 1.5) var(--canvas-font-family, system-ui, sans-serif); }
 `
 
 class MediaSequenceCard {

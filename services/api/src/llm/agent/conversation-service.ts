@@ -73,6 +73,7 @@ export type ConversationServicePorts = {
         operations: TransactOperation[],
     ) => Promise<void>
     publish: (event: ConversationEvent) => Promise<void>
+    dispatchScheduled: (dueAt: number) => void
     now: () => number
     createId: () => string
 }
@@ -529,6 +530,7 @@ export class ConversationService {
                 throw error
             }
 
+            this.ports.dispatchScheduled(dispatch.dueAt)
             await this.ports.publish(event)
 
             return acknowledgement
@@ -649,6 +651,13 @@ export class ConversationService {
                 ]
                 : []),
         ])
+
+        if (
+            descriptions.length
+            && meta.activated
+        )
+            this.ports.dispatchScheduled(dispatch.dueAt)
+
         await this.ports.publish(event)
 
         return await this.snapshot(next)

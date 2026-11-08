@@ -122,6 +122,14 @@ export class LoadingOverlay {
         )
     }
 
+    setAppearance(appearance: Pick<LoadingOverlayOptions, 'outline'>): void {
+        if (this.destroyed)
+            return
+
+        this.options.outline = appearance.outline
+        this.paintOutline()
+    }
+
     setVisible(visible: boolean): void {
         if (
             this.destroyed

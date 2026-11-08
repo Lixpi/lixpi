@@ -19,7 +19,7 @@ import {
     applyStyle,
 } from '@lixpi/ui-primitives/dom'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import {
     applyMediaModelBadgeStyleProperties,
     resolveMediaModelBadgeConfig,

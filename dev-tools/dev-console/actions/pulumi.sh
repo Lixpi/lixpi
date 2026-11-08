@@ -10,7 +10,9 @@ set -euo pipefail
 
 [[ -n "${LIXPI_CONSOLE_ENV_FILE:-}" ]] || { echo "Choose an environment file in ./run.sh." >&2; exit 1; }
 
-COMPOSE=(docker compose -f infrastructure/docker/docker-compose.yml --env-file "${LIXPI_CONSOLE_ENV_FILE}" --profile deploy --progress quiet)
+# Pulumi shares the application's Compose project, so the running stack isn't orphaned.
+export COMPOSE_IGNORE_ORPHANS=true
+COMPOSE=(docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file "${LIXPI_CONSOLE_ENV_FILE}" --profile deploy --progress quiet)
 RUN=("${COMPOSE[@]}" run --rm --no-deps -w /usr/src/service/infrastructure/pulumi)
 
 if [[ "${LIXPI_CONSOLE_QUERY:-}" == "catalog" ]]; then

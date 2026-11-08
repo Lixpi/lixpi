@@ -1,0 +1,185 @@
+// @vitest-environment happy-dom
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    WorkspacePromptComposer,
+    type WorkspacePromptComposerOptions,
+} from './workspace-prompt-composer.ts'
+import {
+    type PromptComposerEditorRequest,
+} from './ai-prompt-composer.ts'
+
+const owners: WorkspacePromptComposer[] = []
+afterEach(() => {
+    for (const owner of owners.splice(0)) owner.destroy()
+
+    document.body.replaceChildren()
+})
+
+const fixture = (raw: string | null = null) => {
+    const requests: PromptComposerEditorRequest[] = []
+    const trayDestroy = vi.fn()
+    const editorDestroy = vi.fn()
+    const options: WorkspacePromptComposerOptions = {
+        document,
+        workspaceId: 'w',
+        appearance: {
+            popoverBoxShadow: '',
+            useShiftingGradientBackground: false,
+            gradientColors: [],
+        },
+        storage: {
+            getItem: vi.fn(() => raw),
+            setItem: vi.fn(),
+        },
+        mountContextTray: () => ({
+            element: document.createElement('div'),
+            destroy: trayDestroy,
+        }),
+        mountEditor: request => {
+            requests.push(request)
+
+            return {
+                editorView: {} as EditorView,
+                restoreContent: vi.fn(),
+                destroy: editorDestroy,
+            }
+        },
+        onSubmit: vi.fn(),
+    }
+    const mount = () => {
+        const composer = new WorkspacePromptComposer(options)
+        owners.push(composer)
+        document.body.appendChild(composer.element)
+
+        return composer
+    }
+
+    return {
+        options,
+        requests,
+        trayDestroy,
+        editorDestroy,
+        mount,
+    }
+}
+
+describe('Workspace prompt composer', () => {
+    it('restores and stores the workspace draft independently of canvas persistence', () => {
+        const f = fixture('{"type":"doc"}')
+        const composer = f.mount()
+        expect(f.options.storage.getItem).toHaveBeenCalledWith('lixpi:canvas-global-composer-draft:w')
+        expect(f.requests[0]?.initialContent).toEqual({ type: 'doc' })
+        f.options.workspaceId = 'other'
+        f.requests[0]!.onContentChange({
+            type: 'doc',
+            content: [],
+        })
+        expect(f.options.storage.setItem).toHaveBeenCalledWith('lixpi:canvas-global-composer-draft:w', '{"type":"doc","content":[]}')
+        expect(composer.element.contains(composer.input.element)).toBe(true)
+    })
+
+    it.each(['invalid json', 'null', '42', '[]'])('ignores malformed or non-document draft values: %s', raw => {
+        const f = fixture(raw)
+        f.mount()
+        expect(f.requests[0]?.initialContent).toEqual({})
+    })
+
+    it('tolerates unavailable storage and stops writing after destruction', () => {
+        const f = fixture()
+        vi.mocked(f.options.storage.getItem).mockImplementation(() => {
+            throw new Error('blocked')
+        })
+        vi.mocked(f.options.storage.setItem).mockImplementation(() => {
+            throw new Error('quota')
+        })
+        const composer = f.mount()
+        expect(() => f.requests[0]!.onContentChange({})).not.toThrow()
+        composer.destroy()
+        f.requests[0]!.onContentChange({})
+        expect(f.options.storage.setItem).toHaveBeenCalledOnce()
+        expect(f.editorDestroy).toHaveBeenCalledOnce()
+        expect(f.trayDestroy).toHaveBeenCalledOnce()
+    })
+
+    it('releases the mounted tray if editor construction fails', () => {
+        const f = fixture()
+        f.options.mountEditor = () => {
+            throw new Error('editor failed')
+        }
+        expect(() => f.mount()).toThrow('editor failed')
+        expect(f.trayDestroy).toHaveBeenCalledOnce()
+        expect(document.body.childElementCount).toBe(0)
+    })
+
+    it('migrates the workspace draft once into the user draft without overwriting a saved conversation', () => {
+        const f = fixture()
+        const stored = new Map([['lixpi:canvas-global-composer-draft:w', '{"type":"doc","content":[]}']])
+        f.options.userId = 'user'
+        f.options.storage = {
+            getItem: key => stored.get(key) ?? null,
+            setItem: (key, value) => void stored.set(key, value),
+        }
+        f.mount()
+        expect(f.requests[0].initialContent).toEqual({
+            type: 'doc',
+            content: [],
+        })
+        stored.set('lixpi:conversation-draft:user:w:new', '{"type":"doc","attrs":{"saved":true}}')
+        f.mount()
+        expect(f.requests[1].initialContent).toEqual({
+            type: 'doc',
+            attrs: { saved: true },
+        })
+        expect(stored.get('lixpi:conversation-draft-migrated:user:w')).toBe('true')
+    })
+})
+
+
+describe('Workspace prompt composer conversation mount ownership', () => {
+    it('replaces borrowed mounts and ignores a stale disposer for the same element', () => {
+        const f = fixture()
+        const composer = f.mount()
+        const panel = document.createElement('section')
+        const destroyPanel = vi.fn()
+        const firstUnmount = composer.mountConversation(panel)
+
+        expect(composer.element.firstElementChild).toBe(panel)
+        expect(composer.element.classList.contains('has-conversation')).toBe(true)
+
+        const secondUnmount = composer.mountConversation(panel)
+        firstUnmount()
+        expect(composer.element.firstElementChild).toBe(panel)
+        expect(composer.element.classList.contains('has-conversation')).toBe(true)
+
+        secondUnmount()
+        expect(panel.parentElement).toBeNull()
+        expect(composer.element.classList.contains('has-conversation')).toBe(false)
+        expect(destroyPanel).not.toHaveBeenCalled()
+    })
+
+    it('detaches but does not destroy a borrowed panel when the composer is destroyed', () => {
+        const f = fixture()
+        const composer = f.mount()
+        const panel = document.createElement('section')
+        const panelClick = vi.fn()
+        panel.addEventListener('click', panelClick)
+        const unmount = composer.mountConversation(panel)
+
+        composer.destroy()
+        unmount()
+        panel.dispatchEvent(new Event('click'))
+
+        expect(panel.parentElement).toBeNull()
+        expect(panelClick).toHaveBeenCalledOnce()
+        expect(() => composer.mountConversation(document.createElement('aside'))).toThrow('disposed')
+    })
+})

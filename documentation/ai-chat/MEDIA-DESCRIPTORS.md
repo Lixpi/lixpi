@@ -16,7 +16,7 @@ resolve the descriptor from `assetsStore` and never persist a copy.
 
 Descriptors let the UI and model-facing traces identify explicitly selected
 media without re-analyzing it. Their main consumers are
-[Explicit Workspace Context](./CONTEXT-RELEVANCE.md),
+[Explicit Workspace Context](CONTEXT-RELEVANCE.md),
 [Branch Lineage](../media-generation/BRANCH-LINEAGE.md), and the canvas media
 info panel. Descriptors do not select context or add canvas nodes to a request.
 
@@ -149,7 +149,7 @@ and VEO anchoring.
 
 ## References
 
-- [Explicit Workspace Context](./CONTEXT-RELEVANCE.md): prompt references, context chips, and authorization
+- [Explicit Workspace Context](CONTEXT-RELEVANCE.md): prompt references, context chips, and authorization
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md): how descriptors/tags feed branch grounding
 - [Image Generation](../media-generation/IMAGE-GENERATION.md): generated-image completion and final-frame storage
 - [Video Generation](../media-generation/VIDEO-GENERATION.md): mid-frame extraction and VEO image-to-video anchoring

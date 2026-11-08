@@ -216,7 +216,7 @@
                 "services/web-ui/**/*.ts",
                 "services/web-ui-user-portal/**/*.ts",
                 "services/ai-model-registry/src/client/**/*.ts",
-                "packages/lixpi/**/src/frontend/**/*.ts",
+                "packages/lixpi/**/src/**/frontend/**/*.ts",
                 "packages/lixpi/canvas-engine/examples/**/*.ts",
                 "packages/lixpi/canvas-components/examples/**/*.ts",
                 "packages/lixpi/debug-tools/**/*.ts",

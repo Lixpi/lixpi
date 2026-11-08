@@ -120,10 +120,13 @@ export class ConnectorRenderer {
             }
 
             resources.setVisible(entry.group, true)
-            const key = JSON.stringify([edge, viewport])
+            const key = JSON.stringify([edge, viewport, this.options.zoomScaling])
 
             if (entry.key === key)
                 continue
+
+            // A failed resource update must not retain the previous frame's cache key.
+            entry.key = ''
 
             const scale = (value: number) => scaleCanvasChromeToScreenForZoom(
                 value,

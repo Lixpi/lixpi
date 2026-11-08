@@ -109,8 +109,7 @@
             }
 
             &:focus {
-                outline: 2px solid map-get($s, retryBgColor);
-                outline-offset: 2px;
+                outline: none;
             }
         }
     }

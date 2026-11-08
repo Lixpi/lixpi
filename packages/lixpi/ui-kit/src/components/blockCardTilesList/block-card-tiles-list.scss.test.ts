@@ -5,19 +5,57 @@ import {
     expect,
     it,
 } from 'vitest'
+import { lixpiLightTheme } from '@lixpi/themes'
 
-describe('block-card-tiles-list.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'block-card-tiles-list.scss'), 'utf-8')
+describe(
+    'block-card-tiles-list.scss',
+    () => {
+        const scss = readFileSync(
+            resolve(
+                import.meta.dirname,
+                'block-card-tiles-list.scss',
+            ),
+            'utf-8',
+        )
+        const expectSourceContains = (snippet: string): void => {
+            expect(
+                scss.includes(snippet),
+                `The shared block-card stylesheet should include: ${snippet}`,
+            ).toBe(true)
+        }
 
-    it('preserves the extracted list, marker, title, metadata, hover, and action geometry', () => {
-        expect(scss).toContain('max-height: 236px;')
-        expect(scss).toContain('min-height: 58px;')
-        expect(scss).toContain('width: 7px;')
-        expect(scss).toContain('height: 7px;')
-        expect(scss).toContain('font-size: 13px;')
-        expect(scss.match(/font-size: 11\.5px;/g)?.length).toBeGreaterThanOrEqual(2)
-        expect(scss).toContain('linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)')
-        expect(scss).toContain('width: 20px;')
-        expect(scss).toContain('height: 20px;')
-    })
-})
+        it(
+            'preserves the extracted list, marker, hover, and action geometry',
+            () => {
+                for (const declaration of [
+                    'max-height: 236px;',
+                    'min-height: 58px;',
+                    'width: 7px;',
+                    'height: 7px;',
+                    'width: 20px;',
+                    'height: 20px;',
+                ])
+                    expectSourceContains(declaration)
+            },
+        )
+
+        it(
+            'uses theme-owned title, metadata and hover appearance with the established defaults',
+            () => {
+                for (const role of [
+                    'tile-title-base-font-size',
+                    'primary-meta-base-font-size',
+                    'secondary-meta-base-font-size',
+                    'block-card-tile-hover-background-image',
+                ])
+                    expectSourceContains(`themeScope.token("components-block-cards-${role}", themePalette.$roles)`)
+
+                const appearance = lixpiLightTheme.components.blockCards
+                expect(appearance.tileTitle.base.fontSize).toBe('13px')
+                expect(appearance.primaryMeta.base.fontSize).toBe('11.5px')
+                expect(appearance.secondaryMeta.base.fontSize).toBe('11.5px')
+                expect(appearance.blockCardTile.hover.backgroundImage).toBe('linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)')
+            },
+        )
+    },
+)

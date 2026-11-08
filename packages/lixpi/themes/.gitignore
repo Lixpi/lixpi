@@ -1,0 +1,4 @@
+# Keep the distributed theme Sass while other build output stays ignored.
+!/dist/
+/dist/*
+!/dist/scss/

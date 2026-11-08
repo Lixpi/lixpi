@@ -1,0 +1,2387 @@
+{
+  "anchors": [
+    "top",
+    "right",
+    "bottom",
+    "left",
+    "center"
+  ],
+  "nodes": [
+    {
+      "id": "orthogonal-source",
+      "shape": "rect",
+      "x": 20,
+      "y": 850,
+      "width": 190,
+      "height": 64
+    },
+    {
+      "id": "orthogonal-solid",
+      "shape": "rect",
+      "x": 420,
+      "y": 730,
+      "width": 120,
+      "height": 64
+    },
+    {
+      "id": "orthogonal-dashed",
+      "shape": "rect",
+      "x": 420,
+      "y": 990,
+      "width": 120,
+      "height": 64
+    }
+  ],
+  "cases": [
+    {
+      "source": "top",
+      "target": "top",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 480,
+              "y": 697.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 480,
+              "y": 957.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "top",
+      "target": "right",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "top",
+      "target": "bottom",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 480,
+              "y": 826.0131616002826
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 480,
+              "y": 1086.0131616002827
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "top",
+      "target": "left",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "top",
+      "target": "center",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 480,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "top"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 834.6390894723701
+            },
+            "target": {
+              "x": 480,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "right",
+      "target": "top",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 697.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 957.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "right",
+      "target": "right",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "right",
+      "target": "bottom",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 826.0131616002826
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 1086.0131616002827
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "right",
+      "target": "left",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "right",
+      "target": "center",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "right"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 225.36091052762993,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "bottom",
+      "target": "top",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 480,
+              "y": 697.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 480,
+              "y": 957.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "bottom",
+      "target": "right",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "bottom",
+      "target": "bottom",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 480,
+              "y": 826.0131616002826
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 480,
+              "y": 1086.0131616002827
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "bottom",
+      "target": "left",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "bottom",
+      "target": "center",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 480,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "bottom"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 929.3609105276299
+            },
+            "target": {
+              "x": 480,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "left",
+      "target": "top",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 697.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 957.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "left",
+      "target": "right",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "left",
+      "target": "bottom",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 826.0131616002826
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 1086.0131616002827
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "left",
+      "target": "left",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "left",
+      "target": "center",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "left"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 4.639089472370065,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "center",
+      "target": "top",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 697.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "top"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 957.9868383997174
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "center",
+      "target": "right",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "right"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 572.0131616002826,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "center",
+      "target": "bottom",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 826.0131616002826
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "bottom"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 1086.0131616002827
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "center",
+      "target": "left",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "left"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 387.9868383997174,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    },
+    {
+      "source": "center",
+      "target": "center",
+      "edges": [
+        {
+          "edge": {
+            "id": "orthogonal-solid",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-solid",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "solid",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 762
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        },
+        {
+          "edge": {
+            "id": "orthogonal-dashed",
+            "source": {
+              "nodeId": "orthogonal-source",
+              "position": "center"
+            },
+            "target": {
+              "nodeId": "orthogonal-dashed",
+              "position": "center"
+            },
+            "pathType": "orthogonal",
+            "lineStyle": "dashed",
+            "marker": "arrowhead",
+            "markerStart": "none",
+            "curvature": 0.35,
+            "borderRadius": 24,
+            "laneIndex": 0,
+            "laneCount": 1
+          },
+          "endpoints": {
+            "source": {
+              "x": 115,
+              "y": 882
+            },
+            "target": {
+              "x": 480,
+              "y": 1022
+            }
+          },
+          "style": {
+            "selected": true,
+            "color": "#5d656d",
+            "selectedColor": "#000",
+            "strokeWidth": 3,
+            "markerSize": 23,
+            "markerOffset": {
+              "source": 15.360910527629935,
+              "target": 15.360910527629935
+            },
+            "worldMarkerSize": 23.5533961423659,
+            "markerBodyLengthFraction": 0.707
+          }
+        }
+      ]
+    }
+  ]
+}

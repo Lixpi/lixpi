@@ -138,8 +138,8 @@ The service hot reloads. Vite serves the page on 3010 and proxies `/api` to the 
 Run the browser-client tests and service quality checks through the repository runners:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner ai-model-registry
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
 ```
 
 ## Pages

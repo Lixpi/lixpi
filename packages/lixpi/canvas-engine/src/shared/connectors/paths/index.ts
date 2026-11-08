@@ -12,60 +12,16 @@ import {
     type NodeConfig,
 } from '../path-types.ts'
 
-// Simple node bounds type for path obstacle avoidance
-type NodeBounds = {
-    id: string
-    x: number
-    y: number
-    width: number
-    height: number
-}
+import {
+    isOrthogonalRouteClear,
+    orthogonalRouteBlockers,
+    type NodeBounds,
+    type OrthogonalPoint,
+} from './route-clearance.ts'
+import { isOrthogonalRouteSimple } from './route-simplicity.ts'
+import { findSimpleDirectedRoute } from './directed-route.ts'
 
-type OrthogonalPoint = {
-    x: number
-    y: number
-}
-
-const orthogonalRouteBlockers = (
-    points: readonly OrthogonalPoint[],
-    nodes: readonly NodeBounds[],
-    margin: number,
-): NodeBounds[] =>
-    nodes.filter(
-        node => points.slice(1).some((end, index) => {
-            const start = points[index]
-            const left = node.x - margin
-            const right = node.x + node.width + margin
-            const top = node.y - margin
-            const bottom = node.y + node.height + margin
-
-            return start.y === end.y
-                ? start.y >= top
-                    && start.y <= bottom
-                    && Math.max(start.x, end.x) > left
-                    && Math.min(start.x, end.x) < right
-                : start.x >= left
-                    && start.x <= right
-                    && Math.max(start.y, end.y) > top
-                    && Math.min(start.y, end.y) < bottom
-        }),
-    )
-
-// Layout-computed routes and automatic detours share the same clearance test.
-export const isOrthogonalRouteClear = (
-    points: readonly OrthogonalPoint[],
-    nodes: readonly NodeBounds[],
-    margin: number = 10,
-): boolean =>
-    points.every(
-        (point, index) =>
-            Number.isFinite(point.x) && Number.isFinite(point.y) && (!index || point.x === points[index - 1].x || point.y === points[index - 1].y),
-    )
-        && orthogonalRouteBlockers(
-            points,
-            nodes,
-            margin,
-        ).length === 0
+export { isOrthogonalRouteClear } from './route-clearance.ts'
 
 export class OrthogonalRoutingError extends Error {
     constructor(readonly edgeId?: string) {
@@ -544,6 +500,41 @@ export const getOrthogonalRoutePoints = (
         return points
     }
 
+    const toward = (
+        from: OrthogonalPoint,
+        to: OrthogonalPoint,
+    ): AnchorPosition => Math.abs(to.x - from.x) >= Math.abs(to.y - from.y)
+        ? to.x >= from.x
+            ? 'right'
+            : 'left'
+        : to.y >= from.y
+            ? 'bottom'
+            : 'top'
+
+    if (sourcePosition === 'center')
+        sourcePosition = toward(
+            {
+                x: sourceX,
+                y: sourceY,
+            },
+            {
+                x: targetX,
+                y: targetY,
+            },
+        )
+
+    if (targetPosition === 'center')
+        targetPosition = toward(
+            {
+                x: targetX,
+                y: targetY,
+            },
+            {
+                x: sourceX,
+                y: sourceY,
+            },
+        )
+
     const sourceVertical = sourcePosition === 'top' || sourcePosition === 'bottom'
     const targetVertical = targetPosition === 'top' || targetPosition === 'bottom'
     const vertical = sourceVertical && targetVertical
@@ -640,6 +631,7 @@ export const getOrthogonalRoutePoints = (
             lastLead,
             targetPosition,
         )
+        && isOrthogonalRouteSimple(points)
     )
         return points
 
@@ -654,58 +646,98 @@ export const getOrthogonalRoutePoints = (
     const lead = (
         point: OrthogonalPoint,
         position: AnchorPosition,
-    ): OrthogonalPoint => ({
-        x: point.x + (position === 'left'
-            ? -leadLength
-            : position === 'right'
-                ? leadLength
-                : 0),
-        y: point.y + (position === 'top'
-            ? -leadLength
-            : position === 'bottom'
-                ? leadLength
-                : 0),
-    })
-    const sourceLead = lead(first, sourcePosition)
-    const targetLead = lead(last, targetPosition)
-    const bridge = sourceVertical
-        ? buildOrthogonalPoints(
-            sourceLead.x,
-            sourceLead.y,
-            targetLead.x,
-            targetLead.y,
-            obstacleNodes,
-            laneIndex,
-            laneCount,
-        )
-        : buildOrthogonalPoints(
-            sourceLead.y,
-            sourceLead.x,
-            targetLead.y,
-            targetLead.x,
-            obstacleNodes.map(
-                node => ({
-                    ...node,
-                    x: node.y,
-                    y: node.x,
-                    width: node.height,
-                    height: node.width,
+        nodeId: string | undefined,
+    ): OrthogonalPoint => {
+        const node = obstacleNodes.find(candidate => candidate.id === nodeId)
+
+        return {
+            x: position === 'left'
+                ? Math.min(point.x - leadLength, node ? node.x - 20 : point.x - leadLength)
+                : position === 'right'
+                    ? Math.max(point.x + leadLength, node ? node.x + node.width + 20 : point.x + leadLength)
+                    : point.x,
+            y: position === 'top'
+                ? Math.min(point.y - leadLength, node ? node.y - 20 : point.y - leadLength)
+                : position === 'bottom'
+                    ? Math.max(point.y + leadLength, node ? node.y + node.height + 20 : point.y + leadLength)
+                    : point.y,
+        }
+    }
+    const sourceLead = lead(
+        first,
+        sourcePosition,
+        sourceNodeId,
+    )
+    const targetLead = lead(
+        last,
+        targetPosition,
+        targetNodeId,
+    )
+    let bridge: OrthogonalPoint[] = []
+
+    try {
+        bridge = sourceVertical
+            ? buildOrthogonalPoints(
+                sourceLead.x,
+                sourceLead.y,
+                targetLead.x,
+                targetLead.y,
+                obstacleNodes,
+                laneIndex,
+                laneCount,
+            )
+            : buildOrthogonalPoints(
+                sourceLead.y,
+                sourceLead.x,
+                targetLead.y,
+                targetLead.x,
+                obstacleNodes.map(
+                    node => ({
+                        ...node,
+                        x: node.y,
+                        y: node.x,
+                        width: node.height,
+                        height: node.width,
+                    }),
+                ),
+                laneIndex,
+                laneCount,
+            ).map(
+                point => ({
+                    x: point.y,
+                    y: point.x,
                 }),
-            ),
-            laneIndex,
-            laneCount,
-        ).map(
-            point => ({
-                x: point.y,
-                y: point.x,
-            }),
-        )
+            )
+    } catch (error) {
+        if (!(error instanceof OrthogonalRoutingError))
+            throw error
+    }
+
     const directed = [first, ...bridge, last]
 
-    if (!isOrthogonalRouteClear(directed, obstacles))
+    if (
+        bridge.length
+        && isOrthogonalRouteClear(directed, obstacles)
+        && isOrthogonalRouteSimple(directed)
+    )
+        return directed
+
+    const alternative = findSimpleDirectedRoute({
+        source: first,
+        target: last,
+        sourceLead,
+        targetLead,
+        sourceVertical,
+        targetVertical,
+        obstacles,
+        bridgeObstacles: obstacleNodes,
+        laneOffset: laneCount > 1 ? (laneIndex - (laneCount - 1) / 2) * 15 : 0,
+    })
+
+    if (!alternative)
         throw new OrthogonalRoutingError()
 
-    return directed
+    return alternative
 }
 
 // Layout planners share the native point solver; rendering rounds the same route.

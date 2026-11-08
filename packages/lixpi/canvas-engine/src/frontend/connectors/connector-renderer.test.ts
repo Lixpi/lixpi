@@ -38,6 +38,7 @@ const fixture = () => {
         signal: controller.signal,
         layers: { connectors: handle('layer') },
     } as unknown as CanvasDrawingSurface
+    const zoomScaling = { minZoom: 0.4 }
     const renderer = new ConnectorRenderer({
         surface,
         marker: {
@@ -48,7 +49,7 @@ const fixture = () => {
             },
             paths: ['M0 0 L10 5 L0 10 Z'],
         },
-        zoomScaling: { minZoom: 0.4 },
+        zoomScaling,
         resolution: 2,
     })
     const edge: ConnectorRenderDatum = {
@@ -71,10 +72,34 @@ const fixture = () => {
         controller,
         resources,
         edge,
+        zoomScaling,
     }
 }
 
 describe('ConnectorRenderer', () => {
+    it('repaints an unchanged edge when its live zoom scaling changes', () => {
+        const {
+            renderer,
+            resources,
+            edge,
+            zoomScaling,
+        } = fixture()
+        const viewport = {
+            x: 10,
+            y: 20,
+            zoom: 0.3,
+        }
+        renderer.render([edge], viewport)
+        const initialStroke = resources.updatePath.mock.calls[0][1][0].stroke.width
+        resources.updatePath.mockClear()
+        zoomScaling.minZoom = 0.8
+        renderer.render([edge], viewport)
+
+        expect(resources.updatePath).toHaveBeenCalledTimes(2)
+        expect(resources.updatePath.mock.calls[0][1][0].stroke.width).not.toBe(initialStroke)
+        renderer.destroy()
+    })
+
     it('positions both endpoint markers and hides unused markers on the next update', () => {
         const {
             renderer,
@@ -190,4 +215,50 @@ describe('ConnectorRenderer', () => {
         }])
         renderer.destroy()
     })
+    it('restores cached path and marker resources after a partial update failure', () => {
+        const {
+            renderer,
+            resources,
+            edge,
+        } = fixture()
+        const viewport = {
+            x: 10,
+            y: 20,
+            zoom: 2,
+        }
+        renderer.render([edge], viewport)
+        const failure = new Error('Injected marker transform failure')
+        resources.updateGroup.mockImplementationOnce(() => {
+            throw failure
+        })
+        const changedEdge = {
+            ...edge,
+            svgPath: 'M0 0 L30 10',
+            strokeColor: '#abcdef',
+        }
+
+        expect(() => renderer.render([changedEdge], viewport)).toThrow(failure)
+        expect(resources.updatePath).toHaveBeenCalledTimes(4)
+
+        renderer.render([edge], viewport)
+
+        expect(resources.updatePath).toHaveBeenCalledTimes(6)
+        expect(resources.updatePath.mock.calls[4][1]).toEqual([expect.objectContaining({
+            path: edge.svgPath,
+            stroke: expect.objectContaining({ color: edge.strokeColor }),
+        })])
+        expect(resources.updatePath.mock.calls[5][1]).toEqual([{
+            path: 'M0 0 L10 5 L0 10 Z',
+            fill: { color: edge.strokeColor },
+        }])
+        expect(resources.updateGroup).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+            position: {
+                x: 50,
+                y: 40,
+            },
+            rotation: 0.5,
+        }))
+        renderer.destroy()
+    })
+
 })

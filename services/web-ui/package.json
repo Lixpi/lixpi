@@ -39,7 +39,6 @@
         "@lixpi/constants": "workspace:*",
         "@lixpi/canvas-engine": "workspace:*",
         "@lixpi/canvas-components": "workspace:*",
-        "@lixpi/canvas-components-lixpi-specific": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/prosemirror": "workspace:*",
         "@lixpi/ui-kit": "workspace:*",
@@ -72,7 +71,8 @@
         "prosemirror-schema-list": "1.5.1",
         "prosemirror-state": "1.4.4",
         "prosemirror-view": "1.42.8",
-        "@lixpi/ui-primitives": "workspace:*"
+        "@lixpi/ui-primitives": "workspace:*",
+        "@lixpi/themes": "workspace:*"
     },
     "packageManager": "pnpm@12.16.1"
 }

@@ -1,0 +1,266 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@import "@lixpi/ui-primitives/styles/transitions";
+
+.workspace-ai-chat-panel-context-chips {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 100%;
+    padding: 10px 14px 0;
+    box-sizing: border-box;
+}
+
+.workspace-ai-chat-panel-context-chips[hidden] {
+    display: none;
+}
+
+.workspace-ai-chat-panel-context-chips-empty {
+    display: none;
+}
+
+.workspace-ai-chat-panel-context-chip {
+    position: relative;
+    display: block;
+    flex: 0 0 58px;
+    width: 58px;
+    height: 42px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
+    box-sizing: border-box;
+    outline: none;
+}
+
+.workspace-ai-chat-panel-context-chip-explicit {
+    border: 0;
+}
+
+.workspace-ai-chat-panel-context-chip:hover,
+.workspace-ai-chat-panel-context-chip:focus-within {
+    z-index: 5;
+    background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
+}
+
+.workspace-ai-chat-panel-context-chip::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    bottom: 100%;
+    display: none;
+    height: 10px;
+}
+
+.workspace-ai-chat-panel-context-chip:hover::before,
+.workspace-ai-chat-panel-context-chip:focus-within::before {
+    display: block;
+}
+
+.workspace-ai-chat-panel-context-chip-remove {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    border-radius: #{themeScope.token("components-composer-workspace-panel-context-chip-remove-base-border-radius", themePalette.$roles)};
+    background: var(--workspace-ai-chat-panel-context-chip-remove-background, #{themeScope.token("components-context-preview-styles-remove-button-background", themePalette.$roles)});
+    color: var(--workspace-ai-chat-panel-context-chip-remove-color, #{themeScope.token("components-context-preview-styles-remove-button-color", themePalette.$roles)});
+    cursor: pointer;
+    overflow: hidden;
+    opacity: 0;
+    box-shadow: var(--workspace-ai-chat-panel-context-chip-remove-box-shadow, #{themeScope.token("components-context-preview-styles-remove-button-box-shadow", themePalette.$roles)});
+    transition:
+        hoverTransition(opacity, $defaultHoverTransitionDuration),
+        hoverTransition(color, $defaultHoverTransitionDuration);
+    z-index: 2;
+}
+
+.workspace-ai-chat-panel-context-chip:hover .workspace-ai-chat-panel-context-chip-remove,
+.workspace-ai-chat-panel-context-chip:focus-within .workspace-ai-chat-panel-context-chip-remove {
+    opacity: 1;
+}
+
+.workspace-ai-chat-panel-context-chip-remove svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    margin-top: -2px;
+    margin-left: -2px;
+    fill: currentColor;
+}
+
+// Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
+// The context tray is outside the input pill so selected references do not
+// consume text-field space.
+.workspace-canvas-global-composer-host {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    width: 760px;
+    max-width: calc(100% - 48px);
+    z-index: 9990;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    pointer-events: auto;
+
+    .workspace-canvas-global-context-chips {
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        padding: 0 34px 0 28px;
+        overflow: visible;
+        box-sizing: border-box;
+    }
+}
+
+.workspace-canvas-global-composer-host:has(.prompt-reference-picker-visible) {
+    z-index: 9992;
+}
+
+// Single compact row: input on the left, model selector + send on the right,
+// with fully rounded (pill) corners. Scoped so the docked panel prompt — which
+// stays a stacked, square-cornered composer — is unaffected.
+.ai-prompt-input-floating.workspace-canvas-global-composer {
+    position: relative;
+    display: block;
+    width: 100%;
+    border-radius: var(--canvas-lixpi-composer-radius, #{themeScope.token("components-composer-workspace-workspace-canvas-global-composer-base-border-radius", themePalette.$roles)});
+
+    .ai-prompt-input-wrapper {
+        flex-direction: row;
+        align-items: center;
+        // The wrapper carries a 4px margin (the gradient ring), so its floor is
+        // the composer pill height minus that ring on both sides.
+        min-height: calc(var(--workspace-canvas-composer-pill-height) - 8px);
+        border-radius: var(--canvas-lixpi-composer-radius, #{themeScope.token("components-composer-workspace-input-wrapper-base-border-radius", themePalette.$roles)});
+        padding: 0;
+
+        // Vertically center the placeholder in the single row.
+        &[data-empty="true"] .ai-prompt-input-content::before {
+            top: 50%;
+            left: 24px;
+            transform: translateY(-50%);
+        }
+    }
+
+    .ai-prompt-input-content {
+        padding: 12px 12px 12px 24px;
+        max-height: 120px;
+    }
+
+    .ai-prompt-input-controls {
+        flex: 0 0 auto;
+        margin-top: 0;
+        padding-right: 18px;
+    }
+}
+.workspace-conversation-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 150px;
+    max-height: min(45vh, 480px);
+    overflow: hidden;
+    border: 1px solid var(--canvas-border, hsl(var(--border, #{themeScope.token("components-composer-workspace-conversation-border-channels", themePalette.$roles)})));
+    border-radius: #{themeScope.token("components-composer-workspace-workspace-conversation-panel-base-border-radius", themePalette.$roles)};
+    background: hsl(var(--background, #{themeScope.token("components-composer-workspace-conversation-background-channels", themePalette.$roles)}));
+    color: hsl(var(--foreground, #{themeScope.token("components-composer-workspace-conversation-foreground-channels", themePalette.$roles)}));
+    box-shadow: #{themeScope.token("components-composer-workspace-workspace-conversation-panel-base-shadow", themePalette.$roles)};
+    font: var(--canvas-font-size, 13px) / var(--canvas-line-height, 1.5) var(--canvas-font-family, system-ui, sans-serif);
+    pointer-events: auto;
+
+    > header,
+    > .workspace-conversation-settings {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--canvas-border, hsl(var(--border, #{themeScope.token("components-composer-workspace-conversation-border-channels", themePalette.$roles)})));
+    }
+
+    > header,
+    > .workspace-conversation-settings,
+    > .workspace-conversation-queue {
+        button,
+        input,
+        select {
+            min-width: 0;
+            padding: var(--canvas-control-padding, 4px 6px);
+            border: 1px solid var(--canvas-border, hsl(var(--border, #{themeScope.token("components-composer-workspace-conversation-border-channels", themePalette.$roles)})));
+            border-radius: #{themeScope.token("components-composer-workspace-workspace-conversation-panel-button-base-border-radius", themePalette.$roles)};
+            background: inherit;
+            color: inherit;
+            font: inherit;
+        }
+
+        select {
+            flex: 1;
+        }
+
+        input {
+            width: 120px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        :disabled {
+            opacity: var(--canvas-disabled-opacity, 0.5);
+        }
+
+        :focus-visible {
+            outline: none;
+        }
+    }
+
+    &[data-collapsed="true"] {
+        min-height: 0;
+
+        .workspace-conversation-messages,
+        .workspace-conversation-settings,
+        .workspace-conversation-queue,
+        .workspace-conversation-new-messages {
+            display: none;
+        }
+    }
+
+    [hidden] {
+        display: none;
+    }
+}
+
+.workspace-conversation-messages {
+    flex: 1;
+    min-height: 90px;
+    padding: 8px 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.workspace-conversation-state,
+.workspace-conversation-queue {
+    padding: 4px 12px;
+    font-size: #{themeScope.token("components-composer-workspace-workspace-conversation-state-base-font-size", themePalette.$roles)};
+}
+
+.workspace-conversation-queue:empty {
+    display: none;
+}

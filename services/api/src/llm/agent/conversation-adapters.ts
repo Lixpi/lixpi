@@ -17,6 +17,7 @@ import AssetModel, {
 } from '../../models/asset.ts'
 import BlobModel, { buildBlobReferenceBatchOperations } from '../../models/blob.ts'
 import { AccountRequestContext } from '../../services/account-request-context.ts'
+import { ConversationDispatcher } from './conversation-dispatcher.ts'
 import { ConversationMigration } from './conversation-migration.ts'
 import {
     type ConversationRepository,
@@ -164,6 +165,7 @@ export class ConversationAdapters {
                 publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.CREATED, prepared.asset)
             },
             publish: this.publish,
+            dispatchScheduled: dueAt => ConversationDispatcher.scheduled(dueAt),
         }
 
         return new ConversationService(this.repository, ports)

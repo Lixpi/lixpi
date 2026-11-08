@@ -2,6 +2,8 @@
 
 Dropdown menus for application controls and ProseMirror NodeViews. Menus live outside the document schema and are never part of saved content.
 
+Dropdown typography, radii and preset paints come from `ApplicationTheme.components.dropdown.menu`. The public Sass mixins retain their configuration maps, including custom colors used by their derived states.
+
 ## What it is
 
 A factory function that creates dropdown UI controls. Used by AI Chat Thread for model/context selection. **Built on top of the InfoBubble primitive** - dropdown provides the button and options, infoBubble handles all state management, positioning, and auto-flip logic.

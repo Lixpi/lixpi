@@ -1,0 +1,47 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+// ********* PopOut animation **********
+// INFO: use like this:
+// animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
+@keyframes popOut {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes popOutAndGrow {
+    from {
+        transform: scale(0);
+        opacity: 0;
+        height: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+        height: 100%;
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ai-response-loading-spinner {
+    display: block;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border: #{themeScope.token("components-chat-animation-loading-spinner-base-border", themePalette.$roles)};
+    border-top-color: #{themeScope.token("components-chat-animation-loading-spinner-base-border-top-color", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-chat-animation-loading-spinner-base-border-radius", themePalette.$roles)};
+    pointer-events: none;
+    animation: spin 0.8s linear infinite;
+}

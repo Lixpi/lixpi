@@ -3,7 +3,7 @@ import {
 } from '@lixpi/constants'
 import {
     type WorkspaceCanvasHost,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     buildAssetRenditionPath,

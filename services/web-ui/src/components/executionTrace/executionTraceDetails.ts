@@ -17,16 +17,14 @@ import {
     createMediaPromptReferencePreview,
     createPromptReferenceChipElement,
     type PromptReferencePreviewRenderer,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 
 import {
     applyMediaModelBadgeStyleProperties,
     resolveMediaModelBadgeConfig,
 } from '$src/components/mediaModelBadge/mediaModelBadge.ts'
-import {
-    colorPalette,
-    settings,
-} from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { lixpiLightTheme } from '@lixpi/themes'
 import { html } from '@lixpi/ui-primitives/dom'
 
 export type ExecutionTraceDetailInstance = {
@@ -91,79 +89,73 @@ const CAUTION_VALUE_TAGS = new Set([
     'pending',
     'skipped',
 ])
-const TRACE_TAG_POSITIVE_COLORS = {
-    fill: colorPalette.perfectLightGreen,
-    fillActive: colorPalette.perfectLightGreen,
-    fillHover: colorPalette.yetAnotherLightGreen,
-    stroke: 'transparent',
-    strokeActive: 'transparent',
-    text: colorPalette.nightBlue,
-    closeHover: 'rgba(66, 73, 79, 0.1)',
-} as const satisfies TagPillColors
-const TRACE_TAG_DANGER_COLORS = {
-    fill: colorPalette.codeRedHover,
-    fillActive: colorPalette.codeRedHover,
-    fillHover: colorPalette.offWhite,
-    stroke: 'transparent',
-    strokeActive: 'transparent',
-    text: colorPalette.nightBlue,
-    closeHover: 'rgba(66, 73, 79, 0.1)',
-} as const satisfies TagPillColors
-const TRACE_TAG_CAUTION_COLORS = {
-    fill: colorPalette.codeYellowHover,
-    fillActive: colorPalette.codeYellowHover,
-    fillHover: colorPalette.offWhite,
-    stroke: 'transparent',
-    strokeActive: 'transparent',
-    text: colorPalette.nightBlue,
-    closeHover: 'rgba(66, 73, 79, 0.1)',
-} as const satisfies TagPillColors
+const feedbackTagColors = (status: keyof typeof lixpiLightTheme.feedback.tags): TagPillColors => {
+    const role = lixpiLightTheme.feedback.tags[status]
+    const value = (
+        name: string,
+        fallback: string,
+    ): string => `var(--theme-feedback-tag-${status}-${name}, ${fallback})`
+
+    return {
+        fill: value('background', role.background),
+        fillActive: value('background', role.background),
+        fillHover: value('hover', role.hover),
+        stroke: value('border', role.border),
+        strokeActive: value('border', role.border),
+        text: value('text', role.foreground),
+        closeHover: value('close-hover', role.closeHover),
+    }
+}
+
+const TRACE_TAG_POSITIVE_COLORS = feedbackTagColors('success')
+const TRACE_TAG_DANGER_COLORS = feedbackTagColors('danger')
+const TRACE_TAG_CAUTION_COLORS = feedbackTagColors('warning')
 const TRACE_TAG_VIOLET_COLORS = {
     fill: settings.gradient.styles.shiftingColors[1],
     fillActive: settings.gradient.styles.shiftingColors[1],
     fillHover: settings.gradient.styles.shiftingColors[3],
-    stroke: 'transparent',
-    strokeActive: 'transparent',
-    text: colorPalette.nightBlue,
-    closeHover: 'rgba(66, 73, 79, 0.1)',
+    stroke: lixpiLightTheme.feedback.tags.success.border,
+    strokeActive: lixpiLightTheme.feedback.tags.success.border,
+    text: lixpiLightTheme.text.secondary,
+    closeHover: lixpiLightTheme.feedback.tags.success.closeHover,
 } as const satisfies TagPillColors
 const TRACE_CATEGORICAL_TAG_COLORS = [
     {
         fill: settings.gradient.styles.shiftingColors[2],
         fillActive: settings.gradient.styles.shiftingColors[2],
         fillHover: settings.gradient.styles.shiftingColors[1],
-        stroke: 'transparent',
-        strokeActive: 'transparent',
-        text: colorPalette.nightBlue,
-        closeHover: 'rgba(66, 73, 79, 0.1)',
+        stroke: lixpiLightTheme.feedback.tags.success.border,
+        strokeActive: lixpiLightTheme.feedback.tags.success.border,
+        text: lixpiLightTheme.text.secondary,
+        closeHover: lixpiLightTheme.feedback.tags.success.closeHover,
     },
     {
-        fill: colorPalette.perfectLightGreen,
-        fillActive: colorPalette.perfectLightGreen,
-        fillHover: colorPalette.yetAnotherLightGreen,
-        stroke: 'transparent',
-        strokeActive: 'transparent',
-        text: colorPalette.nightBlue,
-        closeHover: 'rgba(66, 73, 79, 0.1)',
+        fill: lixpiLightTheme.feedback.tags.success.background,
+        fillActive: lixpiLightTheme.feedback.tags.success.background,
+        fillHover: lixpiLightTheme.feedback.tags.success.hover,
+        stroke: lixpiLightTheme.feedback.tags.success.border,
+        strokeActive: lixpiLightTheme.feedback.tags.success.border,
+        text: lixpiLightTheme.text.secondary,
+        closeHover: lixpiLightTheme.feedback.tags.success.closeHover,
     },
     TRACE_TAG_VIOLET_COLORS,
     {
         fill: settings.gradient.styles.shiftingColors[3],
         fillActive: settings.gradient.styles.shiftingColors[3],
         fillHover: settings.gradient.styles.shiftingColors[0],
-        stroke: 'transparent',
-        strokeActive: 'transparent',
-        text: colorPalette.nightBlue,
-        closeHover: 'rgba(66, 73, 79, 0.1)',
+        stroke: lixpiLightTheme.feedback.tags.success.border,
+        strokeActive: lixpiLightTheme.feedback.tags.success.border,
+        text: lixpiLightTheme.text.secondary,
+        closeHover: lixpiLightTheme.feedback.tags.success.closeHover,
     },
     {
         fill: settings.gradient.styles.shiftingColors[0],
         fillActive: settings.gradient.styles.shiftingColors[0],
-        fillHover: colorPalette.codeYellowHover,
-        stroke: 'transparent',
-        strokeActive: 'transparent',
-        text: colorPalette.nightBlue,
-        closeHover: 'rgba(66, 73, 79, 0.1)',
+        fillHover: lixpiLightTheme.feedback.tags.warning.background,
+        stroke: lixpiLightTheme.feedback.tags.success.border,
+        strokeActive: lixpiLightTheme.feedback.tags.success.border,
+        text: lixpiLightTheme.text.secondary,
+        closeHover: lixpiLightTheme.feedback.tags.success.closeHover,
     },
 ] as const satisfies readonly TagPillColors[]
 
@@ -762,8 +754,8 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
                 y: 0,
                 height: 18,
                 label: displayLabel,
-                fontSize: 11,
-                fontWeight: 400,
+                fontSize: Number.parseFloat(lixpiLightTheme.typography.feedbackTag.fontSize),
+                fontWeight: lixpiLightTheme.typography.feedbackTag.fontWeight,
                 horizontalPadding: 6,
                 selected: true,
                 variant: getExecutionTraceTagPillVariant(label, index),
@@ -776,10 +768,9 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
             selectedFill,
             'important',
         )
-        tag.style.borderRadius = '9px'
-        tag.style.boxShadow = selectedStroke === 'transparent'
-            ? 'none'
-            : `inset 0 0 0 1px ${selectedStroke}`
+        tag.style.borderRadius = 'var(--theme-feedback-tag-radius)'
+        tag.style.setProperty('--feedback-tag-border-color', selectedStroke)
+        tag.style.boxShadow = 'var(--theme-feedback-tag-shadow)'
         this.previewInstances.push(tagPill)
 
         return tag

@@ -15,10 +15,10 @@ import {
     type AssetService,
 } from '$src/services/asset-service.ts'
 import { createNavigationSidePanel } from '$src/components/navigationSidePanel/index.ts'
-import '$src/components/navigationSidePanel/navigation-side-panel.scss'
+import '@lixpi/ui-kit/styles/navigation-side-panel'
 
 import { routes } from '$src/routes.ts'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import '$src/views/layouts/layout.scss'
 
 export type LayoutInstance = {

@@ -1,0 +1,121 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+.context-preview-main,
+.context-preview-tooltip {
+    --context-preview-background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
+}
+
+.ai-user-message-reference-previews .context-preview-inline-popover-top,
+.ai-user-message-reference-previews .context-preview-inline-popover-bottom {
+    right: 0;
+    left: auto;
+}
+
+// Selectors are doubled up so the card wins against the generic single-class
+// `.help-tooltip-content` and `.context-preview-popover`
+// width rules, which would otherwise clamp the card to the 280px tooltip width.
+.capability-description-popover.capability-description-popover {
+    width: min(520px, calc(100vw - 24px));
+    max-width: min(520px, calc(100vw - 24px));
+    max-height: min(560px, var(--help-tooltip-available-max-height, calc(100vh - 24px)), calc(100vh - 24px));
+    padding: 0;
+    overflow-y: auto;
+    border: 1px solid var(--canvas-border, #{themeScope.token("components-context-preview-elements-capability-description-popover-base-border", themePalette.$roles)});
+}
+
+.capability-description-card {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    color: var(--context-preview-popover-text-color, #{themeScope.token("components-context-preview-styles-popover-text-color", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-description-body-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-context-preview-elements-description-body-base-font-weight", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-description-body-base-line-height", themePalette.$roles)};
+}
+
+.capability-description-card header,
+.capability-description-card section {
+    display: grid;
+    gap: 6px;
+}
+
+.capability-description-card h2,
+.capability-description-card h3,
+.capability-description-card p,
+.capability-description-card ul,
+.capability-description-card dl,
+.capability-description-card dd {
+    margin: 0;
+}
+
+.capability-description-card h2 {
+    color: var(--context-preview-popover-title-color, #{themeScope.token("components-context-preview-styles-popover-title-color", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-description-title-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-context-preview-elements-description-title-base-font-weight", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-description-title-base-line-height", themePalette.$roles)};
+}
+
+.capability-description-card h3 {
+    color: var(--context-preview-popover-title-color, #{themeScope.token("components-context-preview-styles-popover-title-color", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-description-section-title-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-context-preview-elements-description-section-title-base-font-weight", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-description-section-title-base-line-height", themePalette.$roles)};
+}
+
+.capability-description-card ul {
+    display: grid;
+    gap: 3px;
+    padding-left: 18px;
+}
+
+.capability-description-card dl,
+.capability-description-card dl > div {
+    display: grid;
+    gap: 3px;
+}
+
+.capability-description-card dl > div + div {
+    padding-top: 7px;
+    border-top: 1px solid var(--canvas-border, #{themeScope.token("components-context-preview-elements-description-term-divider-base-border-top", themePalette.$roles)});
+}
+
+.capability-description-card dt {
+    font-weight: #{themeScope.token("components-context-preview-elements-description-term-base-font-weight", themePalette.$roles)};
+}
+
+.capability-description-card dt span,
+.capability-description-kicker,
+.capability-description-accepts,
+.capability-description-execution {
+    color: #{themeScope.token("components-context-preview-elements-description-meta-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-context-preview-elements-description-meta-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-context-preview-elements-description-meta-base-font-weight", themePalette.$roles)};
+    letter-spacing: #{themeScope.token("components-context-preview-elements-description-meta-base-letter-spacing", themePalette.$roles)};
+    text-transform: uppercase;
+}
+
+.capability-description-status {
+    display: grid;
+    gap: 10px;
+    min-height: 90px;
+    padding: 16px;
+    place-content: center;
+    color: var(--context-preview-popover-text-color, #{themeScope.token("components-context-preview-elements-capability-description-status-base-foreground", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-capability-description-status-base-font-size", themePalette.$roles)};
+    text-align: center;
+}
+
+.capability-description-status p {
+    margin: 0;
+}
+
+.capability-description-retry {
+    justify-self: center;
+    padding: var(--canvas-control-padding, 6px 10px);
+    border: 1px solid var(--canvas-border, #{themeScope.token("components-context-preview-elements-capability-description-retry-base-border", themePalette.$roles)});
+    border-radius: #{themeScope.token("components-context-preview-elements-capability-description-retry-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-context-preview-elements-capability-description-retry-base-background", themePalette.$roles)};
+    color: inherit;
+    cursor: pointer;
+}

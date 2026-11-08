@@ -1,12 +1,16 @@
-@import "$src/sass/_variables.scss";
-@import "$src/sass/_prompt-reference-chip.scss";
+@use "@lixpi/themes/dist/scss/one-dark-pro-mariana/theme";
+@import "@lixpi/canvas-components/styles/workspace/prompt-reference-colors";
 
 .workspace-pane {
-    --workspace-analysis-color: #{$steelBlue};
-    --workspace-handle-color: #{$nightBlue};
+    --workspace-analysis-color: var(--theme-text-muted);
+    --workspace-handle-color: var(--theme-text-secondary);
 }
 
 .workspace-branch-marker-content,
 .workspace-branch-reference-resolution {
     @include prompt-reference-chip-on-dark-surface;
+}
+
+.workspace-canvas-host {
+    display: contents;
 }

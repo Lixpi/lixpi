@@ -337,6 +337,24 @@ describe('CanvasController', () => {
         expect(() => canvas.installConnections({ settings: connectorSettings })).toThrow('already installed')
     })
 
+    it('forwards updated connector settings to the installed manager', () => {
+        const {
+            canvas,
+        } = fixture([node('a', 300), node('b', 410)], { interaction: false })
+        const controls = canvas.installConnections({
+            settings: connectorSettings,
+        })
+        const updateSettings = vi.spyOn(controls, 'updateSettings')
+        const settings = structuredClone(connectorSettings)
+
+        settings.scaling.strokeWidth = 8
+        canvas.setConnectionSettings(settings)
+
+        expect(updateSettings).toHaveBeenCalledOnce()
+        expect(updateSettings).toHaveBeenCalledWith(settings)
+        canvas.destroy()
+    })
+
     it('releases a failed connection installation and allows a clean retry', () => {
         const { canvas } = fixture(undefined, { interaction: false })
         const source = {

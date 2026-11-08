@@ -1,0 +1,18 @@
+// The same bundled font faces used by the main Lixpi web UI.
+@each $family, $directory, $prefix in (("Söhne", "sohne", "test-soehne"), ("Söhne Mono", "sohne-mono", "test-soehne-mono")) {
+    @each $weight, $suffix in (400: "buch", 200: "extraleicht", 500: "kraftig", 300: "leicht") {
+        @font-face {
+            font-family: $family;
+            src: url("../fonts/#{$directory}/#{$prefix}-#{$suffix}.woff2") format("woff2");
+            font-weight: $weight;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: $family;
+            src: url("../fonts/#{$directory}/#{$prefix}-#{$suffix}-kursiv.woff2") format("woff2");
+            font-weight: $weight;
+            font-style: italic;
+        }
+    }
+}

@@ -1,5 +1,5 @@
 import {
-    AGENT_DISPATCH_POLL_MS,
+    AGENT_DISPATCH_RETRY_MS,
     AGENT_DISPATCH_SHARDS,
     NATS_SUBJECTS,
     type AccountWorkContext,
@@ -17,19 +17,33 @@ import {
     type ConversationDispatch,
     type ConversationMeta,
 } from './conversation-repository.ts'
+import { DueSweepScheduler } from './due-sweep-scheduler.ts'
 
 const streamName = 'AGENT_CONVERSATIONS'
 const consumerName = 'api-agent-conversations'
 
 export class ConversationDispatcher {
+    private static readonly running = new Set<ConversationDispatcher>()
     private stopped = true
-    private timer?: ReturnType<typeof setTimeout>
+    private readonly scheduler = new DueSweepScheduler(
+        () => this.publishDue(),
+        AGENT_DISPATCH_RETRY_MS,
+        error => warn('[ConversationDispatcher] dispatch publication will retry', error),
+    )
 
     constructor(
         private readonly nats: NatsService,
         private readonly repository: ConversationRepository,
         private readonly execute: (job: ConversationDispatch) => Promise<'done' | 'defer'>,
     ) {}
+
+    // Every API process runs a dispatcher, and a due row is always committed
+    // by the process that accepted the request, so waking the local
+    // dispatchers is enough. Rows orphaned by a crash are swept on start.
+    static scheduled(dueAt: number): void {
+        for (const dispatcher of ConversationDispatcher.running)
+            dispatcher.scheduler.wake(dueAt)
+    }
 
     async start(): Promise<void> {
         await this.nats.ensureJetStreamStream({
@@ -51,7 +65,8 @@ export class ConversationDispatcher {
             },
         )
         this.stopped = false
-        void this.publishDue()
+        ConversationDispatcher.running.add(this)
+        this.scheduler.start()
 
         for (let slot = 0; slot < 4; slot++)
             void this.consume()
@@ -59,47 +74,68 @@ export class ConversationDispatcher {
 
     stop(): void {
         this.stopped = true
-        clearTimeout(this.timer)
+        ConversationDispatcher.running.delete(this)
+        this.scheduler.stop()
     }
 
-    private async publishDue(): Promise<void> {
-        try {
-            for (
-                let shard = 0;
-                shard < AGENT_DISPATCH_SHARDS
-                && !this.stopped;
-                shard++
-            ) {
-                const partition = `DISPATCH#${shard}`
-                const page = await this.repository.query<ConversationDispatch>(
-                    partition,
-                    '',
-                    { limit: 50 },
-                )
+    // Publishes every due row and returns the earliest due time still waiting.
+    private async publishDue(): Promise<number | undefined> {
+        let next: number | undefined
 
-                for (const job of page.items) {
-                    if (job.dueAt > Date.now())
-                        break
+        for (
+            let shard = 0;
+            shard < AGENT_DISPATCH_SHARDS
+            && !this.stopped;
+            shard++
+        ) {
+            const waiting = await this.publishShard(`DISPATCH#${shard}`)
 
-                    // The DynamoDB intent remains until JetStream confirms the
-                    // durable publish. A crash between these writes duplicates
-                    // delivery, which the owner lease and receipts absorb.
-                    await this.nats.publishJetStream(NATS_SUBJECTS.CONVERSATION_SUBJECTS.DISPATCH, job)
-                    await this.removeDispatched(
-                        partition,
-                        conversationDueKey(job),
-                        job,
-                    )
-                }
-            }
-        } catch (error) {
-            warn('[ConversationDispatcher] dispatch publication will retry', error)
-        } finally {
-            if (!this.stopped) {
-                this.timer = setTimeout(() => void this.publishDue(), AGENT_DISPATCH_POLL_MS)
-                this.timer.unref()
-            }
+            if (
+                waiting !== undefined
+                && (next === undefined || waiting < next)
+            )
+                next = waiting
         }
+
+        return next
+    }
+
+    private async publishShard(partition: string): Promise<number | undefined> {
+        let after: string | undefined
+
+        do {
+            const page = await this.repository.query<ConversationDispatch>(
+                partition,
+                '',
+                {
+                    after,
+                    limit: 50,
+                },
+            )
+
+            // Sort keys start with the due time, so the first future row ends the shard.
+            for (const job of page.items) {
+                if (job.dueAt > Date.now())
+                    return job.dueAt
+
+                // The DynamoDB intent remains until JetStream confirms the
+                // durable publish. A crash between these writes duplicates
+                // delivery, which the owner lease and receipts absorb.
+                await this.nats.publishJetStream(NATS_SUBJECTS.CONVERSATION_SUBJECTS.DISPATCH, job)
+                await this.removeDispatched(
+                    partition,
+                    conversationDueKey(job),
+                    job,
+                )
+            }
+
+            after = page.cursor
+        } while (
+            after
+            && !this.stopped
+        )
+
+        return undefined
     }
 
     private async consume(): Promise<void> {

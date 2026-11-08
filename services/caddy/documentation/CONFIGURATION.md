@@ -29,7 +29,7 @@ The explicit `local` command selects local issuance. Lambda invocation handling 
 
 Local issuance creates the `localhost` certificate and has a one-minute deadline. It does not require `DOMAINS`, email or AWS settings. Compose mounts the shared `caddy-certs` volume at `/certificates`; NATS consumes its exported serving files. The local HTTPS gateway shares the same volume and CA. Application web roots must not mount this volume because it contains private keys.
 
-The `local-https` Compose profile publishes loopback ports 3443, 3444 and 3445 for the workspace, Profile and API. Each origin has its own HTTPS listener, so all three use the browser's existing `localhost` resolution. Caddy reaches `lixpi-web-ui:5173`, the selected portal and `lixpi-api:3000` through Docker's `nats` network. `CADDY_USER_PORTAL_UPSTREAM` selects the portal upstream and defaults to `lixpi-web-ui-user-portal:5173`. Neither frontend receives certificate keys. Browser certificate storage is `/certificates/https`; CA storage and NATS exports remain at the shared root.
+The local HTTPS gateway starts with the `main` profile and publishes loopback ports 3443, 3444 and 3445 for the workspace, Profile and API. Each origin has its own HTTPS listener, so all three use the browser's existing `localhost` resolution. Caddy reaches `lixpi-web-ui:5173`, the selected portal and `lixpi-api:3000` through Docker's `nats` network. `CADDY_USER_PORTAL_UPSTREAM` selects the portal upstream and defaults to `lixpi-web-ui-user-portal:5173`. Neither frontend receives certificate keys. Browser certificate storage is `/certificates/https`; CA storage and NATS exports remain at the shared root.
 
 ## Public settings
 

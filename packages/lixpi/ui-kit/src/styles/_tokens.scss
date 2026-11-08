@@ -1,9 +1,24 @@
-$nightBlue: #42494f;
-$steelBlue: #5d656d;
-$aiGreen: #56967c;
-$offWhite: #f5f3f3;
-$editableElementHoverColor: #0969da;
-$dropdownDarkThemeIconColor: #656d76;
-$dropdownDarkThemeSubmenuBackgroundColor: #fff;
-$dropdownDarkThemeSubmenuTextColor: #42494f;
-$dropdownDarkThemeSubmenuBoxShadow: 0.05rem 0.05rem 7px 0 rgb(0 0 0 / 20%);
+@use "sass:map";
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as light;
+@use "@lixpi/themes/scope";
+
+@function theme-color($role) {
+    @return scope.token($role, light.$roles);
+}
+
+@mixin native-form-field {
+    padding: theme-color("components-capability-run-form-field-base-padding");
+    border: theme-color("components-capability-run-form-field-base-border");
+    border-radius: theme-color("components-capability-run-form-field-base-border-radius");
+    background: theme-color("components-capability-run-form-field-base-background");
+    color: inherit;
+}
+
+$nightBlue: map.get(light.$palette, "nightBlue");
+$steelBlue: map.get(light.$palette, "steelBlue");
+$offWhite: map.get(light.$palette, "offWhite");
+$royalBlue: map.get(light.$palette, "royalBlue");
+$white: map.get(light.$palette, "white");
+$coolGray: map.get(light.$palette, "coolGray");
+$sageGreen: map.get(light.$palette, "sageGreen");
+$seafoamGreen: map.get(light.$palette, "seafoamGreen");

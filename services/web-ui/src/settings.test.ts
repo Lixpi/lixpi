@@ -1,13 +1,13 @@
+import { lixpiPalette as colorPalette } from '@lixpi/themes'
 import {
     describe,
     it,
     expect,
 } from 'vitest'
 import {
-    colorPalette,
     settings,
     type Settings,
-} from '$src/settings.ts'
+} from '@lixpi/canvas-components/workspace/settings'
 import { workspaceCollisionSettings } from '@lixpi/constants'
 
 // Testing rule: assert config shape and ownership, not exact values.
@@ -55,15 +55,15 @@ const expectNoOwnKeys = (value: Record<string, unknown>, keys: string[]): void =
 }
 
 const expectStringLeaf = (value: unknown, path: string): void => {
-    expect(
-        ['string', 'number'].includes(typeof value),
-        `${path} should be a style token-compatible leaf (${typeof value})`,
-    ).toBe(true)
+    if (!['string', 'number'].includes(typeof value))
+        throw new Error(`${path} should be a style token-compatible leaf (${typeof value})`)
 }
 
 const expectLeafValuePaths = (value: unknown, path = ''): void => {
     if (Array.isArray(value)) {
-        expect(value.length).toBeGreaterThan(0, `${path} should be a non-empty array`)
+        if (value.length === 0)
+            throw new Error(`${path} should be a non-empty array`)
+
         value.forEach((item, index) => expectLeafValuePaths(item, `${path}[${index}]`))
 
         return
@@ -84,7 +84,7 @@ const expectLeafValuePaths = (value: unknown, path = ''): void => {
 }
 
 const expectFiniteNumber = (value: unknown, path: string): void => {
-    expect(typeof value).toBe('number', `${path} should be a number`)
+    expect(typeof value, `${path} should be a number`).toBe('number')
     expect(Number.isFinite(value), `${path} should be a finite number`).toBe(true)
 }
 
@@ -372,7 +372,6 @@ describe('settings - grouped configuration', () => {
             'marqueeBackgroundColor',
             'overlayBorderColor',
             'overlayBackgroundColor',
-            'outlineColor',
         ])
         expectNoOwnKeys(settings.mediaNode.image, ['defaultBoxShadow', 'selectedBoxShadow', 'borderRadius', 'modelBadgeBoxShadow'])
         expectNoOwnKeys(settings.mediaNode, ['generationBorder'])

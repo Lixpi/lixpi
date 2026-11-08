@@ -1,5 +1,6 @@
 import { createAuthClient } from '@lixpi/auth-client'
 import '@lixpi/web-client-service-factory/styles/foundation'
+import '$src/sass/styles.scss'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/canvas-components/styles/loading-overlay'
 import { WebUiStartup } from './startup.ts'

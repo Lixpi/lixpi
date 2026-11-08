@@ -25,7 +25,7 @@ import {
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/ui-kit/styles/bubble-menu'
 import '@lixpi/ui-kit/styles/canvas-node-footer'
@@ -43,7 +43,6 @@ import '@lixpi/web-client-service-factory/styles/foundation'
 
 import { workspaceRouting } from '$src/routes.ts'
 import { createLayout } from '$src/views/layouts/layout.ts'
-import '$src/sass/styles.scss'
 
 const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
 

@@ -3,12 +3,12 @@
 @use "@lixpi/ui-primitives/styles/transitions" as *;
 
 // Use same colors as dropdown and infoBubble primitives
-$bubbleMenuBg: $steelBlue;
-$bubbleMenuFg: $offWhite;
+$bubbleMenuBg: theme-color("button-background");
+$bubbleMenuFg: theme-color("button-text");
 $bubbleMenuBorder: color.adjust($steelBlue, $lightness: -10%);
-$bubbleMenuHoverBg: $nightBlue;
-$bubbleMenuActiveBg: rgb(95 143 207);
-$bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
+$bubbleMenuHoverBg: theme-color("button-hover");
+$bubbleMenuActiveBg: theme-color("accent");
+$bubbleMenuShadow: theme-color("shadow-control");
 
 .bubble-menu {
     position: absolute;
@@ -46,8 +46,7 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     padding: 4px 4px;
     background: $bubbleMenuBg;
     border-radius: 99px;
-    // box-shadow: $bubbleMenuShadow;
-    box-shadow: 0.05rem 0.05rem 7px 0 rgb(0 0 0 / 20%);
+    box-shadow: $bubbleMenuShadow;
     border: 0.06rem solid $bubbleMenuBorder;
 
     // Mobile: slightly larger touch targets
@@ -88,7 +87,7 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     svg {
         width: 16px;
         height: 16px;
-        fill: $offWhite;
+        fill: $bubbleMenuFg;
     }
 
     &:hover {
@@ -101,12 +100,11 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
 
     &.is-active {
         background-color: $bubbleMenuActiveBg;
-        color: $offWhite;
+        color: $bubbleMenuFg;
     }
 
     &:focus-visible {
-        outline: 2px solid $offWhite;
-        outline-offset: 2px;
+        outline: none;
     }
 }
 
@@ -153,7 +151,7 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
         svg {
             width: 16px;
             height: 16px;
-            fill: $offWhite;
+            fill: $bubbleMenuFg;
             opacity: 1;
         }
     }
@@ -162,7 +160,7 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     > svg {
         width: 14px;
         height: 14px;
-        fill: $offWhite;
+        fill: $bubbleMenuFg;
         opacity: 0.7;
     }
 
@@ -216,7 +214,7 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     svg {
         width: 18px;
         height: 18px;
-        fill: $offWhite;
+        fill: $bubbleMenuFg;
     }
 
     @media (max-width: 640px) {
@@ -313,13 +311,13 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
 
 .link-input-apply {
     svg {
-        fill: $aiGreen;
+        fill: theme-color("success");
     }
 }
 
 .link-input-remove {
     svg {
-        fill: $offWhite;
+        fill: $bubbleMenuFg;
         opacity: 0.7;
     }
 

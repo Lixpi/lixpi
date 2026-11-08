@@ -60,7 +60,7 @@ const getBraceBalancedBlock = (source: string, selector: string): string => {
 }
 
 describe('ai-chat-thread.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'ai-chat-thread.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/chat-thread.scss'), 'utf-8')
 
     it('defines thread and user message wrapper primitives', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
@@ -78,7 +78,7 @@ describe('ai-chat-thread.scss', () => {
             'utf-8',
         )
 
-        expectSourceToContain(scss, '@import "$src/sass/_prompt-reference-chip.scss";')
+        expectSourceToContain(scss, '@import "./prompt-reference-colors";')
         expectSourceToContain(workspaceScss, '@include prompt-reference-chip-on-dark-surface;')
         expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-color')).toBeUndefined()
         expect(

@@ -262,6 +262,91 @@ describe('ImageSurface', () => {
         expect(loaded.release).toHaveBeenCalledOnce()
     })
 
+    it('marks only the first successful load as the initial load across visibility changes', async () => {
+        const {
+            requests,
+            lease,
+            surface,
+            onError,
+        } = fixture()
+        type Data = { photo: MediaDescriptor }
+        const onImageLoaded = vi.fn()
+        const registration = createImageNodeRegistration<Data>({
+            type: 'photograph',
+            geometry: {
+                measure: node => {
+                    const bounds = {
+                        ...node.position,
+                        ...node.dimensions,
+                    }
+
+                    return {
+                        visualBounds: bounds,
+                        hitBounds: bounds,
+                        selectionBounds: bounds,
+                        collisionBounds: bounds,
+                        connectorBounds: bounds,
+                    }
+                },
+                movable: true,
+                resize: {
+                    min: {
+                        width: 1,
+                        height: 1,
+                    },
+                    preserveAspectRatio: true,
+                },
+            },
+            getMedia: node => node.data.photo,
+            progressive: false,
+            onImageLoaded,
+            onError,
+        })
+        const node: EngineNode<Data> = {
+            nodeId: 'one',
+            type: 'photograph',
+            position: {
+                x: 10,
+                y: 20,
+            },
+            dimensions: {
+                width: 400,
+                height: 200,
+            },
+            ports: [],
+            data: { photo: descriptor('first') },
+        }
+        const context = {
+            ...surface,
+            contentRoot: {},
+            subscribeScene: vi.fn(),
+            subscribeView: vi.fn(),
+            mountOverlay: vi.fn(),
+        } as unknown as ComponentContext
+        const view = registration.mount(node, context)
+        view.setVisible(true)
+
+        requests[0].resolve(lease())
+        await Promise.resolve()
+        expect(onImageLoaded.mock.calls.map(call => call[1].initialLoad)).toEqual([true])
+
+        view.setVisible(false)
+        view.setVisible(true)
+        requests[1].resolve(lease())
+        await Promise.resolve()
+        expect(onImageLoaded.mock.calls.map(call => call[1].initialLoad)).toEqual([true, false])
+
+        view.update({
+            ...node,
+            data: { photo: descriptor('second') },
+        })
+        requests[2].resolve(lease())
+        await Promise.resolve()
+        expect(onImageLoaded.mock.calls.map(call => call[1].initialLoad)).toEqual([true, false, false])
+
+        view.destroy()
+    })
+
     it('retains the displayed image during replacement and rejects a late superseded load', async () => {
         const {
             image,

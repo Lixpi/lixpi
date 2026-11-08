@@ -16,7 +16,7 @@ export type DiagramNodeAppearance = DiagramNodePaint & {
     shape?: 'rounded-rectangle' | 'circle'
     cornerRadius?: number
     selected?: boolean
-    selectedStyle?: Partial<DiagramNodePaint>
+    selectedStyle?: Partial<Pick<DiagramNodePaint, 'fill'>>
 }
 
 export type DiagramNodeSurfaceOptions = {
@@ -146,7 +146,7 @@ export class DiagramNodeSurface {
             || this.appearance.selected
             ? {
                 ...this.appearance,
-                ...this.appearance.selectedStyle,
+                fill: this.appearance.selectedStyle?.fill ?? this.appearance.fill,
             }
             : this.appearance
         this.options.surface.resources.updateGroup(

@@ -126,21 +126,15 @@ describe('tree selection radio rows', () => {
             },
         ],
     }
-    const services: TreeNode = {
-        value: 'choice:services',
-        label: 'Services',
-        choices: [
-            {
-                value: 'base',
-                label: 'Base',
-                selection: ['a'],
-            },
-            {
-                value: 'all',
-                label: 'All',
-                selection: ['a', 'b'],
-            },
-        ],
+    const base: TreeNode = {
+        value: 'preset:base',
+        label: 'Base',
+        selection: ['a'],
+    }
+    const all: TreeNode = {
+        value: 'preset:all',
+        label: 'All',
+        selection: ['a', 'b'],
     }
     const leafA: TreeNode = {
         value: 'a',
@@ -155,7 +149,7 @@ describe('tree selection radio rows', () => {
         label: 'Group',
         children: [leafA, leafB],
     }
-    const roots = [containers, services, group]
+    const roots = [containers, base, all, group]
 
     it('starts an independent row on its first choice and reports it', () => void expect(new TreeSelection(roots, ['a']).selectedOptions()).toEqual(['existing']))
 
@@ -168,13 +162,14 @@ describe('tree selection radio rows', () => {
         expect(selection.selectedLeaves()).toEqual(['a'])
     })
 
-    it('applies a selection choice to the tree', () => {
+    it('applies a preset to the tree', () => {
         const selection = new TreeSelection(roots, ['a'])
 
-        selection.switchChoice(services, 1)
+        selection.toggle(all)
 
         expect(selection.selectedLeaves()).toEqual(['a', 'b'])
-        expect(selection.activeChoice(services)?.value).toBe('all')
+        expect(selection.stateOf(all)).toBe('all')
+        expect(selection.stateOf(base)).toBe('none')
     })
 
     it('wraps around in both directions', () => {
@@ -185,42 +180,34 @@ describe('tree selection radio rows', () => {
         expect(selection.selectedOptions()).toEqual(['rebuild'])
     })
 
-    it('shows no active choice once the tree matches neither selection', () => {
+    it('marks no preset once the tree matches neither', () => {
         const selection = new TreeSelection(roots, ['b'])
 
-        expect(selection.activeChoice(services)).toBeUndefined()
+        expect(selection.stateOf(base)).toBe('none')
+        expect(selection.stateOf(all)).toBe('none')
     })
 
-    it('comes back to a choice when the tree matches it again', () => {
+    it('marks a preset again when the tree matches it', () => {
         const selection = new TreeSelection(roots, ['b'])
 
         selection.toggle(leafA)
 
-        expect(selection.activeChoice(services)?.value).toBe('all')
+        expect(selection.stateOf(all)).toBe('all')
     })
 
-    it('picks the option on the side of the arrow from a custom selection', () => {
-        const right = new TreeSelection(roots, ['b'])
-        const left = new TreeSelection(roots, ['b'])
-
-        right.switchChoice(services, 1)
-        left.switchChoice(services, -1)
-
-        expect(right.activeChoice(services)?.value).toBe('all')
-        expect(left.activeChoice(services)?.value).toBe('base')
-    })
+    it('keeps presets out of the selected services', () => void expect(new TreeSelection(roots, ['a']).selectedLeaves()).toEqual(['a']))
 
     it('keeps an independent choice when the tree changes', () => {
         const selection = new TreeSelection(roots, ['a'])
 
         selection.switchChoice(containers, 1)
-        selection.switchChoice(services, 1)
+        selection.toggle(all)
 
         expect(selection.selectedOptions()).toEqual(['rebuild'])
     })
 
     it('summarizes every row, and the tree only for a custom selection', () => {
-        expect(new TreeSelection(roots, ['a']).summary()).toEqual(['Containers: Existing', 'Services: Base'])
+        expect(new TreeSelection(roots, ['a']).summary()).toEqual(['Containers: Existing', 'Base'])
         expect(new TreeSelection(roots, ['b']).summary()).toEqual(['Containers: Existing', 'b'])
     })
 })
@@ -386,21 +373,15 @@ describe('tree multiselect prompt', () => {
                         ],
                     },
                     {
-                        value: 'choice:set',
-                        label: 'Set',
-                        hint: 'Custom selection',
-                        choices: [
-                            {
-                                value: 'base',
-                                label: 'Base',
-                                selection: ['a'],
-                            },
-                            {
-                                value: 'all',
-                                label: 'All',
-                                selection: ['a', 'b'],
-                            },
-                        ],
+                        value: 'preset:base',
+                        label: 'Base',
+                        hint: 'What runs the application',
+                        selection: ['a'],
+                    },
+                    {
+                        value: 'preset:all',
+                        label: 'All',
+                        selection: ['a', 'b'],
                     },
                     {
                         value: 'first',
@@ -445,7 +426,9 @@ describe('tree multiselect prompt', () => {
             const screen = stripVTControlCharacters(prompt.output.text)
 
             expect(screen).toContain('Containers  ● Use existing / ○ Rebuild (Builds what is missing)')
-            expect(screen).toContain('Set         ● Base / ○ All')
+            expect(screen).toContain('Containers  ● Use existing / ○ Rebuild')
+            expect(screen).toContain('● Base (What runs the application)')
+            expect(screen).toContain('○ All')
 
             await prompt.press(ENTER)
             await prompt.result
@@ -480,7 +463,7 @@ describe('tree multiselect prompt', () => {
             const screen = stripVTControlCharacters(prompt.output.text)
 
             expect(screen).toContain('❯ Containers')
-            expect(screen).toContain('❯ Set')
+            expect(screen).toContain('❯ ● Base')
 
             await prompt.press(ENTER)
             await prompt.result
@@ -494,20 +477,23 @@ describe('tree multiselect prompt', () => {
             expect(await prompt.result).toEqual(['rebuild', 'a'])
         })
 
-        it('applies a selection choice to the tree below it', async () => {
+        it('applies a preset row in the tree with Space', async () => {
             const prompt = openPrompt(['a'])
 
-            await prompt.press(DOWN, RIGHT, ENTER)
+            await prompt.press(DOWN, DOWN, SPACE, ENTER)
 
             expect(await prompt.result).toEqual(['existing', 'a', 'b'])
         })
 
-        it('marks neither choice for a custom selection and shows the fallback hint', async () => {
+        it('marks neither preset for a custom selection', async () => {
             const prompt = openPrompt(['b'])
 
             await delay(70)
 
-            expect(stripVTControlCharacters(prompt.output.text)).toContain('Set         ○ Base / ○ All (Custom selection)')
+            const screen = stripVTControlCharacters(prompt.output.text)
+
+            expect(screen).toContain('○ Base')
+            expect(screen).toContain('○ All')
 
             await prompt.press(ENTER)
             await prompt.result
@@ -519,19 +505,19 @@ describe('tree multiselect prompt', () => {
             await prompt.press(ENTER)
             expect(stripVTControlCharacters(prompt.output.text)).toContain('Select at least one option.')
 
-            await prompt.press(DOWN, RIGHT, ENTER)
+            await prompt.press(DOWN, DOWN, SPACE, ENTER)
             expect(await prompt.result).toEqual(['existing', 'a', 'b'])
         })
 
-        it('separates the radio rows from the tree with a line and blank line', async () => {
+        it('separates the radio rows from the tree with a line, and the presets from the groups with a blank line', async () => {
             const prompt = openPrompt(['a'])
 
             await prompt.press(DOWN)
 
             const screen = stripVTControlCharacters(prompt.output.text)
 
-            expect(screen).toMatch(/Rebuild[^\n]*\n│\s+Set/u)
-            expect(screen).toMatch(/All[^\n]*\n│\s+─+\n│\s*\n│\s+◼ ▾ First/u)
+            expect(screen).toMatch(/Rebuild[^\n]*\n│\s+─+\n│\s*\n│\s+● Base/u)
+            expect(screen).toMatch(/Base[^\n]*\n│\s+○ All\n│\s*\n│\s+◼ ▾ First/u)
             expect(screen).toMatch(/service-a\n│\s*\n│\s+◻ ▾ Second/u)
 
             await prompt.press(ENTER)

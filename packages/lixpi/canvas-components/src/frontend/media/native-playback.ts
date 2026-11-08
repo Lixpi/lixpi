@@ -166,6 +166,7 @@ export type NativePlaybackOptions = {
     signal: AbortSignal
     kind: 'video' | 'audio'
     muted?: boolean
+    controls?: boolean
     loop?: boolean
     preload?: 'none' | 'metadata' | 'auto'
     crossOrigin?: 'anonymous' | 'use-credentials'
@@ -193,6 +194,7 @@ export class NativePlayback {
             ` as HTMLVideoElement
             : html`<audio className="canvas-native-audio"></audio>` as HTMLAudioElement
         this.element.muted = options.muted ?? false
+        this.element.controls = options.controls ?? false
         this.element.loop = options.loop ?? false
         this.element.preload = options.preload ?? 'metadata'
         this.element.crossOrigin = options.crossOrigin ?? 'anonymous'
@@ -206,8 +208,8 @@ export class NativePlayback {
                     objectFit: 'contain',
                 }
                 : {
-                    width: '1px',
-                    height: '1px',
+                    width: options.controls ? '100%' : '1px',
+                    height: options.controls ? '100%' : '1px',
                     display: 'block',
                 },
         )

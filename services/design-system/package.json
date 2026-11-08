@@ -1,0 +1,34 @@
+{
+    "name": "lixpi-canvas-library",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@12.16.1",
+    "scripts": {
+        "dev": "vite --host 0.0.0.0",
+        "build": "vite build",
+        "preview": "vite preview --host 0.0.0.0"
+    },
+    "dependencies": {
+        "@lixpi/canvas-components": "workspace:*",
+        "@lixpi/canvas-engine": "workspace:*",
+        "@lixpi/capability-system": "workspace:*",
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/debug-tools": "workspace:*",
+        "@lixpi/prosemirror": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
+        "@lixpi/ui-primitives": "workspace:*",
+        "@lixpi/web-client-service-factory": "workspace:*",
+        "d3-selection": "3.0.0",
+        "prosemirror-model": "1.25.12",
+        "prosemirror-state": "1.4.4",
+        "prosemirror-view": "1.42.8",
+        "@lixpi/themes": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/d3-selection": "3.0.12",
+        "sass": "1.107.0",
+        "typescript": "7.0.2",
+        "vite": "8.3.5",
+        "vitest": "5.0.5"
+    }
+}

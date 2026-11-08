@@ -12,12 +12,14 @@ import {
     aiPromptInputNodeSpec,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import { withoutLayout } from '@lixpi/test-utils'
+import { SLIDING_SWITCH_TRANSITION_DURATION_MS } from '@lixpi/ui-kit/components/sliding-switch'
 
 const expectSourceToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 
 const expectSourceNotToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 
 const aiPromptInputNodeSource = readFileSync(resolve(import.meta.dirname, 'aiPromptInputNode.ts'), 'utf-8')
+const nativePromptControlsSource = readFileSync(resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/native-prompt-controls.ts'), 'utf-8')
 
 describe('ai model selection parsing and serialization', () => {
     it('parses string JSON arrays and filters empty entries', () => {
@@ -102,21 +104,24 @@ describe('aiPromptInputNodeSpec', () => {
 
 describe('media generation mode switch', () => {
     it('reshuffles the selected mode to the right using the shared default duration', () => {
-        const switchStart = aiPromptInputNodeSource.indexOf("id: 'ai-prompt-media-generation-mode'")
-        const switchEnd = aiPromptInputNodeSource.indexOf('onChange: value => setNodeAttrs', switchStart)
-        const mediaModeSwitchSource = aiPromptInputNodeSource.slice(switchStart, switchEnd)
+        const switchStart = nativePromptControlsSource.indexOf('export class PromptMediaModeSwitch')
+        const switchEnd = nativePromptControlsSource.indexOf('export const createPromptMediaModeSwitch', switchStart)
+        const mediaModeSwitchSource = nativePromptControlsSource.slice(switchStart, switchEnd)
 
         expect(switchStart, 'media mode switch should be configured').toBeGreaterThan(-1)
-        expect(switchEnd, 'media mode switch should notify its node view').toBeGreaterThan(switchStart)
-        expectSourceToContain(mediaModeSwitchSource, "reshuffleItemsOnValueChange: {\n                enable: true,\n                selectedElementPosition: 'right',\n            },")
+        expect(switchEnd, 'media mode switch implementation should exist').toBeGreaterThan(switchStart)
+        expectSourceToContain(mediaModeSwitchSource, "reshuffleItemsOnValueChange: { enable: true, selectedElementPosition: 'right' }")
+        expectSourceNotToContain(mediaModeSwitchSource, 'durationMs:')
+        expect(SLIDING_SWITCH_TRANSITION_DURATION_MS).toBe(150)
+        expect(SLIDING_SWITCH_TRANSITION_DURATION_MS).toBe(150)
         expectSourceNotToContain(mediaModeSwitchSource, 'transition:')
     })
 })
 
 describe('simple tooltip wiring', () => {
     it('uses ARIA-backed delegated tooltips for model and submit controls', () => {
-        expectSourceToContain(aiPromptInputNodeSource, 'aria-label="Generation settings"')
-        expectSourceToContain(aiPromptInputNodeSource, 'data-help-tooltip="aria-label"')
+        expectSourceToContain(nativePromptControlsSource, 'aria-label="Generation settings"')
+        expectSourceToContain(nativePromptControlsSource, 'data-help-tooltip="aria-label"')
         expectSourceToContain(aiPromptInputNodeSource, "submitButton.dataset.helpTooltip = 'aria-description'")
         expectSourceToContain(aiPromptInputNodeSource, 'submitButton.ariaDescription = invalid?.message ?? null')
         expectSourceNotToContain(aiPromptInputNodeSource, "submitButton.setAttribute('title'")

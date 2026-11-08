@@ -1,0 +1,490 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+@use "./tokens" as uiTokens;
+
+html,
+body,
+#app {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+.canvas-library {
+    // `*-open-width` is the space an open panel covers, used for offsets.
+    // `*-dock-width` is the grid space it takes, which only `push` panels claim.
+    --canvas-library-sidebar-open-width: 0px;
+    --canvas-library-params-open-width: 0px;
+    --canvas-library-theme-open-width: 0px;
+    --canvas-library-sidebar-dock-width: 0px;
+    --canvas-library-params-dock-width: 0px;
+    --canvas-library-theme-dock-width: 0px;
+    --side-panel-resize-handle-z-index: 100;
+    --side-panel-backdrop-z-index: 1;
+    grid-template-columns: var(--canvas-library-sidebar-dock-width) minmax(0, 1fr) var(--canvas-library-params-dock-width) var(--canvas-library-theme-dock-width);
+    position: relative;
+    display: grid;
+    width: 100%;
+    height: 100dvh;
+    color: var(--theme-text);
+    background: var(--theme-background);
+}
+
+.canvas-library .side-panel-backdrop[data-canvas-library-panel="navigation"] {
+    --side-panel-backdrop-fill: var(--canvas-lixpi-navigation-backdrop, #{themeScope.token("navigation-backdrop", themePalette.$roles)});
+    --side-panel-backdrop-fill-opaque: var(--canvas-lixpi-navigation-backdrop-opaque, #{themeScope.token("navigation-backdrop-opaque", themePalette.$roles)});
+}
+
+.canvas-library .side-panel-backdrop-right {
+    --side-panel-backdrop-fill: var(--canvas-lixpi-panel-backdrop, #{themeScope.token("panel-background", themePalette.$roles)});
+    --side-panel-backdrop-fill-opaque: var(--canvas-lixpi-panel-backdrop-opaque, #{themeScope.token("panel-background-opaque", themePalette.$roles)});
+}
+
+.canvas-library .side-panel-backdrop[data-canvas-library-panel="parameters"] {
+    right: var(--canvas-library-theme-open-width);
+}
+
+.canvas-library:not(.canvas-library-navigating) > .side-panel-backdrop[data-canvas-library-panel="navigation"],
+.canvas-library:not(.canvas-library-inspecting) > .side-panel-backdrop[data-canvas-library-panel="parameters"],
+.canvas-library:not(.canvas-library-theming) > .side-panel-backdrop[data-canvas-library-panel="theme"] {
+    display: none;
+}
+
+.canvas-library-theming {
+    --canvas-library-theme-open-width: var(--canvas-library-theme-width);
+}
+
+.canvas-library-theming[data-theme-placement="push"] {
+    --canvas-library-theme-dock-width: var(--canvas-library-theme-open-width);
+}
+
+.canvas-library-sidebar {
+    grid-column: 1;
+    position: relative;
+    inset: auto;
+    width: auto;
+    z-index: 2;
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+}
+
+.canvas-library-navigation-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.canvas-library-brand {
+    --canvas-library-navigation-toggle-size: #{themeScope.token("components-navigation-geometry-toggle-size", themePalette.$roles)};
+    --canvas-library-navigation-header-height: #{themeScope.token("components-navigation-new-workspace-button-base-size", themePalette.$roles)};
+
+    flex-shrink: 0;
+    justify-content: center;
+    min-height: var(--canvas-library-navigation-header-height);
+    margin-top: calc(themeScope.token("components-navigation-geometry-toggle-top", themePalette.$roles) + (var(--canvas-library-navigation-toggle-size) - var(--canvas-library-navigation-header-height)) / 2);
+    padding: 0 var(--navigation-side-panel-row-gap);
+    padding-inline-start: calc(themeScope.token("components-navigation-geometry-toggle-open-offset", themePalette.$roles) + var(--canvas-library-navigation-toggle-size) + var(--navigation-side-panel-row-gap));
+}
+
+.canvas-library-search {
+    min-height: var(--canvas-control-height);
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 0 var(--navigation-side-panel-list-inline-padding) 24px;
+}
+
+.canvas-library-navigation {
+    gap: 0;
+    padding-inline: 0;
+    padding-bottom: 24px;
+}
+
+.canvas-library-section-items {
+    margin-inline: var(--navigation-side-panel-list-inline-padding);
+}
+
+.canvas-library-section-items .navigation-side-panel-row {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.canvas-library .navigation-side-panel-row {
+    color: inherit;
+    text-decoration: none;
+}
+
+.canvas-library-domain-navigation + .canvas-library-domain-navigation,
+.canvas-library-node-navigation > .navigation-side-panel-row + .navigation-side-panel-row {
+    margin-top: var(--navigation-side-panel-row-gap);
+}
+
+.canvas-library-domain-row {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.canvas-library-section-items .canvas-library-domain-link {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+}
+
+.canvas-library-section-items .canvas-library-domain-toggle {
+    flex: 0 0 28px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    padding: 4px;
+}
+
+.canvas-library-domain-chevron,
+.canvas-library-domain-chevron svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.canvas-library-inspector,
+.canvas-library-theme-panel {
+    box-sizing: border-box;
+    background: transparent;
+    font-size: var(--canvas-panel-font-size, #{themeScope.token("panel-font-size", themePalette.$roles)});
+    line-height: var(--canvas-panel-line-height, #{themeScope.token("panel-line-height", themePalette.$roles)});
+}
+
+.canvas-library-inspector {
+    grid-column: 3;
+    position: relative;
+    inset: auto;
+    width: auto;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+    padding: 12px calc(themeScope.token("components-right-panel-geometry-content-inset", themePalette.$roles) * 1px);
+}
+
+.canvas-library-inspector-heading,
+.canvas-library-theme-heading {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.canvas-library-title,
+.canvas-library-theme-heading h2 {
+    margin: 0;
+}
+
+.canvas-library-example-selector:empty {
+    display: none;
+}
+
+.canvas-library-example-selector {
+    flex-shrink: 0;
+}
+
+.canvas-library-inspector-tabs {
+    flex-shrink: 0;
+    display: block;
+    width: 100%;
+    height: calc(var(--canvas-control-height) * var(--canvas-lixpi-panel-switch-scale, 1));
+    overflow: visible;
+}
+
+.canvas-library-inspector-content {
+    min-height: 0;
+    overflow: auto;
+    min-width: 0;
+}
+
+.canvas-library-inspector-content[data-view="parameters"] .canvas-example-code,
+.canvas-library-inspector-content[data-view="parameters"] .canvas-library-reference,
+.canvas-library-inspector-content[data-view="code"] .canvas-example-instructions,
+.canvas-library-inspector-content[data-view="code"] .canvas-example-parameters,
+.canvas-library-inspector-content[data-view="code"] .canvas-example-actions,
+.canvas-library-inspector-content[data-view="code"] .canvas-example-status {
+    display: none;
+}
+
+.canvas-library-stage {
+    grid-column: 2;
+}
+
+.canvas-library-stage,
+.canvas-library-example-host {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.canvas-library-theme-panel {
+    grid-column: 4;
+    position: relative;
+    inset: auto;
+    width: auto;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    min-height: 0;
+    padding: 12px 14px;
+}
+
+.canvas-library-theme-panel[hidden] {
+    display: none;
+}
+
+.canvas-library-theme-content {
+    min-height: 0;
+    overflow: auto;
+}
+
+.canvas-library-reference {
+    margin-top: 20px;
+    padding-top: 16px;
+}
+
+.canvas-library-reference p,
+.canvas-library-reference code {
+    overflow-wrap: anywhere;
+}
+
+.canvas-library-error,
+.canvas-library-empty {
+    margin: 16px;
+}
+
+.canvas-theme-group {
+    padding: 10px 0;
+}
+
+.canvas-theme-group summary {
+    cursor: pointer;
+}
+
+.canvas-theme-group .canvas-theme-group {
+    margin-left: 8px;
+}
+
+.canvas-theme-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 140px);
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    overflow-wrap: anywhere;
+}
+
+.canvas-theme-editor :is(input:not([type="checkbox"]), select, textarea) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: var(--canvas-control-height);
+}
+
+.canvas-library-search,
+.canvas-theme-editor :is(input:not([type="checkbox"]), select, textarea) {
+    @include uiTokens.native-form-field;
+}
+
+.canvas-library-search,
+.canvas-theme-editor :is(input:not([type="checkbox"]), select, textarea),
+.canvas-example-parameter :is(input:not([type="checkbox"]), select) {
+    font-family: #{themeScope.token("control-font-family", themePalette.$roles)};
+    font-size: var(--canvas-control-font-size, #{themeScope.token("control-font-size", themePalette.$roles)});
+    font-weight: var(--canvas-control-font-weight, #{themeScope.token("control-font-weight", themePalette.$roles)});
+}
+
+.canvas-library-search:focus-visible,
+.canvas-theme-editor :is(input, select, textarea):focus-visible,
+.canvas-example-parameter :is(input, select):focus-visible {
+    border-color: var(--canvas-accent, #{themeScope.token("accent", themePalette.$roles)});
+}
+
+.canvas-theme-editor input[aria-invalid="true"],
+.canvas-theme-editor textarea[aria-invalid="true"],
+.canvas-example-parameter input[aria-invalid="true"] {
+    border-color: var(--canvas-danger, #{themeScope.token("danger", themePalette.$roles)});
+}
+
+.canvas-library :is(.canvas-example-button, .canvas-library-text-button) {
+    justify-content: center;
+    padding-inline: var(--canvas-control-padding);
+    min-height: var(--canvas-control-height);
+    border-radius: var(--canvas-control-radius);
+    background: #{themeScope.token("button-background", themePalette.$roles)};
+    color: #{themeScope.token("button-text", themePalette.$roles)};
+    transition: hoverTransition(background);
+}
+
+.canvas-library :is(.canvas-example-button, .canvas-library-text-button):is(:hover, :focus-visible) {
+    background: #{themeScope.token("button-hover", themePalette.$roles)};
+}
+
+.canvas-theme-editor textarea {
+    resize: vertical;
+}
+
+.canvas-theme-error {
+    display: block;
+    margin-top: 4px;
+}
+
+.canvas-theme-error:empty {
+    display: none;
+}
+
+.canvas-theme-color {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.canvas-theme-color input[type="color"] {
+    flex: 0 0 var(--canvas-control-height);
+    width: var(--canvas-control-height);
+    height: var(--canvas-control-height);
+    padding: 1px;
+}
+
+.canvas-theme-toggle {
+    display: block;
+    width: var(--canvas-theme-toggle-width, 36px);
+    height: var(--canvas-theme-toggle-height, 22px);
+}
+
+.canvas-library-inspecting {
+    --canvas-library-params-open-width: var(--canvas-library-params-width);
+}
+
+.canvas-library-inspecting[data-parameters-placement="push"] {
+    --canvas-library-params-dock-width: var(--canvas-library-params-open-width);
+}
+
+.canvas-library-inspector[hidden] {
+    display: none;
+}
+
+.canvas-library-panel-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.canvas-library-icons {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    align-content: start;
+    gap: 24px;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    padding: 56px 28px 28px;
+}
+
+.canvas-library-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin: 0;
+    padding: 16px 8px;
+}
+
+.canvas-library-icon-artwork {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--canvas-theme-toggle-width, 36px);
+    height: 36px;
+    fill: currentColor;
+}
+
+.canvas-library-icon-artwork svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.canvas-library-icon figcaption {
+    max-width: 100%;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.canvas-library-node-navigation {
+    margin-top: 6px;
+    padding-inline-start: 16px;
+}
+
+.canvas-library-navigating {
+    --canvas-library-sidebar-open-width: var(--canvas-library-sidebar-width);
+}
+
+.canvas-library-navigating[data-navigation-placement="push"] {
+    --canvas-library-sidebar-dock-width: var(--canvas-library-sidebar-open-width);
+}
+
+// Overlay panels span the whole grid as their containing block and sit on top
+// of the stage, so opening or closing them never resizes the canvas.
+.canvas-library[data-navigation-placement="overlay"] > .canvas-library-sidebar,
+.canvas-library[data-parameters-placement="overlay"] > .canvas-library-inspector,
+.canvas-library[data-theme-placement="overlay"] > .canvas-library-theme-panel {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+}
+
+.canvas-library[data-navigation-placement="overlay"] > .canvas-library-sidebar {
+    left: 0;
+    width: var(--canvas-library-sidebar-width);
+}
+
+.canvas-library[data-parameters-placement="overlay"] > .canvas-library-inspector {
+    right: var(--canvas-library-theme-open-width);
+    width: var(--canvas-library-params-width);
+}
+
+.canvas-library[data-theme-placement="overlay"] > .canvas-library-theme-panel {
+    right: 0;
+    width: var(--canvas-library-theme-width);
+}
+
+.canvas-library-sidebar[hidden] {
+    display: none;
+}
+
+.canvas-library .side-panel-toggle {
+    --side-panel-toggle-z-index: 200;
+}
+
+.canvas-library-dropdown-popover.info-bubble-wrapper {
+    z-index: 300;
+}
+
+.canvas-library-inspector-tabs-host {
+    flex-shrink: 0;
+}

@@ -1,9 +1,18 @@
 @use "sass:color";
 @use "sass:map";
 @use "sass:math";
-@use "../../styles/tokens" as *;
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 @use "@lixpi/ui-primitives/styles/transitions" as *;
 @use "../infoBubble/infoBubble-mixins" as *;
+
+@function dropdownThemeToken($role) {
+    @return themeScope.token("components-dropdown-menu-#{$role}", themePalette.$roles);
+}
+
+@function dropdownThemeValue($role) {
+    @return map.get(themePalette.$value-roles, "components-dropdown-menu-#{$role}");
+}
 
 // =============================
 // Dropdown Component — M3-Inspired
@@ -26,11 +35,11 @@
 @mixin dropdownTriggerStructure($config: ()) {
     $defaults: (
         svgSize: 1.1rem,
-        triggerHeight: 28px,
+        triggerHeight: dropdownThemeToken("trigger-height"),
         triggerPadding: 4px 8px,
-        triggerRadius: 8px,
-        fontSize: 0.8125rem,
-        fontWeight: 500,
+        triggerRadius: dropdownThemeToken("trigger-radius"),
+        fontSize: dropdownThemeToken("trigger-font-size"),
+        fontWeight: dropdownThemeToken("trigger-font-weight"),
         iconMargin: 0 6px 0 0,
         iconSize: 16px,
         hoverDuration: $defaultHoverTransitionDuration
@@ -71,7 +80,7 @@
             width: auto;
             font-size: map.get($s, fontSize);
             font-weight: map.get($s, fontWeight);
-            letter-spacing: 0.01em;
+            letter-spacing: dropdownThemeToken("trigger-letter-spacing");
             white-space: nowrap;
             position: relative;
             overflow: hidden;
@@ -120,11 +129,11 @@
             }
 
             &:hover:before {
-                opacity: 0.08;
+                opacity: dropdownThemeToken("trigger-hover-opacity");
             }
 
             &:active:before {
-                opacity: 0.12;
+                opacity: dropdownThemeToken("trigger-pressed-opacity");
             }
 
             &:focus {
@@ -132,8 +141,7 @@
             }
 
             &:focus-visible {
-                outline: 2px solid currentColor;
-                outline-offset: 2px;
+                outline: none;
             }
         }
 
@@ -169,8 +177,8 @@
     $defaults: (
         itemPadding: 0 12px,
         itemHeight: 44px,
-        itemFontSize: 0.875rem,
-        itemFontWeight: 400,
+        itemFontSize: dropdownThemeToken("item-font-size"),
+        itemFontWeight: dropdownThemeToken("item-font-weight"),
         itemIconSize: 20px,
         itemIconMargin: 0 12px 0 0,
         hoverDuration: $defaultHoverTransitionDuration,
@@ -199,7 +207,7 @@
             li {
                 // Two-color highlight pulled from the shifting gradient palette.
                 // Left uses a slightly darker tone than #FFF5FA.
-                $shiftingGradientSimple: linear-gradient(135deg, #f5eff9 0%, #e6e9f6 100%);
+                $shiftingGradientSimple: dropdownThemeToken("item-highlight-gradient");
 
                 margin: 2px 6px;
                 padding: map.get($s, itemPadding);
@@ -208,14 +216,14 @@
                 align-items: center;
                 font-size: map.get($s, itemFontSize);
                 font-weight: map.get($s, itemFontWeight);
-                letter-spacing: 0.01em;
+                letter-spacing: dropdownThemeToken("item-letter-spacing");
                 text-transform: none;
                 cursor: pointer;
                 position: relative;
                 overflow: hidden;
                 transition: hoverTransition(background, map.get($s, hoverDuration));
-                border-radius: 12px;
-                background: transparent;
+                border-radius: dropdownThemeToken("item-radius");
+                background: dropdownThemeToken("item-background");
 
                 svg {
                     height: map.get($s, itemIconSize);
@@ -251,7 +259,7 @@
                 }
 
                 &[data-selected="true"] {
-                    font-weight: 500;
+                    font-weight: dropdownThemeToken("item-selected-font-weight");
                     background-image: $shiftingGradientSimple;
                     background-repeat: no-repeat;
                     background-size: 100% 100%;
@@ -267,7 +275,7 @@
             // Header item styling
             li[data-type="header"] {
                 margin: 0;
-                border-radius: 0;
+                border-radius: dropdownThemeToken("item-header-radius");
                 cursor: default;
                 align-items: flex-start;
                 height: auto;
@@ -280,16 +288,16 @@
                 .header-text {
                     display: flex;
                     flex-direction: column;
-                    line-height: 1.15;
+                    line-height: dropdownThemeToken("item-header-line-height");
                     gap: 2px;
                 }
             }
 
             li[data-type="header"] .header-text .header-meta {
-                font-size: 0.75rem;
-                opacity: 0.6;
+                font-size: dropdownThemeToken("item-meta-font-size");
+                opacity: dropdownThemeToken("item-meta-opacity");
                 text-transform: none;
-                font-weight: 400;
+                font-weight: dropdownThemeToken("item-meta-font-weight");
             }
         }
     }
@@ -355,11 +363,11 @@
 // 4) Dropdown items theming — M3 surface/on-surface color system
 @mixin dropdownItemsTheme($config: ()) {
     $defaults: (
-        surfaceBg: #fff,
-        surfaceFg: #1d1b20,
-        itemIconColor: #49454f,
-        stateLayerColor: #1d1b20,
-        hoverLightnessAdjustment: -6%
+        surfaceBg: dropdownThemeValue("defaults-surface-background"),
+        surfaceFg: dropdownThemeValue("defaults-surface-foreground"),
+        itemIconColor: dropdownThemeValue("defaults-item-icon"),
+        stateLayerColor: dropdownThemeValue("defaults-state-layer"),
+        hoverLightnessAdjustment: dropdownThemeValue("defaults-hover-lightness-adjustment")
     );
     $s: map.merge($defaults, $config);
 
@@ -386,7 +394,7 @@
                 }
 
                 .header-text .header-meta {
-                    color: color.change(map.get($s, surfaceFg), $alpha: 0.6);
+                    color: color.change(map.get($s, surfaceFg), $alpha: dropdownThemeValue("item-meta-alpha"));
                 }
             }
         }
@@ -396,23 +404,23 @@
 // 5) Tag filter styling
 @mixin dropdownTagFilter($config: ()) {
     $defaults: (
-        surfaceBg: #fff,
-        surfaceFg: #1d1b20,
-        hoverLightnessAdjustment: -6%,
-        borderLightnessAdjustment: -10%,
-        accentColor: rgb(100 150 255)
+        surfaceBg: dropdownThemeValue("defaults-surface-background"),
+        surfaceFg: dropdownThemeValue("defaults-surface-foreground"),
+        hoverLightnessAdjustment: dropdownThemeValue("defaults-hover-lightness-adjustment"),
+        borderLightnessAdjustment: dropdownThemeValue("defaults-border-lightness-adjustment"),
+        accentColor: dropdownThemeValue("defaults-accent")
     );
     $s: map.merge($defaults, $config);
-    $shiftingGradientSimple: linear-gradient(135deg, #f5eff9 0%, #e6e9f6 100%);
+    $shiftingGradientSimple: dropdownThemeToken("item-highlight-gradient");
 
     .bubble-header {
         .tag-filter {
             .tag-filter-title {
-                font-size: 0.6rem;
-                font-weight: 500;
-                color: color.change(map.get($s, surfaceFg), $alpha: 0.6);
+                font-size: dropdownThemeToken("filter-font-size");
+                font-weight: dropdownThemeToken("filter-font-weight");
+                color: color.change(map.get($s, surfaceFg), $alpha: dropdownThemeValue("filter-title-alpha"));
                 margin-bottom: 2px;
-                letter-spacing: 0.05em;
+                letter-spacing: dropdownThemeToken("filter-title-letter-spacing");
                 text-transform: uppercase;
             }
 
@@ -427,11 +435,11 @@
                     align-items: center;
                     height: 24px;
                     padding: 0 10px;
-                    font-size: 0.6rem;
-                    font-weight: 500;
-                    letter-spacing: 0.01em;
-                    border: 1px solid color.change(map.get($s, surfaceFg), $alpha: 0.28);
-                    border-radius: 8px; // M3 chip radius
+                    font-size: dropdownThemeToken("filter-font-size");
+                    font-weight: dropdownThemeToken("filter-font-weight");
+                    letter-spacing: dropdownThemeToken("filter-letter-spacing");
+                    border: dropdownThemeToken("filter-border-width") solid color.change(map.get($s, surfaceFg), $alpha: dropdownThemeValue("filter-border-alpha"));
+                    border-radius: dropdownThemeToken("filter-radius"); // M3 chip radius
                     cursor: pointer;
                     transition:
                         hoverTransition(background-color, $defaultHoverTransitionDuration),
@@ -439,7 +447,7 @@
                         hoverTransition(color, $defaultHoverTransitionDuration);
                     opacity: 1;
                     color: map.get($s, surfaceFg);
-                    background: transparent;
+                    background: dropdownThemeToken("filter-background");
                 }
 
                 .tag-filter-item::before {
@@ -448,22 +456,22 @@
                     width: 12px;
                     margin-right: 6px;
                     text-align: center;
-                    font-size: 0.75rem;
-                    line-height: 1;
+                    font-size: dropdownThemeToken("filter-indicator-font-size");
+                    line-height: dropdownThemeToken("filter-indicator-line-height");
                 }
 
                 .tag-filter-item:hover {
                     background-image: $shiftingGradientSimple;
                     background-repeat: no-repeat;
                     background-size: 100% 100%;
-                    border-color: color.change(map.get($s, accentColor), $alpha: 0.4);
+                    border-color: color.change(map.get($s, accentColor), $alpha: dropdownThemeValue("filter-hover-border-alpha"));
                 }
 
                 .tag-filter-item.active {
                     background-image: $shiftingGradientSimple;
                     background-repeat: no-repeat;
                     background-size: 100% 100%;
-                    border-color: color.change(map.get($s, accentColor), $alpha: 0.6);
+                    border-color: color.change(map.get($s, accentColor), $alpha: dropdownThemeValue("filter-active-border-alpha"));
                     color: map.get($s, accentColor);
                 }
 
@@ -479,9 +487,9 @@
                 .tag-filter-item.click-feedback {
                     @include clickToggleFeedbackAnimation(
                         (
-                            startColor: color.change(map.get($s, surfaceFg), $alpha: 0.65),
+                            startColor: color.change(map.get($s, surfaceFg), $alpha: dropdownThemeValue("filter-feedback-alpha")),
                             flashColor: map.get($s, surfaceFg),
-                            endColor: color.change(map.get($s, surfaceFg), $alpha: 0.65)
+                            endColor: color.change(map.get($s, surfaceFg), $alpha: dropdownThemeValue("filter-feedback-alpha"))
                         )
                     );
                 }
@@ -494,15 +502,13 @@
 // Theme presets
 // -----------------------------
 @mixin tagPillDropdownLightTheme($config: ()) {
-    $accentViolet: color.adjust($editableElementHoverColor, $hue: 55deg, $saturation: 20%, $lightness: 10%);
-
     @include dropdownTriggerTheme(
         map.merge(
             (
-                glyphBase: $offWhite,
-                triggerBg: $accentViolet,
-                hoverGlyphFill: $accentViolet,
-                activeIndicatorFill: $accentViolet,
+                glyphBase: dropdownThemeValue("light-glyph-base"),
+                triggerBg: dropdownThemeValue("light-trigger-background"),
+                hoverGlyphFill: dropdownThemeValue("light-accent"),
+                activeIndicatorFill: dropdownThemeValue("light-accent"),
                 invertIndicatorOnActive: false
             ),
             $config
@@ -512,11 +518,11 @@
     @include dropdownItemsTheme(
         map.merge(
             (
-                surfaceBg: $offWhite,
-                surfaceFg: #1d1b20,
-                itemIconColor: #49454f,
-                stateLayerColor: $accentViolet,
-                hoverLightnessAdjustment: -6%
+                surfaceBg: dropdownThemeValue("light-surface-background"),
+                surfaceFg: dropdownThemeValue("light-surface-foreground"),
+                itemIconColor: dropdownThemeValue("light-item-icon"),
+                stateLayerColor: dropdownThemeValue("light-state-layer"),
+                hoverLightnessAdjustment: dropdownThemeValue("light-hover-lightness-adjustment")
             ),
             $config
         )
@@ -525,10 +531,10 @@
     @include dropdownTagFilter(
         map.merge(
             (
-                surfaceBg: $offWhite,
-                surfaceFg: $nightBlue,
-                accentColor: $accentViolet,
-                hoverLightnessAdjustment: -6%
+                surfaceBg: dropdownThemeValue("light-surface-background"),
+                surfaceFg: dropdownThemeValue("light-filter-foreground"),
+                accentColor: dropdownThemeValue("light-accent"),
+                hoverLightnessAdjustment: dropdownThemeValue("light-hover-lightness-adjustment")
             ),
             $config
         )
@@ -536,14 +542,11 @@
 }
 
 @mixin tagPillDropdownDarkTheme($config: ()) {
-    $accentViolet: color.adjust($editableElementHoverColor, $hue: 55deg, $saturation: 20%, $lightness: 10%);
-
     @include dropdownTriggerTheme(
         map.merge(
             (
-                glyphBase: $dropdownDarkThemeSubmenuTextColor,
-                triggerBg: #f1edf8,
-                // Don't recolor the chevron just because the dropdown opens/hovered.
+                glyphBase: dropdownThemeValue("dark-glyph-base"),
+                triggerBg: dropdownThemeValue("dark-trigger-background"),
                 hoverGlyphFill: null,
                 activeIndicatorFill: null,
                 invertIndicatorOnActive: true
@@ -555,11 +558,11 @@
     @include dropdownItemsTheme(
         map.merge(
             (
-                surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
-                surfaceFg: $dropdownDarkThemeSubmenuTextColor,
-                itemIconColor: $dropdownDarkThemeIconColor,
-                stateLayerColor: $accentViolet,
-                hoverLightnessAdjustment: -6%
+                surfaceBg: dropdownThemeValue("dark-surface-background"),
+                surfaceFg: dropdownThemeValue("dark-surface-foreground"),
+                itemIconColor: dropdownThemeValue("dark-item-icon"),
+                stateLayerColor: dropdownThemeValue("dark-state-layer"),
+                hoverLightnessAdjustment: dropdownThemeValue("dark-hover-lightness-adjustment")
             ),
             $config
         )
@@ -568,10 +571,10 @@
     @include dropdownTagFilter(
         map.merge(
             (
-                surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
-                surfaceFg: $dropdownDarkThemeSubmenuTextColor,
-                accentColor: $accentViolet,
-                hoverLightnessAdjustment: -6%
+                surfaceBg: dropdownThemeValue("dark-surface-background"),
+                surfaceFg: dropdownThemeValue("dark-filter-foreground"),
+                accentColor: dropdownThemeValue("dark-accent"),
+                hoverLightnessAdjustment: dropdownThemeValue("dark-hover-lightness-adjustment")
             ),
             $config
         )

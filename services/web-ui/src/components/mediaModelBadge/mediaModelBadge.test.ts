@@ -15,7 +15,7 @@ import {
     renderMediaModelBadge as renderSharedMediaModelBadge,
 } from '@lixpi/ui-kit/components/media-model-badge'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import {
     geminiIcon,
     gptAvatarIcon,

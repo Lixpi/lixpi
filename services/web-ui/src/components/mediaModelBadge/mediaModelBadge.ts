@@ -1,4 +1,4 @@
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     getAiModelIcon,

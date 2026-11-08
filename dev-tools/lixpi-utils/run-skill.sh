@@ -2,7 +2,7 @@
 # Universal entrypoint for lixpi-utils.
 #
 # Usage:
-#   docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils <skill-name> <script> [args...]
+#   docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/utilities/setup/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils <skill-name> <script> [args...]
 #
 # <skill-name> is a directory under ${LIXPI_REPOSITORY_PATH}/skills/. <script> is an
 # absolute path under that skill's directory. Both are checked here so a typo fails with a

@@ -1,3 +1,5 @@
+import { lixpiLightTheme } from '@lixpi/themes'
+
 export type VideoControlsSettings = {
     height: number
     layout: {
@@ -72,6 +74,11 @@ export type VideoControlsSettings = {
 }
 
 export const createDefaultVideoControlsSettings = (): VideoControlsSettings => {
+    const appearance = structuredClone({
+        styles: lixpiLightTheme.components.videoControls.styles,
+        typography: lixpiLightTheme.components.videoControls.typography,
+    })
+
     return {
         height: 40,
         layout: {
@@ -96,10 +103,7 @@ export const createDefaultVideoControlsSettings = (): VideoControlsSettings => {
             minSeekWidth: 36,
             speedScaleTickHeight: 10,
         },
-        typography: {
-            timeFontSize: 13,
-            timeFontWeight: 600,
-        },
+        typography: appearance.typography,
         speed: {
             minRate: 0.5,
             maxRate: 2,
@@ -116,32 +120,6 @@ export const createDefaultVideoControlsSettings = (): VideoControlsSettings => {
             volumeSliderMinResponsiveWidth: 330,
             volumeSliderFullResponsiveWidth: 520,
         },
-        styles: {
-            hostBorderRadius: '99px',
-            hostDropShadow: 'drop-shadow(0 12px 30px rgb(0 0 0 / 30%))',
-            hostBackdropFilter: 'blur(22px) saturate(155%) contrast(108%)',
-            hostReducedTransparencyBackground: 'rgb(24 28 34 / 70%)',
-            background: 'rgb(24 28 34 / 24%)',
-            backgroundStroke: 'rgb(255 255 255 / 22%)',
-            backgroundStrokeWidth: 1,
-            glassHighlight: 'rgb(255 255 255 / 10%)',
-            glassHighlightStrokeWidth: 1,
-            buttonHover: 'rgb(255 255 255 / 14%)',
-            icon: 'rgb(255 255 255 / 95%)',
-            iconMuted: 'rgb(255 255 255 / 58%)',
-            text: 'rgb(255 255 255 / 92%)',
-            textSubtle: 'rgb(255 255 255 / 76%)',
-            rail: 'rgb(255 255 255 / 24%)',
-            buffered: 'rgb(255 255 255 / 34%)',
-            progress: '#ffffff',
-            speedScaleTick: 'rgb(255 255 255 / 42%)',
-            speedScaleTickWidth: 1,
-            liquidGlassFilter: {
-                displacementScale: 2.4,
-                baseFrequency: '0.012 0.08',
-                numOctaves: 2,
-                seed: 7,
-            },
-        },
+        styles: appearance.styles,
     }
 }

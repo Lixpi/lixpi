@@ -1,4 +1,4 @@
-import { isOrthogonalRouteClear } from './index.ts'
+import { isOrthogonalRouteClear } from './route-clearance.ts'
 import {
     type CanvasEnginePoint,
 } from '../../geometry/types.ts'

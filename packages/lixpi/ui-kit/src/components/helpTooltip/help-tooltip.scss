@@ -41,8 +41,7 @@
 }
 
 .help-tooltip-trigger:focus-visible {
-    outline: var(--help-tooltip-trigger-focus-outline, 2px solid #b8bec8);
-    outline-offset: var(--help-tooltip-trigger-focus-outline-offset, 2px);
+    outline: none;
 }
 
 .help-tooltip-mark {

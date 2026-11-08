@@ -1,6 +1,10 @@
 import {
+    PromptModelDropdownOptionView as ModelSlidingDropdownOptionView,
+    PromptControlPortalScope as CanvasDropdownPortalScope,
+    createPromptSubmitButton,
+} from '@lixpi/canvas-components/workspace/composer'
+import {
     questionMarkCircleIcon,
-    sendIcon,
     chevronDownIcon,
     gptAvatarIcon,
     claudeIcon,
@@ -9,7 +13,6 @@ import {
     bytedanceIcon,
     imageIcon,
 } from '@lixpi/ui-kit/svg'
-import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
@@ -27,7 +30,7 @@ import {
     createHelpTooltip,
     type HelpTooltipInstance,
 } from '@lixpi/ui-kit/components/help-tooltip'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 import { createModelConfigurationRow } from '$src/components/aiModelControls/modelConfigurationRow.ts'
 
 import {
@@ -100,12 +103,14 @@ export type MediaGenerationConfigMatrixControls = {
         dom: HTMLElement
         update: () => void
         destroy?: () => void
+        closeMenus?: () => void
     }
 }
 
 export type MediaGenerationConfigMatrixViewInstance = {
     dom: HTMLElement
     update: () => void
+    closeMenus: () => void
     destroy: () => void
 }
 
@@ -119,6 +124,7 @@ type PendingMediaConfigModelDropdown = {
 }
 
 type MountedMediaConfigControl = {
+    closeMenu?: () => void
     groupId: string
     modelId: string
     control: MediaGenerationConfigControl
@@ -687,111 +693,6 @@ type ModelSlidingDropdownConfig = {
     controls: ModelSlidingDropdownControls
 }
 
-class ModelSlidingDropdownOptionView implements SlidingDropdownOptionRenderInstance<string> {
-    private readonly group: any
-    private readonly iconGroup: any
-    private readonly label: any
-    private readonly providerLabel: any
-    private readonly modelLabel: any
-    private readonly hasIcon: boolean
-    private optionHeight = 0
-
-    constructor(
-        parent: any,
-        state: SlidingDropdownOptionRenderState<string>,
-        private readonly option: AiModelDropdownOption,
-    ) {
-        const styles = settings.aiModelControls.styles.modelDropdown
-        this.group = parent
-            .append('g')
-            .attr('class', 'ai-model-sliding-dropdown-option')
-            .attr('pointer-events', 'none')
-        this.iconGroup = this.group.append('g')
-            .attr('class', 'ai-model-sliding-dropdown-option-icon')
-        this.hasIcon = Boolean(option.icon)
-
-        if (option.icon) {
-            appendSvgPathIcon(
-                this.iconGroup,
-                option.icon,
-                {
-                    x: 0,
-                    y: 0,
-                    size: styles.iconSize,
-                    fill: settings.slidingDropdown.styles.option.textColor,
-                },
-            )
-        }
-
-        this.label = this.group
-            .append('text')
-            .attr('class', 'ai-model-sliding-dropdown-option-label')
-            .attr('font-size', styles.valueFontSize)
-            .attr('text-anchor', 'start')
-            .attr('dominant-baseline', 'central')
-        this.providerLabel = this.label.append('tspan')
-            .attr('class', 'ai-model-sliding-dropdown-option-provider')
-        this.modelLabel = this.label.append('tspan')
-            .attr('class', 'ai-model-sliding-dropdown-option-model')
-        this.render(state)
-    }
-
-    resize(
-        x: number,
-        y: number,
-        _width: number,
-        height = this.optionHeight,
-    ): void {
-        this.optionHeight = height
-        const styles = settings.aiModelControls.styles.modelDropdown
-        const contentX = x + styles.horizontalPadding
-        const centerY = y + height / 2
-        this.iconGroup.attr('transform', `translate(${contentX}, ${centerY - styles.iconSize / 2})`)
-        this.label
-            .attr('x', contentX + (this.hasIcon ? styles.iconSize + styles.iconLabelGap : 0))
-            .attr('y', centerY)
-    }
-
-    render(state: SlidingDropdownOptionRenderState<string>): void {
-        const optionStyles = settings.slidingDropdown.styles.option
-        const iconColor = state.disabled
-            ? optionStyles.disabledTextColor
-            : state.selected
-                || state.hovered
-                ? optionStyles.activeTextColor
-                : optionStyles.textColor
-        const providerColor = state.disabled
-            ? optionStyles.disabledTextColor
-            : optionStyles.textColor
-        const modelColor = state.disabled
-            ? optionStyles.disabledTextColor
-            : optionStyles.activeTextColor
-        this.iconGroup
-            .attr('display', this.hasIcon ? null : 'none')
-            .selectAll('path')
-            .attr('fill', iconColor)
-        this.label
-            .attr('font-weight', state.selected ? optionStyles.selectedFontWeight : optionStyles.fontWeight)
-        this.providerLabel
-            .attr('display', this.option.providerTitle ? null : 'none')
-            .attr('fill', providerColor)
-            .text(this.option.providerTitle ? `${this.option.providerTitle}:` : '')
-        this.modelLabel
-            .attr('fill', modelColor)
-            .text(`${this.option.providerTitle ? ' ' : ''}${this.option.title}`)
-        this.resize(
-            state.x,
-            state.y,
-            state.width,
-            state.height,
-        )
-    }
-
-    destroy(): void {
-        this.group.remove()
-    }
-}
-
 class ModelSlidingDropdownView {
     readonly dom: HTMLElement
 
@@ -916,6 +817,7 @@ class ModelSlidingDropdownView {
             return
 
         const styles = settings.aiModelControls.styles.modelDropdown
+        const portalScope = new CanvasDropdownPortalScope(this.dom)
         const svg = select(this.dom)
             .append('svg')
             .attr('class', 'ai-model-sliding-dropdown-svg')
@@ -923,6 +825,7 @@ class ModelSlidingDropdownView {
             svg,
             {
                 id: this.config.id,
+                ...portalScope.options,
                 x: 0,
                 y: 0,
                 width: styles.width,
@@ -937,6 +840,10 @@ class ModelSlidingDropdownView {
                         parent,
                         state,
                         optionData.get(state.option.value) ?? selectedOption,
+                        {
+                            ...settings.aiModelControls.styles.modelDropdown,
+                            ...settings.slidingDropdown.styles.option,
+                        },
                     ),
                 onChange: value => {
                     if (value)
@@ -967,6 +874,10 @@ class ModelSlidingDropdownView {
         this.dropdown.render()
     }
 
+    closeMenus(): void {
+        this.dropdown?.setOpen(false)
+    }
+
     destroy(): void {
         if (this.defaultSelectionTimer !== null)
             clearTimeout(this.defaultSelectionTimer)
@@ -995,37 +906,7 @@ export const createGenericAiModelDropdown = (
     })
 }
 
-export const createGenericSubmitButton = (controls: SubmitControls) => {
-    const handleClick = (e: MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        controls.onSubmit()
-    }
-
-    return html`
-        <div
-            className="ai-submit-button"
-            onclick=${handleClick}
-            style=${{
-                pointerEvents: 'auto',
-                cursor: 'pointer',
-            }}
-        >
-            <div className="button-default">
-                <span
-                    className="send-icon"
-                    innerHTML=${sendIcon}
-                ></span>
-            </div>
-            <div className="button-hover">
-                <span
-                    className="send-icon"
-                    innerHTML=${sendIcon}
-                ></span>
-            </div>
-        </div>
-    `
-}
+export const createGenericSubmitButton = (controls: SubmitControls) => createPromptSubmitButton(document, controls.onSubmit).element
 
 export const createGenericImageSizeDropdown = (
     controls: ImageSizeControls,
@@ -1182,6 +1063,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     private readonly mountedModelDropdowns: Array<{
         update: () => void
         destroy?: () => void
+        closeMenus?: () => void
     }> = []
     private readonly mountedControls: MountedMediaConfigControl[] = []
     private readonly mountedHelpTooltips: HelpTooltipInstance[] = []
@@ -1387,6 +1269,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             selectedValue,
         } = pendingControl
         const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
+        const portalScope = new CanvasDropdownPortalScope(host)
         const svg = select(host).append('svg')
         const rendersGlyph = rendersDimensionGlyph(this.controls.mediaType, control)
         const rendersOptionHelp = control.options.some(
@@ -1426,6 +1309,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             svg,
             {
                 id: `${group.groupId}:${group.selectedModelIds[0] ?? ''}:${control.key}`,
+                ...portalScope.options,
                 x: 0,
                 y: 0,
                 width: dropdownStyles.width,
@@ -1448,6 +1332,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             modelId: group.selectedModelIds[0] ?? '',
             control,
             setValue: value => slidingDropdown.setValue(value),
+            closeMenu: () => slidingDropdown.setOpen(false),
             destroy: () => slidingDropdown.destroy(),
         })
     }
@@ -1707,6 +1592,14 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         for (const pendingControl of pendingControls) {
             this.mountSlidingDropdownControl(pendingControl)
         }
+    }
+
+    closeMenus(): void {
+        for (const dropdown of this.mountedModelDropdowns)
+            dropdown.closeMenus?.()
+
+        for (const control of this.mountedControls)
+            control.closeMenu?.()
     }
 
     destroy(): void {

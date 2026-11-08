@@ -11,11 +11,11 @@ const source = [
     'workspace-canvas.ts',
     'workspace-branch-marker-presentation.ts',
     'workspace-canvas-visibility.ts',
-].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`), 'utf-8')).join('\n')
-const scssSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-content.scss'), 'utf-8')
+].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/${filename}`), 'utf-8')).join('\n')
+const scssSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-content.scss'), 'utf-8')
 
 const preflightMethod = (name: string, module = 'workspace-preflight-markers'): string => {
-    const source = readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/${module}.ts`), 'utf-8')
+    const source = readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components/src/workspace/shared/generation/${module}.ts`), 'utf-8')
     const start = source.indexOf(`\n    ${name}(`)
     const end = source.indexOf('\n    }\n', start)
     expect(start, `Missing preflight method ${name}`).toBeGreaterThan(-1)
@@ -140,7 +140,7 @@ describe('branch marker lifecycle', () => {
 
     it('reconciles planned marker ownership through the scene without replacing editors', () => {
         const snapshotSyncBody = preflightMethod('syncApiCanvasSnapshotNodesToDOM', '../scene/workspace-api-canvas-geometry')
-        const handoff = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-branch-marker-handoff.ts'), 'utf-8')
+        const handoff = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-branch-marker-handoff.ts'), 'utf-8')
         expectSourceToContain(handoff, 'this.ports.placements.ensurePendingBranchMarkerRecordForApiRun(threadId, generationRun)', 'pending marker adoption')
         expectSourceToContain(handoff, 'this.syncPlannedBranchMarkerResolution(', 'marker handoff owner')
         expectSourceToContain(source, 'commit: this.commitTransientCanvasStatePreservingEditors,', 'transient handoff commit')

@@ -28,7 +28,7 @@ The public Tool schema accepts an intent, source Asset IDs, a reasoning model ID
 
 ## Saved visual-style Tools
 
-The persisted Tool contains the synthesized visual contract and ordered sample resources. Its registered `visual-style.apply` action returns `mediaGenerationMode: visual-style`, `preserveUserPrompt: false`, and the instructions and authorized images required by the shared media-generation output contract. Those resources include detail crops, generated probes, and a downscaled full-frame composition sample for each source. See [Style Reference Isolation](./ANTI-LEAKAGE.md) for the exact evidence set and its limits.
+The persisted Tool contains the synthesized visual contract and ordered sample resources. Its registered `visual-style.apply` action returns `mediaGenerationMode: visual-style`, `preserveUserPrompt: false`, and the instructions and authorized images required by the shared media-generation output contract. Those resources include detail crops, generated probes, and a downscaled full-frame composition sample for each source. See [Style Reference Isolation](ANTI-LEAKAGE.md) for the exact evidence set and its limits.
 
 Generated sample resources remain Blob-backed. Catalog search returns metadata only, and applying the Tool reads resources from the sealed plan.
 

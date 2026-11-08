@@ -221,6 +221,19 @@ export class GlassBorder {
         )
     }
 
+    setAppearance(
+        style: GlassBorderStyle,
+        texture: TextureInput,
+    ): void {
+        if (this.destroyed)
+            return
+
+        this.options.style = style
+        this.options.texture = texture
+        this.options.surface.resources.updateTexture(this.materialTexture, texture)
+        this.options.surface.invalidate()
+    }
+
     sync(
         datums: readonly GlassBorderDatum[],
         viewport: ViewportSize,

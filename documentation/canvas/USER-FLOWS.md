@@ -5,10 +5,10 @@ description: The end-to-end canvas interactions — opening a workspace, creatin
 
 # User Flows
 
-This page walks through the canvas interactions a user performs day to day, each illustrated with a sequence diagram across the TypeScript view, the framework-agnostic canvas engine, the frontend services, and the backend. Read it alongside the [Workspace Model](./WORKSPACE-MODEL.md), which defines every entity these flows read and write, and [Edges & Connections](../../packages/lixpi/canvas-engine/docs/EDGES-AND-CONNECTIONS.md), which covers the connect/disconnect interactions that are not repeated here.
+This page walks through the canvas interactions a user performs day to day, each illustrated with a sequence diagram across the TypeScript view, the framework-agnostic canvas engine, the frontend services, and the backend. Read it alongside the [Workspace Model](WORKSPACE-MODEL.md), which defines every entity these flows read and write, and [Edges & Connections](../../packages/lixpi/canvas-engine/docs/EDGES-AND-CONNECTIONS.md), which covers the connect/disconnect interactions that are not repeated here.
 
 {% callout type="note" %}
-This page is part of the canvas domain. The "why" of each persisted shape lives in [Workspace Model](./WORKSPACE-MODEL.md); how the result is drawn lives in [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md). AI-driven flows (generating an image or video from a chat thread) are documented in [Image Generation](../media-generation/IMAGE-GENERATION.md), [Video Generation](../media-generation/VIDEO-GENERATION.md), and [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
+This page is part of the canvas domain. The "why" of each persisted shape lives in [Workspace Model](WORKSPACE-MODEL.md); how the result is drawn lives in [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md). AI-driven flows (generating an image or video from a chat thread) are documented in [Image Generation](../media-generation/IMAGE-GENERATION.md), [Video Generation](../media-generation/VIDEO-GENERATION.md), and [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
 {% /callout %}
 
 ## Opening a Workspace
@@ -248,7 +248,7 @@ sequenceDiagram
     end
 ```
 
-Detachment never deletes bytes inline. Maintenance rechecks Asset and Blob reference counts before deletion, and catalog references protect the Asset independently of canvas placement. A rejected candidate releases its generation-owned catalog reference explicitly. See [Workspace Model](./WORKSPACE-MODEL.md) and [Data Storage](../platform/DATA-STORAGE.md).
+Detachment never deletes bytes inline. Maintenance rechecks Asset and Blob reference counts before deletion, and catalog references protect the Asset independently of canvas placement. A rejected candidate releases its generation-owned catalog reference explicitly. See [Workspace Model](WORKSPACE-MODEL.md) and [Data Storage](../platform/DATA-STORAGE.md).
 
 ## Editing Content
 

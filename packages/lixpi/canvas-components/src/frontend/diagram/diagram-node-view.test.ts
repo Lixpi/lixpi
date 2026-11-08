@@ -63,9 +63,10 @@ const appearance: DiagramNodeLabelAppearance = {
     tagText: '#334455',
     alignment: 'center',
     heading: 'metric',
+    shadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+    selectedShadow: '0 0 0 2px #00aaff',
     selectedStyle: {
-        stroke: '#00aaff',
-        strokeWidth: 3,
+        fill: '#ddeeff',
     },
 }
 
@@ -156,15 +157,33 @@ describe('DiagramNodeView', () => {
         view.setSelected(true)
         expect(labels.ariaPressed).toBe('true')
         const shapes = resources.updatePath.mock.calls.at(-1)?.[1] as Array<{
+            fill: { color: string }
             stroke: {
                 color: string
                 width: number
             }
         }>
+        expect(shapes[0].fill.color).toBe('#ddeeff')
         expect(shapes[0].stroke).toEqual({
-            color: '#00aaff',
-            width: 3,
+            color: '#667788',
+            width: 1.25,
         })
+        expect(labels.style.boxShadow).toBe('0 0 0 2px #00aaff')
+
+        view.setSelected(false)
+        const unselectedShapes = resources.updatePath.mock.calls.at(-1)?.[1] as Array<{
+            fill: { color: string }
+            stroke: {
+                color: string
+                width: number
+            }
+        }>
+        expect(unselectedShapes[0].fill.color).toBe('#ffffff')
+        expect(unselectedShapes[0].stroke).toEqual({
+            color: '#667788',
+            width: 1.25,
+        })
+        expect(labels.style.boxShadow).toBe('0 2px 8px rgba(0, 0, 0, 0.2)')
 
         labels.dispatchEvent(new KeyboardEvent('keydown', {
             key: 'Enter',

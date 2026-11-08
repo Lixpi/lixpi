@@ -10,7 +10,7 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import {
     type PromptReferencePreviewRenderer,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import {
     type AiMediaGenerationProgressRenderer,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiMediaGenerationProgressNode.ts'

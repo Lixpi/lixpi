@@ -11,7 +11,7 @@ import {
     type WorkspaceMeta,
 } from '@lixpi/constants'
 import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { createRequire } from 'node:module'
 import { withoutLayout } from '@lixpi/test-utils'
 import {
     createRouterService,
@@ -90,7 +90,7 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { createAuthStore } from '@lixpi/auth-client'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { navigationSidePanelStore } from '$src/stores/navigationSidePanelStore.ts'
-import { settings } from '$src/settings.ts'
+import { settings } from '@lixpi/canvas-components/workspace/settings'
 
 const USER_PORTAL_URL = 'https://user-portal.example.test'
 
@@ -1051,34 +1051,63 @@ describe('NavigationSidePanel — destroy', () => {
     })
 })
 
-describe('NavigationSidePanel row menu styles', () => {
-    it('reveals the row menu only on row hover, keyboard focus, or while its menu is open', () => {
-        const source = withoutLayout(readFileSync(resolve(import.meta.dirname, 'navigation-side-panel.scss'), 'utf-8'))
+describe(
+    'NavigationSidePanel row menu styles',
+    () => {
+        const stylesheetPath = createRequire(import.meta.url).resolve('@lixpi/ui-kit/styles/navigation-side-panel')
+        const readStyles = (): string => withoutLayout(
+            readFileSync(
+                stylesheetPath,
+                'utf-8',
+            ),
+        )
 
-        expect(source).toContain(withoutLayout(`
-            .navigation-side-panel-row-menu {
-                flex: 0 0 auto;
-                margin-left: auto;
-                opacity: 0;
-                transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
-            }
-        `))
-        expect(source).toContain(withoutLayout(`
-            .navigation-side-panel-row:hover .navigation-side-panel-row-menu,
-            .navigation-side-panel-row-menu:focus-within,
-            .navigation-side-panel-row-menu:has(.dots-dropdown-menu.is-active) {
-                opacity: 1;
-            }
-        `))
-    })
+        it(
+            'reveals the row menu only on row hover, keyboard focus, or while its menu is open',
+            () => {
+                const source = readStyles()
+                const hiddenMenu = withoutLayout(`
+                    .navigation-side-panel-row-menu {
+                        flex: 0 0 auto;
+                        margin-left: auto;
+                        opacity: 0;
+                        transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+                    }
+                `)
+                const visibleMenu = withoutLayout(`
+                    .navigation-side-panel-row:hover .navigation-side-panel-row-menu,
+                    .navigation-side-panel-row-menu:focus-within,
+                    .navigation-side-panel-row-menu:has(.dots-dropdown-menu.is-active) {
+                        opacity: 1;
+                    }
+                `)
 
-    it('turns the open row menu dots horizontal instead of flipping them', () => {
-        const source = withoutLayout(readFileSync(resolve(import.meta.dirname, 'navigation-side-panel.scss'), 'utf-8'))
+                expect(
+                    source.includes(hiddenMenu),
+                    'The shared navigation stylesheet should hide idle row menus and retain their hover transition.',
+                ).toBe(true)
+                expect(
+                    source.includes(visibleMenu),
+                    'The shared navigation stylesheet should reveal row menus on hover, keyboard focus, or an open menu.',
+                ).toBe(true)
+            },
+        )
 
-        expect(source).toContain(withoutLayout(`
-            .navigation-side-panel-row-menu .dropdown-menu-tag-pill-wrapper.theme-dark .dots-dropdown-menu.is-active button span.state-indicator svg {
-                transform: rotate(90deg);
-            }
-        `))
-    })
-})
+        it(
+            'turns the open row menu dots horizontal instead of flipping them',
+            () => {
+                const source = readStyles()
+                const horizontalDots = withoutLayout(`
+                    .navigation-side-panel-row-menu .dropdown-menu-tag-pill-wrapper.theme-dark .dots-dropdown-menu.is-active button span.state-indicator svg {
+                        transform: rotate(90deg);
+                    }
+                `)
+
+                expect(
+                    source.includes(horizontalDots),
+                    'The shared navigation stylesheet should rotate open row-menu dots by a quarter turn.',
+                ).toBe(true)
+            },
+        )
+    },
+)

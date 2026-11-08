@@ -69,15 +69,15 @@ Each embedded surface keeps the cited Asset alive after its canvas and Media cat
 
 ## Source layout
 
-- Package module: [`packages/lixpi/capability-system/src/capabilities/action-timeline/`](../../packages/lixpi/capability-system/src/capabilities/action-timeline/)
-- API adapters: [`services/api/src/capability-system/`](../../services/api/src/capability-system/)
+- Package module: [`packages/lixpi/capability-system/src/capabilities/action-timeline/`](../../packages/lixpi/capability-system/src/capabilities/action-timeline)
+- API adapters: [`services/api/src/capability-system/`](../../services/api/src/capability-system)
 - Browser composition: [`services/web-ui/src/installed-capabilities.ts`](../../services/web-ui/src/installed-capabilities.ts)
-- Generic Artifact library: [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/artifact-library-panel.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/artifact-library-panel.ts)
+- Generic Artifact library: [`packages/lixpi/canvas-components/src/workspace/frontend/library/artifact-library-panel.ts`](../../packages/lixpi/canvas-components/src/workspace/frontend/library/artifact-library-panel.ts)
 
 ## Related documentation
 
-- [Tools, Skills, and Capability Modules](./TOOLS-AND-SKILLS.md)
-- [Capability Storage and Operations](./CAPABILITY-STORAGE.md)
-- [Media Library](./MEDIA-LIBRARY.md)
+- [Tools, Skills, and Capability Modules](TOOLS-AND-SKILLS.md)
+- [Capability Storage and Operations](CAPABILITY-STORAGE.md)
+- [Media Library](MEDIA-LIBRARY.md)
 - [Workspace Model](../canvas/WORKSPACE-MODEL.md)
 - [Data Storage](../platform/DATA-STORAGE.md)

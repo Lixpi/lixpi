@@ -10,6 +10,7 @@ import {
     createSidePanel,
     type SidePanelConfig,
 } from './sidePanel.ts'
+import { uiKitSettings } from '../../runtime-settings.ts'
 
 it('restores body styles after overlapping panel drags are disposed out of order', () => {
     document.body.style.cursor = 'crosshair'
@@ -462,16 +463,30 @@ describe('SidePanel', () => {
         sidePanel.destroy()
     })
 
-    it('uses distinct default open/close easing and a 500ms default duration when unconfigured', () => {
+    it('uses the ui-kit side panel motion settings when the host passes no animation', () => {
+        const defaults = uiKitSettings.sidePanel.animation
         const sidePanel = createSidePanel(buildConfig())
         const panel = document.createElement('div')
 
         sidePanel.mountOpen(panel)
-        expect(panel.style.getPropertyValue('--side-panel-slide-duration')).toBe('500ms')
-        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('cubic-bezier(0.22, 1, 0.36, 1)')
+        expect(panel.style.getPropertyValue('--side-panel-slide-duration')).toBe(`${defaults.durationMs}ms`)
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe(defaults.openEasing)
 
         sidePanel.playClose()
-        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('cubic-bezier(0.64, 0, 0.78, 0)')
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe(defaults.closeEasing)
+
+        sidePanel.destroy()
+    })
+
+    it('mounts a closed panel off its edge so the next open slides in', () => {
+        const sidePanel = createSidePanel(buildConfig({ side: 'left' }))
+        const panel = document.createElement('div')
+
+        sidePanel.mountClosed(panel)
+
+        expect(panel.style.transform).toBe('translate3d(-100%, 0, 0)')
+        expect(sidePanel.backdropElement.style.transform).toBe('translate3d(-100%, 0, 0)')
+        expect(panel.style.transition).toBe('none')
 
         sidePanel.destroy()
     })

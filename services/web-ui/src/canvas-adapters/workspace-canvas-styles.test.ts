@@ -45,7 +45,7 @@ describe('workspace canvas styles', () => {
     it('compiles through the package Sass exports used by the web UI', async () => {
         const stylesheetPath = resolve(
             import.meta.dirname,
-            '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.scss',
+            '../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas.scss',
         )
         const result = await compileAsync(stylesheetPath, {
             importers: [packageStylesheetImporter],

@@ -20,8 +20,9 @@
     &.theme-light {
         @include infoBubbleTheme(
             (
-                surfaceBg: $offWhite,
-                surfaceFg: $nightBlue,
+                surfaceBg: theme-color("surface"),
+                surfaceFg: theme-color("text-secondary"),
+                borderColor: theme-color("border"),
                 bubbleRadius: 4px,
                 bubbleShadow: (0 1px 3px 1px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
                 borderLightnessAdjustment: -10%
@@ -35,8 +36,9 @@
                 // In our app, `theme-dark` is used for controls on light surfaces.
                 // Keep the popover surface light (like M3 menus) and rely on violet
                 // state layers for interaction.
-                surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
-                surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+                surfaceBg: theme-color("surface"),
+                surfaceFg: theme-color("text-secondary"),
+                borderColor: theme-color("border"),
                 bubbleRadius: 8px,
                 bubbleShadow: (0 2px 6px 2px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
                 borderLightnessAdjustment: -10%

@@ -37,7 +37,7 @@ After changing a subject grant, regenerate the signed declaration and restart th
 Tests assert public/private access, event-only grants, user-scoped events, queue metadata, portal extensions, constant-derived IDs, and invalid declarations directly. Run the package through the [shared Docker test runner](../../../documentation/code-quality/testing/TYPESCRIPT.md):
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared nats-subject-registry
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared nats-subject-registry
 ```
 
 See [Authentication](../../../documentation/platform/AUTHENTICATION.md) for credential verification, accounts, and request authorization. The [NATS service architecture](../../../services/nats/documentation/ARCHITECTURE.md) explains signed runtime declarations, authoritative reads and revision checks during peer admission.

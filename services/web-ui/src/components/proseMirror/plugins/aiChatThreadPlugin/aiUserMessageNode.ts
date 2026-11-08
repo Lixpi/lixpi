@@ -10,7 +10,7 @@ import {
     createContextPreviewTile,
     type ContextPreviewEnvironment,
     type ContextPreviewTileInstance,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import {
     type CanvasNode,
 } from '@lixpi/constants'

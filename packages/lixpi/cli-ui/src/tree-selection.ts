@@ -1,10 +1,8 @@
-// One option of a horizontal radio row. With `selection`, choosing it applies that
-// exact selection to the tree. Without it, the row is independent of the tree.
+// One option of a horizontal radio row. The row is independent of the tree.
 export type TreeChoice = {
     value: string
     label: string
     hint?: string
-    selection?: string[]
 }
 
 export type TreeNode = {
@@ -16,6 +14,10 @@ export type TreeNode = {
     // Makes this a top-level radio row, drawn as `Label  o One / * Two`. It isn't a
     // selectable item itself.
     choices?: TreeChoice[]
+
+    // Makes this a preset row inside the tree, drawn with a radio mark. Space applies
+    // this exact selection, and the mark is filled while the tree matches it.
+    selection?: string[]
 }
 
 export type SelectionState = 'all' | 'some' | 'none'
@@ -89,6 +91,9 @@ export class TreeSelection {
     }
 
     stateOf(node: TreeNode): SelectionState {
+        if (node.selection)
+            return this.matches(node.selection) ? 'all' : 'none'
+
         const leaves = this.leavesOf(node)
         const selectedCount = leaves.filter(leaf => this.selected.has(leaf)).length
 
@@ -103,6 +108,15 @@ export class TreeSelection {
     toggle(node: TreeNode): void {
         if (node.choices) {
             this.switchChoice(node, 1)
+
+            return
+        }
+
+        if (node.selection) {
+            this.selected.clear()
+
+            for (const value of node.selection)
+                this.selected.add(value)
 
             return
         }
@@ -146,26 +160,16 @@ export class TreeSelection {
             return state === 'all' ? [node.label] : (node.children ?? []).flatMap(summarize)
         }
 
-        const choiceRows = this.roots.filter(root => root.choices)
-        const hasMatchingSelection = choiceRows.some(root => root.choices![0].selection && this.activeChoice(root))
+        const preset = this.roots.find(root => root.selection && this.matches(root.selection))
 
         return [
-            ...choiceRows.flatMap(root => {
-                const choice = this.activeChoice(root)
-
-                return choice ? [`${root.label}: ${choice.label}`] : []
-            }),
-            ...(hasMatchingSelection ? [] : this.serviceRoots().flatMap(summarize)),
+            ...this.roots.filter(root => root.choices).map(root => `${root.label}: ${this.activeChoice(root).label}`),
+            ...(preset ? [preset.label] : this.serviceRoots().flatMap(summarize)),
         ]
     }
 
-    // A row that applies selections has an active choice only while the tree matches
-    // it, so changing a single service shows neither option as chosen.
-    activeChoice(node: TreeNode): TreeChoice | undefined {
+    activeChoice(node: TreeNode): TreeChoice {
         const choices = node.choices ?? []
-
-        if (choices[0]?.selection)
-            return choices.find(choice => this.matches(choice.selection!))
 
         return choices.find(choice => choice.value === this.chosen.get(node.value)) ?? choices[0]
     }
@@ -175,43 +179,20 @@ export class TreeSelection {
         direction: 1 | -1,
     ): void {
         const choices = node.choices ?? []
-        const current = choices.indexOf(this.activeChoice(node)!)
+        const current = choices.indexOf(
+            this.activeChoice(node),
+        )
 
-        // With no active choice, each arrow picks the option on its own side.
-        const nextIndex = current === -1
-            ? direction === 1
-                ? choices.length - 1
-                : 0
-            : (current + direction + choices.length) % choices.length
-        const next = choices[nextIndex]
-
-        if (!next.selection) {
-            this.chosen.set(node.value, next.value)
-
-            return
-        }
-
-        this.selected.clear()
-
-        for (const value of next.selection)
-            this.selected.add(value)
+        this.chosen.set(node.value, choices[(current + direction + choices.length) % choices.length].value)
     }
 
     // The chosen values of rows that are independent of the tree.
     selectedOptions(): string[] {
-        return this.roots.flatMap(root => {
-            if (
-                !root.choices
-                || root.choices[0]?.selection
-            )
-                return []
-
-            return [this.activeChoice(root)!.value]
-        })
+        return this.roots.filter(root => root.choices).map(root => this.activeChoice(root).value)
     }
 
     private serviceRoots(): TreeNode[] {
-        return this.roots.filter(root => !root.choices)
+        return this.roots.filter(root => !root.choices && !root.selection)
     }
 
     private matches(values: string[]): boolean {

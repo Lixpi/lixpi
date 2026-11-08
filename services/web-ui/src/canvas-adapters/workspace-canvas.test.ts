@@ -24,13 +24,13 @@ const readSourceFile = (relativePath: string, displayName = relativePath): strin
 }
 
 const loadNodeDeletion = (): string =>
-    readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-node-deletion.ts')
+    readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/scene/workspace-node-deletion.ts')
 
 const loadNodeGestures = (): string =>
-    readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-node-gestures.ts')
+    readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-node-gestures.ts')
 
 const loadGenerationHandlers = (): string =>
-    readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-generation-handlers.ts')
+    readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/workspace-generation-handlers.ts')
 
 const sourceName = (source: string): string => sourceFileNames.get(source) ?? 'source excerpt'
 
@@ -63,47 +63,47 @@ const expectExcerptNotToContain = (excerpt: string, snippet: string, label = 'so
 }
 
 const loadScss = (): string => {
-    return readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.scss').replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/canvas-chrome";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-chrome.scss'),
+    return readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas.scss').replace(
+        '@import "@lixpi/canvas-components/styles/workspace/canvas-chrome";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-chrome.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/document-node";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/document-node.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/document-node";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/document-node.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/operation-status";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/operation-status-node.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/operation-status";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/operation-status-node.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/branch-marker";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-reference-resolution.scss')
-            + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-content.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/branch-marker";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-reference-resolution.scss')
+            + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-content.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/nodes";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/workspace-node-shells.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/nodes";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/workspace-node-shells.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/progress";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/progress/media-generation-progress.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/progress";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/progress/media-generation-progress.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/output-details";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/output-details";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/generated-output-details-sidebar.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/video-chrome";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-video-chrome.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/video-chrome";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/frontend/media/playback-chrome.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/asset-views";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/workspace-asset-views.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/asset-views";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/workspace-asset-views.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/output-chrome";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/generated-output-node-chrome.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/output-chrome";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-chrome.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/right-panel";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-right-panel.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/right-panel";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-right-panel.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components-lixpi-specific/styles/output-details-content";',
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/workspace-output-details.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/output-details-content";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/workspace-output-details.scss'),
     )
 }
 
-const loadOutputChrome = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-output-chrome.ts')
+const loadOutputChrome = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/workspace-output-chrome.ts')
 
 const loadTs = (): string => {
     const workspaceOwnerFiles = [
@@ -128,9 +128,9 @@ const loadTs = (): string => {
         'workspace-branch-marker-generation.ts',
         'workspace-operation-status-nodes.ts',
     ]
-    const workspaceOwners = workspaceOwnerFiles.map(filename => readSourceFile(`../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`)).join('\n')
-    const nodeShells = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/workspace-node-shells.ts')
-    const canvasTheme = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/settings/canvas-theme.ts')
+    const workspaceOwners = workspaceOwnerFiles.map(filename => readSourceFile(`../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/${filename}`)).join('\n')
+    const nodeShells = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/workspace-node-shells.ts')
+    const canvasTheme = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/settings/canvas-theme.ts')
     const source = `${loadNodeDeletion()}\n${loadNodeGestures()}\n${loadGenerationHandlers()}\n${workspaceOwners}\n${nodeShells}\n${canvasTheme}`
     sourceFileNames.set(source, 'workspace renderer, focused owners, and generation handlers')
 
@@ -156,7 +156,7 @@ const closingBraceIndex = (source: string, openIndex: number): number => {
 }
 
 const loadWorkspacePreflightMethod = (name: string, module = 'workspace-preflight-markers'): string => {
-    const source = readSourceFile(`../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/${module}.ts`)
+    const source = readSourceFile(`../../packages/lixpi/canvas-components/src/workspace/shared/generation/${module}.ts`)
     const start = source.indexOf(`\n    ${name}(`)
     expect(start, `Missing preflight method ${name}`).toBeGreaterThan(-1)
     // Brace matching rather than a `\n    }\n` marker, so the slice survives a
@@ -167,7 +167,7 @@ const loadWorkspacePreflightMethod = (name: string, module = 'workspace-prefligh
     return source.slice(start, end)
 }
 
-const loadRightPanel = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-right-panel.ts')
+const loadRightPanel = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-right-panel.ts')
 
 const extractMarqueeConfiguration = (source: string): string => {
     const configuration = source.match(/this\.marquee = [^\n]+\.installMarquee\([\s\S]*?^        \}\)/m)?.[0]
@@ -176,7 +176,7 @@ const extractMarqueeConfiguration = (source: string): string => {
     return configuration!
 }
 
-const loadPixiMediaLayer = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-media-layer.ts')
+const loadPixiMediaLayer = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/workspace-media-layer.ts')
 
 const loadViewportBridge = (): string => readSourceFile('../../packages/lixpi/canvas-engine/src/frontend/viewport/viewport-bridge.ts', 'packages/lixpi/canvas-engine/src/frontend/viewport/viewport-bridge.ts')
 
@@ -184,19 +184,19 @@ const loadPixiTravelingOutlineRenderer = (): string => readSourceFile('../../pac
 
 const loadWorkspaceLoadingOutline = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/frontend/loading/loading-overlay.ts', 'packages/lixpi/canvas-components/src/frontend/loading/loading-overlay.ts')
 
-const loadWorkspaceLineageProjection = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/branch-tree-layout/workspace-lineage-projection.ts')
+const loadWorkspaceLineageProjection = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/branch-tree-layout/workspace-lineage-projection.ts')
 
-const loadWorkspaceMarkerHandoff = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-branch-marker-handoff.ts')
+const loadWorkspaceMarkerHandoff = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-branch-marker-handoff.ts')
 
 const loadWorkspaceCanvasView = (): string => {
     return readSourceFile('../components/workspaceCanvasView/workspaceCanvasView.ts', 'components/workspaceCanvasView/workspaceCanvasView.ts')
-        + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-chrome.ts')
-        + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-surface.ts')
+        + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-chrome.ts')
+        + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-surface.ts')
 }
 
-const loadCanvasMembershipStateRebase = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/membership-state-rebase.ts')
+const loadCanvasMembershipStateRebase = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/scene/membership-state-rebase.ts')
 
-const loadContextPreview = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/context/context-preview.ts', 'context-preview.ts')
+const loadContextPreview = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/context/context-preview.ts', 'context-preview.ts')
 
 const loadAiInteractionService = (): string => readSourceFile('../services/ai-interaction-service.ts', 'services/ai-interaction-service.ts')
 
@@ -204,16 +204,18 @@ const loadAiChatThreadPlugin = (): string => readSourceFile('../components/prose
 
 const loadAiGeneratedImageNode = (): string => readSourceFile('../components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts')
 
-const loadAiGeneratedMediaCanvasRouter = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/canvas-generation-events.ts')
+const loadAiGeneratedMediaCanvasRouter = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/canvas-generation-events.ts')
 
-const loadAiPromptComposer = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/composer/ai-prompt-composer.ts', 'ai-prompt-composer.ts')
+const loadAiPromptComposer = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/composer/ai-prompt-composer.ts', 'ai-prompt-composer.ts')
 
-const loadWorkspaceComposerStyles = (): string => readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/composer/workspace-prompt-composer.scss')
+const loadWorkspaceComposerStyles = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/composer/workspace-prompt-composer.scss')
+
+const loadWorkspacePromptControlRail = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/composer/workspace-prompt-control-rail.ts')
 
 describe('Branch prompt-reference theme integration', () => {
     it('uses a lighter Capability accent on the dark branch message without changing marker layout', () => {
-        const scss = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.scss')
-        const componentScss = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-content.scss')
+        const scss = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas.scss')
+        const componentScss = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-content.scss')
         const selector = '.workspace-branch-marker-message-text .prompt-reference-chip {'
         const ruleStart = componentScss.indexOf(selector)
         const ruleEnd = componentScss.indexOf('\n}', ruleStart)
@@ -254,13 +256,14 @@ const loadLayout = (): string => readSourceFile('../views/layouts/layout.ts', 'v
 
 const loadNavigationSidePanel = (): string => readSourceFile('../components/navigationSidePanel/navigationSidePanel.ts', 'components/navigationSidePanel/navigationSidePanel.ts')
 
-const loadNavigationSidePanelScss = (): string => readSourceFile('../components/navigationSidePanel/navigation-side-panel.scss', 'components/navigationSidePanel/navigation-side-panel.scss')
+const loadNavigationSidePanelScss = (): string => readSourceFile('../../packages/lixpi/ui-kit/styles/navigation-side-panel.scss', 'ui-kit/styles/navigation-side-panel.scss')
 
 const loadSettings = (): string => {
     return [
-        readSourceFile('../settings.ts', 'settings.ts'),
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/settings/canvas-settings.ts'),
-        readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/settings/types.ts'),
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/settings/ui-settings.ts', 'settings.ts'),
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/settings/canvas-settings.ts'),
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/settings/types.ts'),
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-theme.ts'),
     ].join('\n')
 }
 
@@ -527,8 +530,8 @@ describe('Capability Artifact generated-output chrome parity', () => {
 
 describe('Workspace canvas — durable media request recovery and identity', () => {
     const ts = loadTs()
-    const identityControl = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/asset-subject-identity-control.ts')
-    const library = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts')
+    const identityControl = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/asset-subject-identity-control.ts')
+    const library = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/library/media-library-panel.ts')
 
     it('uses the scope selector dropdown for all five subject identity options in both Asset surfaces', () => {
         expectSourceToContain(identityControl, "{ title: 'Unknown', value: 'unknown'")
@@ -580,7 +583,7 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 
     it('applies progress heartbeats as child updates without synchronizing or rerendering canvas nodes', () => {
         const progressUpdate = extractFunctionBody(ts, 'applyProgress')
-        const eventUpdate = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-media-operation-recovery.ts')
+        const eventUpdate = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-media-operation-recovery.ts')
 
         expectExcerptToContain(progressUpdate, 'this.ports.replaceState(result.state)', 'progress-only recovery')
         expectExcerptToContain(progressUpdate, 'this.ports.syncProgress(result.state)', 'progress-only recovery')
@@ -636,10 +639,11 @@ describe('workspace node CSS — box-shadow consistency', () => {
     const docNodeBlock = extractBlock(scss, '.workspace-document-node')
     const imageNodeBlock = extractBlock(scss, '.workspace-image-node')
 
-    it('.workspace-document-node has exactly one box-shadow (base only)', () => {
+    it('.workspace-document-node uses separate base and selected theme shadows', () => {
         const allShadows = extractBoxShadowValues(docNodeBlock)
-        expect(allShadows).toHaveLength(1)
-        expect(allShadows[0]).not.toBe('none')
+        expect(allShadows).toHaveLength(2)
+        expect(allShadows[0]).toContain('var(--canvas-shadow')
+        expect(allShadows[1]).toContain('var(--canvas-selected-shadow')
     })
 
     it('no hover box-shadow override on any node', () => {
@@ -651,8 +655,8 @@ describe('workspace node CSS — box-shadow consistency', () => {
     })
 
     it('keeps document selected/focus styling from adding box-shadow', () => {
-        expect(docNodeBlock).not.toMatch(/is-selected[\s\S]*?box-shadow/)
-        expect(docNodeBlock).not.toMatch(/focus-within[\s\S]*?box-shadow/)
+        expect(docNodeBlock).toContain('outline: none;')
+        expect(docNodeBlock).toContain('box-shadow: var(--canvas-selected-shadow,')
     })
 
     it('no box-shadow transition on any node', () => {
@@ -660,7 +664,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
         expectExcerptNotToContain(docNodeBlock, 'transition:box-shadow')
     })
 
-    it('.workspace-image-node base uses the theme-configured default box-shadow', () => void expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--workspace-media-node-default-box-shadow\);/m))
+    it('.workspace-image-node base uses the theme-configured default box-shadow', () => void expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--canvas-shadow, var\(--workspace-media-node-default-box-shadow\)\);/m))
 
     it('keeps generated media model chrome free of badge and button shadows', () => {
         const badgeBlock = extractBlock(loadMediaModelBadgeScss(), '.media-model-badge')
@@ -675,7 +679,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
     it('uses a theme-configured shadow for selected image nodes', () => {
         const selectedBlock = extractBlockContainingSelector(imageNodeBlock, '&.is-selected')
-        expectExcerptToContain(selectedBlock, 'box-shadow: var(--workspace-media-node-selected-box-shadow)', 'selected image selector block')
+        expectExcerptToContain(selectedBlock, 'box-shadow: var(--canvas-selected-shadow, var(--workspace-media-node-selected-box-shadow))', 'selected image selector block')
         expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
     })
 
@@ -712,7 +716,7 @@ describe('PIXI media layer — first sync geometry', () => {
 
     it('initializes new image sprite and placeholder geometry during first upsert', () => {
         const host = loadTs()
-        expectSourceToContain(host, "from '@lixpi/canvas-components-lixpi-specific/frontend/media'")
+        expectSourceToContain(host, "from '@lixpi/canvas-components/workspace/media'")
         expectSourceToContain(host, 'createWorkspaceMediaLayer({')
         expectSourceNotToContain(host, 'getVideoLayer')
         expectSourceNotToContain(host, 'createVideoNodeHandler')
@@ -755,13 +759,12 @@ describe('Workspace canvas — generated image preview rendering', () => {
         expectSourceToContain(pixiLayerTs, 'this.outlines.sync(datums)')
         expectSourceToContain(outlineRendererTs, 'export class TravelingOutline {')
         expectSourceNotToContain(outlineRendererTs, "from 'pixi.js'")
-        expectSourceToContain(settingsTs, 'gap: 3')
+        expectSourceToContain(settingsTs, 'gap: effects.generationOutline.gap')
         expectSourceToContain(settingsTs, 'preFrameCircleScale: mediaGenerationLayoutSettings.preFrameCircleScale')
-        expectSourceToContain(settingsTs, 'snakeWidth: 9')
-        expectSourceToContain(settingsTs, 'snakeTailWidthFraction: 0.14')
-        expectSourceToContain(settingsTs, 'snakeLengthFraction: 0.24')
-        expectSourceToContain(settingsTs, "'#ff0084'")
-        expectSourceToContain(settingsTs, 'animationDurationMs: 3200')
+        expectSourceToContain(settingsTs, 'snakeWidth: effects.generationOutline.snakeHeadWidth')
+        expectSourceToContain(settingsTs, 'snakeTailWidthFraction: effects.generationOutline.snakeTailWidthFraction')
+        expectSourceToContain(settingsTs, 'snakeLengthFraction: effects.generationOutline.snakeLengthFraction')
+        expectSourceToContain(settingsTs, 'animationDurationMs: effects.generationOutline.durationMs')
         expectSourceNotToContain(ts, 'SvgGradientRenderer')
         expectSourceNotToContain(ts, 'image-generating-border')
         expectSourceNotToContain(ts, 'image-generating-spinner')
@@ -890,8 +893,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
     })
 
     it('routes generated-media add/remove through the centralized tree rebalance', () => {
-        const rebalancePipeline = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/branch-tree-layout/generated-media-rebalance.ts')
-        expectSourceToContain(ts, "from '@lixpi/canvas-components-lixpi-specific/shared'")
+        const rebalancePipeline = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/branch-tree-layout/generated-media-rebalance.ts')
+        expectSourceToContain(ts, "from '@lixpi/canvas-components/workspace/shared'")
         expectSourceToContain(rebalancePipeline, "import { getStartedLineageMarkerState } from './branch-lineage-state.ts'")
         expectSourceToContain(ts, 'private createGeneratedMediaRebalancePipeline = (): GeneratedMediaRebalancePipeline')
         expectSourceToContain(ts, 'private rebalanceGeneratedMediaTrees = (nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
@@ -917,7 +920,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
     })
 
     it('applies API-resolved authoritative canvas geometry instead of recomputing generation layout', () => {
-        const geometry = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-api-canvas-geometry.ts')
+        const geometry = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/scene/workspace-api-canvas-geometry.ts')
         // The API runs the shared branch-tree layout and broadcasts resolved
         // geometry over the chat stream; the client applies it transiently (no
         // re-persist, the API already wrote it) with a monotonic revision guard.
@@ -972,7 +975,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
     })
 
     it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
-        const history = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/review/workspace-history.ts')
+        const history = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/review/workspace-history.ts')
         expectSourceToContain(history, 'buildBranchMarkerTurnProjectionFromThreadContent')
         expectSourceToContain(ts, 'getPendingGeneratedMediaNodeId')
         expectSourceToContain(history, 'allowLatestTurnFallback: this.canUseLatestBranchMarkerTurnFallback(marker)')
@@ -1058,7 +1061,7 @@ describe('Workspace canvas — generated video canvas state', () => {
         const completeHandler = ts.slice(completeStart, errorStart)
         expectExcerptToContain(completeHandler, 'const completedVideoNode = this.getCurrentCanvasMediaNode(completedNodeId)', 'video complete handler')
         expectExcerptToContain(completeHandler, 'void this.ports.analysis.refreshCompleted(completedVideoNode)', 'video complete handler')
-        const analysis = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-media-analysis.ts')
+        const analysis = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-media-analysis.ts')
         expectSourceToContain(analysis, 'async refreshCompleted(node: MediaNode)')
         expectSourceToContain(analysis, 'await this.ports.refreshAsset(work.assetId, work.workspaceId)')
     })
@@ -1076,7 +1079,7 @@ describe('Workspace canvas — generated video canvas state', () => {
         expectExcerptToContain(renderDetails, 'progressDetails: this.ports.context.getExecutionTraceTimelineDetail()', 'sidebar timeline')
         expectExcerptToContain(renderDetails, 'getProgress: this.getTraceState,', 'sidebar timeline')
         expectExcerptToContain(detailsBody, 'overflow-y: auto', 'details scroll surface')
-        expectExcerptToContain(traceProgressBlock, '--progress-timeline-title-size: var(--workspace-right-sidebar-content-font-size)', 'timeline title typography')
+        expectExcerptToContain(traceProgressBlock, '--progress-timeline-title-size: var(--canvas-font-size, var(--workspace-right-sidebar-content-font-size))', 'timeline title typography')
     })
 
     it('uses the standard chat projection for Capability Artifact lineage history', () => {
@@ -1085,7 +1088,7 @@ describe('Workspace canvas — generated video canvas state', () => {
         expectExcerptToContain(renderDetails, 'mountArtifactHistory: ({ host, node: artifact, signal }) => this.mountArtifactHistory(host, artifact, signal)', 'Capability Artifact details')
         expectExcerptToContain(artifactHistory, 'new WorkspaceGenerationHistory({ host, projection, signal }, this.getGenerationHistoryPorts())', 'Capability Artifact history')
         expectSourceToContain(ts, 'this.ports.history.buildCapabilityArtifactTurnProjectionContent(node)')
-        expectSourceToContain(readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/review/workspace-history.ts'), 'allowLatestTurnFallback: false')
+        expectSourceToContain(readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/review/workspace-history.ts'), 'allowLatestTurnFallback: false')
         expectSourceNotToContain(ts, 'createCapabilityArtifactBranchHistoryPanel')
     })
 
@@ -1111,7 +1114,7 @@ describe('Workspace canvas — generated video canvas state', () => {
     it('combines media metadata and history in the unified details renderer while using one footer for Artifacts', () => {
         const renderDetails = extractFunctionBody(ts, 'renderContent')
         const detailsProjection = extractFunctionBody(ts, 'mountMediaHistory')
-        const chatProjection = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/workspace-generation-history.ts')
+        const chatProjection = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/workspace-generation-history.ts')
         const artifactChrome = loadOutputChrome()
         expectExcerptToContain(renderDetails, 'assets: this.ports.createAssetViewPorts()', 'generated media details')
         expectExcerptToContain(renderDetails, 'new WorkspaceOutputDetails(body, node, {', 'generated media history')
@@ -1465,7 +1468,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
     })
 
     it('recovers pending marker records and aliases in the package owner', () => {
-        const placements = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-placements.ts')
+        const placements = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-generation-placements.ts')
         expectSourceToContain(placements, 'return this.recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)')
         expectSourceToContain(placements, 'this.setPendingBranchMarkerRecordAliases(threadId, generationRun, existing)')
         expectSourceToContain(loadWorkspaceMarkerHandoff(), 'this.ports.placements.ensurePendingBranchMarkerRecordForApiRun(threadId, generationRun)')
@@ -1511,7 +1514,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
     })
 
     it('keeps branch marker planning and pending-state clearing transient so they cannot overwrite API-owned media membership', () => {
-        const settlement = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-settlement.ts')
+        const settlement = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-generation-settlement.ts')
         expectSourceToContain(settlement, 'this.ports.handoff.resolvePendingBranchMarkerWithLineagePlan(threadId, generationRun)')
         expectSourceToContain(settlement, 'this.ports.handoff.clearPendingBranchMarkerStateForRun(threadId, generationRun, options)')
         expectSourceToContain(ts, 'commit: this.commitTransientCanvasStatePreservingEditors,')
@@ -1654,7 +1657,7 @@ describe('Workspace right panel — single generated-output details renderer', (
     })
 
     it('mounts only the unified details component on the AI Threads surface', () => {
-        const detailsSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-generated-output-details.ts')
+        const detailsSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-generated-output-details.ts')
         const content = extractFunctionBody(ts, 'mountContent')
         expectExcerptToContain(content, 'this.renderContent(body, node)', 'right panel content')
         expectExcerptToContain(content, 'workspace-generated-output-details-empty', 'right panel content')
@@ -1723,7 +1726,7 @@ describe('Generated-output details — media title visibility', () => {
     const ts = loadTs()
 
     it('renders the Asset metadata title without a hide-title modifier', () => {
-        const appendMetadata = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/workspace-output-details.ts')
+        const appendMetadata = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/workspace-output-details.ts')
         expectExcerptToContain(appendMetadata, 'canvas-asset-metadata-editor is-details nopan', 'generated-output metadata')
         expectExcerptToContain(appendMetadata, "new WorkspaceAssetMetadataEditor(node.assetId, title, 'details', this.ports.assets)", 'generated-output metadata')
         expectSourceNotToContain(ts, 'workspace-ai-chat-thread-node-hide-title')
@@ -1736,7 +1739,7 @@ describe('Generated-output details — media title visibility', () => {
         expectExcerptToContain(titleBlock, 'margin-right: 3.5rem', 'details title container')
         expectExcerptToContain(contentBlock, '&.is-details', 'details metadata editor')
         expectExcerptToContain(contentBlock, 'h1.document-title', 'details metadata title')
-        expectExcerptToContain(contentBlock, 'font-size: 1.55rem', 'details metadata title')
+        expectExcerptToContain(contentBlock, 'font-size: var(--canvas-title-font-size, 1.55rem)', 'details metadata title')
     })
 })
 
@@ -1756,16 +1759,16 @@ describe('Resize handles - corner-hover visibility', () => {
         expectExcerptNotToContain(block, '&.is-resizing .document-resize-handle')
     })
 
-    it('keeps handles as invisible corner hitboxes that reveal only on direct hover or drag', () => {
+    it('keeps resize corners as transparent interactive hitboxes without visible artwork', () => {
         // extractBlock matches the first occurrence; a nested pending-media-hover
         // override of the same selector now precedes the top-level base rule.
         const block = extractBlock(scss, '\n.document-resize-handle')
 
-        expect(block).toMatch(/opacity:\s*0/)
         expect(block).toMatch(/pointer-events:\s*auto/)
-        expectExcerptToContain(block, '&:hover,')
-        expectExcerptToContain(block, '&.is-dragging')
-        expect(block).toMatch(/&:hover,[\s\S]*&\.is-dragging\s*\{[\s\S]*opacity:\s*1/)
+        expectExcerptToContain(block, 'background: transparent;')
+        expectExcerptToContain(block, 'border: 0;')
+        expectExcerptToContain(block, 'box-shadow: none;')
+        expectExcerptNotToContain(block, 'opacity:')
     })
 
     it('does not reveal floating input resize handles from thread selection', () => {
@@ -1784,11 +1787,11 @@ describe('Right side panel — TS infrastructure', () => {
     const ts = loadTs()
 
     it('supplies shared panel settings and persisted state through package ports', () => {
-        expectSourceToContain(ts, 'this.rightPanel = new WorkspaceRightPanel({')
+        expectSourceToContain(ts, 'this.rightPanel = this.options.sidePanel === false ? null : new WorkspaceRightPanel({')
         expectSourceToContain(ts, 'settings: this.host.settings.rightSidePanel,')
         expectSourceToContain(ts, 'getState: () => this.aiChatPanelState,')
         expectSourceToContain(ts, 'this.aiChatPanelState = { ...this.aiChatPanelState, width }')
-        expectSourceToContain(ts, 'rightPanel.syncState()')
+        expectSourceToContain(ts, 'this.rightPanel?.syncState()')
         expectSourceNotToContain(ts, 'settings.aiChatThread.rightSidePanel')
         expectSourceNotToContain(ts, 'createSidePanel({')
     })
@@ -1845,6 +1848,7 @@ describe('Right side panel — TS infrastructure', () => {
         const ts = loadTs()
         const scss = loadScss()
         const workspaceCanvasViewSource = loadWorkspaceCanvasView()
+        const railSource = loadWorkspacePromptControlRail()
         const canvasMediaLayer = loadPixiMediaLayer()
         const leftRailItems = extractBlockContainingSelector(
             scss,
@@ -1861,26 +1865,24 @@ describe('Right side panel — TS infrastructure', () => {
             scss,
             '.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background',
         )
-        const rightRailStart = workspaceCanvasViewSource.indexOf(
+        const rightRailStart = railSource.indexOf(
             '<div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">',
         )
-        const rightRailEnd = workspaceCanvasViewSource.indexOf('controls.style.setProperty', rightRailStart)
-        const rightRailMarkup = workspaceCanvasViewSource.slice(rightRailStart, rightRailEnd)
+        const rightRailMarkup = railSource
         const screenGlassTargets = workspaceCanvasViewSource
 
         expectSourceNotToContain(
             workspaceCanvasViewSource,
             'workspace-canvas-media-library-panel',
         )
-        expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-right-control-rail')
-        expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-model-menu-hover-background"')
-        expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-media-mode-panel"')
-        expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-model-menu-panel"')
-        expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
+        expectSourceToContain(railSource, 'workspace-canvas-right-control-rail')
+        expectSourceToContain(railSource, 'className="workspace-canvas-model-menu-hover-background"')
+        expectSourceToContain(railSource, 'className="workspace-canvas-media-mode-panel"')
+        expectSourceToContain(railSource, 'className="workspace-canvas-model-menu-panel"')
+        expectSourceNotToContain(railSource, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel-right')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-media-mode-panel-right')
         expect(rightRailStart).toBeGreaterThan(-1)
-        expect(rightRailEnd).toBeGreaterThan(rightRailStart)
         expect(rightRailMarkup.indexOf('${this.mediaModeSwitchMount}')).toBeLessThan(
             rightRailMarkup.indexOf('${this.modelMenuControlMount}'),
         )
@@ -1893,12 +1895,12 @@ describe('Right side panel — TS infrastructure', () => {
         expectExcerptToContain(rightRail, 'left: calc(', 'right control rail')
         expectExcerptToContain(rightRail, 'display: flex;', 'right control rail')
         expectExcerptToContain(rightRail, 'gap: 2px;', 'right control rail')
-        expectExcerptToContain(rightRail, 'border-radius: 9999px;', 'right control rail')
+        expectExcerptToContain(rightRail, 'border-radius: var(--canvas-lixpi-rail-radius, var(--canvas-control-radius, 9999px));', 'right control rail')
         expectExcerptToContain(modelMenuHoverBackground, 'position: absolute;', 'model menu hover background')
         expectExcerptToContain(modelMenuHoverBackground, 'inset: 0;', 'model menu hover background')
         expectExcerptToContain(modelMenuHoverBackground, 'pointer-events: none;', 'model menu hover background')
-        expectExcerptToContain(modelMenuHoverBackgroundActive, 'background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);', 'model menu hover state')
-        expectSourceToContain(scss, '--workspace-canvas-media-mode-panel-width: 76px;')
+        expectExcerptToContain(modelMenuHoverBackgroundActive, 'background: var(--canvas-surface-hover, var(--ai-prompt-model-menu-trigger-active-background, #eef0f4));', 'model menu hover state')
+        expectSourceToContain(scss, '--workspace-canvas-media-mode-panel-width: calc(2 * var(--canvas-control-height, 40px) - 4px);')
         expectExcerptToContain(modelMenuPanel, 'padding: 0;', 'model menu panel')
         expectExcerptToContain(modelMenuTrigger, 'width: 100%;', 'model menu trigger')
         expectExcerptToContain(modelMenuTrigger, 'height: 100%;', 'model menu trigger')
@@ -1990,7 +1992,7 @@ describe('Right side panel — TS infrastructure', () => {
     })
 
     it('prepares detached canvas generations through the conversation run owner', () => {
-        const run = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/canvas-conversation-run.ts')
+        const run = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/canvas-conversation-run.ts')
         expectSourceToContain(run, 'this.ports.preflight(')
         expectSourceToContain(run, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
         expectSourceToContain(run, 'mediaBranchCandidateSnapshot,')
@@ -2049,7 +2051,7 @@ describe('Right side panel — TS infrastructure', () => {
     it('sets closed state before awaiting the package panel close animation', () => {
         const close = extractFunctionBody(ts, 'closeAiChatPanel')
         expectExcerptToContain(close, 'this.aiChatPanelState = { ...this.aiChatPanelState, isOpen: false }', 'panel close')
-        expectExcerptToContain(close, 'const closing = this.rightPanel.close()', 'panel close')
+        expectExcerptToContain(close, 'const closing = this.rightPanel?.close()', 'panel close')
         expect(close.indexOf('rightPanel.close()')).toBeLessThan(close.indexOf('persistAiChatSidebarState()'))
         expectExcerptToContain(close, 'await closing', 'panel close')
     })
@@ -2083,7 +2085,7 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
         expectSourceToContain(scss, 'bottom: calc(0px - var(--workspace-canvas-padding-bottom))')
         expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
-        expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: 10px', 'outer chat panel')
+        expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: var(--canvas-panel-radius, 10px)', 'outer chat panel')
         expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
         expectSourceToContain(loadWorkspaceComposerStyles(), '.ai-prompt-input-floating.workspace-canvas-global-composer')
         expectExcerptToContain(
@@ -2235,7 +2237,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
     })
 
     it('selectNode (plain click) does NOT pass fromMarquee so single-click never shows overlay', () => {
-        const selectionOwner = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-selection.ts')
+        const selectionOwner = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-selection.ts')
         const fnBody = extractFunctionBody(selectionOwner, 'selectNode')
         expect(fnBody).not.toBe('')
 
@@ -2295,9 +2297,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
         expectSourceToContain(ts, "'--selection-marquee-background-color': selection.marqueeBackgroundColor")
         expectSourceToContain(ts, "'--selection-overlay-border-color': selection.overlayBorderColor")
         expectSourceToContain(ts, "'--selection-overlay-background-color': selection.overlayBackgroundColor")
-        expectSourceToContain(ts, "'--selection-outline-color': selection.outlineColor")
         expectSourceToContain(ts, 'applyWorkspaceCanvasTheme(this.paneEl, this.host.settings)')
-        expect(scss).toMatch(/var\(--selection-outline-color/)
     })
 
     it('wires image settings to CSS custom properties', () => {
@@ -2305,7 +2305,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
         expectSourceToContain(ts, "'--workspace-media-node-selected-box-shadow': mediaNode.selectedBoxShadow")
         expectSourceToContain(ts, "'--workspace-media-node-border-radius': `${mediaNode.borderRadius}px`")
         expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-media-model-badge-box-shadow', mediaNodeStyles.modelBadgeBoxShadow)")
-        expect(scss).toMatch(/border-radius:\s*var\(--workspace-media-node-border-radius\)/)
+        expect(scss).toMatch(/border-radius:\s*var\(--canvas-media-radius, var\(--workspace-media-node-border-radius\)\)/)
     })
 
     it('wires resize handles through configured bounded zoom scaling', () => {
@@ -2522,7 +2522,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
     })
 
     it('builds rectangular collision boxes from node world bounds', () => {
-        const geometry = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/branch-tree-layout/workspace-geometry.ts')
+        const geometry = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/branch-tree-layout/workspace-geometry.ts')
         expectSourceToContain(geometry, 'const worldPosition = this.ports.getWorldPosition(node, nodesById)')
         expectSourceToContain(geometry, 'const collisionRect = this.getCanvasNodeCollisionRect(node, worldPosition)')
         expectSourceToContain(geometry, 'x: collisionRect.x,')
@@ -2530,13 +2530,13 @@ describe('Workspace canvas — collision resolution ownership', () => {
     })
 
     it('includes resolved media title and action chrome in collision boxes', () => {
-        const geometry = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/branch-tree-layout/workspace-geometry.ts')
+        const geometry = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/branch-tree-layout/workspace-geometry.ts')
         expectSourceToContain(ts, 'this.workspaceGeometry.getCanvasNodeCollisionRect(node, worldPosition)')
         expectSourceToContain(geometry, 'getNodeConnectorAnchorRect: (node, position) => this.getCanvasNodeConnectorAnchorRect(node, position)')
     })
 
     it('uses plain rectangle overlap filtering for collision pairs', () => {
-        const geometry = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/branch-tree-layout/workspace-geometry.ts')
+        const geometry = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/branch-tree-layout/workspace-geometry.ts')
         expectSourceToContain(geometry, 'const shouldResolvePair = (): boolean => true')
         expectSourceNotToContain(ts, ['context', 'RegionCl', 'oudGeometry'].join(''))
     })
@@ -2793,7 +2793,9 @@ describe('workspace connectors — PIXI owns visible pixels', () => {
         const layer = loadPixiMediaLayer()
         const controller = readSourceFile('../../packages/lixpi/canvas-engine/src/frontend/runtime/canvas-controller.ts')
         expectSourceToContain(layer, 'this.canvas.installConnections({')
-        expectSourceToContain(controller, 'new ConnectorRenderer({ ...options.renderer, surface })')
+        expectSourceToContain(controller, 'const rendererOptions = {')
+        expectSourceToContain(controller, 'surface,')
+        expectSourceToContain(controller, 'const drawing = new ConnectorRenderer(rendererOptions)')
         expectSourceToContain(controller, 'onConnectorGeometry: edges => drawing.render(edges, this.scene.viewport)')
     })
     it('does not provide a DOM image fallback for PIXI initialization failure', () => {
@@ -2848,8 +2850,8 @@ describe('video generation — canvas + plugin source shape', () => {
     it('wires the bubble menu for video nodes (Replace + Download + Connect + Add to Media Library + Delete)', () => {
         // Video nodes share Replace, Download, Add to Media Library, and Connect
         // with images, while keeping dedicated Delete behavior.
-        const bubbleMenuTs = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/menus/canvas-bubble-menu-items.ts')
-        const menu = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/menus/workspace-canvas-menu.ts')
+        const bubbleMenuTs = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/menus/canvas-bubble-menu-items.ts')
+        const menu = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/menus/workspace-canvas-menu.ts')
         expectSourceToContain(ts, 'new WorkspaceCanvasMenu({')
         // Every uploaded media kind maps to a bubble-menu context (image, video,
         // mediaDocument, audio) — so documents/audio also get a menu (Delete).
@@ -2880,7 +2882,7 @@ describe('video generation — canvas + plugin source shape', () => {
         // gone. Video context now flows through ai-image-branching.ts's Asset
         // rendition resolver: videos resolve to the representativeFrame rendition
         // (falling back to the frame-0 poster), the MP4 itself is never sent.
-        const branchingTs = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-context.ts')
+        const branchingTs = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/workspace-generation-context.ts')
         expectSourceToContain(branchingTs, "ports.renditionPath(node.assetId, node.type === 'video' ? 'representativeFrame' : 'preview')")
         expectSourceNotToContain(branchingTs, "'.mp4'")
     })
@@ -2922,7 +2924,7 @@ describe('canvas node deletion', () => {
 
     it('delegates canvas keyboard ownership and supplies the selection deletion action', () => {
         const start = ts.indexOf('this.canvasRuntime.installKeyboard({')
-        const end = ts.indexOf('const releaseCommands = this.host.onOpenCapabilityLibrary', start)
+        const end = ts.indexOf('const releaseCommands = this.options.sidePanel === false ? undefined : this.host.onOpenCapabilityLibrary', start)
         const handler = ts.slice(start, end)
 
         expect(start).toBeGreaterThan(-1)

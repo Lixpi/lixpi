@@ -5,7 +5,6 @@ export default createWebClientViteConfig({
         '@lixpi/capability-system',
         '@lixpi/canvas-engine',
         '@lixpi/canvas-components',
-        '@lixpi/canvas-components-lixpi-specific',
         '@lixpi/constants',
         '@lixpi/nats-service',
         '@lixpi/prosemirror',

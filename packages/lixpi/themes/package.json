@@ -1,0 +1,62 @@
+{
+  "name": "@lixpi/themes",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scope": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./src/projections/scope.scss",
+      "style": "./src/projections/scope.scss",
+      "default": "./src/projections/scope.scss"
+    },
+    "./dist/scss/lixpi-light/palette": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./dist/scss/lixpi-light/palette.scss",
+      "style": "./dist/scss/lixpi-light/palette.scss",
+      "default": "./dist/scss/lixpi-light/palette.scss"
+    },
+    "./dist/scss/lixpi-light/theme": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./dist/scss/lixpi-light/theme.scss",
+      "style": "./dist/scss/lixpi-light/theme.scss",
+      "default": "./dist/scss/lixpi-light/theme.scss"
+    },
+    "./dist/scss/one-dark-pro-mariana/palette": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./dist/scss/one-dark-pro-mariana/palette.scss",
+      "style": "./dist/scss/one-dark-pro-mariana/palette.scss",
+      "default": "./dist/scss/one-dark-pro-mariana/palette.scss"
+    },
+    "./dist/scss/one-dark-pro-mariana/theme": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./dist/scss/one-dark-pro-mariana/theme.scss",
+      "style": "./dist/scss/one-dark-pro-mariana/theme.scss",
+      "default": "./dist/scss/one-dark-pro-mariana/theme.scss"
+    },
+    "./dist/scss/adapters/gentelella": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./dist/scss/adapters/gentelella.scss",
+      "style": "./dist/scss/adapters/gentelella.scss",
+      "default": "./dist/scss/adapters/gentelella.scss"
+    },
+    "./dist/scss": {
+      "types": "./src/projections/scss.d.ts",
+      "sass": "./dist/scss/themes.scss",
+      "style": "./dist/scss/themes.scss",
+      "default": "./dist/scss/themes.scss"
+    }
+  },
+  "scripts": {
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "themes:generate": "node tooling/generate.ts",
+    "themes:check": "node tooling/generate.ts --check"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

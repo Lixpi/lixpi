@@ -4,6 +4,7 @@ import 'd3-transition'
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
 import { xIcon } from '../../svg/svgIcons.ts'
+import { lixpiLightTheme } from '@lixpi/themes'
 import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 
 export type SlidingSwitchOption<Value extends string = string> = {
@@ -28,6 +29,10 @@ export type SlidingSwitchOptionRenderState<Value extends string = string> = {
     disabled: boolean
     closable: boolean
     color: string
+    fontFamily?: string
+    fontSize?: number
+    fontWeight?: number
+    closeHoverColor?: string
     onClose: (event: Event) => void
 }
 
@@ -70,7 +75,22 @@ export type SlidingSwitchReshuffleItemsOnValueChange = {
     selectedElementPosition: 'left' | 'right'
 }
 
-export type SlidingSwitchConfig<Value extends string = string> = {
+export type SlidingSwitchAppearance = {
+    trackBackgroundColor: string
+    indicatorBackgroundColor: string
+    unselectedOptionColor: string
+    hoveredOptionColor: string
+    selectedOptionColor: string
+    disabledOptionColor: string
+    closeHoverColor: string
+    indicatorBoxShadow: string
+    indicatorInsetShadow: SlidingSwitchIndicatorInsetShadow | null
+    fontFamily: string
+    fontSize: number
+    fontWeight: number
+}
+
+export type SlidingSwitchConfig<Value extends string = string> = Partial<SlidingSwitchAppearance> & {
     id: string
     x: number
     y: number
@@ -85,13 +105,6 @@ export type SlidingSwitchConfig<Value extends string = string> = {
     minOptionWidth?: number
     observeParentResize?: boolean
     visualOverflowPadding?: Partial<SlidingSwitchVisualOverflowPadding>
-    trackBackgroundColor?: string
-    indicatorBackgroundColor?: string
-    unselectedOptionColor?: string
-    hoveredOptionColor?: string
-    selectedOptionColor?: string
-    indicatorBoxShadow?: string
-    indicatorInsetShadow?: SlidingSwitchIndicatorInsetShadow
     transition?: Partial<SlidingSwitchTransitionConfig>
     reshuffleItemsOnValueChange?: SlidingSwitchReshuffleItemsOnValueChange
     renderOption?: SlidingSwitchOptionRenderer<Value>
@@ -108,6 +121,7 @@ export type SlidingSwitchConfig<Value extends string = string> = {
 
 export type SlidingSwitchInstance<Value extends string = string> = {
     render: () => void
+    setAppearance: (appearance: Partial<SlidingSwitchAppearance>) => void
     resize: (
         x: number,
         y: number,
@@ -140,8 +154,8 @@ const DEFAULT_MIN_SLIDING_SWITCH_TRANSITION_DURATION_MS = 70
 const DEFAULT_DISTANCE_SPEEDUP_FACTOR = 0.28
 const RESHUFFLE_INITIAL_SLIDE_OVERLAP_RATIO = 0.3
 const DEFAULT_HEIGHT = 26
-const FONT_SIZE = 12
-const FONT_WEIGHT = 400
+const FONT_SIZE = Number.parseFloat(lixpiLightTheme.typography.control.fontSize)
+const FONT_WEIGHT = lixpiLightTheme.typography.control.fontWeight
 const CLOSE_SIZE = 14
 const CLOSE_ICON_SIZE = 7
 const CLOSE_GAP = 6
@@ -152,12 +166,12 @@ const SHADOW_PADDING_LEFT = 14
 let slidingSwitchInstanceCounter = 0
 
 const COLORS = {
-    track: 'rgba(105, 115, 133, 0.09)',
-    indicator: 'rgba(255, 255, 255, 0.72)',
-    optionText: 'rgba(49, 59, 78, 0.68)',
-    optionTextActive: '#1a2744',
-    optionTextDisabled: 'rgba(49, 59, 78, 0.32)',
-    closeHover: 'rgba(26, 39, 68, 0.1)',
+    track: lixpiLightTheme.control.slidingSwitch.track,
+    indicator: lixpiLightTheme.control.slidingSwitch.indicator,
+    optionText: lixpiLightTheme.control.slidingSwitch.inactive,
+    optionTextActive: lixpiLightTheme.control.slidingSwitch.selected,
+    optionTextDisabled: lixpiLightTheme.control.slidingSwitch.disabled,
+    closeHover: lixpiLightTheme.control.slidingSwitch.closeHover,
 }
 
 class SlidingSwitch<Value extends string = string> implements SlidingSwitchInstance<Value> {
@@ -169,14 +183,20 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     private readonly selectedAriaAttribute: 'aria-checked' | 'aria-selected'
     private readonly minOptionWidth: number | null
     private readonly observeParentResize: boolean
-    private readonly visualOverflowPadding: SlidingSwitchVisualOverflowPadding
-    private readonly trackBackgroundColor: string
-    private readonly indicatorBackgroundColor: string
-    private readonly unselectedOptionColor: string
-    private readonly hoveredOptionColor: string
-    private readonly selectedOptionColor: string
-    private readonly indicatorBoxShadow: string
-    private readonly indicatorInsetShadow: SlidingSwitchIndicatorInsetShadow | null
+    private visualOverflowPadding: SlidingSwitchVisualOverflowPadding
+    private readonly configuredVisualOverflowPadding?: Partial<SlidingSwitchVisualOverflowPadding>
+    private trackBackgroundColor: string
+    private indicatorBackgroundColor: string
+    private unselectedOptionColor: string
+    private hoveredOptionColor: string
+    private selectedOptionColor: string
+    private indicatorBoxShadow: string
+    private indicatorInsetShadow: SlidingSwitchIndicatorInsetShadow | null
+    private disabledOptionColor: string
+    private closeHoverColor: string
+    private fontFamily: string
+    private fontSize: number
+    private fontWeight: number
     private readonly indicatorInsetGradientId: string
     private readonly transitionConfig: SlidingSwitchTransitionConfig
     private readonly reshuffleItemsOnValueChange: SlidingSwitchReshuffleItemsOnValueChange | null
@@ -237,13 +257,19 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         this.unselectedOptionColor = config.unselectedOptionColor ?? COLORS.optionText
         this.hoveredOptionColor = config.hoveredOptionColor ?? COLORS.optionTextActive
         this.selectedOptionColor = config.selectedOptionColor ?? COLORS.optionTextActive
-        this.indicatorBoxShadow = config.indicatorBoxShadow ?? 'none'
+        this.indicatorBoxShadow = config.indicatorBoxShadow ?? lixpiLightTheme.control.slidingSwitch.shadow
         this.indicatorInsetShadow = config.indicatorInsetShadow ?? null
+        this.disabledOptionColor = config.disabledOptionColor ?? COLORS.optionTextDisabled
+        this.closeHoverColor = config.closeHoverColor ?? COLORS.closeHover
+        this.fontFamily = config.fontFamily ?? lixpiLightTheme.typography.control.fontFamily
+        this.fontSize = config.fontSize ?? FONT_SIZE
+        this.fontWeight = config.fontWeight ?? FONT_WEIGHT
         this.transitionConfig = this.createTransitionConfig(config.transition)
         this.reshuffleItemsOnValueChange = config.reshuffleItemsOnValueChange?.enable
             ? config.reshuffleItemsOnValueChange
             : null
-        this.visualOverflowPadding = this.createVisualOverflowPadding(config.visualOverflowPadding)
+        this.configuredVisualOverflowPadding = config.visualOverflowPadding ? { ...config.visualOverflowPadding } : undefined
+        this.visualOverflowPadding = this.createVisualOverflowPadding(this.configuredVisualOverflowPadding)
         slidingSwitchInstanceCounter += 1
         this.indicatorInsetGradientId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingSwitchInstanceCounter}-indicator-inset`
         this.onChange = config.onChange
@@ -753,6 +779,10 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             disabled,
             closable: Boolean(option.closable && this.onClose && !disabled),
             color,
+            fontFamily: this.fontFamily,
+            fontSize: this.fontSize,
+            fontWeight: this.fontWeight,
+            closeHoverColor: this.closeHoverColor,
             onClose: (event: Event) => this.closeOption(option, event),
         }
     }
@@ -812,8 +842,9 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             .attr('class', 'sliding-switch-option')
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('font-size', FONT_SIZE)
-            .attr('font-weight', FONT_WEIGHT)
+            .attr('font-size', this.fontSize)
+            .attr('font-family', this.fontFamily || null)
+            .attr('font-weight', this.fontWeight)
             .attr('data-value', view.option.value)
 
         view.closeGroup = view.group
@@ -840,7 +871,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
                 this.closeOption(view.option, event)
             })
-            .on('mouseenter', () => view.closeBackground?.attr('fill', COLORS.closeHover))
+            .on('mouseenter', () => view.closeBackground?.attr('fill', this.closeHoverColor))
             .on('mouseleave', () => view.closeBackground?.attr('fill', 'transparent'))
     }
 
@@ -970,6 +1001,9 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             ?.attr('x', textCenterX)
             .attr('y', state.y + state.height / 2)
             .attr('fill', state.color)
+            .attr('font-family', this.fontFamily || null)
+            .attr('font-size', this.fontSize)
+            .attr('font-weight', this.fontWeight)
             .text(state.option.label)
 
         view.closeGroup
@@ -1173,6 +1207,85 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
         if (notify)
             this.onChange?.(value, this.id)
+    }
+
+    setAppearance(appearance: Partial<SlidingSwitchAppearance>): void {
+        if (this.destroyed)
+            return
+
+        this.trackBackgroundColor = appearance.trackBackgroundColor ?? this.trackBackgroundColor
+        this.indicatorBackgroundColor = appearance.indicatorBackgroundColor ?? this.indicatorBackgroundColor
+        this.unselectedOptionColor = appearance.unselectedOptionColor ?? this.unselectedOptionColor
+        this.hoveredOptionColor = appearance.hoveredOptionColor ?? this.hoveredOptionColor
+        this.selectedOptionColor = appearance.selectedOptionColor ?? this.selectedOptionColor
+        this.disabledOptionColor = appearance.disabledOptionColor ?? this.disabledOptionColor
+        this.closeHoverColor = appearance.closeHoverColor ?? this.closeHoverColor
+        this.indicatorBoxShadow = appearance.indicatorBoxShadow ?? this.indicatorBoxShadow
+
+        if (appearance.indicatorBoxShadow !== undefined) {
+            this.visualOverflowPadding = this.createVisualOverflowPadding(this.configuredVisualOverflowPadding)
+            this.updateHostSvgGeometry()
+            this.group.attr('transform', `translate(${this.x + this.visualOverflowPadding.left}, ${this.y + this.visualOverflowPadding.top})`)
+        }
+
+        this.fontFamily = appearance.fontFamily ?? this.fontFamily
+        this.fontSize = appearance.fontSize ?? this.fontSize
+        this.fontWeight = appearance.fontWeight ?? this.fontWeight
+
+        if (appearance.indicatorInsetShadow !== undefined)
+            this.indicatorInsetShadow = appearance.indicatorInsetShadow
+
+        this.track.attr('fill', this.trackBackgroundColor)
+        this.indicator
+            .attr('fill', this.indicatorBackgroundColor)
+            .style('filter', this.indicatorBoxShadow === 'none' ? null : `drop-shadow(${this.indicatorBoxShadow})`)
+
+        const stops = this.indicatorInsetShadow ? [
+            {
+                offset: '0%',
+                color: this.indicatorInsetShadow.topColor,
+            },
+            {
+                offset: '38%',
+                color: 'rgba(255, 255, 255, 0)',
+            },
+            {
+                offset: '72%',
+                color: 'rgba(0, 0, 0, 0)',
+            },
+            {
+                offset: '100%',
+                color: this.indicatorInsetShadow.bottomColor,
+            },
+        ] : []
+        this.indicatorInsetGradient
+            .selectAll('stop')
+            .data(stops)
+            .join('stop')
+            .attr('offset', (stop: { offset: string }) => stop.offset)
+            .attr('stop-color', (stop: { color: string }) => stop.color)
+        this.indicatorInset.attr('fill', this.indicatorInsetShadow ? `url(#${this.indicatorInsetGradientId})` : 'transparent')
+
+        // Appearance updates do not interrupt indicator or option movement.
+        for (const view of this.optionViews) {
+            const state = this.createOptionState(view.option, view.index)
+
+            if (view.customRenderer) {
+                view.customRenderer.render?.(state)
+
+                continue
+            }
+
+            view.label
+                ?.attr('fill', state.color)
+                .attr('font-family', this.fontFamily || null)
+                .attr('font-size', this.fontSize)
+                .attr('font-weight', this.fontWeight)
+            view.closeIcon?.selectAll('path').attr('fill', state.color)
+
+            if (view.closeBackground?.attr('fill') !== 'transparent')
+                view.closeBackground?.attr('fill', this.closeHoverColor)
+        }
     }
 
     render = (): void => {

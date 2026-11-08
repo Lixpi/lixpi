@@ -8,7 +8,7 @@ import {
     type CanvasConversationTransport,
     type CanvasGenerationRequest,
     type WorkspaceConversationOutputPorts,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import {
     type ConversationOperationSummary,
 } from '@lixpi/constants'

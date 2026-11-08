@@ -1,3 +1,5 @@
+import { lixpiLightTheme } from '@lixpi/themes'
+
 export type UiKitSlidingDropdownStyles = {
     surface: {
         closedBackgroundColor: string
@@ -33,6 +35,10 @@ export type UiKitSlidingDropdownStyles = {
     }
 }
 
+// `overlay` draws an open panel on top of the content beside it. `push` gives
+// the panel its own space, so the content shrinks while the panel is open.
+export type UiKitSidePanelPlacement = 'overlay' | 'push'
+
 export type UiKitRuntimeSettings = {
     modelSelectorDropdown: {
         useModalityFilter: boolean
@@ -49,7 +55,33 @@ export type UiKitRuntimeSettings = {
     slidingDropdown: {
         styles: UiKitSlidingDropdownStyles
     }
+    // Motion every SidePanel uses unless a host passes its own override.
+    sidePanel: {
+        placement: UiKitSidePanelPlacement
+        animation: {
+            durationMs: number
+            openEasing: string
+            closeEasing: string
+        }
+        overlay: {
+            opacity: number
+        }
+        drag: {
+            // Fraction of the panel width a swipe must travel to close it.
+            closeThreshold: number
+            // Swipe speed in px/ms that closes the panel regardless of distance.
+            velocityThreshold: number
+            pointerSwipeStartThreshold: number
+            touchSwipeStartThreshold: number
+        }
+    }
 }
+
+export type UiKitSettingsOverrides = {
+    [Key in keyof UiKitRuntimeSettings]?: UiKitRuntimeSettings[Key]
+}
+
+const components = structuredClone(lixpiLightTheme.components)
 
 export const uiKitSettings: UiKitRuntimeSettings = {
     modelSelectorDropdown: {
@@ -58,52 +90,33 @@ export const uiKitSettings: UiKitRuntimeSettings = {
     dropdown: {
         errorState: {
             fallbackTitle: 'Error state',
-            textColor: '#be4e1a',
+            textColor: lixpiLightTheme.feedback.danger,
         },
-        styles: {
-            popoverBoxShadow: '0 2px 12px rgb(0 0 0 / 10%)',
-        },
+        styles: components.dropdown.popover,
     },
     slidingDropdown: {
-        styles: {
-            surface: {
-                closedBackgroundColor: 'transparent',
-                openBackgroundColor: 'rgb(241, 242, 244)',
-            },
-            indicator: {
-                backgroundColor: 'rgba(255, 255, 255, 0.72)',
-                boxShadow: 'none',
-                insetShadow: {
-                    topColor: 'rgba(255, 255, 255, 0.86)',
-                    bottomColor: 'rgba(0, 0, 0, 0)',
-                },
-                closedBorderColor: 'rgba(105, 115, 133, 0.1)',
-                closedBorderWidth: 0,
-                openBorderColor: 'rgba(105, 115, 133, 0.07)',
-                openBorderWidth: 1.5,
-            },
-            option: {
-                textColor: 'rgba(49, 59, 78, 0.68)',
-                activeTextColor: '#1a2744',
-                disabledTextColor: 'rgba(49, 59, 78, 0.32)',
-                fontSize: 12,
-                fontWeight: 400,
-                selectedFontWeight: 400,
-            },
-            openShadow: {
-                color: '#000000',
-                opacity: 0.09,
-                offsetX: 0,
-                offsetY: 2,
-                blurRadius: 6,
-                spreadRadius: 3,
-            },
+        styles: components.slidingDropdown.standalone,
+    },
+    sidePanel: {
+        placement: 'overlay',
+        animation: components.sidePanel.animation,
+        overlay: {
+            opacity: components.sidePanel.overlay.opacity,
+        },
+        drag: {
+            closeThreshold: 0.25,
+            velocityThreshold: 0.4,
+            pointerSwipeStartThreshold: 2,
+            touchSwipeStartThreshold: 10,
         },
     },
 }
 
-export const configureUiKit = (settings: UiKitRuntimeSettings): void => {
-    uiKitSettings.modelSelectorDropdown = settings.modelSelectorDropdown
-    uiKitSettings.dropdown = settings.dropdown
-    uiKitSettings.slidingDropdown = settings.slidingDropdown
+// Hosts call this once at startup. Every section they omit keeps the ui-kit
+// default above, so a service only names what it deliberately changes.
+export const configureUiKit = (overrides: UiKitSettingsOverrides): void => {
+    uiKitSettings.modelSelectorDropdown = overrides.modelSelectorDropdown ?? uiKitSettings.modelSelectorDropdown
+    uiKitSettings.dropdown = overrides.dropdown ?? uiKitSettings.dropdown
+    uiKitSettings.slidingDropdown = overrides.slidingDropdown ?? uiKitSettings.slidingDropdown
+    uiKitSettings.sidePanel = overrides.sidePanel ?? uiKitSettings.sidePanel
 }

@@ -1,0 +1,31 @@
+# Generates the local development CA and certificates into the caddy-certs volume,
+# then exits. A utility, so the stack never starts it: Initialize infrastructure
+# runs it, and NATS and the local HTTPS gateway read the certificates it leaves.
+name: lixpi
+
+services:
+    lixpi-caddy:
+        container_name: lixpi-caddy
+        image: lixpi/caddy-cert-manager
+        build:
+            dockerfile: services/caddy/Dockerfile
+            context: ../../../..
+        environment:
+            # Local development mode
+            CADDY_LOCAL_MODE: "true"
+            DOMAINS: "localhost"
+            CADDY_EMAIL: ${CERTIFICATE_VALIDATION_EMAIL}
+            STORAGE_TYPE: "local"
+        volumes:
+            - caddy-certs:/certificates
+        networks:
+            - nats
+        # Container exits after generating certificates - no ports needed
+        restart: "no"
+
+volumes:
+    caddy-certs:
+
+networks:
+    nats:
+        name: nats

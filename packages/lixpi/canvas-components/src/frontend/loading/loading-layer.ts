@@ -30,6 +30,14 @@ export class LoadingLayer {
         ` as HTMLDivElement
     }
 
+    setAppearance(appearance: Pick<LoadingOverlayOptions, 'outline'>): void {
+        if (this.destroyed)
+            return
+
+        this.options.outline = appearance.outline
+        this.overlay?.setAppearance(appearance)
+    }
+
     acquire(options: LoadingRequest = {}): LoadingLease {
         if (this.destroyed)
             throw new Error('Loading layer is disposed')

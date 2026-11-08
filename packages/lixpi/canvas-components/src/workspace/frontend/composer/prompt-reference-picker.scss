@@ -1,0 +1,239 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@import "@lixpi/ui-primitives/styles/transitions";
+@import "./prompt-reference-colors";
+
+// Emitted once, app-wide: this stylesheet is pulled in by the global
+// `sass/styles.scss`. Every chip reads these unless a dark surface above it
+// overrides them with `prompt-reference-chip-on-dark-surface`.
+:root {
+    @include prompt-reference-chip-on-light-surface;
+}
+
+.prompt-reference-picker {
+    position: absolute;
+    z-index: 150;
+    display: flex;
+    flex-direction: column;
+    width: min(440px, calc(100vw - 24px));
+    max-height: min(390px, calc(100vh - 16px));
+    padding: 6px;
+    overflow: hidden;
+    border: #{themeScope.token("components-composer-references-picker-base-border", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-composer-references-picker-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-composer-references-picker-base-background", themePalette.$roles)};
+    box-shadow: #{themeScope.token("components-composer-references-picker-base-shadow", themePalette.$roles)};
+    color: #{themeScope.token("components-composer-references-picker-base-foreground", themePalette.$roles)};
+    backdrop-filter: #{themeScope.token("components-composer-references-picker-base-backdrop-filter", themePalette.$roles)};
+    -webkit-backdrop-filter: #{themeScope.token("components-composer-references-picker-base-webkit-backdrop-filter", themePalette.$roles)};
+}
+
+.prompt-reference-picker-header {
+    flex: 0 0 auto;
+    padding: 6px 6px 8px;
+    background: #{themeScope.token("components-composer-references-picker-header-base-background", themePalette.$roles)};
+}
+
+.prompt-reference-picker-switch {
+    display: block;
+    width: 100%;
+    height: 32px;
+}
+
+.prompt-reference-picker-list {
+    display: grid;
+    flex: 1 1 auto;
+    gap: 4px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.prompt-reference-picker-item {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: #{themeScope.token("components-composer-references-picker-item-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-composer-references-picker-item-base-background", themePalette.$roles)};
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: hoverTransition(background-color);
+
+    &:hover,
+    &.is-selected {
+        background: #{themeScope.token("components-composer-references-picker-item-hover-background", themePalette.$roles)};
+    }
+}
+
+.prompt-reference-picker-thumbnail,
+.prompt-reference-picker-glyph {
+    width: 36px;
+    height: 36px;
+    border-radius: #{themeScope.token("components-composer-references-picker-thumbnail-base-border-radius", themePalette.$roles)};
+}
+
+.prompt-reference-picker-thumbnail {
+    object-fit: cover;
+}
+
+.prompt-reference-picker-glyph {
+    display: grid;
+    place-items: center;
+    background: #{themeScope.token("components-composer-references-picker-glyph-base-background", themePalette.$roles)};
+    color: #{themeScope.token("components-composer-references-picker-glyph-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-composer-references-picker-glyph-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-composer-references-picker-glyph-base-font-weight", themePalette.$roles)};
+}
+
+.prompt-reference-picker-glyph-capability-module {
+    background: #{themeScope.token("components-composer-references-picker-glyph-capability-module-base-background", themePalette.$roles)};
+    color: #{themeScope.token("components-composer-references-picker-glyph-capability-module-base-foreground", themePalette.$roles)};
+}
+
+.prompt-reference-picker-glyph-skill {
+    background: #{themeScope.token("components-composer-references-picker-glyph-skill-base-background", themePalette.$roles)};
+    color: #{themeScope.token("components-composer-references-picker-glyph-skill-base-foreground", themePalette.$roles)};
+}
+
+.prompt-reference-picker-glyph-capability-artifact {
+    background: #{themeScope.token("components-composer-references-picker-glyph-capability-artifact-base-background", themePalette.$roles)};
+    color: #{themeScope.token("components-composer-references-picker-glyph-capability-artifact-base-foreground", themePalette.$roles)};
+}
+
+.prompt-reference-picker-glyph-capability-artifact svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.prompt-reference-picker-copy {
+    display: grid;
+    min-width: 0;
+
+    strong,
+    small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    strong {
+        font-size: #{themeScope.token("components-composer-references-picker-copy-strong-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-composer-references-picker-copy-strong-base-font-weight", themePalette.$roles)};
+        line-height: #{themeScope.token("components-composer-references-picker-copy-strong-base-line-height", themePalette.$roles)};
+    }
+
+    small {
+        color: #{themeScope.token("components-composer-references-picker-copy-hint-base-foreground", themePalette.$roles)};
+        font-size: #{themeScope.token("components-composer-references-picker-copy-hint-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-composer-references-picker-copy-hint-base-line-height", themePalette.$roles)};
+    }
+}
+
+.prompt-reference-picker-artifact-host .action-timeline-reference {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: inherit;
+    font: 800 13px/1.3 system-ui, sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prompt-reference-picker-badge {
+    color: #{themeScope.token("components-composer-references-picker-badge-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-composer-references-picker-badge-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-composer-references-picker-badge-base-font-weight", themePalette.$roles)};
+    letter-spacing: #{themeScope.token("components-composer-references-picker-badge-base-letter-spacing", themePalette.$roles)};
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.prompt-reference-picker-badge-capability-module {
+    color: #{themeScope.token("components-composer-references-picker-badge-capability-module-base-foreground", themePalette.$roles)};
+}
+
+.prompt-reference-picker-badge-skill {
+    color: #{themeScope.token("components-composer-references-picker-badge-skill-base-foreground", themePalette.$roles)};
+}
+
+.prompt-reference-picker-status,
+.prompt-reference-picker-load-more {
+    padding: 12px;
+    color: #{themeScope.token("components-composer-references-picker-status-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-composer-references-picker-status-base-font-size", themePalette.$roles)};
+    text-align: center;
+}
+
+.prompt-reference-picker-load-more {
+    width: 100%;
+    border: 0;
+    border-radius: #{themeScope.token("components-composer-references-picker-load-more-base-border-radius", themePalette.$roles)};
+    background: transparent;
+    cursor: pointer;
+    transition: hoverTransition(background-color);
+
+    &:hover {
+        background: #{themeScope.token("components-composer-references-picker-load-more-hover-background", themePalette.$roles)};
+    }
+}
+
+.prompt-reference-chip {
+    display: inline-flex;
+    gap: 0;
+    align-items: baseline;
+    margin-inline: 1px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--prompt-reference-color);
+    font-size: inherit;
+    line-height: #{themeScope.token("components-composer-references-chip-base-line-height", themePalette.$roles)};
+    vertical-align: baseline;
+    white-space: nowrap;
+}
+
+.prompt-reference-chip-content {
+    display: inline-flex;
+    gap: 2px;
+    align-items: baseline;
+}
+
+.prompt-reference-chip-capability-module {
+    color: var(--prompt-reference-capability-module-color);
+}
+
+.prompt-reference-chip-tool {
+    color: var(--prompt-reference-tool-color);
+}
+
+.prompt-reference-chip-skill {
+    color: var(--prompt-reference-skill-color);
+}
+
+.prompt-reference-chip-icon {
+    display: inline-flex;
+    flex: 0 0 14px;
+    align-self: center;
+    width: 14px;
+    height: 14px;
+}
+
+.prompt-reference-chip-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.prompt-reference-chip-name {
+    font-weight: #{themeScope.token("components-composer-references-chip-name-base-font-weight", themePalette.$roles)};
+    line-height: inherit;
+}

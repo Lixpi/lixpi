@@ -1,0 +1,1 @@
+{ "label": "Messaging and workers", "order": 30, "description": "The NATS cluster and the NEX workers that run on it." }

@@ -47,7 +47,7 @@ The result captures reusable visual behavior while reducing accidental source re
 
 The synthesized Tool instructions include only source-derived negative constraints needed to prevent an evidence-conflicting interpretation. The static pipeline instructions contain no stock medium, subject, or artifact examples.
 
-See [Style Reference Isolation](./ANTI-LEAKAGE.md) for the crop behavior, provider path, and isolation limits.
+See [Style Reference Isolation](ANTI-LEAKAGE.md) for the crop behavior, provider path, and isolation limits.
 
 ## Output
 
@@ -63,7 +63,7 @@ Reloading the workspace reconstructs progress from the Capability run index and 
 
 ## Related pages
 
-- [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md)
-- [Tools and Skills](./TOOLS-AND-SKILLS.md)
-- [Capability Storage and Operations](./CAPABILITY-STORAGE.md)
+- [Style Extraction Tool](STYLE-EXTRACTION-TOOL.md)
+- [Tools and Skills](TOOLS-AND-SKILLS.md)
+- [Capability Storage and Operations](CAPABILITY-STORAGE.md)
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md)

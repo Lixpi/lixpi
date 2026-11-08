@@ -48,10 +48,6 @@ class StaticWebsiteBuild {
                 manifest: 'package.json',
             },
             {
-                directory: 'canvas-components-lixpi-specific',
-                manifest: 'package.json',
-            },
-            {
                 directory: 'capability-system',
                 manifest: 'package.json',
             },
@@ -69,6 +65,10 @@ class StaticWebsiteBuild {
             },
             {
                 directory: 'ui-kit',
+                manifest: 'package.json',
+            },
+            {
+                directory: 'themes',
                 manifest: 'package.json',
             },
             {

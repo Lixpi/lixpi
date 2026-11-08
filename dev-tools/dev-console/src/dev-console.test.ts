@@ -13,6 +13,10 @@ import {
 import { ComposeCatalog } from './compose-catalog.ts'
 import { ServiceTree } from './service-tree.ts'
 import {
+    DockerLayout,
+    DockerLayoutError,
+} from './docker-layout.ts'
+import {
     DevConsoleWizard,
     readEnvironmentFiles,
     renderConsolePlan,
@@ -85,14 +89,7 @@ const CONFIG: ConsoleConfig = {
                             },
                         ],
                     }],
-                    services: {
-                        composeFile: 'infrastructure/docker/docker-compose.yml',
-                        baseProfile: 'main',
-                        groups: [{
-                            label: 'Application',
-                            services: ['web'],
-                        }],
-                    },
+                    services: true,
                 },
             ],
         },
@@ -205,9 +202,14 @@ const USAGE = [
     '{"Active":"0","Reclaimable":"4GB","Size":"4GB","TotalCount":"80","Type":"Build Cache"}',
 ].join('\n')
 
-const ROOT_COMPOSE = `
+const STACK_COMPOSE = `
+name: test
 include:
-    - docker-compose.nats.yml
+    - services/application/docker-compose.application.yml
+    - services/messaging/nats/docker-compose.nats.yml
+`
+
+const APPLICATION_COMPOSE = `
 services:
     web:
         profiles: ["main"]
@@ -223,11 +225,9 @@ services:
     always-on: {}
     extended:
         extends:
-            file: nested/base.yml
+            file: ../../../../tools/base.yml
             service: base
     admin:
-        profiles: ["dev"]
-    test-runner:
         profiles: ["dev"]
     optional-sidecar:
         profiles: ["dev"]
@@ -239,44 +239,51 @@ services:
         profiles: ["main"]
 `
 
+const RUNNER_COMPOSE = `
+services:
+    test-runner:
+        profiles: ["dev"]
+`
+
 const BASE_COMPOSE = `
 services:
     base:
         profiles: ["dev"]
 `
 
-const GROUPS = [
-    {
-        label: 'Application',
-        services: [
-            'web',
-            'api',
-            'removed-from-compose',
-        ],
-    },
-    {
-        label: 'Messaging',
-        groups: [{
-            label: 'NATS',
-            services: ['nats-1'],
-        }],
-    },
-    {
-        label: 'Retired',
-        services: ['also-removed'],
-    },
-]
+// A complete layout: the stack, two service groups with one nested, and a utility.
+const LAYOUT_FILES: Record<string, string> = {
+    'infrastructure/docker/docker-group.json': '{ "label": "Test", "baseProfile": "main" }',
+    'infrastructure/docker/docker-compose.yml': STACK_COMPOSE,
+    'infrastructure/docker/services/docker-group.json': '{ "kind": "services", "label": "Services" }',
+    'infrastructure/docker/services/application/docker-group.json': '{ "label": "Application", "order": 10 }',
+    'infrastructure/docker/services/application/docker-compose.application.yml': APPLICATION_COMPOSE,
+    'infrastructure/docker/services/messaging/docker-group.json': '{ "label": "Messaging", "order": 20 }',
+    'infrastructure/docker/services/messaging/nats/docker-group.json': '{ "label": "NATS" }',
+    'infrastructure/docker/services/messaging/nats/docker-compose.nats.yml': NATS_COMPOSE,
+    'infrastructure/docker/utilities/docker-group.json': '{ "kind": "utilities", "label": "Utilities" }',
+    'infrastructure/docker/utilities/code-quality/docker-group.json': '{ "label": "Code quality" }',
+    'infrastructure/docker/utilities/code-quality/docker-compose.test-runner.yml': RUNNER_COMPOSE,
+    'tools/base.yml': BASE_COMPOSE,
+}
 
 describe('dev console', () => {
     let workspace: string
 
     beforeEach(() => {
         workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-console-'))
-        fs.mkdirSync(path.join(workspace, 'infrastructure/docker/nested'), { recursive: true })
-        fs.writeFileSync(path.join(workspace, 'infrastructure/docker/docker-compose.yml'), ROOT_COMPOSE)
-        fs.writeFileSync(path.join(workspace, 'infrastructure/docker/docker-compose.nats.yml'), NATS_COMPOSE)
-        fs.writeFileSync(path.join(workspace, 'infrastructure/docker/nested/base.yml'), BASE_COMPOSE)
+
+        for (const [file, text] of Object.entries(LAYOUT_FILES))
+            writeWorkspaceFile(file, text)
     })
+
+    const writeWorkspaceFile = (
+        file: string,
+        text: string,
+    ): void => {
+        fs.mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true })
+        fs.writeFileSync(path.join(workspace, file), text)
+    }
 
     afterEach(() => {
         fs.rmSync(workspace, {
@@ -289,8 +296,8 @@ describe('dev console', () => {
         it('reads included files and records which file owns each service', () => {
             const catalog = new ComposeCatalog(workspace, ROOT_COMPOSE_PATH)
 
-            expect(catalog.fileOf('web')).toBe('infrastructure/docker/docker-compose.yml')
-            expect(catalog.fileOf('nats-1')).toBe('infrastructure/docker/docker-compose.nats.yml')
+            expect(catalog.fileOf('web')).toBe('infrastructure/docker/services/application/docker-compose.application.yml')
+            expect(catalog.fileOf('nats-1')).toBe('infrastructure/docker/services/messaging/nats/docker-compose.nats.yml')
         })
 
         it('treats main-profile and profileless services as the default stack', () => {
@@ -311,42 +318,110 @@ describe('dev console', () => {
         })
     })
 
+    describe('docker layout', () => {
+        const problemsOf = (): string[] => {
+            try {
+                DockerLayout.read(workspace)
+            } catch (error) {
+                return error instanceof DockerLayoutError ? error.problems : []
+            }
+
+            return []
+        }
+
+        it('reads groups in order with their labels and partials', () => {
+            const layout = DockerLayout.read(workspace)
+
+            expect(layout.baseProfile).toBe('main')
+            expect(layout.services?.groups.map(group => group.label)).toEqual(['Application', 'Messaging'])
+            expect(layout.services?.groups[1].groups[0].files).toEqual(['infrastructure/docker/services/messaging/nats/docker-compose.nats.yml'])
+            expect(layout.utilities?.groups[0].label).toBe('Code quality')
+        })
+
+        it('requires a docker-group.json in every directory', () => {
+            fs.rmSync(path.join(workspace, 'infrastructure/docker/services/messaging/docker-group.json'))
+
+            expect(problemsOf()).toEqual(['infrastructure/docker/services/messaging needs a docker-group.json.'])
+        })
+
+        it('reports a services partial the stack forgets to include', () => {
+            writeWorkspaceFile('infrastructure/docker/services/messaging/nats/docker-compose.nats-cli.yml', 'services:\n    cli: {}\n')
+
+            expect(problemsOf()).toEqual(['infrastructure/docker/docker-compose.yml doesn\'t include infrastructure/docker/services/messaging/nats/docker-compose.nats-cli.yml.'])
+        })
+
+        it('reports a utility the stack includes', () => {
+            writeWorkspaceFile('infrastructure/docker/docker-compose.yml', `${STACK_COMPOSE}    - utilities/code-quality/docker-compose.test-runner.yml\n`)
+
+            expect(problemsOf()).toEqual(['infrastructure/docker/docker-compose.yml includes infrastructure/docker/utilities/code-quality/docker-compose.test-runner.yml, which isn\'t a partial under services/.'])
+        })
+
+        it('rejects a compose file outside the services and utilities groups', () => {
+            writeWorkspaceFile('infrastructure/docker/docker-compose.extra.yml', 'services: {}\n')
+
+            expect(problemsOf()).toEqual(['infrastructure/docker/docker-compose.extra.yml belongs in services/ or utilities/.'])
+        })
+
+        it('rejects files that are not named like partials', () => {
+            writeWorkspaceFile('infrastructure/docker/utilities/code-quality/runner.yml', 'services: {}\n')
+
+            expect(problemsOf()).toEqual(['infrastructure/docker/utilities/code-quality/runner.yml isn\'t a docker-compose.<name>.yml partial.'])
+        })
+
+        it('requires the top directories to declare their kind', () => {
+            writeWorkspaceFile('infrastructure/docker/utilities/docker-group.json', '{ "label": "Utilities" }')
+
+            expect(problemsOf()).toEqual(['infrastructure/docker/utilities/docker-group.json must set "kind": "utilities".'])
+        })
+
+        it('reports every problem at once', () => {
+            writeWorkspaceFile('infrastructure/docker/services/application/docker-group.json', '{ "order": "first" }')
+
+            expect(problemsOf()).toEqual([
+                'infrastructure/docker/services/application/docker-group.json must give "order" as a number.',
+                'infrastructure/docker/services/application/docker-group.json needs a "label".',
+            ])
+        })
+    })
+
     describe('service tree', () => {
         const buildTree = (): ServiceTree =>
             new ServiceTree(
                 new ComposeCatalog(workspace, ROOT_COMPOSE_PATH),
-                GROUPS,
-                ROOT_COMPOSE_PATH,
-                'main',
+                DockerLayout.read(workspace),
             )
+        const groupsOf = (tree: ServiceTree) => tree.roots.filter(node => !node.selection)
 
-        it('drops names Compose no longer has and removes groups left empty', () => {
-            const labels = buildTree().roots.filter(node => !node.choices).map(node => node.label)
+        it('draws one group per directory, nested like the directories', () => {
+            const [application, messaging] = groupsOf(buildTree())
 
-            expect(labels).toEqual(['Application', 'Messaging', 'Other services'])
-            expect(buildTree().allServices).not.toContain('removed-from-compose')
+            expect(application.label).toBe('Application')
+            expect(application.children?.map(node => node.value)).toEqual(['web', 'api', 'always-on', 'extended', 'admin', 'optional-sidecar'])
+            expect(messaging.children?.[0].label).toBe('NATS')
+            expect(messaging.children?.[0].children?.map(node => node.value)).toEqual(['nats-1'])
         })
 
-        it('keeps an ungrouped main-profile service in the tree instead of losing it', () => void expect(buildTree().baseServices).toContain('always-on'))
+        it('leaves utilities out of the tree', () => void expect(JSON.stringify(buildTree().roots)).not.toContain('test-runner'))
 
-        it('hides runners that no group names', () => void expect(JSON.stringify(buildTree().roots)).not.toContain('test-runner'))
-
-        it('offers Base and All as one radio row above the groups', () => {
+        it('offers Base and All as preset rows at the top of the tree', () => {
             const tree = buildTree()
-            const [base, all] = tree.roots[0].choices!
+            const [base, all] = tree.roots
 
             expect(base.selection).toEqual(tree.baseServices)
             expect(all.selection).toEqual(tree.allServices)
         })
 
-        it('uses profileless services as the base stack when no profile is configured', () => {
-            const tree = new ServiceTree(
-                new ComposeCatalog(workspace, ROOT_COMPOSE_PATH),
-                [],
-                ROOT_COMPOSE_PATH,
-            )
+        it('takes the base stack from the base profile, so a dev service stays out of it', () => {
+            const tree = buildTree()
 
-            expect(tree.baseServices).toEqual(['always-on'])
+            expect(tree.baseServices).toEqual(['web', 'api', 'always-on', 'nats-1'])
+            expect(tree.allServices).toContain('admin')
+        })
+
+        it('uses profileless services as the base stack when no profile is configured', () => {
+            writeWorkspaceFile('infrastructure/docker/docker-group.json', '{ "label": "Test" }')
+
+            expect(buildTree().baseServices).toEqual(['always-on'])
         })
 
         it('reads a base service from the Lixpi checkout through its variable', () => {
@@ -363,39 +438,16 @@ describe('dev console', () => {
             expect(catalog.startsByDefault('tool')).toBe(false)
         })
 
-        it('takes the base stack from the main profile, so a grouped dev service stays out of it', () => {
-            const tree = new ServiceTree(
-                new ComposeCatalog(workspace, ROOT_COMPOSE_PATH),
-                [{
-                    label: 'Application',
-                    services: ['web', 'admin'],
-                }],
-                ROOT_COMPOSE_PATH,
-                'main',
-            )
+        it('labels a group with its partial file only when it has exactly one', () => {
+            const [application, messaging] = groupsOf(buildTree())
 
-            expect(tree.allServices).toContain('admin')
-            expect(tree.baseServices).toContain('web')
-            expect(tree.baseServices).not.toContain('admin')
-        })
-
-        it('labels a group with its partial file only when one partial owns it', () => {
-            const [application, messaging] = buildTree().roots.filter(node => !node.choices)
-
-            expect(application.hint).toBeUndefined()
-            expect(messaging.hint).toBe('docker-compose.nats.yml')
+            expect(application.hint).toBe('docker-compose.application.yml')
+            expect(messaging.hint).toBeUndefined()
+            expect(messaging.children?.[0].hint).toBe('docker-compose.nats.yml')
         })
 
         it('describes the base stack, the whole tree and a partial choice', () => {
-            const tree = new ServiceTree(
-                new ComposeCatalog(workspace, ROOT_COMPOSE_PATH),
-                [{
-                    label: 'Application',
-                    services: ['web', 'admin'],
-                }],
-                ROOT_COMPOSE_PATH,
-                'main',
-            )
+            const tree = buildTree()
 
             expect(tree.describe(tree.baseServices)).toBe('Base services')
             expect(tree.describe(tree.allServices)).toBe('All services')
@@ -489,6 +541,8 @@ describe('dev console', () => {
         it('rejects a config without actions', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[]}')).toThrow('at least one action'))
 
         it('rejects a script that names neither shared nor local', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"../evil"}]}')).toThrow('shared:<name> or local:<name>'))
+
+        it('rejects a hand-written service list', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"shared:start-services","steps":[{"type":"choices","message":"m","services":{"groups":[]}}]}]}')).toThrow('"services": true'))
     })
 
     describe('main menu', () => {
@@ -606,7 +660,11 @@ describe('dev console', () => {
                 action: 'run',
                 script: 'shared:start-services',
                 envFile: '.env.alice-local',
-                options: { rebuild: 'true' },
+                options: {
+                    'compose-file': 'infrastructure/docker/docker-compose.yml',
+                    profile: 'main',
+                    rebuild: 'true',
+                },
                 selected: ['web'],
                 arguments: [],
             })

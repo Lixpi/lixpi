@@ -1,12 +1,17 @@
 import {
     createSlidingSwitch,
+    type SlidingSwitchAppearance,
     type SlidingSwitchConfig,
     type SlidingSwitchIndicatorInsetShadow,
     type SlidingSwitchInstance,
     type SlidingSwitchOption,
+    type SlidingSwitchOptionRenderState,
     type SlidingSwitchTransitionConfig,
 } from '../slidingSwitch/index.ts'
-import { createTagPill } from '../tagPill/index.ts'
+import {
+    createTagPill,
+    type TagPillRenderState,
+} from '../tagPill/index.ts'
 
 export type SlidingTabsSwitchTab<Value extends string = string> = {
     label: string
@@ -17,7 +22,7 @@ export type SlidingTabsSwitchTab<Value extends string = string> = {
     closeAriaLabel?: string
 }
 
-export type SlidingTabsSwitchConfig<Value extends string = string> = {
+export type SlidingTabsSwitchConfig<Value extends string = string> = Partial<SlidingSwitchAppearance> & {
     id: string
     x: number
     y: number
@@ -66,11 +71,26 @@ const toSlidingSwitchOption = <Value extends string>(tab: SlidingTabsSwitchTab<V
 
 class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwitchInstance<Value> {
     private readonly switchInstance: SlidingSwitchInstance<Value>
+    private appearance: Partial<SlidingSwitchAppearance>
 
     constructor(
         parent: any,
         private readonly config: SlidingTabsSwitchConfig<Value>,
     ) {
+        this.appearance = {
+            trackBackgroundColor: config.trackBackgroundColor,
+            indicatorBackgroundColor: config.indicatorBackgroundColor,
+            unselectedOptionColor: config.unselectedOptionColor,
+            hoveredOptionColor: config.hoveredOptionColor,
+            selectedOptionColor: config.selectedOptionColor,
+            disabledOptionColor: config.disabledOptionColor,
+            closeHoverColor: config.closeHoverColor,
+            indicatorBoxShadow: config.indicatorBoxShadow,
+            indicatorInsetShadow: config.indicatorInsetShadow,
+            fontFamily: config.fontFamily,
+            fontSize: config.fontSize,
+            fontWeight: config.fontWeight,
+        }
         this.switchInstance = createSlidingSwitch<Value>(
             parent,
             this.createSwitchConfig(),
@@ -79,6 +99,7 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
 
     private createSwitchConfig(): SlidingSwitchConfig<Value> {
         const switchConfig: SlidingSwitchConfig<Value> = {
+            ...this.appearance,
             id: this.config.id,
             x: this.config.x,
             y: this.config.y,
@@ -88,8 +109,8 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
             optionRole: 'tab',
             selectedAriaAttribute: 'aria-selected',
             observeParentResize: true,
-            renderOption: (optionParent, state) =>
-                createTagPill(
+            renderOption: (optionParent, state) => {
+                const pill = createTagPill(
                     optionParent,
                     {
                         id: state.id,
@@ -106,8 +127,32 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
                         closeVisibility: 'hover',
                         closeAriaLabel: state.option.closeAriaLabel,
                         onClose: (_id, event) => state.onClose(event),
+                        ...this.optionAppearance(state),
                     },
-                ),
+                )
+
+                return {
+                    resize: (
+                        x,
+                        y,
+                        width,
+                        height,
+                    ) => pill.resize(
+                        x,
+                        y,
+                        width,
+                        height,
+                    ),
+                    render: next => pill.render({
+                        selected: next.selected,
+                        hovered: next.hovered,
+                        disabled: next.disabled,
+                        closable: next.closable,
+                        ...this.optionAppearance(next),
+                    }),
+                    destroy: () => pill.destroy(),
+                }
+            },
         }
 
         if (this.config.height !== undefined)
@@ -146,6 +191,34 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
             )
 
         return switchConfig
+    }
+
+    private optionAppearance(state: SlidingSwitchOptionRenderState<Value>): TagPillRenderState {
+        const textColor = state.disabled
+            ? this.appearance.disabledOptionColor
+            : state.selected
+                ? this.appearance.selectedOptionColor
+                : state.hovered
+                    ? this.appearance.hoveredOptionColor
+                    : this.appearance.unselectedOptionColor
+
+        return {
+            textColor: textColor ?? state.color,
+            fontFamily: this.appearance.fontFamily ?? state.fontFamily,
+            fontSize: this.appearance.fontSize ?? state.fontSize,
+            fontWeight: this.appearance.fontWeight ?? state.fontWeight,
+            colors: this.appearance.closeHoverColor === undefined ? undefined : {
+                closeHover: this.appearance.closeHoverColor,
+            },
+        }
+    }
+
+    setAppearance(appearance: Partial<SlidingSwitchAppearance>): void {
+        this.appearance = {
+            ...this.appearance,
+            ...appearance,
+        }
+        this.switchInstance.setAppearance(appearance)
     }
 
     render(): void {

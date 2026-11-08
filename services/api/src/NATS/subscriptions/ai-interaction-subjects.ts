@@ -61,7 +61,7 @@ import {
     getMediaGenerationOperationNodeId,
     getPendingGeneratedMediaNodeId,
     hasActiveGeneratedOutputLineage,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 
 import AiModel from '../../models/ai-model.ts'
 import {
