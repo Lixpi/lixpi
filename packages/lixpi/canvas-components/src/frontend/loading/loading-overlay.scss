@@ -5,6 +5,12 @@
     inset: 0;
     z-index: 20000;
     pointer-events: auto;
+
+    // Contained in one area, such as the workspace pane, the layer covers only
+    // that area.
+    &.is-contained {
+        position: absolute;
+    }
 }
 
 // Loading that finishes within this time never shows the overlay, so a quick

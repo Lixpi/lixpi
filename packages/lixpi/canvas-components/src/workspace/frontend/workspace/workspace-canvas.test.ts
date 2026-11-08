@@ -137,6 +137,7 @@ vi.mock('@lixpi/canvas-components/workspace/loading', async importOriginal => ({
     }),
     createWorkspaceLoadingLayer: () => ({
         acquire: () => ({ destroy: vi.fn() }),
+        contain: () => vi.fn(),
         destroy: vi.fn(),
     }),
 }))
