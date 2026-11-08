@@ -30,6 +30,32 @@ export class LoadingLayer {
         ` as HTMLDivElement
     }
 
+    // Confines the layer to `root` instead of covering the whole window, so a
+    // later load covers only the area it belongs to and leaves navigation
+    // around it in place. Returns the function that puts the layer back.
+    contain(root: HTMLElement): () => void {
+        const previousRoot = this.options.root
+        const wasContained = this.dom.classList.contains('is-contained')
+
+        this.moveTo(root, true)
+
+        return () => {
+            if (this.options.root === root)
+                this.moveTo(previousRoot, wasContained)
+        }
+    }
+
+    private moveTo(
+        root: HTMLElement,
+        contained: boolean,
+    ): void {
+        this.options.root = root
+        this.dom.classList.toggle('is-contained', contained)
+
+        if (this.dom.isConnected)
+            root.append(this.dom)
+    }
+
     setAppearance(appearance: Pick<LoadingOverlayOptions, 'outline'>): void {
         if (this.destroyed)
             return

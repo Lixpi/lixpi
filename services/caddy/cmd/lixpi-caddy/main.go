@@ -117,10 +117,19 @@ func execute(ctx context.Context, settings settings) error {
 			return fmt.Errorf("create local certificate directory: %w", err)
 		}
 
+		discarded, err := certificates.DiscardOverlongLocal(settings.directory, "localhost")
+		if err != nil {
+			return fmt.Errorf("discard overlong local certificate: %w", err)
+		}
+
+		if discarded > 0 {
+			slog.Info("replacing local certificate valid for longer than Apple clients accept", "event", "LOCAL_CERTIFICATE_REPLACED")
+		}
+
 		localCtx, cancel := context.WithTimeout(ctx, settings.timeout)
 		defer cancel()
 
-		err := engine.Maintain(localCtx, settings.directory, settings.domains, func() error {
+		err = engine.Maintain(localCtx, settings.directory, settings.domains, func() error {
 			roots, _, err := certificates.LocalRoots(settings.directory)
 			if err != nil {
 				return fmt.Errorf("load local certificate roots: %w", err)

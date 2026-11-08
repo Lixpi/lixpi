@@ -1,0 +1,15 @@
+[package]
+name = "lixpi-rust-quality-tools"
+version = "0.0.1"
+description = "Syntax-tree source conventions for Lixpi's Rust code"
+license = "MIT"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[[bin]]
+name = "check-rust-source"
+path = "src/main.rs"
+
+[dependencies]
+ra_ap_syntax = "=0.0.360"

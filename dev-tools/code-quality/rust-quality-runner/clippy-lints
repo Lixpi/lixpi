@@ -1,0 +1,51 @@
+# Lint levels the Rust quality runner passes to every target's crates, the
+# way golangci.yml configures the Go runner. One rustc lint flag per line.
+# Dependencies are not linted: Cargo caps their lints.
+
+# Any warning fails the check, so nothing lingers as a warning.
+-D warnings
+
+# Unsafe code needs a review the runner cannot do. Code that genuinely needs
+# it, such as a call into the Objective-C runtime, states why with
+# #[expect(unsafe_code, reason = "...")] and explains each block's soundness
+# in a // SAFETY: comment.
+-D unsafe_code
+-D unsafe_op_in_unsafe_fn
+-D clippy::undocumented_unsafe_blocks
+-D clippy::multiple_unsafe_ops_per_block
+-D unreachable_pub
+-D unused_qualifications
+
+# Clippy's default and pedantic groups.
+-D clippy::all
+-D clippy::pedantic
+
+# Errors are handled or returned, never turned into a crash. Tests may unwrap,
+# expect and panic, as clippy.toml allows.
+-D clippy::unwrap_used
+-D clippy::expect_used
+-D clippy::panic
+-D clippy::unwrap_in_result
+-D clippy::todo
+-D clippy::unimplemented
+-D clippy::let_underscore_must_use
+
+# Only `main` ends the process, after reporting why, so no helper exits past
+# its caller's cleanup.
+-D clippy::exit
+
+# A program writes command output on purpose, not through debugging leftovers.
+-D clippy::print_stdout
+-D clippy::dbg_macro
+
+# A suppression is an `#[expect]` with a reason, so it fails once the code it
+# excused is gone, like nolintlint's explanation and specificity rules.
+-D clippy::allow_attributes
+-D clippy::allow_attributes_without_reason
+
+# Strings are built with format!, like TypeScript template literals.
+-D clippy::string_add
+-D clippy::str_to_string
+
+# Tests live in a #[cfg(test)] module beside the code they cover.
+-D clippy::tests_outside_test_module

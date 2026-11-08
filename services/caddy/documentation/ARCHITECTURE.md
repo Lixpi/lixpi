@@ -88,7 +88,7 @@ The deployment adapter polls Secrets Manager and supplies certificate files to N
 
 ## Local development
 
-Local mode keeps Caddy's state in the mounted certificate directory. Caddy's internal CA issues a certificate for `localhost`; the intermediate lifetime is 3000 days and the requested leaf lifetime is 2500 days. These long lifetimes are for local development. Public mode uses public issuers and their lifetimes.
+Local mode keeps Caddy's state in the mounted certificate directory. Caddy's internal CA issues a certificate for `localhost` with an intermediate lifetime of 3000 days and a leaf lifetime of 800 days. The leaf can't be longer: Apple's TLS stack, which Safari and the desktop app's WebKit view use, rejects a server certificate valid for more than 825 days even when a locally trusted root issued it. Chrome doesn't apply that limit, so an overlong certificate fails only in Apple clients. Local issuance removes a stored leaf longer than 825 days before it starts, so a certificate issued under the earlier 2500-day lifetime is replaced on the next **Initialize infrastructure**. Public mode uses public issuers and their lifetimes.
 
 After issuance, the service verifies the certificate against the generated root and exports the three filenames consumed by Compose. Public CA and certificate files use `0644`; the private key uses `0600`. A repeated run reuses a valid certificate and the same CA. Startup dependencies wait for successful service completion before starting consumers. Installing the public CA in a developer's trust store is a separate action.
 

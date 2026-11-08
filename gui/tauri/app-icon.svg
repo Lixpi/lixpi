@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    The desktop app's icon. It repeats the company website's hero: the same
+    four greens at the freeform gradient's starting points, the soft white glow
+    in the middle and the thin inner highlight, with the Lixpi mark in night
+    blue. The tile follows the macOS icon grid, 824 of 1024 units with rounded
+    corners. The desktop builder renders every icon size from this file.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+    <defs>
+        <clipPath id="tile">
+            <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
+        </clipPath>
+
+        <!--
+            Each colour point fades out by 0.9 of the tile, with the quartic
+            falloff the website's renderer uses.
+        -->
+        <radialGradient id="upper-left" gradientUnits="userSpaceOnUse" cx="388.4" cy="306" r="741.6">
+            <stop offset="0" stop-color="#7ca06c" stop-opacity="1"/>
+            <stop offset="0.25" stop-color="#7ca06c" stop-opacity="0.32"/>
+            <stop offset="0.5" stop-color="#7ca06c" stop-opacity="0.06"/>
+            <stop offset="1" stop-color="#7ca06c" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="upper-right" gradientUnits="userSpaceOnUse" cx="759.2" cy="182.4" r="741.6">
+            <stop offset="0" stop-color="#789c6a" stop-opacity="1"/>
+            <stop offset="0.25" stop-color="#789c6a" stop-opacity="0.32"/>
+            <stop offset="0.5" stop-color="#789c6a" stop-opacity="0.06"/>
+            <stop offset="1" stop-color="#789c6a" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="lower-right" gradientUnits="userSpaceOnUse" cx="635.6" cy="718" r="741.6">
+            <stop offset="0" stop-color="#769a68" stop-opacity="1"/>
+            <stop offset="0.25" stop-color="#769a68" stop-opacity="0.32"/>
+            <stop offset="0.5" stop-color="#769a68" stop-opacity="0.06"/>
+            <stop offset="1" stop-color="#769a68" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="lower-left" gradientUnits="userSpaceOnUse" cx="264.8" cy="841.6" r="741.6">
+            <stop offset="0" stop-color="#7a9e6b" stop-opacity="1"/>
+            <stop offset="0.25" stop-color="#7a9e6b" stop-opacity="0.32"/>
+            <stop offset="0.5" stop-color="#7a9e6b" stop-opacity="0.06"/>
+            <stop offset="1" stop-color="#7a9e6b" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- The hero's radial-gradient(ellipse 80% 60% at 50% 50%, white 6% to clear). -->
+        <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="512" cy="512" r="659.2" gradientTransform="translate(512 512) scale(1 0.75) translate(-512 -512)">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.06"/>
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- The hero's inset highlights: brighter along the top edge than the bottom. -->
+        <linearGradient id="edge" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+            <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0.14"/>
+        </linearGradient>
+    </defs>
+
+    <g clip-path="url(#tile)">
+        <rect x="100" y="100" width="824" height="824" fill="#789c6a"/>
+        <rect x="100" y="100" width="824" height="824" fill="url(#upper-left)"/>
+        <rect x="100" y="100" width="824" height="824" fill="url(#upper-right)"/>
+        <rect x="100" y="100" width="824" height="824" fill="url(#lower-right)"/>
+        <rect x="100" y="100" width="824" height="824" fill="url(#lower-left)"/>
+        <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+        <rect x="102" y="102" width="820" height="820" rx="183" ry="183" fill="none" stroke="url(#edge)" stroke-width="4"/>
+    </g>
+
+    <!-- The Lixpi mark from @lixpi/ui-kit's lixpiLogo, 576 units wide and centred. -->
+    <g transform="translate(224 224) scale(1.0035)" fill="#42494f">
+        <g transform="translate(0,574) scale(0.1,-0.1)" stroke="none">
+            <path d="M2425 5720 c-66 -10 -158 -28 -205 -40 -234 -59 -543 -179 -710 -274 -41 -24 -85 -46 -97 -50 -39 -12 -261 -173 -406 -295 -143 -119 -230 -208 -386 -395 -104 -125 -158 -205 -255 -379 -249 -445 -367 -867 -365 -1297 l1 -185 14 155 c54 621 307 1199 720 1641 230 246 463 424 754 577 224 118 483 204 780 261 243 46 621 53 860 16 148 -23 497 -111 599 -151 232 -93 516 -255 726 -417 99 -76 353 -331 438 -440 154 -198 328 -504 416 -732 33 -85 88 -292 122 -453 60 -295 66 -670 13 -962 -31 -172 -104 -442 -154 -567 -130 -326 -364 -680 -604 -917 -221 -217 -411 -356 -666 -489 -359 -187 -699 -284 -1105 -316 l-110 -8 185 -2 c277 -2 452 28 755 126 138 45 372 143 450 188 22 12 76 42 120 65 173 91 496 347 641 506 214 237 295 346 419 568 178 319 299 660 345 975 29 197 29 685 0 882 -46 315 -167 656 -345 975 -124 222 -205 331 -419 568 -145 159 -468 415 -641 506 -44 23 -98 53 -120 65 -78 45 -312 143 -450 188 -335 109 -462 127 -885 126 -251 -1 -339 -4 -435 -19z"/>
+            <path d="M2310 5124 c-333 -45 -677 -164 -952 -329 -186 -112 -331 -226 -494 -389 -290 -290 -484 -602 -609 -980 -89 -269 -125 -496 -125 -796 0 -300 36 -527 125 -796 125 -378 319 -690 609 -980 290 -290 602 -484 980 -609 269 -89 496 -125 796 -125 300 0 527 36 796 125 378 125 690 319 980 609 290 290 484 602 609 980 89 269 125 496 125 796 0 300 -36 527 -125 796 -125 378 -319 690 -609 980 -403 404 -893 645 -1459 719 -149 19 -501 19 -647 -1z"/>
+        </g>
+    </g>
+</svg>

@@ -348,6 +348,11 @@ export class LixpiWorkspaceCanvas {
                 paneEl: this.paneEl,
                 settings: this.host.settings,
             })
+            // Workspace and document loading covers only this pane, so switching
+            // projects leaves the navigation beside the canvas in place.
+            this.callbacks.own(
+                this.loadingLayer.contain(this.paneEl),
+            )
 
             if (
                 this.host.theme

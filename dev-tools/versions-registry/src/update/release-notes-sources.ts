@@ -97,16 +97,25 @@ export class ReleaseNotesSourceResolver {
 
         if (group === 'tools') {
             const repositories = {
+                'apple-codesign': 'indygreg/apple-platform-rs',
+                'cargo-zigbuild': 'rust-cross/cargo-zigbuild',
                 fnm: 'Schniz/fnm',
                 nex: 'synadia-io/nex',
                 pulumi: 'pulumi/pulumi',
                 'pulumi-resource-aws': 'pulumi/pulumi-aws',
+                'tauri-cli': 'tauri-apps/tauri',
                 trunk: 'trunk-rs/trunk',
+                zig: 'ziglang/zig',
             } as const
+            // Monorepos tag each crate's releases with the crate name.
+            const tagPrefixes: Record<string, string[]> = {
+                'apple-codesign': ['apple-codesign/'],
+                'tauri-cli': ['tauri-cli-v'],
+            }
             const repository = repositories[name as keyof typeof repositories]
 
             return repository
-                ? this.github(repository)
+                ? this.github(repository, tagPrefixes[name])
                 : this.unavailable(`No release-note source is registered for tool ${name}.`)
         }
 

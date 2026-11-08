@@ -1,0 +1,3 @@
+# The builder image installs tools only. The app source is mounted when a build
+# runs, so nothing from this directory belongs in the build context.
+*

@@ -1,0 +1,26 @@
+name: lixpi
+
+services:
+    # One-shot containers use generated names, just like the Go runner.
+    lixpi-rust-quality-runner:
+        extends:
+            file: ../../../../dev-tools/code-quality/runner-compose/rust-quality.base.yml
+            service: rust-quality-runner-base
+        environment:
+            # The desktop app's build script requires the URLs it connects to.
+            LIXPI_WEB_UI_URL: https://web-ui.lixpi.test
+            LIXPI_API_URL: https://api.lixpi.test
+        volumes:
+            - ../../../../dev-tools/code-quality/rust-quality-runner/Cargo.toml:/usr/src/manifests/rust-quality-tools/Cargo.toml:cached
+            - ../../../../dev-tools/code-quality/rust-quality-runner/Cargo.lock:/usr/src/manifests/rust-quality-tools/Cargo.lock:cached
+            - ../../../../dev-tools/code-quality/rust-quality-runner/src:/usr/src/service/rust-quality-tools/src:cached
+            - ../../../../gui/tauri/src-tauri/Cargo.toml:/usr/src/manifests/desktop/Cargo.toml:cached
+            - ../../../../gui/tauri/src-tauri/Cargo.lock:/usr/src/manifests/desktop/Cargo.lock:cached
+            - ../../../../gui/tauri/src-tauri/build.rs:/usr/src/service/desktop/build.rs:cached
+            - ../../../../gui/tauri/src-tauri/src:/usr/src/service/desktop/src:cached
+            - ../../../../gui/tauri/src-tauri/tauri.conf.json:/usr/src/service/desktop/tauri.conf.json:ro,cached
+            - ../../../../gui/tauri/src-tauri/icons:/usr/src/service/desktop/icons:ro,cached
+
+volumes:
+    rust-quality-runner-registry-cache:
+    rust-quality-runner-target-cache:

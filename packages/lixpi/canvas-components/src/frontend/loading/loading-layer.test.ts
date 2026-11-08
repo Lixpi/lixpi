@@ -121,3 +121,54 @@ describe('application loading layer', () => {
         expect(() => layer.acquire()).toThrow('disposed')
     })
 })
+
+describe('contained loading layer', () => {
+    it('covers only the area it is contained in and returns to the window afterwards', () => {
+        const layer = createLayer()
+        const pane = document.createElement('div')
+        document.body.append(pane)
+        const startup = layer.acquire({ visible: true })
+
+        expect(layer.dom.parentElement).toBe(document.body)
+        expect(layer.dom.classList.contains('is-contained')).toBe(false)
+
+        const release = layer.contain(pane)
+
+        expect(layer.dom.parentElement).toBe(pane)
+        expect(layer.dom.classList.contains('is-contained')).toBe(true)
+
+        release()
+
+        expect(layer.dom.parentElement).toBe(document.body)
+        expect(layer.dom.classList.contains('is-contained')).toBe(false)
+        startup.destroy()
+    })
+
+    it('mounts a later load inside the contained area', () => {
+        const layer = createLayer()
+        const pane = document.createElement('div')
+        document.body.append(pane)
+        layer.contain(pane)
+
+        const load = layer.acquire({ visible: true })
+
+        expect(layer.dom.parentElement).toBe(pane)
+        load.destroy()
+        expect(layer.dom.isConnected).toBe(false)
+    })
+
+    it('leaves a newer containment in place when an older one is released', () => {
+        const layer = createLayer()
+        const firstPane = document.createElement('div')
+        const secondPane = document.createElement('div')
+        document.body.append(firstPane, secondPane)
+        const load = layer.acquire({ visible: true })
+        const releaseFirst = layer.contain(firstPane)
+        layer.contain(secondPane)
+
+        releaseFirst()
+
+        expect(layer.dom.parentElement).toBe(secondPane)
+        load.destroy()
+    })
+})

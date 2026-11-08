@@ -44,13 +44,14 @@ The generated local environment sets `METRICS_ENABLED=false`. Enable it only whe
 
 Set up TLS certificates and DynamoDB tables. This is required before starting the application for the first time:
 
-Run `./run.sh` and choose **Initialize infrastructure**, then pick the environment file to use.
+Run `./run.sh` and choose **Initialize infrastructure**, pick the environment file, then choose whether to trust the local certificate authority. The action generates the local TLS certificates and initializes the DynamoDB tables with Pulumi.
 
-This script will:
+The local stack serves web-ui, Profile, the API and the NATS WebSocket over HTTPS, with certificates from a certificate authority that Caddy generates for this checkout. A browser accepts those certificates only if the computer trusts that authority. **Trust** decides whether the action adds it to the system trust store:
 
-- Start Caddy to generate TLS certificates.
-- Extract and install the CA certificate into your system's trust store.
-- Initialize DynamoDB tables using Pulumi.
+- **Skip**, the default, leaves the computer's trust store unchanged. Choose it when you use the [desktop app](DESKTOP-APP.md), which embeds the authority and trusts it on its own, or when you only work against a remote environment, whose certificates are public.
+- **Install** adds the authority to the system trust store and asks for your password. Choose it when you open the local web-ui in a browser. Without it, the browser rejects the local certificates, and web-ui can't reach NATS even after you click through the warning for the page.
+
+You can rerun the action with **Install** at any time. The authority stays the same across reruns as long as the `caddy-certs` volume is kept. [Caddy certificate operations](../../services/caddy/documentation/OPERATIONS.md) covers installing it by hand and other browsers' trust stores.
 
 ### 4. Start the application
 

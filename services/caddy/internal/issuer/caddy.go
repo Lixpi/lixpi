@@ -12,6 +12,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/modules/caddypki"
 	"github.com/caddyserver/caddy/v2/modules/caddytls"
+	"github.com/lixpi/caddy/internal/certificates"
 )
 
 type Engine struct {
@@ -36,7 +37,7 @@ func (e Engine) Configuration(root string, domains []string) *caddy.Config {
 	if e.Local {
 		lifetime := e.LocalLifetime
 		if lifetime == 0 {
-			lifetime = 2500 * 24 * time.Hour
+			lifetime = certificates.LocalLeafLifetime
 		}
 
 		policy.IssuersRaw = []json.RawMessage{caddyconfig.JSONModuleObject(

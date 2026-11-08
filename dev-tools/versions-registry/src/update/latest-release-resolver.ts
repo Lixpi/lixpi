@@ -8,6 +8,11 @@ import {
 import {
     type ReleaseClient,
 } from './release-client.ts'
+import {
+    comparableVersion,
+    compareVersions,
+    type ComparableVersion,
+} from './semantic-version.ts'
 
 export type ResolvedDependencyRelease = DependencyCoordinate & {
     currentVersion: string
@@ -295,7 +300,96 @@ export class LatestReleaseResolver {
                 data => stringField(data, 'version'),
             )
 
+        if (
+            name === 'apple-codesign'
+            || name === 'cargo-zigbuild'
+        )
+            return this.crate(name, 'max_stable_version')
+
+        // The desktop app follows the Tauri 3 prerelease line, so the newest
+        // published CLI is the target even while it is a prerelease.
+        if (name === 'tauri-cli')
+            return this.crate(name, 'max_version')
+
+        if (name === 'zig')
+            return this.zig()
+
+        if (name === 'rust-nightly')
+            return this.rustNightly()
+
         throw new Error(`No latest-release resolver for tool ${name}`)
+    }
+
+    private crate(
+        name: string,
+        versionField: 'max_stable_version' | 'max_version',
+    ): Promise<string> {
+        return this.releases.releaseVersion(
+            'tools',
+            name,
+            `https://crates.io/api/v1/crates/${name}`,
+            data => stringField(
+                data
+                    && typeof data === 'object'
+                    ? (data as Record<string, unknown>).crate
+                    : undefined,
+                versionField,
+            ),
+        )
+    }
+
+    // The nightly toolchain is selected by its date. The channel manifest
+    // names the newest one.
+    private async rustNightly(): Promise<string> {
+        const url = 'https://static.rust-lang.org/dist/channel-rust-nightly.toml'
+        const manifest = await this.releases.fetchText(url)
+        const date = manifest.match(/^date = "(\d{4}-\d{2}-\d{2})"$/m)?.[1]
+
+        if (!date)
+            throw new Error(`No nightly toolchain date in ${url}`)
+
+        this.releases.recordRelease(
+            'tools',
+            'rust-nightly',
+            date,
+            url,
+        )
+
+        return date
+    }
+
+    private async zig(): Promise<string> {
+        const url = 'https://ziglang.org/download/index.json'
+        const data = await this.releases.fetchJson(url)
+
+        if (
+            !data
+            || typeof data !== 'object'
+        )
+            throw new Error(`Expected the Zig release index from ${url}`)
+
+        const [newest] = Object
+            .keys(data)
+            .filter(candidate => /^\d+\.\d+\.\d+$/.test(candidate))
+            .map(
+                candidate => ({
+                    name: candidate,
+                    version: comparableVersion(candidate) as ComparableVersion,
+                }),
+            )
+            .sort((left, right) => compareVersions(right.version, left.version))
+
+        if (!newest)
+            throw new Error(`No stable Zig release in ${url}`)
+
+        this.releases.recordRelease(
+            'tools',
+            'zig',
+            newest.name,
+            url,
+        )
+
+        return newest.name
     }
 
     private githubTool(

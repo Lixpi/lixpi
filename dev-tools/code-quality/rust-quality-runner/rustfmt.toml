@@ -1,0 +1,41 @@
+# Lixpi's Rust layout. rustfmt formats from the parsed syntax tree, like Oxfmt
+# and gofumpt, and these settings carry the TypeScript and Go layout rules over
+# to Rust. Several are unstable, so the runner formats with a pinned nightly
+# rustfmt while compiling, linting and testing on the stable toolchain.
+
+edition = "2024"
+style_edition = "2024"
+
+# Four spaces, Unix line endings and the 150-column limit the Go and
+# TypeScript formatters use.
+hard_tabs = false
+tab_spaces = 4
+max_width = 150
+newline_style = "Unix"
+
+# A signature with two or more parameters puts one parameter on each line.
+fn_params_layout = "Vertical"
+
+# Imports from one crate merge into one `use`, grouped as std, external
+# crates, then this crate. A list of two or more items puts one item on each
+# line, like a TypeScript named import list.
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+imports_layout = "Vertical"
+reorder_imports = true
+
+# A struct literal or pattern puts one field on each line, like a TypeScript
+# object literal or destructuring pattern. rustfmt measures width rather than
+# counting fields, so a single-field literal expands too.
+struct_lit_width = 0
+
+# Trailing commas wherever a list spans lines, match arms included.
+trailing_comma = "Vertical"
+match_block_trailing_comma = true
+
+# Block comments become line comments.
+normalize_comments = true
+normalize_doc_attributes = true
+
+use_field_init_shorthand = true
+use_try_shorthand = true
