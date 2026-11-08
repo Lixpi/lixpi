@@ -7,11 +7,6 @@
 #[cfg(target_os = "macos")]
 mod macos;
 
-use tauri::{
-    Url,
-    WebviewWindow,
-};
-
 // build.rs writes the authority here in DER form, or an empty file when the
 // build has none. Only the macOS web view consults it.
 #[cfg(target_os = "macos")]
@@ -21,26 +16,18 @@ const LOCAL_CA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/local-ca.der")
 #[cfg(any(target_os = "macos", test))]
 const LOCAL_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
-// Opens `url` in the window once the app is ready to answer WebKit's
-// certificate checks, so the first request to the local stack is already
-// covered.
-pub(crate) fn open(
-    window: &WebviewWindow,
-    url: Url,
-) -> tauri::Result<()> {
-    // The runtime runs these in order on the main thread. The installer must
-    // not call back into the runtime itself: during setup the runtime runs it
-    // synchronously, and a nested call would wait on itself.
-    #[cfg(target_os = "macos")]
-    if !LOCAL_CA.is_empty() {
-        window.with_webview(|webview| {
-            if let Err(error) = macos::install(&webview) {
-                eprintln!("Could not trust the local certificate authority: {error}");
-            }
-        })?;
+// Answers WebKit's certificate checks for the local stack in `web_view`, the
+// window's WKWebView, when this build embeds the local authority. It runs
+// before web-ui loads, so the first request is already covered.
+#[cfg(target_os = "macos")]
+pub(crate) fn install(web_view: *mut objc2::runtime::AnyObject) {
+    if LOCAL_CA.is_empty() {
+        return;
     }
 
-    window.navigate(url)
+    if let Err(error) = macos::install(web_view) {
+        eprintln!("Could not trust the local certificate authority: {error}");
+    }
 }
 
 // The embedded authority's certificate, when it may vouch for `host`.

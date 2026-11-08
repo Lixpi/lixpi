@@ -4,6 +4,7 @@ mod diagnostics;
 mod downloads;
 mod local_trust;
 mod origins;
+mod webkit;
 
 use origins::{
     NavigationAction,
@@ -124,7 +125,7 @@ fn open_main_window(
     #[cfg(feature = "diagnostics")]
     diagnostics.watch(window.clone());
 
-    local_trust::open(&window, web_ui)
+    webkit::open(&window, web_ui)
 }
 
 fn window_title(document_title: &str) -> String {

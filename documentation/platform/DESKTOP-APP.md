@@ -39,6 +39,10 @@ The page has no access to Tauri's native commands. The app grants no capabilitie
 
 The window remembers its size and position between launches.
 
+## Rendering at the display's refresh rate
+
+WebKit runs `requestAnimationFrame` near 60 frames a second by default, even on a 120 Hz ProMotion display, where Chrome runs at 120. Every canvas animation, pan and zoom follows that rate, so the canvas felt slower in the app than in Chrome. Before web-ui loads, the app turns off WebKit's `PreferPageRenderingUpdatesNear60FPSEnabled` feature flag, the same switch as Safari's "Prefer Page Rendering Updates near 60fps", so the page renders at the display's own rate. WebKit lists its feature flags only through private API, so the app looks the flag up by name and logs `Page animation stays near 60 frames per second` on stderr when a WebKit version doesn't have it. The canvas itself runs on Pixi, which uses WebGPU when the view offers it, as WebKit on current macOS does.
+
 ## Debugging the app
 
 The app is a thin window around web-ui, so most problems are in the page, in the TLS connections it opens, or in the services behind it. Each has its own place to look.
@@ -52,8 +56,11 @@ Choose **Diagnostics: On** in **Build the macOS desktop app**, or set `LIXPI_DES
 ```text
 [1794127180655] page started: https://localhost:3443/
 [1794127181476] info /: NATS -> listening on: wss://localhost:9222
+[1794127182477] rendering /: 118 frames per second devicePixelRatio 2 WebGPU available
 [1794127183012] error /: NATS -> authorization failed, refreshing credentials {"name":"AuthorizationError"}
 ```
+
+A second after each page loads, the log records a `rendering` line: the frame rate the page actually got, the device pixel ratio, and whether WebGPU is available. Compare it with the display's refresh rate when the canvas feels slow.
 
 ### For people
 

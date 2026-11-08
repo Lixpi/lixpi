@@ -65,6 +65,23 @@ pub(crate) const CAPTURE_SCRIPT: &str = r"
   addEventListener('error', event => record('uncaught', [event.message, `${event.filename}:${event.lineno}:${event.colno}`]))
   addEventListener('unhandledrejection', event => record('unhandled-rejection', [event.reason]))
   addEventListener('securitypolicyviolation', event => record('blocked', [event.violatedDirective, event.blockedURI]))
+
+  // Measures how often the page can render, which is what canvas animation
+  // feels like, plus what the GPU path has to work with.
+  addEventListener('load', () => {
+    const frames = []
+    const step = time => {
+      frames.push(time)
+
+      if (time - frames[0] < 1000)
+        return requestAnimationFrame(step)
+
+      const rate = Math.round((frames.length - 1) * 1000 / (time - frames[0]))
+      record('rendering', [`${rate} frames per second`, `devicePixelRatio ${devicePixelRatio}`, `WebGPU ${'gpu' in navigator ? 'available' : 'unavailable'}`])
+    }
+
+    requestAnimationFrame(step)
+  })
 })()
 ";
 

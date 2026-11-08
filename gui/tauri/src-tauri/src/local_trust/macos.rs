@@ -39,7 +39,6 @@ use objc2_security::{
     SecCertificate,
     SecTrust,
 };
-use tauri::webview::PlatformWebview;
 
 use super::anchor_for;
 
@@ -51,15 +50,7 @@ type CompletionHandler = Block<dyn Fn(isize, *mut AnyObject)>;
 
 type ChallengeMethod = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut NSURLAuthenticationChallenge, *mut CompletionHandler);
 
-pub(super) fn install(webview: &PlatformWebview) -> Result<(), String> {
-    let native = webview
-        .downcast_ref::<tauri_runtime_wry::Webview>()
-        .ok_or("the window does not use the WebKit runtime")?;
-    let wk_web_view = native.inner().cast::<AnyObject>().cast_mut();
-    if wk_web_view.is_null() {
-        return Err(String::from("the window has no web view"));
-    }
-
+pub(super) fn install(wk_web_view: *mut AnyObject) -> Result<(), String> {
     // SAFETY: `wk_web_view` is the window's live WKWebView, and this runs on the
     // main thread through `with_webview`, as WebKit requires.
     let delegate: *mut AnyObject = unsafe { msg_send![wk_web_view, navigationDelegate] };
