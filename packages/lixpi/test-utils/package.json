@@ -4,9 +4,15 @@
     "private": true,
     "type": "module",
     "exports": {
-        ".": "./src/index.ts"
+        ".": "./src/index.ts",
+        "./stylesheets": "./src/themed-stylesheet.ts"
     },
-    "dependencies": {
+    "peerDependencies": {
         "sass": "1.107.0"
+    },
+    "peerDependenciesMeta": {
+        "sass": {
+            "optional": true
+        }
     }
 }

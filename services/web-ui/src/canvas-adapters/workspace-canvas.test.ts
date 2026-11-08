@@ -5,10 +5,8 @@ import {
 } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import {
-    compileThemedStylesheet,
-    withoutLayout,
-} from '@lixpi/test-utils'
+import { withoutLayout } from '@lixpi/test-utils'
+import { compileThemedStylesheet } from '@lixpi/test-utils/stylesheets'
 
 // =============================================================================
 // HELPERS
