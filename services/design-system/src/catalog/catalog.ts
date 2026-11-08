@@ -187,13 +187,6 @@ export const mountCanvasExample = async (
         )
     }
 
-    if (id === 'nodes-all') {
-        const { AllNodesExample } = await import('../examples/all-nodes-example.ts')
-        const example = new AllNodesExample(host)
-
-        return example
-    }
-
     if (id === 'node-shell') {
         const { mountMetadataShellExample } = await import('../examples/node-example-variants.ts')
 

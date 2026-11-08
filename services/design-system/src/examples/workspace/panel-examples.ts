@@ -634,7 +634,7 @@ export class ContextExample extends PanelExample {
                     video: 'Video',
                     audio: 'Audio',
                     document: 'Document',
-                    mediaDocument: 'Media document',
+                    mediaDocument: 'Uploaded document',
                     capabilityArtifact: 'Capability Artifact',
                 },
                 kind => {

@@ -560,23 +560,6 @@ const initialScene = (
         edges = []
     }
 
-    if (mode === 'nodes-all-basic') {
-        nodes = [
-            ...initialScene("engine-theme").nodes.filter(node => node.type === "diagram"),
-            ...initialScene("media-images").nodes,
-            ...initialScene("media-playback").nodes,
-        ].map(
-            (node, index) => ({
-                ...node,
-                position: {
-                    x: 30 + (index % 3) * 540,
-                    y: 40 + Math.floor(index / 3) * 360,
-                },
-            }),
-        )
-        edges = []
-    }
-
     return {
         sceneKey: `library-${mode}`,
         revision: '0',
@@ -778,7 +761,7 @@ export class EngineExample {
                 y: 12,
                 zoom: Math.round(Math.min(
                     1,
-                    Math.max(0.2, host.clientWidth / (mode === "nodes-all-basic" ? 1720 : 920)),
+                    Math.max(0.2, host.clientWidth / 920),
                 ) * 100) / 100,
             },
             collisions: mode === 'engine-parenting' ? { margin: 20 } : undefined,
@@ -859,7 +842,6 @@ export class EngineExample {
 
         if (
             options.nodeType
-            || mode === 'nodes-all-basic'
             || mode === 'node-shell'
         )
             this.fit()

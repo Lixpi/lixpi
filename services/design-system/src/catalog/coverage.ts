@@ -1,13 +1,4 @@
 export const componentCoverage: Record<string, readonly string[]> = {
-    'nodes-all': [
-        'CanvasThemeStore', 'bindCanvasTheme', 'canvasThemeConnectorSettings',
-        'CanvasController', 'NodeRegistry', 'DiagramNodeView', 'DiagramNodeSurface',
-        'ImageSurface', 'NativePlayback', 'PlaybackChrome', 'createVideoControls',
-        'LixpiWorkspaceCanvas', 'WorkspaceCanvasChrome', 'WorkspaceNodeShells',
-        'WorkspaceDocumentNodes', 'WorkspaceCapabilityNode', 'OperationStatusNode',
-        'BranchMarkerContent', 'WorkspaceOutputChrome', 'WorkspaceMediaLayer',
-        'GeneratedOutputNodeChrome', 'WorkspaceCanvasMenu', 'WorkspaceDiagramNodeView',
-    ],
     'node-diagram': [
         'CanvasController', 'CanvasScene', 'NodeRegistry', 'CanvasRenderer', 'CanvasSelection',
         'MarqueeController', 'SelectionOverlay', 'NodeHandles', 'NodeResizeHandles',

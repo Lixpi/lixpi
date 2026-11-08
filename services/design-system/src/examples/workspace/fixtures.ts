@@ -1,4 +1,7 @@
-import { mediaFixtures } from './media-fixtures.ts'
+import {
+    documentPosterFixtures,
+    mediaFixtures,
+} from './media-fixtures.ts'
 import {
     createConversationSettings,
     type Asset,
@@ -65,6 +68,55 @@ type StoredDocument = {
     version: number
 }
 
+type UploadedDocumentFixture = {
+    assetId: string
+    title: string
+    originalName: string
+    sourceMimeType: string
+    canonicalMimeType: string
+    pageCount?: number
+    poster: typeof documentPosterFixtures[keyof typeof documentPosterFixtures] | null
+}
+
+// One file per conversion path: a PDF kept as is, a Word file converted to
+// PDF, a Markdown file drawn as a text page, and a PDF whose poster failed.
+export const uploadedDocumentFixtures: readonly UploadedDocumentFixture[] = [
+    {
+        assetId: 'fixture-media-document',
+        title: 'Autumn launch creative brief',
+        originalName: 'Autumn launch creative brief.pdf',
+        sourceMimeType: 'application/pdf',
+        canonicalMimeType: 'application/pdf',
+        pageCount: 2,
+        poster: documentPosterFixtures.creativeBrief,
+    },
+    {
+        assetId: 'fixture-media-document-docx',
+        title: 'Product film shot list',
+        originalName: 'Product film shot list.docx',
+        sourceMimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        canonicalMimeType: 'application/pdf',
+        pageCount: 1,
+        poster: documentPosterFixtures.shotList,
+    },
+    {
+        assetId: 'fixture-media-document-markdown',
+        title: 'Prompt notes',
+        originalName: 'prompt-notes.md',
+        sourceMimeType: 'text/markdown',
+        canonicalMimeType: 'text/markdown',
+        poster: documentPosterFixtures.promptNotes,
+    },
+    {
+        assetId: 'fixture-media-document-no-poster',
+        title: 'Signed release form',
+        originalName: 'Signed release form.pdf',
+        sourceMimeType: 'application/pdf',
+        canonicalMimeType: 'application/pdf',
+        poster: null,
+    },
+]
+
 export class WorkspaceFixtures {
     readonly artifacts = createArtifactFixtures()
     readonly assets = new Map<string, Asset>()
@@ -74,6 +126,7 @@ export class WorkspaceFixtures {
     private readonly listeners = new Set<(snapshot: { items: ReadonlyMap<string, Asset> }) => void>()
     private nextId = 0
     private readonly conversations = new Map<string, ConversationSnapshot>()
+    private readonly posterUrls = new Map<string, string>()
 
     readonly storage: Pick<Storage, 'getItem' | 'setItem'> = {
         getItem: key => this.storageValues.get(key) ?? null,
@@ -96,11 +149,9 @@ export class WorkspaceFixtures {
             'Audio study',
             'audio',
         )
-        this.addAsset(
-            'fixture-media-document',
-            'Imported document',
-            'document',
-        )
+        for (const upload of uploadedDocumentFixtures)
+            this.addUploadedDocument(upload)
+
         this.addAsset(
             'fixture-document',
             'Canvas notes',
@@ -151,6 +202,68 @@ export class WorkspaceFixtures {
     }
 
     createId = (): string => `fixture-id-${++this.nextId}`
+
+    // Mirrors what file conversion stores for an uploaded document: the original
+    // file, the model-facing canonical file, and a first-page poster plus
+    // thumbnail. Without a poster the asset is degraded and both fail.
+    private addUploadedDocument(upload: UploadedDocumentFixture): void {
+        const asset = this.addAsset(
+            upload.assetId,
+            upload.title,
+            'document',
+        )
+        const file = (
+            name: 'original' | 'canonical',
+            mimeType: string,
+        ) => ({
+            name,
+            status: 'ready' as const,
+            blobHash: `fixture-${upload.assetId}-${name}`,
+            mimeType,
+            updatedAt: fixtureTime,
+        })
+        const poster = upload.poster
+        const image = (name: 'poster' | 'thumbnail') => poster
+            ? {
+                name,
+                status: 'ready' as const,
+                blobHash: poster.blobHash,
+                mimeType: 'image/png',
+                byteSize: poster.byteSize,
+                width: poster.width,
+                height: poster.height,
+                updatedAt: fixtureTime,
+            }
+            : {
+                name,
+                status: 'failed' as const,
+                errorCode: name === 'poster' ? 'DOCUMENT_POSTER_GENERATION_FAILED' : 'POSTER_UNAVAILABLE',
+                updatedAt: fixtureTime,
+            }
+        asset.states.media = poster ? 'ready' : 'degraded'
+        asset.media = {
+            kind: 'document',
+            originalName: upload.originalName,
+            sourceMimeType: upload.sourceMimeType,
+            modelSafe: upload.canonicalMimeType === upload.sourceMimeType,
+            pageCount: upload.pageCount,
+            renditions: {
+                original: file(
+                    'original',
+                    upload.sourceMimeType,
+                ),
+                canonical: file(
+                    'canonical',
+                    upload.canonicalMimeType,
+                ),
+                poster: image('poster'),
+                thumbnail: image('thumbnail'),
+            },
+        }
+
+        if (poster)
+            this.posterUrls.set(upload.assetId, poster.url)
+    }
 
     addAsset(
         assetId: string,
@@ -408,7 +521,7 @@ export class WorkspaceFixtures {
         )
             return '/fixtures/canvas-sample.wav'
 
-        return '/fixtures/canvas-sample.png'
+        return this.posterUrls.get(assetId) ?? '/fixtures/canvas-sample.png'
     }
 
     get documents(): WorkspaceCanvasDocument[] {

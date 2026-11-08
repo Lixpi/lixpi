@@ -53,6 +53,9 @@ export type FullWorkspaceExampleOptions = {
     workspaceControls?: boolean
     nodeType?: CanvasState["nodes"][number]["type"]
     nodeTypes?: readonly CanvasState["nodes"][number]["type"][]
+    // Shown instead of the shared fixture's nodes of the isolated type, at
+    // their own positions.
+    nodes?: readonly CanvasState["nodes"][number][]
 }
 
 export class FullWorkspaceExample {
@@ -62,11 +65,13 @@ export class FullWorkspaceExample {
         if (!types)
             return
 
-        const nodes = this.state.nodes.filter(node => types.includes(node.type)).map(
+        const explicit = initial ? this.options.nodes : undefined
+        const nodes = (explicit ?? this.state.nodes.filter(node => types.includes(node.type))).map(
             (node, index) => ({
                 ...node,
                 position: initial
                     && !this.options.nodeTypes
+                    && !explicit
                     ? {
                         x: 60,
                         y: 80 + index * (node.dimensions.height + 60),

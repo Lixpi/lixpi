@@ -1,11 +1,13 @@
 import {
     type CanvasNode,
     type CanvasState,
+    type DocumentMediaCanvasNode,
     type WorkspaceEdge,
     type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import {
     fixtureTime,
+    uploadedDocumentFixtures,
     type WorkspaceFixtures,
 } from './fixtures.ts'
 
@@ -97,6 +99,24 @@ const createBranchConversations = (fixtures: WorkspaceFixtures): void => {
     }
 }
 
+// Uploads land on a letter-shaped frame, like the canvas upload action
+// (width / 0.7727). The poster is fitted inside it without cropping.
+export const createUploadedDocumentNodes = (): DocumentMediaCanvasNode[] => uploadedDocumentFixtures.map(
+    (upload, index) => ({
+        nodeId: index === 0 ? 'node-media-document' : `node-${upload.assetId.replace('fixture-', '')}`,
+        type: 'mediaDocument',
+        assetId: upload.assetId,
+        position: {
+            x: 60 + index * 300,
+            y: 80,
+        },
+        dimensions: {
+            width: 240,
+            height: Math.round(240 / 0.7727),
+        },
+    }),
+)
+
 export const createCanvasFixture = (fixtures: WorkspaceFixtures): CanvasState => {
     createBranchConversations(fixtures)
     const nodes: CanvasNode[] = [
@@ -153,16 +173,10 @@ export const createCanvasFixture = (fixtures: WorkspaceFixtures): CanvasState =>
             },
         },
         {
-            nodeId: 'node-media-document',
-            type: 'mediaDocument',
-            assetId: 'fixture-media-document',
+            ...createUploadedDocumentNodes()[0],
             position: {
                 x: 1760,
                 y: 100,
-            },
-            dimensions: {
-                width: 240,
-                height: 300,
             },
         },
         {

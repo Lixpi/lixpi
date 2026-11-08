@@ -47,7 +47,7 @@ export const canvasNodePages: readonly CanvasNodePage[] = [
     },
     {
         id: 'node-lixpi-media-document',
-        title: 'Media document',
+        title: 'Uploaded document',
         nodeType: 'mediaDocument',
         mode: 'workspace-canvas',
     },
@@ -88,7 +88,7 @@ const nodeDescriptions: Record<string, string> = {
     'node-video': 'Native video with shared PlaybackChrome and UI-kit SVG controls.',
     'node-audio': 'Native audio with shared PlaybackChrome and UI-kit SVG controls.',
     'node-lixpi-document': 'The original document canvas node plus editable, read-only lease, loading and retryable editor-mount states.',
-    'node-lixpi-media-document': 'The original media-document node with its actual document view and isolated canvas geometry.',
+    'node-lixpi-media-document': 'A read-only file added to the canvas as prompt context, shown as a picture of its first page. Covers PDF, Word converted to PDF, Markdown and a file whose page image failed.',
     'node-lixpi-operation': 'The original operation-status canvas node plus upload and generation progress, failure and required-action presentations.',
     'node-lixpi-branches': 'Origin, fork and continuation markers together with their native parent relationships, plus reference-resolution and review variants.',
     'node-lixpi-artifact': 'The original Capability Artifact canvas nodes plus registered module views and the editable-module lease state.',
@@ -96,15 +96,6 @@ const nodeDescriptions: Record<string, string> = {
 }
 
 export const canvasNodeExamples: readonly CanvasExample[] = [
-    {
-        id: 'nodes-all',
-        title: 'All node types',
-        group: 'Nodes',
-        summary: 'Basic and composite canvas nodes in one overview.',
-        source: 'services/design-system/src/examples/all-nodes-example.ts',
-        components: componentCoverage['nodes-all'],
-        nodes: canvasNodePages.flatMap(page => page.nodeTypes ?? [page.nodeType]),
-    },
     {
         id: 'node-shell',
         title: 'Metadata shell',

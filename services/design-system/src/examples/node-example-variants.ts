@@ -183,6 +183,20 @@ const canvasNodeVariant = (page: CanvasNodePage): Variant => ({
 
         const { FullWorkspaceExample } = await import('./workspace/canvas-examples.ts')
 
+        if (page.nodeType === 'mediaDocument') {
+            const { createUploadedDocumentNodes } = await import('./workspace/node-fixtures.ts')
+            const example = new FullWorkspaceExample(
+                host,
+                {
+                    nodeType: 'mediaDocument',
+                    nodes: createUploadedDocumentNodes(),
+                },
+            )
+            example.frame.setInstructions(uploadedDocumentInstructions())
+
+            return ownFrame(example)
+        }
+
         return ownFrame(
             new FullWorkspaceExample(
                 host,
@@ -194,6 +208,14 @@ const canvasNodeVariant = (page: CanvasNodePage): Variant => ({
         )
     },
 })
+
+const uploadedDocumentInstructions = (): HTMLElement => html`
+    <section className="canvas-example-instructions">
+        <p>An uploaded document is a file someone added to the canvas, such as a brief or a script, so prompts can reference it. It is read-only and shows only a picture of the file's first page. To write text on the canvas, use the editable <strong>Document</strong> node instead.</p>
+        <p>From left to right: a PDF, which is kept as is; a Word file, which is converted to PDF first; a Markdown file, drawn as a plain text page; and a PDF whose page image could not be made, which leaves a blank card in the canvas surface color. Word, PowerPoint, OpenDocument and RTF files take the Word path, and plain text takes the Markdown path.</p>
+        <p>New uploads get a letter-shaped frame, and the page image is fitted inside it without cropping, so an A4 page shows thin side bars. Resizing does not lock the frame's proportions, and the page stays fitted inside whatever shape the frame takes. While a file is still converting, the canvas shows an upload <strong>Operation status</strong> node in its place.</p>
+    </section>
+` as HTMLElement
 
 const nodeVariants = (page: CanvasNodePage): Variant[] => {
     const variants = [canvasNodeVariant(page)]

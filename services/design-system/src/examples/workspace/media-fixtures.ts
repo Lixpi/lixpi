@@ -24,3 +24,30 @@ export const mediaFixtures = {
         height: undefined,
     },
 } as const
+
+// First-page posters made with the production conversion tools in the nex
+// image: LibreOffice for Word to PDF, `pdftocairo -scale-to 1024` for PDF pages
+// and the text poster layout for Markdown and plain text.
+export const documentPosterFixtures = {
+    creativeBrief: {
+        url: '/fixtures/document-creative-brief-poster.png',
+        blobHash: 'ac053f5a57433e00d1ad5137c8f06ee51a6eafc18150a46cc9eed63529c50b3c',
+        byteSize: 105717,
+        width: 725,
+        height: 1024,
+    },
+    shotList: {
+        url: '/fixtures/document-shot-list-poster.png',
+        blobHash: '2b324e68954ebb6a541621b572e05e85f271ac0a3022f655da55b6f6f1f9b7cc',
+        byteSize: 65291,
+        width: 725,
+        height: 1024,
+    },
+    promptNotes: {
+        url: '/fixtures/document-prompt-notes-poster.png',
+        blobHash: '0f94f4011074f8412fd8ec7ddb1910a573f79951e3dc4be7433486f23fe0f660',
+        byteSize: 98222,
+        width: 1024,
+        height: 1448,
+    },
+} as const
