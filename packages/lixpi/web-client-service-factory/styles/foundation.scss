@@ -13,3 +13,8 @@ body,
 *::after {
     box-sizing: inherit;
 }
+
+:focus,
+:focus-visible {
+    outline: none;
+}

@@ -1,0 +1,34 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+@use "@lixpi/ui-kit/styles/tokens" as uiTokens;
+
+.capability-run-form,
+.capability-run-form-fields,
+.capability-run-form-field {
+    display: grid;
+    gap: 8px;
+}
+
+.capability-run-form-field textarea,
+.capability-run-form-field input,
+.capability-run-form-field select {
+    @include uiTokens.native-form-field;
+}
+
+.capability-run-form-field small {
+    color: #{themeScope.token("components-capability-run-form-field-hint-base-foreground", themePalette.$roles)};
+}
+
+.capability-run-form-submit {
+    justify-self: start;
+}
+
+.capability-run-form-errors,
+.capability-run-step-error {
+    color: #{themeScope.token("components-capability-run-form-errors-base-foreground", themePalette.$roles)};
+}
+
+.capability-run-progress-header {
+    display: flex;
+    justify-content: space-between;
+}

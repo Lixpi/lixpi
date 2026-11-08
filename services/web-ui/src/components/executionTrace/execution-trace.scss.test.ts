@@ -25,7 +25,7 @@ const expectRuleToContain = (rule: string, snippet: string, label: string): void
 const expectRuleNotToContain = (rule: string, snippet: string, label: string): void => void expect(withoutLayout(rule).includes(withoutLayout(snippet)), `${label} should not contain:\n${snippet}`).toBe(false)
 
 describe('execution-trace.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'execution-trace.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, '../../../packages/lixpi/canvas-components/src/workspace/frontend/progress/execution-trace.scss'), 'utf-8')
 
     it('keeps model calls as compact indented typography without cards', () => {
         const call = extractFlatRule(scss, '.execution-trace-model-call')

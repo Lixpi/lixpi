@@ -2,6 +2,8 @@
 
 Interactive SVG toggle switch component for reusable D3-backed controls.
 
+Default track, knob and checkmark appearance comes from `lixpiLightTheme.components.toggleSwitch`. Per-instance appearance overrides retain the same merge behavior.
+
 ## What it is
 
 A D3-based toggle switch renderer that creates SVG toggle elements with built-in state management, smooth animations, and event handling. It is a UI control and is no longer owned by the infographic shape directory.

@@ -1,6 +1,6 @@
 import {
     type ContextPreviewEnvironment,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import {
     type AuthTokenProvider,
 } from '@lixpi/auth-client'

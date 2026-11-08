@@ -1,3 +1,6 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
 .context-preview-main {
     position: relative;
     display: block;
@@ -12,11 +15,11 @@
     --help-tooltip-width: 280px;
     --help-tooltip-max-width: min(280px, calc(100vw - 24px));
     --help-tooltip-padding: 8px;
-    --help-tooltip-background: var(--context-preview-tooltip-background, #fff);
+    --help-tooltip-background: var(--context-preview-tooltip-background, #{themeScope.token("components-context-preview-styles-tooltip-background", themePalette.$roles)});
     --help-tooltip-border: var(--context-preview-tooltip-border, none);
-    --help-tooltip-border-radius: var(--context-preview-tooltip-border-radius, 8px);
-    --help-tooltip-box-shadow: var(--context-preview-tooltip-box-shadow, 0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12));
-    --help-tooltip-color: var(--context-preview-tooltip-color, #1a3a47);
+    --help-tooltip-border-radius: var(--context-preview-tooltip-border-radius, #{themeScope.token("components-context-preview-styles-tooltip-border-radius", themePalette.$roles)});
+    --help-tooltip-box-shadow: var(--context-preview-tooltip-box-shadow, #{themeScope.token("components-context-preview-styles-tooltip-box-shadow", themePalette.$roles)});
+    --help-tooltip-color: var(--context-preview-tooltip-color, #{themeScope.token("components-context-preview-styles-tooltip-color", themePalette.$roles)});
     --help-tooltip-font-size: 11px;
     --help-tooltip-font-weight: 500;
     --help-tooltip-line-height: 1.3;
@@ -56,7 +59,7 @@
     box-sizing: border-box;
     padding: 0;
     border: 0;
-    border-radius: var(--context-preview-trigger-border-radius, 6px);
+    border-radius: var(--context-preview-trigger-border-radius, #{themeScope.token("components-context-preview-styles-trigger-border-radius", themePalette.$roles)});
     background: var(--context-preview-background, transparent);
     color: inherit;
     cursor: default;
@@ -87,7 +90,7 @@
 .context-preview-video,
 .context-preview-document {
     width: 100%;
-    border-radius: var(--context-preview-border-radius, 6px);
+    border-radius: var(--context-preview-border-radius, #{themeScope.token("components-context-preview-elements-image-base-border-radius", themePalette.$roles)});
     background: var(--context-preview-background, transparent);
     overflow: hidden;
 }
@@ -127,7 +130,7 @@
 .context-preview-video video {
     display: block;
     width: 100%;
-    background: var(--context-preview-video-background, #0f1721);
+    background: var(--context-preview-video-background, #{themeScope.token("components-context-preview-styles-video-background", themePalette.$roles)});
 }
 
 .context-preview-video-mini {
@@ -167,9 +170,9 @@
     place-items: center;
     width: 24px;
     height: 24px;
-    border-radius: 50%;
-    background: var(--context-preview-video-glyph-background, rgba(255, 255, 255, 0.84));
-    color: var(--context-preview-video-glyph-color, #1a3a47);
+    border-radius: #{themeScope.token("components-context-preview-elements-video-glyph-base-border-radius", themePalette.$roles)};
+    background: var(--context-preview-video-glyph-background, #{themeScope.token("components-context-preview-styles-video-glyph-background", themePalette.$roles)});
+    color: var(--context-preview-video-glyph-color, #{themeScope.token("components-context-preview-styles-video-glyph-color", themePalette.$roles)});
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
@@ -189,7 +192,7 @@
     align-items: flex-start;
     gap: 6px;
     box-sizing: border-box;
-    color: var(--context-preview-document-color, #243045);
+    color: var(--context-preview-document-color, #{themeScope.token("components-context-preview-styles-document-color", themePalette.$roles)});
 }
 
 .context-preview-document-mini {
@@ -209,8 +212,8 @@
 .context-preview-document-skeleton span {
     display: block;
     height: 4px;
-    border-radius: var(--context-preview-document-skeleton-line-border-radius, 999px);
-    background: var(--context-preview-document-skeleton-line-background, rgba(105, 115, 136, 0.32));
+    border-radius: var(--context-preview-document-skeleton-line-border-radius, #{themeScope.token("components-context-preview-styles-document-skeleton-line-border-radius", themePalette.$roles)});
+    background: var(--context-preview-document-skeleton-line-background, #{themeScope.token("components-context-preview-styles-document-skeleton-line-background", themePalette.$roles)});
 }
 
 .context-preview-document-skeleton span:nth-child(2) {
@@ -238,7 +241,7 @@
     flex: 0 0 auto;
     width: 18px;
     height: 18px;
-    color: var(--context-preview-document-icon-color, #697388);
+    color: var(--context-preview-document-icon-color, #{themeScope.token("components-context-preview-styles-document-icon-color", themePalette.$roles)});
 }
 
 .context-preview-document-icon svg {
@@ -251,7 +254,7 @@
     display: flex;
     align-items: center;
     min-width: 0;
-    color: var(--context-preview-document-color, #697388);
+    color: var(--context-preview-document-color, #{themeScope.token("components-context-preview-elements-artifact-base-foreground", themePalette.$roles)});
 }
 
 .context-preview-artifact-mini {
@@ -280,7 +283,7 @@
 
 .context-preview-artifact-title {
     overflow: hidden;
-    font-weight: 700;
+    font-weight: #{themeScope.token("components-context-preview-elements-artifact-title-base-font-weight", themePalette.$roles)};
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -294,22 +297,22 @@
 }
 
 .context-preview-document-title {
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.2;
+    font-size: #{themeScope.token("components-context-preview-elements-document-title-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-context-preview-elements-document-title-base-font-weight", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-document-title-base-line-height", themePalette.$roles)};
     overflow-wrap: anywhere;
 }
 
 .context-preview-document-text {
     display: block;
-    color: var(--context-preview-document-text-color, rgba(57, 69, 93, 0.76));
-    font-size: 10px;
-    line-height: 1.25;
+    color: var(--context-preview-document-text-color, #{themeScope.token("components-context-preview-styles-document-text-color", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-document-text-base-font-size", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-document-text-base-line-height", themePalette.$roles)};
     overflow-wrap: anywhere;
 }
 
 .context-preview-document-large .context-preview-document-text {
-    font-size: 11px;
+    font-size: #{themeScope.token("components-context-preview-elements-expanded-document-text-base-font-size", themePalette.$roles)};
 }
 
 .context-preview-popover {
@@ -329,10 +332,10 @@
     --help-tooltip-width: 280px;
     --help-tooltip-max-width: min(280px, calc(100vw - 24px));
     --help-tooltip-padding: 8px;
-    --help-tooltip-background: var(--context-preview-tooltip-background, #fff);
-    --help-tooltip-border-radius: var(--context-preview-tooltip-border-radius, 8px);
-    --help-tooltip-box-shadow: var(--context-preview-tooltip-box-shadow, 0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12));
-    --help-tooltip-color: var(--context-preview-tooltip-color, #1a3a47);
+    --help-tooltip-background: var(--context-preview-tooltip-background, #{themeScope.token("components-context-preview-styles-tooltip-background", themePalette.$roles)});
+    --help-tooltip-border-radius: var(--context-preview-tooltip-border-radius, #{themeScope.token("components-context-preview-styles-tooltip-border-radius", themePalette.$roles)});
+    --help-tooltip-box-shadow: var(--context-preview-tooltip-box-shadow, #{themeScope.token("components-context-preview-styles-tooltip-box-shadow", themePalette.$roles)});
+    --help-tooltip-color: var(--context-preview-tooltip-color, #{themeScope.token("components-context-preview-styles-tooltip-color", themePalette.$roles)});
     position: relative;
     width: 58px;
     height: 42px;
@@ -369,10 +372,10 @@
     visibility: hidden;
     opacity: 0;
     padding: var(--help-tooltip-padding, 8px);
-    border-radius: var(--help-tooltip-border-radius, 8px);
-    background: var(--help-tooltip-background, #fff);
-    box-shadow: var(--help-tooltip-box-shadow, 0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12));
-    color: var(--help-tooltip-color, #1a3a47);
+    border-radius: var(--help-tooltip-border-radius, #{themeScope.token("components-context-preview-elements-inline-popover-base-border-radius", themePalette.$roles)});
+    background: var(--help-tooltip-background, #{themeScope.token("components-context-preview-elements-inline-popover-base-background", themePalette.$roles)});
+    box-shadow: var(--help-tooltip-box-shadow, #{themeScope.token("components-context-preview-elements-inline-popover-base-shadow", themePalette.$roles)});
+    color: var(--help-tooltip-color, #{themeScope.token("components-context-preview-elements-inline-popover-base-foreground", themePalette.$roles)});
     box-sizing: border-box;
     pointer-events: none;
 }
@@ -485,10 +488,10 @@
 }
 
 .context-preview-popover-title {
-    color: var(--context-preview-popover-title-color, #1a3a47);
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.25;
+    color: var(--context-preview-popover-title-color, #{themeScope.token("components-context-preview-styles-popover-title-color", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-popover-title-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-context-preview-elements-popover-title-base-font-weight", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-popover-title-base-line-height", themePalette.$roles)};
     overflow: visible;
     overflow-wrap: anywhere;
     white-space: normal;
@@ -513,9 +516,9 @@
 
 .context-preview-popover-text {
     display: block;
-    color: var(--context-preview-popover-text-color, rgba(57, 69, 93, 0.82));
-    font-size: 11px;
-    line-height: 1.3;
+    color: var(--context-preview-popover-text-color, #{themeScope.token("components-context-preview-styles-popover-text-color", themePalette.$roles)});
+    font-size: #{themeScope.token("components-context-preview-elements-popover-text-base-font-size", themePalette.$roles)};
+    line-height: #{themeScope.token("components-context-preview-elements-popover-text-base-line-height", themePalette.$roles)};
     overflow: visible;
     overflow-wrap: anywhere;
 }

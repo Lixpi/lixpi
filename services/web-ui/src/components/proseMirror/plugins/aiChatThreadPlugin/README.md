@@ -336,7 +336,7 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiChatMessageShells.ts`: shared user/assistant message shells.
 - `@lixpi/prosemirror/shared/generated-media-turn-projection`: helpers for generated-media provenance.
 - `aiChatThreadPluginConstants.ts`: shared `PluginKey` and transaction meta constants.
-- `ai-chat-thread.scss`: thread-log, message, media, and compatibility styles.
+- Package styles/chat-thread owns thread-log, message, media, and compatibility styles.
 
 ## Transaction Meta
 

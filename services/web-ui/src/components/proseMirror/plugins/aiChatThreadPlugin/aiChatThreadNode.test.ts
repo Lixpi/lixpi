@@ -11,7 +11,7 @@ import {
     TextSelection,
 } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
-import { CanvasGenerationEvents } from '@lixpi/canvas-components-lixpi-specific/shared'
+import { CanvasGenerationEvents } from '@lixpi/canvas-components/workspace/shared'
 
 import { applyStyle } from '@lixpi/ui-primitives/dom'
 import { doc, p, reasoningSection, thread, userMsg, response, schema } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'

@@ -1,4 +1,4 @@
-import { WorkspaceGenerationContext } from '@lixpi/canvas-components-lixpi-specific/shared'
+import { WorkspaceGenerationContext } from '@lixpi/canvas-components/workspace/shared'
 import { assetsStore } from '$src/stores/assetsStore.ts'
 import { buildAssetRenditionPath } from '$src/utils/mediaUrls.ts'
 

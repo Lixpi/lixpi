@@ -1,0 +1,41 @@
+@use "sass:map";
+
+@function token($role, $fallbacks) {
+    @if not map.has-key($fallbacks, $role) {
+        @error "Unknown theme role: #{$role}";
+    }
+
+    @return var(--theme-#{$role}, #{map.get($fallbacks, $role)});
+}
+
+@mixin apply($selector, $name, $scheme, $values) {
+    #{$selector} {
+        --theme-name: #{$name};
+
+        @each $role, $value in $values {
+            --theme-#{$role}: #{$value};
+        }
+
+        color-scheme: $scheme;
+        color: var(--theme-text);
+        background: var(--theme-background);
+        accent-color: var(--theme-accent);
+
+        ::selection {
+            color: var(--theme-selection-text);
+            background: var(--theme-selection-background);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--theme-scrollbar);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--theme-scrollbar-hover);
+        }
+
+        ::-webkit-scrollbar-thumb:active {
+            background: var(--theme-scrollbar-active);
+        }
+    }
+}

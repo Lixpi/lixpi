@@ -1,29 +1,22 @@
-// Shared variables, transitions, and global styles. This stylesheet is imported
-// once from the app entry point, so it pulls them in directly.
-@import "$src/sass/_variables.scss";
+@use "@lixpi/themes/dist/scss/lixpi-light/theme";
+// Imported once by the application entry point, before startup surfaces mount.
 @import "@lixpi/ui-primitives/styles/transitions";
 
 @import "components/_reset";
 @import "_helpers";
 
-@import "_typography";
+@import "@lixpi/ui-kit/styles/typography";
 @import "_markdown";
 
 @import "components/animations";
 
-@import "$src/components/proseMirror/ProseMirror.scss";
-@import "$src/components/proseMirror/CodeMirror.scss";
-
-// @import 'components/_fonts';
-
-// // font-family: 'Source Sans Pro', sans-serif;   Main content font. Also supports cyrilic and other languages
-// // font-family: 'Lato', sans-serif;  Main font ??? is it??
-// // font-family: 'Raleway', sans-serif;   Main header font
+@import "@lixpi/canvas-components/styles/workspace/editor";
+@import "@lixpi/prosemirror/styles/code-mirror";
 
 html,
 body {
     overscroll-behavior: none;
-    background: #fff;
+    background: var(--theme-background);
 }
 
 #root {
@@ -53,7 +46,7 @@ img {
     overflow: hidden;
     // height: 100%;
     max-height: calc(100vh - 100px);
-    // background: #fff;
+    // background: var(--theme-background);
     display: flex;
     flex-direction: column;
 }

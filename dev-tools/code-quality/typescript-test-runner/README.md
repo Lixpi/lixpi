@@ -7,7 +7,7 @@ description: Docker image, workspace assembly, cache layout, and dispatcher for 
 
 This directory builds the shared one-shot TypeScript test image. The image contains Node, pnpm, and the `script` utility for pseudo-terminal regression tests, but no application dependencies. A repository-specific Compose adapter mounts a workspace under `/usr/src/service/<workspace>`, and [`run-tests.sh`](run-tests.sh) installs that workspace in container storage before invoking Vitest.
 
-The reusable service is defined in [`../runner-compose/typescript-test.base.yml`](../runner-compose/typescript-test.base.yml). The main repository extends it from [`../../../infrastructure/docker/docker-compose.typescript-test-runner.yml`](../../../infrastructure/docker/docker-compose.typescript-test-runner.yml). Another repository can extend the same base service with a smaller adapter containing only its own workspaces.
+The reusable service is defined in [`../runner-compose/typescript-test.base.yml`](../runner-compose/typescript-test.base.yml). The main repository extends it from [`../../../infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml`](../../../infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml). Another repository can extend the same base service with a smaller adapter containing only its own workspaces.
 
 ## Ordinary workspace contract
 
@@ -34,13 +34,13 @@ Every invocation runs `pnpm install`, then `pnpm exec vitest run`. The pnpm cont
 Run a main-repository workspace from the repository root:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <workspace> [vitest arguments]
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner <workspace> [vitest arguments]
 ```
 
 For shared packages, the optional package selector comes before the Vitest arguments:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared [package] [vitest arguments]
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared [package] [vitest arguments]
 ```
 
 The complete domain list and test conventions are in [TypeScript Testing](../../../documentation/code-quality/testing/TYPESCRIPT.md).

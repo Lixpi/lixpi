@@ -12,7 +12,7 @@ There are still HTTP routes where HTTP is the right tool: Asset upload/import an
 This page maps how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales.
 
 {% callout type="note" %}
-Application services use Fargate. Each NATS broker embeds its admission worker on EC2; the cluster starts with three hosts and can scale within configured bounds. Retained EBS preserves JetStream events, work queues, Object Store bytes and NEX state. See [NATS Service](../../services/nats/README.md), [NATS Cluster](./deployment/NATS-CLUSTER.md), and [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md).
+Application services use Fargate. Each NATS broker embeds its admission worker on EC2; the cluster starts with three hosts and can scale within configured bounds. Retained EBS preserves JetStream events, work queues, Object Store bytes and NEX state. See [NATS Service](../../services/nats/README.md), [NATS Cluster](deployment/NATS-CLUSTER.md), and [Infrastructure Overview](deployment/INFRASTRUCTURE-OVERVIEW.md).
 {% /callout %}
 
 ## Services
@@ -26,7 +26,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
 | **nats** | Go (initially 3 nodes) | [services/nats](../../services/nats/README.md) | Embedded broker and admission, pub/sub, request/reply, JetStream replay and work queues, organization Blob Object Stores and NEX control state |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
-| **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
+| **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](deployment/NEX-EXECUTION-ENGINE.md) |
 | **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
 
 The development-only [AI Model Registry](../../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) runs separately from the production topology. It records provider models, parameters, compatibility, implementation state, and configuration-control decisions that must match NEX model synchronization, API provider code, and the web configuration matrix.
@@ -105,7 +105,7 @@ Most application behavior in Lixpi flows through NATS. This decision shapes the 
 - **End-to-end messaging** — Browser ↔ NATS ↔ backend services. The same bus carries browser requests and inter-service traffic.
 - **Real-time streaming** — AI pipeline events stream directly to clients on per-thread subjects, with no intermediate HTTP streaming layer.
 - **Durable replay**: Native JetStream streams retain pipeline and document events so an authorized client can replay missed generation state.
-- **Centralized auth** — The NATS `auth_callout` delegates "can this connection happen, and what may it do?" to its embedded Go dispatcher and bounded workers. API request authorization stays in handlers and middleware. See [Authentication](./AUTHENTICATION.md).
+- **Centralized auth** — The NATS `auth_callout` delegates "can this connection happen, and what may it do?" to its embedded Go dispatcher and bounded workers. API request authorization stays in handlers and middleware. See [Authentication](AUTHENTICATION.md).
 - **Queue groups** — Multiple instances of a service subscribe under a shared queue-group name, and NATS load-balances messages across them automatically. No external load balancer required.
 
 HTTP remains in the system for payloads that are better served as HTTP responses:
@@ -117,7 +117,7 @@ HTTP remains in the system for payloads that are better served as HTTP responses
 | `/api/capabilities/*` | Authenticated Capability resource reads use HTTP byte responses; catalog commands and invalidations flow over NATS subjects. |
 | `/health-check` | ECS needs a simple health endpoint. |
 
-For the AI event path from provider output to rendered DOM, and the catalog of stream event types, see [Streaming & Events](./STREAMING-AND-EVENTS.md).
+For the AI event path from provider output to rendered DOM, and the catalog of stream event types, see [Streaming & Events](STREAMING-AND-EVENTS.md).
 
 ### Subject Naming Convention
 
@@ -166,7 +166,7 @@ Application services provide infrastructure through typed ports defined by the m
 
 ### Provider-Agnostic AI
 
-Every AI request sends the full conversation history; no provider-specific session IDs are stored. A user can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves sealed Tools and Skills plus branch candidates, executes explicitly required Tools, streams the text model with `search_capabilities` and `use_capability`, then conditionally routes `generate_image` and `generate_video` calls through transient media providers before calculating usage and cleaning up. See [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md).
+Every AI request sends the full conversation history; no provider-specific session IDs are stored. A user can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves sealed Tools and Skills plus branch candidates, executes explicitly required Tools, streams the text model with `search_capabilities` and `use_capability`, then conditionally routes `generate_image` and `generate_video` calls through transient media providers before calculating usage and cleaning up. See [AI Generation Pipeline](AI-GENERATION-PIPELINE.md).
 
 ### Explicit Context Extraction
 
@@ -205,7 +205,7 @@ flowchart LR
 
 ### Future Split: `llm-workers`
 
-If LLM streaming workload grows enough to warrant deployment isolation from the gateway — so that an API deploy does not interrupt long-running streams — the LLM module is shaped so it can be split into a separate `llm-workers` service. That split still needs implementation work: `getSubscriptions()` is currently empty, the worker command would need to register real NATS subscriptions, and the auth callout would need an internal-service entry for the worker. See [`services/api/src/llm/README.md`](../../services/api/src/llm/README.md) for the future-split path, and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) for how it maps onto AWS.
+If LLM streaming workload grows enough to warrant deployment isolation from the gateway — so that an API deploy does not interrupt long-running streams — the LLM module is shaped so it can be split into a separate `llm-workers` service. That split still needs implementation work: `getSubscriptions()` is currently empty, the worker command would need to register real NATS subscriptions, and the auth callout would need an internal-service entry for the worker. See [`services/api/src/llm/README.md`](../../services/api/src/llm/README.md) for the future-split path, and [Scaling & Operations](deployment/SCALING-AND-OPERATIONS.md) for how it maps onto AWS.
 
 ## Shared Infrastructure Packages
 
@@ -223,9 +223,9 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 
 ## Where to Go Next
 
-- [Authentication](./AUTHENTICATION.md) — the dual auth model, the NATS auth callout, and the two auth modes.
-- [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md) — the LangGraph workflow, providers, and tool-call routing.
-- [Streaming & Events](./STREAMING-AND-EVENTS.md) — live AI events, durable replay logs, ProseMirror step streams, and the event catalog.
+- [Authentication](AUTHENTICATION.md) — the dual auth model, the NATS auth callout, and the two auth modes.
+- [AI Generation Pipeline](AI-GENERATION-PIPELINE.md) — the LangGraph workflow, providers, and tool-call routing.
+- [Streaming & Events](STREAMING-AND-EVENTS.md) — live AI events, durable replay logs, ProseMirror step streams, and the event catalog.
 - [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — the framework-agnostic canvas.
 - [Explicit Workspace Context](../ai-chat/CONTEXT-RELEVANCE.md): how prompt references and composer chips become multimodal context.
-- [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) — the AWS topology, Pulumi, and production scaling.
+- [Infrastructure Overview](deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](deployment/SCALING-AND-OPERATIONS.md) — the AWS topology, Pulumi, and production scaling.

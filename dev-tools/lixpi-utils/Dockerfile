@@ -2,7 +2,7 @@
 #
 # Every skill under ${LIXPI_REPOSITORY_PATH}/skills/ that needs to execute code executes it here, never on the host. See
 # ${LIXPI_REPOSITORY_PATH}/documentation/development-workflow/SKILL-EXECUTION-GUIDE.md. The canonical skills tree is bind-mounted at /skills
-# (infrastructure/docker/docker-compose.lixpi-utils.yml), so a script edit applies on the next run with no rebuild.
+# (infrastructure/docker/utilities/setup/docker-compose.lixpi-utils.yml), so a script edit applies on the next run with no rebuild.
 #
 # The shared setup UI reuses the dependency manifest from dev-tools/config-utils so it renders
 # with the same Clack and Chalk components as the configuration wizard. Skill scripts still ship their own

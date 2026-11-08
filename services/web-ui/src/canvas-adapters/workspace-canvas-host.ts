@@ -1,9 +1,13 @@
 import {
     type WorkspaceCanvasHost,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import {
     type AuthClientInstance,
 } from '@lixpi/auth-client'
+import {
+    type CanvasThemeSource,
+} from '@lixpi/canvas-components/theme'
+import { canvasThemeStore } from './canvas-theme.ts'
 import { WorkspaceMediaAdapter } from './workspace-media.ts'
 import { ConversationWorkspaceClient } from './conversation-workspace-client.ts'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
@@ -52,11 +56,13 @@ import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 export type WorkspaceCanvasHostConfig = {
     assetService: AssetService
     auth: AuthClientInstance
+    theme?: CanvasThemeSource
 }
 
 export const createWorkspaceCanvasHost = ({
     assetService,
     auth,
+    theme = canvasThemeStore,
 }: WorkspaceCanvasHostConfig): WorkspaceCanvasHost => {
     const apiBaseUrl = import.meta.env.VITE_API_URL || ''
 
@@ -74,6 +80,7 @@ export const createWorkspaceCanvasHost = ({
             return () => window.removeEventListener('lixpi:open-capability-library', listener)
         },
         settings,
+        theme,
         loadingLayer: servicesStore.getData('loadingLayer') ?? undefined,
         editors: createWorkspaceCanvasEditors({
             assetService,

@@ -92,7 +92,7 @@ Use Capability run traces and persisted configuration to verify the full path:
 
 ## Related pages
 
-- [Style Extraction Pipeline](./STYLE-EXTRACTION-PIPELINE.md)
-- [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md)
-- [Tools, Skills, and Capability Modules](./TOOLS-AND-SKILLS.md)
-- [Capability Storage and Operations](./CAPABILITY-STORAGE.md)
+- [Style Extraction Pipeline](STYLE-EXTRACTION-PIPELINE.md)
+- [Style Extraction Tool](STYLE-EXTRACTION-TOOL.md)
+- [Tools, Skills, and Capability Modules](TOOLS-AND-SKILLS.md)
+- [Capability Storage and Operations](CAPABILITY-STORAGE.md)

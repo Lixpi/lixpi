@@ -13,10 +13,7 @@ import {
     type WebClientRouterService,
 } from '@lixpi/web-client-service-factory'
 
-import {
-    html,
-    applyStyle,
-} from '@lixpi/ui-primitives/dom'
+import { html } from '@lixpi/ui-primitives/dom'
 import {
     createSidePanel,
     type SidePanelInstance,
@@ -154,7 +151,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
                 size: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.size,
                 onToggle: this.toggleVisibility,
             },
-            animation: NAVIGATION_SIDE_PANEL_SETTINGS.animation,
             minWidth: NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth,
             defaultWidth: NAVIGATION_SIDE_PANEL_SETTINGS.defaultDimensions.width,
             getMaxWidth: this.getMaxWidth,
@@ -273,15 +269,10 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     }
 
     private reflectInitialOpenState(): void {
-        if (navigationSidePanelStore.getData().isOpen) {
+        if (navigationSidePanelStore.getData().isOpen)
             this.sidePanel.mountOpen(this.panelEl)
-
-            return
-        }
-
-        applyStyle(this.panelEl, { transform: 'translate3d(-100%, 0, 0)' })
-        applyStyle(this.sidePanel.backdropElement, { transform: 'translate3d(-100%, 0, 0)' })
-        this.sidePanel.setOpen(false)
+        else
+            this.sidePanel.mountClosed(this.panelEl)
     }
 
     private handleOpenChange = (open: boolean): void => {

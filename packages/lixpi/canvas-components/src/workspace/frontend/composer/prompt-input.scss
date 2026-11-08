@@ -1,0 +1,667 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+// =============================================================================
+// AI PROMPT INPUT — Floating canvas input node
+//
+// Detached AI prompt input below the selected canvas node.
+// Same shifting gradient background as AI chat thread nodes.
+// Input field is vertically centered with controls at the bottom.
+// =============================================================================
+
+@import "@lixpi/ui-primitives/styles/transitions";
+
+.ai-prompt-input-floating {
+    position: absolute;
+    z-index: 100;
+    pointer-events: auto;
+    border-radius: var(--canvas-lixpi-prompt-radius, #{themeScope.token("components-composer-input-input-floating-base-border-radius", themePalette.$roles)});
+    // overflow: hidden; // Disabled to allow dropdowns to pop out
+    box-shadow: var(--canvas-lixpi-prompt-shadow, #{themeScope.token("components-composer-input-input-floating-base-shadow", themePalette.$roles)});
+    display: none;
+
+    // Gradient canvas must inherit the border-radius
+    .shifting-gradient-canvas {
+        border-radius: inherit;
+        overflow: hidden; // Keep gradient contained
+    }
+}
+
+.floating-input-editor {
+    position: relative;
+    z-index: 1;
+    background: transparent !important;
+    height: 100%; // Ensure it fills the floating container
+
+    .editor,
+    .ProseMirror {
+        background: transparent !important;
+        padding: 0 !important; // Remove default ProseMirror padding to let input fill space
+        margin: 0 !important;
+        height: 100%;
+    }
+}
+
+.ai-prompt-input-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--canvas-lixpi-prompt-background, #{themeScope.token("components-composer-input-input-wrapper-base-background", themePalette.$roles)}); // More opaque white
+    backdrop-filter: #{themeScope.token("components-composer-input-input-wrapper-base-backdrop-filter", themePalette.$roles)};
+    border-radius: var(--canvas-lixpi-prompt-inner-radius, #{themeScope.token("components-composer-input-input-wrapper-base-border-radius", themePalette.$roles)}); // Slightly smaller radius than container (12px) to fit nicely if there's padding
+    // No border - clean look
+    box-shadow: var(--canvas-lixpi-prompt-inner-shadow, #{themeScope.token("components-composer-input-input-wrapper-base-shadow", themePalette.$roles)});
+
+    // Fix dropdown positioning when it is embedded in the node
+    .info-bubble-wrapper.static-position {
+        // IMPORTANT: `.bubble-wrapper` is `position: fixed` by default (InfoBubble).
+        // For canvas-embedded dropdowns we instead position the whole wrapper
+        // relative to the dropdown handle (`.dots-dropdown-menu`).
+        position: absolute !important;
+        z-index: 10030 !important;
+        top: 100% !important;
+        right: 0 !important;
+        left: auto !important;
+        bottom: auto !important;
+        transform: translateY(var(--static-bubble-gap, 15px)) !important;
+        width: max-content;
+        height: auto;
+
+        &[data-static-placement="top"] {
+            top: auto !important;
+            bottom: 100% !important;
+            transform: translateY(calc(-1 * var(--static-bubble-gap, 15px))) !important;
+
+            .bubble-wrapper.visible {
+                transform-origin: bottom center;
+            }
+        }
+
+        &[data-static-placement="bottom"] .bubble-wrapper.visible {
+            transform-origin: top center;
+        }
+
+        // Make the visible surface participate in this absolute layout.
+        .bubble-wrapper {
+            position: static !important;
+            top: auto !important;
+            left: auto !important;
+            right: auto !important;
+            bottom: auto !important;
+            transform: none !important;
+        }
+
+        .bubble-body .submenu {
+            max-height: min(280px, var(--static-bubble-max-height, 280px));
+        }
+
+        // Kill the arrow — M3 menus don't have arrows
+        .bubble-container {
+            &:before,
+            &:after {
+                display: none !important;
+                content: none !important;
+            }
+        }
+    }
+
+    // Make sure it fills the editor area, leaving a small gap for the gradient to show
+    margin: 4px; // Small margin creates the "border" effect of the gradient
+    min-height: 100px;
+
+    // Add internal padding for the content
+    padding: 0 0 4px 0; // Bottom padding for controls
+
+    &[data-empty="false"] .ai-prompt-input-controls .ai-submit-button .send-icon svg {
+        fill: var(--canvas-text, #{themeScope.token("components-composer-input-send-icon-base-fill", themePalette.$roles)});
+    }
+
+    &[data-empty="false"] .ai-prompt-input-controls .dropdown-menu-tag-pill-wrapper .dots-dropdown-menu {
+        button {
+            color: #{themeScope.token("components-composer-input-dots-dropdown-menu-button-base-foreground", themePalette.$roles)};
+        }
+    }
+
+    &[data-empty="true"] .ai-prompt-input-content {
+        &::before {
+            content: attr(data-placeholder);
+            color: var(--canvas-lixpi-prompt-placeholder, #{themeScope.token("components-composer-input-input-content-underlay-base-foreground", themePalette.$roles)});
+            pointer-events: none;
+            font-size: #{themeScope.token("components-composer-input-input-content-underlay-base-font-size", themePalette.$roles)}; // Slightly larger placeholder
+            line-height: #{themeScope.token("components-composer-input-input-content-underlay-base-line-height", themePalette.$roles)};
+            white-space: nowrap;
+
+            // Align with text start
+            position: absolute;
+            top: 16px;
+            left: 20px;
+        }
+    }
+}
+
+.ai-prompt-input-wrapper.empty-node-placeholder[data-placeholder]::before {
+    display: none;
+    content: none;
+}
+
+.ai-prompt-input-content {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; // Start text at top
+    padding: 16px 20px 8px; // Comfortable padding inside the white box
+    color: var(--canvas-lixpi-prompt-text, #{themeScope.token("components-composer-input-input-content-base-foreground", themePalette.$roles)});
+    font-size: #{themeScope.token("components-composer-input-input-content-base-font-size", themePalette.$roles)};
+    line-height: var(--canvas-lixpi-prompt-line-height, #{themeScope.token("components-composer-input-input-content-base-line-height", themePalette.$roles)});
+    outline: none;
+    overflow-y: auto;
+    max-height: 250px;
+
+    .ProseMirror {
+        outline: none;
+        min-height: 24px;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+
+    p {
+        margin: 0 0 6px 0;
+
+        &:last-child {
+            margin-bottom: 0;
+        }
+    }
+}
+
+.ai-prompt-input-controls {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    padding-right: 0.5rem;
+
+    .dropdown-menu-tag-pill-wrapper {
+        position: relative;
+
+        // Ensure the dots-dropdown-menu doesn't stretch in flex
+        .dots-dropdown-menu {
+            display: inline-block;
+            position: relative;
+            button {
+                color: #{themeScope.token("components-composer-input-dots-dropdown-menu-button-base-foreground", themePalette.$roles)};
+            }
+        }
+    }
+}
+
+.ai-prompt-selected-model-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ai-prompt-selected-model-tags-gap, 6px);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-prompt-selected-model-tags-row[data-visible="false"] {
+    display: none;
+}
+
+.ai-prompt-selected-model-tag,
+.ai-prompt-selected-model-tag-svg {
+    flex: 0 0 auto;
+}
+
+.ai-prompt-selected-model-tag {
+    display: inline-flex;
+    line-height: 0;
+}
+
+.ai-prompt-selected-model-tag-svg {
+    display: block;
+    overflow: visible;
+}
+
+.ai-prompt-model-menu-control:has(.ai-model-config-row-collection) {
+    flex: 1 0 100%;
+    width: 100%;
+    max-width: 100%;
+}
+
+.ai-prompt-model-menu-control:has(.ai-model-config-row-collection) .ai-prompt-model-menu-control-field {
+    width: 100%;
+}
+
+.ai-model-config-row-collection {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.ai-media-config-matrix[data-visible="false"] {
+    display: none;
+}
+
+.ai-model-config-row {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-media-config-group + .ai-media-config-group {
+    padding-top: var(--ai-prompt-model-menu-section-divider-padding-top, 14px);
+}
+
+.ai-media-config-group + .ai-media-config-group::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: var(--ai-prompt-model-menu-section-divider-width, 92%);
+    height: var(--ai-prompt-model-menu-section-divider-height, 2px);
+    background: var(--ai-prompt-model-menu-section-divider-gradient, #{themeScope.token("components-composer-model-menu-section-divider-gradient", themePalette.$roles)});
+    border-radius: var(--ai-prompt-model-menu-section-divider-border-radius, #{themeScope.token("components-composer-model-menu-section-divider-border-radius", themePalette.$roles)});
+    transform: translateX(-50%);
+}
+
+.ai-model-config-primary-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 8px;
+    width: max-content;
+    min-width: 100%;
+}
+
+.ai-model-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-control-gap, 3px);
+    flex: 0 0 auto;
+}
+
+.ai-model-config-model-column {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: max-content;
+    justify-content: flex-start;
+}
+
+.ai-model-config-inline-control {
+    display: flex;
+    min-width: max-content;
+    flex: 0 0 auto;
+    justify-content: flex-start;
+}
+
+.ai-model-config-dropdown {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.ai-media-config-model-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ai-prompt-selected-model-tags-gap, 6px);
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-media-config-model-tag,
+.ai-media-config-model-tag-svg {
+    flex: 0 0 auto;
+}
+
+.ai-media-config-model-tag {
+    display: inline-flex;
+    line-height: 0;
+}
+
+.ai-media-config-model-tag-svg {
+    display: block;
+    overflow: visible;
+}
+
+.ai-model-config-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-media-config-control {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-control-gap, 3px);
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-media-config-control-field {
+    display: flex;
+    min-width: 0;
+}
+
+.ai-media-config-control[data-control-kind="toggle"] .ai-media-config-control-field {
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-media-config-control-label {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 4px;
+    width: max-content;
+    white-space: nowrap;
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-model-config-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control {
+    grid-column: 1 / -1;
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="aspectRatio"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="resolution"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="duration"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="outputFormat"] {
+    grid-column: auto;
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="watermark"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="returnLastFrame"] {
+    grid-column: auto;
+    min-width: max-content;
+}
+
+.ai-media-config-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ai-prompt-model-menu-control-label-color, #{themeScope.token("components-composer-input-media-config-toggle-base-foreground", themePalette.$roles)});
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ai-media-config-toggle:focus-visible {
+    outline: none;
+}
+
+.ai-media-config-toggle-svg-host,
+.ai-media-config-toggle-svg {
+    display: block;
+    width: 34px;
+    height: 22px;
+    flex: 0 0 34px;
+}
+
+.ai-media-config-toggle-svg {
+    overflow: visible;
+}
+
+.ai-media-config-description {
+    max-width: 300px;
+    color: #{themeScope.token("components-composer-input-media-config-description-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-composer-input-media-config-description-base-font-size", themePalette.$roles)};
+    line-height: #{themeScope.token("components-composer-input-media-config-description-base-line-height", themePalette.$roles)};
+}
+
+.ai-media-config-option-help {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    line-height: 0;
+    vertical-align: top;
+}
+
+.ai-media-config-control .dropdown-menu-tag-pill-wrapper,
+.ai-media-config-control .dots-dropdown-menu,
+.ai-media-config-control .dots-dropdown-menu button {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-model-sliding-dropdown-host {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-model-sliding-dropdown-svg {
+    display: block;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.ai-model-config-add,
+.ai-model-config-remove {
+    border: none;
+    background: transparent;
+    color: var(--ai-prompt-model-menu-control-label-color, #{themeScope.token("components-composer-input-model-config-add-base-foreground", themePalette.$roles)});
+    cursor: pointer;
+    transition:
+        hoverTransition(color),
+        hoverTransition(background-color);
+}
+
+.ai-model-config-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0;
+    font: inherit;
+    white-space: nowrap;
+}
+
+.ai-model-config-add-label {
+    font-size: var(--ai-prompt-model-menu-control-label-font-size, #{themeScope.token("components-composer-input-model-config-add-label-base-font-size", themePalette.$roles)});
+    font-weight: var(--ai-prompt-model-menu-control-label-font-weight, #{themeScope.token("components-composer-input-model-config-add-label-base-font-weight", themePalette.$roles)});
+    line-height: var(--ai-prompt-model-menu-control-label-line-height, #{themeScope.token("components-composer-input-model-config-add-label-base-line-height", themePalette.$roles)});
+}
+
+.ai-model-config-add-icon,
+.ai-model-config-add-icon svg {
+    display: block;
+}
+
+.ai-model-config-add-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    border-radius: #{themeScope.token("components-composer-input-model-config-add-icon-base-border-radius", themePalette.$roles)};
+    background-color: var(--canvas-text, #{themeScope.token("components-composer-input-model-config-add-icon-base-background-color", themePalette.$roles)});
+}
+
+.ai-model-config-add-icon svg {
+    width: 8px;
+    height: 8px;
+    fill: #{themeScope.token("components-composer-input-model-config-add-icon-base-fill", themePalette.$roles)};
+}
+
+.ai-model-config-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    flex: 0 0 24px;
+    margin-left: auto;
+    width: 24px;
+    height: 24px;
+    padding: 6px;
+    border-radius: #{themeScope.token("components-composer-input-model-config-remove-base-border-radius", themePalette.$roles)};
+}
+
+.ai-model-config-remove-icon,
+.ai-model-config-remove-icon svg {
+    display: block;
+    width: 8px;
+    height: 8px;
+    fill: currentColor;
+}
+
+.ai-model-config-add:hover:not(:disabled),
+.ai-model-config-remove:hover:not(:disabled) {
+    color: var(--ai-prompt-model-menu-section-title-color, #{themeScope.token("components-composer-model-menu-section-title-color", themePalette.$roles)});
+}
+
+.ai-model-config-remove:hover:not(:disabled) {
+    background: #{themeScope.token("components-composer-input-model-config-remove-hover-background", themePalette.$roles)};
+}
+
+.ai-model-config-add:disabled {
+    opacity: 0.38;
+    cursor: default;
+}
+
+.ai-model-config-add:focus-visible,
+.ai-model-config-remove:focus-visible {
+    outline: none;
+}
+
+.ai-prompt-model-menu-section-controls .dropdown-menu-tag-pill-wrapper {
+    position: relative;
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-section-controls .dots-dropdown-menu {
+    display: inline-block;
+    position: relative;
+}
+
+.ai-prompt-model-menu-section-controls .dots-dropdown-menu button {
+    max-width: var(--ai-prompt-model-menu-dropdown-button-max-width, 190px);
+}
+
+.ai-prompt-model-menu-section-controls .ai-media-config-control .dots-dropdown-menu button {
+    max-width: 100%;
+}
+
+.ai-prompt-model-menu-section-controls .dots-dropdown-menu button .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-prompt-model-selector-host,
+.ai-prompt-model-selector-host > .dropdown-menu-tag-pill-wrapper,
+.ai-prompt-model-selector-host .dots-dropdown-menu,
+.ai-prompt-model-selector-host .dots-dropdown-menu button {
+    height: var(--ai-prompt-model-selector-trigger-height, 30px);
+    min-height: var(--ai-prompt-model-selector-trigger-height, 30px);
+}
+
+.ai-prompt-model-selector-host .dots-dropdown-menu button {
+    align-items: center;
+}
+
+.ai-model-multi-select .selected-option-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+}
+
+.ai-model-multi-select .selected-option-icon:empty {
+    display: none;
+}
+
+.ai-model-multi-select-list {
+    min-width: 220px;
+}
+
+.ai-model-multi-select-option {
+    gap: 8px;
+}
+
+.ai-model-multi-select-check {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    margin-left: auto;
+}
+
+.ai-model-multi-select-check svg,
+.ai-model-multi-select-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ai-model-multi-select-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 520px) {
+    .ai-prompt-media-mode-switch {
+        left: 0;
+        bottom: calc(100% + 6px);
+    }
+
+    .ai-prompt-model-menu-info-bubble .bubble-menu-content {
+        max-width: var(--ai-prompt-model-menu-info-bubble-mobile-max-width, calc(100vw - 16px));
+    }
+
+    .ai-prompt-model-menu-section-controls {
+        max-width: 100%;
+    }
+
+    .ai-media-config-matrix {
+        min-width: 0;
+    }
+
+    .ai-model-config-row {
+        gap: 6px;
+    }
+
+    .ai-prompt-model-menu-section-controls .dots-dropdown-menu button {
+        max-width: var(--ai-prompt-model-menu-dropdown-button-mobile-max-width, 150px);
+    }
+}
+
+// Placeholder decoration from the plugin
+.empty-node-placeholder {
+    &[data-placeholder]::before {
+        content: attr(data-placeholder);
+        position: absolute;
+        // Align with the text content (match padding of .ai-prompt-input-content)
+        top: 16px;
+        left: 20px;
+        color: var(--canvas-lixpi-prompt-placeholder, #{themeScope.token("components-composer-input-empty-node-placeholder-underlay-base-foreground", themePalette.$roles)});
+        pointer-events: none;
+        font-size: #{themeScope.token("components-composer-input-empty-node-placeholder-underlay-base-font-size", themePalette.$roles)};
+    }
+}

@@ -17,7 +17,7 @@ import {
     type VideoCanvasNode,
     type WorkspaceEdge,
 } from '@lixpi/constants'
-import { getGeneratedMediaPreFrameSize } from '@lixpi/canvas-components-lixpi-specific/shared'
+import { getGeneratedMediaPreFrameSize } from '@lixpi/canvas-components/workspace/shared'
 import { info } from '@lixpi/debug-tools'
 
 import Workspace from '../models/workspace.ts'

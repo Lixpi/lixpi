@@ -1,0 +1,46 @@
+services:
+
+    lixpi-localauth0:
+        container_name: lixpi-localauth0
+        profiles: ["main"]
+        image: lixpi/localauth0
+        build:
+            context: ../../../../services/localauth0
+            dockerfile: Dockerfile
+        ports:
+            - 3000:3000
+        volumes:
+            - localauth0-data:/data
+        networks:
+            - nats
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/.well-known/jwks.json"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 5s
+
+    # Both the workspace and user portal use this Caddy instance and CA.
+    # Localhost ports need no host DNS or hosts-file configuration.
+    lixpi-local-https:
+        container_name: lixpi-local-https
+        profiles: ["main", "local-https"]
+        image: lixpi/caddy-cert-manager
+        build:
+            dockerfile: services/caddy/Dockerfile
+            context: ../../../..
+        command: ["serve-local"]
+        environment:
+            CADDY_LOCAL_ROUTES: >-
+                {"${VITE_AUTH0_REDIRECT_URI}":"lixpi-web-ui:5173",
+                 "${VITE_USER_PORTAL_URL}":"${CADDY_USER_PORTAL_UPSTREAM:-lixpi-web-ui-user-portal:5173}",
+                 "${VITE_API_URL}":"lixpi-api:3000"}
+        volumes:
+            - caddy-certs:/certificates
+        ports:
+            - "127.0.0.1:3443:3443"
+            - "127.0.0.1:3444:3444"
+            - "127.0.0.1:3445:3445"
+        networks:
+            - nats
+        restart: unless-stopped

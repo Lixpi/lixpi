@@ -3,7 +3,6 @@ packages:
   - "packages/lixpi/capability-system"
   - "packages/lixpi/canvas-engine"
   - "packages/lixpi/canvas-components"
-  - "packages/lixpi/canvas-components-lixpi-specific"
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/dynamodb-service"
@@ -13,9 +12,13 @@ packages:
   - "packages/lixpi/test-utils"
   - "packages/lixpi/ui-primitives"
   - "packages/lixpi/ui-kit"
+  - "packages/lixpi/themes"
   - "packages/lixpi/usage-reporter"
 
 allowBuilds:
+  # Sass reaches this workspace through a shared package's dev dependencies. Its
+  # native file watcher only serves `sass --watch`, which nothing here runs.
+  "@parcel/watcher": false
   "@google/genai": true
   protobufjs: true
 

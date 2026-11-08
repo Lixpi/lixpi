@@ -25,7 +25,7 @@ import { withoutLayout } from '@lixpi/test-utils'
 
 const loadScss = (): string => {
     return readFileSync(
-        resolve(import.meta.dirname, 'ai-chat-thread.scss'),
+        resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/chat-thread.scss'),
         'utf-8',
     )
 }
@@ -39,7 +39,7 @@ const loadSource = (filename: string): string => {
 
 const loadAnimationsScss = (): string => {
     return readFileSync(
-        resolve(import.meta.dirname, '../../../../sass/components/_animations.scss'),
+        resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/chat-animations.scss'),
         'utf-8',
     )
 }

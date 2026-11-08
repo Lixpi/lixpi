@@ -2,6 +2,8 @@
 
 Reusable SVG/D3 pill primitive for compact labels, context tags, and closeable chip-like UI. It renders into a caller-provided d3 SVG selection and owns only its SVG group, geometry, hover state, and optional close action.
 
+Default variant paints, content hover fill and label typography come from `lixpiLightTheme.components.tagPill`. Per-instance colors and sizing still override those defaults.
+
 ## API
 
 ### `createTagPill(parent, config)`

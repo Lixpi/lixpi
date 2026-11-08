@@ -24,7 +24,7 @@ case "${LIXPI_REPOSITORY_PATH}" in
 esac
 export LIXPI_REPOSITORY_PATH
 SKILLS_ROOT="${LIXPI_REPOSITORY_PATH}/skills"
-COMPOSE_FILE="${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml"
+COMPOSE_FILE="${LIXPI_REPOSITORY_PATH}/infrastructure/docker/utilities/setup/docker-compose.lixpi-utils.yml"
 
 HARNESS_NAMES=(
     "Codex"

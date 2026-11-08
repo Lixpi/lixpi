@@ -1,0 +1,419 @@
+// The product adapter projects semantic paints at the host. Component typography
+// stays with each component's theme roles and explicit runtime configuration.
+[data-canvas-theme] {
+    --canvas-node-footer-color: var(--canvas-text-muted);
+    --canvas-node-footer-hover-color: var(--canvas-text);
+    --canvas-node-footer-separator-gradient: linear-gradient(var(--canvas-border), var(--canvas-border));
+    --workspace-media-model-badge-provider-color: var(--canvas-lixpi-badge-provider, var(--canvas-text-muted));
+    --workspace-media-model-badge-model-color: var(--canvas-lixpi-badge-model, var(--canvas-text));
+    --workspace-right-sidebar-content-font-size: var(--canvas-panel-font-size);
+    --workspace-right-sidebar-tag-pill-font-size: var(--canvas-control-font-size);
+    --workspace-right-sidebar-tag-pill-font-weight: var(--canvas-control-font-weight);
+    --side-panel-overlay-fill-opaque: var(--canvas-surface);
+    --side-panel-backdrop-fill: var(--canvas-lixpi-panel-backdrop, var(--canvas-surface-raised));
+    --side-panel-backdrop-fill-opaque: var(--canvas-lixpi-panel-backdrop-opaque, var(--canvas-surface-raised));
+    --side-panel-toggle-color: var(--canvas-panel-toggle-color);
+    --side-panel-toggle-hover-color: var(--canvas-panel-toggle-hover);
+    --side-panel-resize-handle-gradient: var(--canvas-panel-resize-handle-gradient);
+    --side-panel-resize-handle-width: var(--canvas-panel-resize-handle-width);
+    --context-preview-background: var(--canvas-surface);
+    --context-preview-video-background: var(--canvas-lixpi-context-video-background);
+    --context-preview-video-glyph-background: var(--canvas-lixpi-context-video-glyph-background);
+    --context-preview-video-glyph-color: var(--canvas-lixpi-context-video-glyph-color);
+    --context-preview-trigger-border-radius: var(--canvas-lixpi-context-trigger-border-radius);
+    --context-preview-border-radius: var(--canvas-lixpi-context-preview-border-radius);
+    --context-preview-document-color: var(--canvas-lixpi-context-document-color);
+    --context-preview-document-icon-color: var(--canvas-lixpi-context-document-icon-color);
+    --context-preview-document-text-color: var(--canvas-lixpi-context-document-text-color);
+    --context-preview-document-skeleton-line-background: var(--canvas-lixpi-context-document-skeleton-line-background);
+    --context-preview-tooltip-background: var(--canvas-lixpi-context-tooltip-background);
+    --context-preview-tooltip-border: var(--canvas-lixpi-context-tooltip-border);
+    --context-preview-tooltip-border-radius: var(--canvas-lixpi-context-tooltip-border-radius);
+    --context-preview-tooltip-box-shadow: var(--canvas-lixpi-context-tooltip-box-shadow);
+    --context-preview-tooltip-color: var(--canvas-lixpi-context-tooltip-color);
+    --context-preview-popover-title-color: var(--canvas-lixpi-context-popover-title-color);
+    --context-preview-popover-text-color: var(--canvas-lixpi-context-popover-text-color);
+    --help-tooltip-background: var(--canvas-surface-raised);
+    --help-tooltip-border: 1px solid var(--canvas-border);
+    --help-tooltip-border-radius: var(--canvas-panel-radius);
+    --help-tooltip-box-shadow: var(--canvas-shadow);
+    --help-tooltip-color: var(--canvas-text);
+    --help-tooltip-trigger-color: var(--canvas-text-muted);
+    --help-tooltip-trigger-hover-color: var(--canvas-text);
+    --help-tooltip-trigger-hover-background: var(--canvas-surface-hover);
+    --help-tooltip-trigger-focus-outline: none;
+    --progress-timeline-surface: var(--canvas-surface);
+    --progress-timeline-primary: var(--canvas-text);
+    --progress-timeline-secondary: var(--canvas-text-muted);
+    --progress-timeline-line: var(--canvas-border);
+    --progress-timeline-pending-border: var(--canvas-border);
+    --progress-timeline-completed: var(--canvas-success);
+    --progress-timeline-attention: var(--canvas-warning);
+    --progress-timeline-failed: var(--canvas-danger);
+    --progress-timeline-capability: var(--canvas-accent);
+    --progress-timeline-tool: var(--canvas-accent);
+    --progress-timeline-skill: var(--canvas-accent);
+    --dropdown-popover-box-shadow: var(--canvas-shadow);
+
+    --sliding-dropdown-control-height: var(--canvas-control-height);
+    --sliding-dropdown-control-height-offset: var(--canvas-lixpi-dropdown-height-offset, 0px);
+    --canvas-control-focus-outline: none;
+    --canvas-panel-border: 1px solid var(--canvas-border);
+
+    color-scheme: var(--canvas-color-scheme);
+    font-family: var(--canvas-font-family);
+    font-size: var(--canvas-font-size);
+    line-height: var(--canvas-line-height);
+    color: var(--canvas-text);
+    --ai-prompt-model-menu-trigger-color: var(--canvas-lixpi-menu-trigger, var(--canvas-text-muted));
+    --ai-prompt-model-menu-trigger-active-color: var(--canvas-lixpi-menu-trigger-active, var(--canvas-text));
+    --ai-prompt-model-menu-trigger-active-background: var(--canvas-lixpi-menu-hover, var(--canvas-surface-hover));
+    --ai-prompt-model-menu-trigger-focus-outline: none;
+    --ai-prompt-model-menu-info-bubble-background: var(--canvas-lixpi-menu-background, var(--canvas-surface-raised));
+    --ai-prompt-model-menu-info-bubble-color: var(--canvas-lixpi-menu-text, var(--canvas-text));
+    --ai-prompt-model-menu-info-bubble-border-radius: var(--canvas-panel-radius);
+    --ai-prompt-model-menu-info-bubble-box-shadow: var(--canvas-lixpi-menu-shadow, var(--canvas-shadow));
+    --ai-prompt-model-menu-section-divider-gradient: var(--canvas-lixpi-menu-divider, linear-gradient(var(--canvas-border), var(--canvas-border)));
+    --ai-prompt-model-menu-section-title-color: var(--canvas-lixpi-menu-title, var(--canvas-text));
+    --ai-prompt-model-menu-section-title-font-size: var(--canvas-lixpi-menu-title-size, var(--canvas-title-font-size));
+    --ai-prompt-model-menu-control-label-color: var(--canvas-lixpi-menu-label, var(--canvas-text-muted));
+    --ai-prompt-model-menu-control-label-font-size: var(--canvas-lixpi-menu-label-size, var(--canvas-font-size));
+    --ai-prompt-model-menu-selector-trigger-height: var(--canvas-control-height);
+}
+
+[data-canvas-theme] .ProseMirror {
+    font-family: var(--canvas-font-family);
+    color: var(--canvas-text);
+}
+
+[data-canvas-theme] :where(button, input, select, textarea) {
+    font-family: var(--canvas-font-family);
+}
+
+[data-canvas-theme] .context-preview-tooltip,
+[data-canvas-theme] .context-preview-inline,
+[data-canvas-theme] .workspace-branch-marker-reasoning-tooltip {
+    --help-tooltip-background: var(--canvas-surface-raised);
+    --help-tooltip-border: 1px solid var(--canvas-border);
+    --help-tooltip-border-radius: var(--canvas-panel-radius);
+    --help-tooltip-box-shadow: var(--canvas-shadow);
+    --help-tooltip-color: var(--canvas-text);
+}
+
+[data-canvas-theme] .canvas-node-footer-separator::before {
+    filter: none;
+}
+
+[data-canvas-theme] .bubble-menu-content,
+[data-canvas-theme] .bubble-menu-dropdown-menu,
+[data-canvas-theme] .bubble-menu-link-input {
+    border-color: var(--canvas-border);
+    border-radius: var(--canvas-panel-radius);
+    background: var(--canvas-surface-raised);
+    box-shadow: var(--canvas-shadow);
+}
+
+[data-canvas-theme] .bubble-menu-button,
+[data-canvas-theme] .bubble-menu-dropdown-toggle,
+[data-canvas-theme] .bubble-menu-dropdown-item {
+    height: var(--canvas-control-height);
+    border-radius: var(--canvas-control-radius);
+    color: var(--canvas-text);
+    font-family: var(--canvas-font-family);
+}
+
+[data-canvas-theme] .bubble-menu-button svg,
+[data-canvas-theme] .bubble-menu-dropdown-toggle svg,
+[data-canvas-theme] .bubble-menu-dropdown-item svg,
+[data-canvas-theme] .link-input-remove svg {
+    fill: currentColor;
+}
+
+[data-canvas-theme] .bubble-menu-button:hover,
+[data-canvas-theme] .bubble-menu-dropdown-toggle:hover,
+[data-canvas-theme] .bubble-menu-dropdown-item:hover {
+    background: var(--canvas-surface-hover);
+}
+
+[data-canvas-theme] .bubble-menu-button.is-active,
+[data-canvas-theme] .bubble-menu-dropdown-item.is-active {
+    background: var(--canvas-accent);
+    color: var(--canvas-on-accent);
+}
+
+[data-canvas-theme] .bubble-menu-separator {
+    background: var(--canvas-border);
+}
+
+[data-canvas-theme] .link-input-field {
+    border-radius: var(--canvas-control-radius);
+    background: var(--canvas-surface);
+    color: var(--canvas-text);
+    font-family: var(--canvas-font-family);
+}
+
+[data-canvas-theme] .link-input-field:focus {
+    background: var(--canvas-surface-hover);
+}
+
+[data-canvas-theme] .link-input-field::placeholder {
+    color: var(--canvas-text-muted);
+}
+
+[data-canvas-theme] .link-input-apply svg {
+    fill: var(--canvas-success);
+}
+
+[data-canvas-theme] .dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button,
+[data-canvas-theme] .dropdown-menu-popover .bubble-body .submenu li {
+    border-radius: var(--canvas-control-radius);
+    color: var(--canvas-text);
+    font-family: var(--canvas-font-family);
+}
+
+[data-canvas-theme] .dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button::before,
+[data-canvas-theme] .dropdown-menu-tag-pill-wrapper .dots-dropdown-menu.is-active > button::before {
+    background: var(--canvas-surface-hover);
+}
+
+[data-canvas-theme] .dropdown-menu-tag-pill-wrapper .state-indicator svg {
+    fill: var(--canvas-text-muted);
+}
+
+[data-canvas-theme] .dropdown-menu-popover .bubble-wrapper .bubble-body {
+    border: 1px solid var(--canvas-border);
+    border-radius: var(--canvas-panel-radius);
+    background: var(--canvas-surface-raised);
+    box-shadow: var(--canvas-shadow);
+}
+
+[data-canvas-theme] .dropdown-menu-popover .bubble-body .submenu li:hover,
+[data-canvas-theme] .dropdown-menu-popover .bubble-body .submenu li:focus-visible,
+[data-canvas-theme] .dropdown-menu-popover .bubble-body .submenu li[data-selected="true"] {
+    background: var(--canvas-surface-hover);
+}
+
+[data-canvas-theme] .dropdown-menu-popover .bubble-body .submenu li[data-type="header"] {
+    background: var(--canvas-surface);
+}
+
+[data-canvas-theme] .dropdown-menu-popover .header-meta,
+[data-canvas-theme] .dropdown-menu-popover .tag-filter-title {
+    color: var(--canvas-text-muted);
+}
+
+[data-canvas-theme] .ai-prompt-input-floating {
+    border-radius: var(--canvas-lixpi-prompt-radius, var(--canvas-panel-radius));
+    box-shadow: var(--canvas-lixpi-prompt-shadow, var(--canvas-shadow));
+}
+
+[data-canvas-theme] .ai-prompt-input-floating .ai-prompt-input-wrapper {
+    border-radius: var(--canvas-lixpi-prompt-inner-radius, var(--canvas-control-radius));
+    background: var(--canvas-lixpi-prompt-background, var(--canvas-surface-raised));
+    box-shadow: var(--canvas-lixpi-prompt-inner-shadow, var(--canvas-shadow));
+}
+
+[data-canvas-theme] .ai-prompt-input-content {
+    color: var(--canvas-lixpi-prompt-text, var(--canvas-text));
+    font-family: var(--canvas-font-family);
+    line-height: var(--canvas-lixpi-prompt-line-height, var(--canvas-line-height));
+}
+
+[data-canvas-theme] .ai-prompt-input-wrapper[data-empty="true"] .ai-prompt-input-content::before {
+    color: var(--canvas-lixpi-prompt-placeholder, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-prompt-input-wrapper[data-empty] .ai-prompt-input-controls .ai-submit-button .send-icon svg {
+    fill: var(--canvas-text);
+}
+
+[data-canvas-theme] .ai-prompt-input-controls .ai-submit-button {
+    width: var(--canvas-control-height);
+    height: var(--canvas-control-height);
+    flex-basis: var(--canvas-control-height);
+}
+
+[data-canvas-theme] .ai-prompt-input-controls .ai-submit-button[aria-disabled="true"] {
+    opacity: var(--canvas-disabled-opacity);
+}
+
+[data-canvas-theme] .ai-prompt-model-menu-trigger {
+    border-radius: var(--canvas-control-radius);
+    background: var(--canvas-surface);
+    color: var(--canvas-lixpi-menu-trigger, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-prompt-model-menu-trigger:hover,
+[data-canvas-theme] .ai-prompt-model-menu-trigger.is-active {
+    background: var(--canvas-lixpi-menu-hover, var(--canvas-surface-hover));
+    color: var(--canvas-lixpi-menu-trigger-active, var(--canvas-text));
+}
+
+[data-canvas-theme] .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger,
+[data-canvas-theme] .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,
+[data-canvas-theme] .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {
+    background: transparent;
+}
+
+[data-canvas-theme] .ai-prompt-model-menu-trigger-summary {
+    color: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-prompt-media-mode-switch {
+    border-radius: var(--canvas-lixpi-switch-radius, var(--canvas-control-radius));
+    background: var(--canvas-lixpi-switch-surface, var(--canvas-surface-raised));
+    box-shadow: var(--canvas-lixpi-prompt-shadow, var(--canvas-shadow));
+}
+
+[data-canvas-theme] .workspace-canvas-media-mode-panel > .ai-prompt-media-mode-switch {
+    background: transparent;
+    box-shadow: none;
+}
+
+[data-canvas-theme] .sliding-switch-track {
+    fill: var(--canvas-switch-track);
+}
+
+[data-canvas-theme] .sliding-switch-indicator {
+    fill: var(--canvas-switch-indicator);
+}
+
+[data-canvas-theme] .sliding-switch-option {
+    fill: var(--canvas-switch-inactive);
+}
+
+[data-canvas-theme] .sliding-switch-option-group:hover .sliding-switch-option,
+[data-canvas-theme] .sliding-switch-option-group:focus-visible .sliding-switch-option,
+[data-canvas-theme] .sliding-switch-option-group[aria-checked="true"] .sliding-switch-option,
+[data-canvas-theme] .sliding-switch-option-group[aria-selected="true"] .sliding-switch-option {
+    fill: var(--canvas-switch-selected);
+}
+
+[data-canvas-theme] .sliding-switch-option-close-icon path {
+    fill: var(--canvas-text-muted);
+}
+
+[data-canvas-theme] .sliding-switch-option-close:hover .sliding-switch-option-close-background,
+[data-canvas-theme] .sliding-switch-option-close:focus-visible .sliding-switch-option-close-background {
+    fill: var(--canvas-surface-hover);
+}
+
+[data-canvas-theme] .sliding-switch-option-group[aria-disabled="true"] {
+    opacity: var(--canvas-disabled-opacity);
+}
+
+[data-canvas-theme] .sliding-switch-option-group[aria-disabled="true"] .sliding-switch-option,
+[data-canvas-theme] .sliding-switch-option-group[aria-disabled="true"] .sliding-switch-option-close-icon path {
+    fill: var(--canvas-text-muted);
+}
+
+[data-canvas-theme] .sliding-dropdown-track {
+    fill: var(--canvas-lixpi-dropdown-track, var(--canvas-surface-raised));
+}
+
+[data-canvas-theme] .sliding-dropdown-indicator {
+    fill: var(--canvas-lixpi-dropdown-indicator, var(--canvas-surface));
+}
+
+[data-canvas-theme] .sliding-dropdown-indicator-inset-shadow {
+    fill: transparent;
+    stroke: var(--canvas-border);
+}
+
+[data-canvas-theme] .sliding-dropdown-option,
+[data-canvas-theme] .ai-model-sliding-dropdown-option-label,
+[data-canvas-theme] .ai-media-config-dimensions-dropdown-label,
+[data-canvas-theme] .ai-media-config-text-dropdown-label {
+    fill: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-model-sliding-dropdown-option-provider {
+    fill: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-model-sliding-dropdown-option-model {
+    fill: var(--canvas-lixpi-dropdown-selected, var(--canvas-text));
+}
+
+[data-canvas-theme] .ai-model-sliding-dropdown-option-icon path,
+[data-canvas-theme] .sliding-dropdown-chevron-icon path,
+[data-canvas-theme] .ai-media-config-dimensions-dropdown-adaptive-label,
+[data-canvas-theme] .ai-prompt-media-mode-switch-icon path {
+    fill: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-media-config-dimensions-dropdown-glyph {
+    stroke: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .sliding-dropdown-option-group:hover .sliding-dropdown-option,
+[data-canvas-theme] .sliding-dropdown-option-group:focus-visible .sliding-dropdown-option,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-selected="true"] .sliding-dropdown-option,
+[data-canvas-theme] .sliding-dropdown-option-group:hover .ai-media-config-dimensions-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group:focus-visible .ai-media-config-dimensions-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-selected="true"] .ai-media-config-dimensions-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group:hover .ai-media-config-text-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group:focus-visible .ai-media-config-text-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-selected="true"] .ai-media-config-text-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group:hover .ai-model-sliding-dropdown-option-icon path,
+[data-canvas-theme] .sliding-dropdown-option-group:focus-visible .ai-model-sliding-dropdown-option-icon path,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-selected="true"] .ai-model-sliding-dropdown-option-icon path,
+[data-canvas-theme] .sliding-switch-option-group:hover .ai-prompt-media-mode-switch-icon path,
+[data-canvas-theme] .sliding-switch-option-group:focus-visible .ai-prompt-media-mode-switch-icon path,
+[data-canvas-theme] .sliding-switch-option-group[aria-checked="true"] .ai-prompt-media-mode-switch-icon path {
+    fill: var(--canvas-lixpi-dropdown-selected, var(--canvas-text));
+}
+
+[data-canvas-theme] .sliding-dropdown-option-group:hover .ai-media-config-dimensions-dropdown-glyph,
+[data-canvas-theme] .sliding-dropdown-option-group:focus-visible .ai-media-config-dimensions-dropdown-glyph,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-selected="true"] .ai-media-config-dimensions-dropdown-glyph {
+    stroke: var(--canvas-lixpi-dropdown-selected, var(--canvas-text));
+}
+
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] {
+    opacity: var(--canvas-disabled-opacity);
+}
+
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] .sliding-dropdown-option,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] .ai-media-config-dimensions-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] .ai-media-config-text-dropdown-label,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] tspan,
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] .ai-model-sliding-dropdown-option-icon path,
+[data-canvas-theme] .sliding-switch-option-group[aria-disabled="true"] .ai-prompt-media-mode-switch-icon path {
+    fill: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .sliding-dropdown-option-group[aria-disabled="true"] .ai-media-config-dimensions-dropdown-glyph {
+    stroke: var(--canvas-lixpi-dropdown-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-prompt-media-mode-switch .sliding-switch-track {
+    fill: var(--canvas-lixpi-switch-track, var(--canvas-surface-hover));
+}
+
+[data-canvas-theme] .ai-prompt-media-mode-switch .sliding-switch-indicator {
+    fill: var(--canvas-lixpi-switch-indicator, var(--canvas-surface));
+}
+
+[data-canvas-theme] .ai-prompt-media-mode-switch .ai-prompt-media-mode-switch-icon path {
+    fill: var(--canvas-lixpi-switch-option, var(--canvas-text-muted));
+}
+
+[data-canvas-theme] .ai-prompt-media-mode-switch .sliding-switch-option-group:hover .ai-prompt-media-mode-switch-icon path,
+[data-canvas-theme] .ai-prompt-media-mode-switch .sliding-switch-option-group:focus-visible .ai-prompt-media-mode-switch-icon path {
+    fill: var(--canvas-lixpi-switch-hover, var(--canvas-text));
+}
+
+[data-canvas-theme] .ai-prompt-media-mode-switch .sliding-switch-option-group[aria-checked="true"] .ai-prompt-media-mode-switch-icon path {
+    fill: var(--canvas-lixpi-switch-selected, var(--canvas-text));
+}
+
+[data-canvas-theme] .ai-prompt-model-menu-info-bubble .bubble-menu-content {
+    background: var(--canvas-lixpi-menu-background, var(--canvas-surface-raised));
+    box-shadow: var(--canvas-lixpi-menu-shadow, var(--canvas-shadow));
+    color: var(--canvas-lixpi-menu-text, var(--canvas-text));
+}
+
+[data-canvas-theme] .workspace-right-panel-mode-switch-svg {
+    height: calc(var(--canvas-control-height) * var(--canvas-lixpi-panel-switch-scale, 1));
+}

@@ -27,6 +27,7 @@ import { AccountRequestContext } from '../services/account-request-context.ts'
 import {
     type ConversationRepository,
 } from '../llm/agent/conversation-repository.ts'
+import { DueSweepScheduler } from '../llm/agent/due-sweep-scheduler.ts'
 import {
     type AgentPayload,
     type AgentPayloadPort,
@@ -113,7 +114,11 @@ const terminal = new Set([
 
 export class MediaRenderAdapter {
     private stopped = true
-    private timer?: ReturnType<typeof setTimeout>
+    private readonly scheduler = new DueSweepScheduler(
+        () => this.publishDue(),
+        1000,
+        error => warn('[MediaRenderAdapter] durable dispatch publication will retry', error),
+    )
     private progressSubscription?: { unsubscribe: () => void }
     private removeReconnect?: () => void
 
@@ -266,6 +271,7 @@ export class MediaRenderAdapter {
                     },
                 ),
             ])
+            this.scheduler.wake()
         } catch (error) {
             const winner = await this.repository.read<MediaRenderRecord>(pk, 'META')
 
@@ -400,13 +406,13 @@ export class MediaRenderAdapter {
         this.stopped = false
         this.bindProgress()
         this.removeReconnect = this.ports.nats.onReconnect(() => this.bindProgress())
-        void this.publishDue()
+        this.scheduler.start()
         void this.consume()
     }
 
     stop(): void {
         this.stopped = true
-        clearTimeout(this.timer)
+        this.scheduler.stop()
         this.progressSubscription?.unsubscribe()
         this.progressSubscription = undefined
         this.removeReconnect?.()
@@ -869,34 +875,41 @@ export class MediaRenderAdapter {
         })()
     }
 
-    private async publishDue(): Promise<void> {
-        try {
-            for (
-                let shard = 0;
-                shard < 16
-                && !this.stopped;
-                shard++
-            ) {
+    private async publishDue(): Promise<undefined> {
+        for (
+            let shard = 0;
+            shard < 16
+            && !this.stopped;
+            shard++
+        ) {
+            let after: string | undefined
+
+            do {
                 const page = await this.repository.query<{
                     jobId: string
                     organizationId: string
                 }>(
                     `RENDER_DUE#${shard}`,
                     '',
-                    { limit: 50 },
+                    {
+                        after,
+                        limit: 50,
+                    },
                 )
 
                 for (const job of page.items) {
                     await this.ports.nats.publishJetStream(subjects.DISPATCH, job)
                     await this.repository.commit([this.repository.remove(`RENDER_DUE#${shard}`, job.jobId)])
                 }
-            }
-        } catch (error) {
-            warn('[MediaRenderAdapter] durable dispatch publication will retry', error)
-        } finally {
-            if (!this.stopped)
-                this.timer = setTimeout(() => void this.publishDue(), 1000)
+
+                after = page.cursor
+            } while (
+                after
+                && !this.stopped
+            )
         }
+
+        return undefined
     }
 
     private async consume(): Promise<void> {

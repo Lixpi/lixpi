@@ -141,6 +141,7 @@ describe('durable conversation acceptance', () => {
             resolveReferences: vi.fn(async () => []),
             activate: vi.fn(async (_meta, operations) => await repository.commit(operations)),
             publish: vi.fn(async () => {}),
+            dispatchScheduled: vi.fn(),
             createId: () => `id-${++nextId}`,
             now: () => 1000,
         }

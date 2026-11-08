@@ -9,22 +9,22 @@ import {
 import {
     formatMediaFileSize,
     stripMediaFileExtension,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/library'
+} from '@lixpi/canvas-components/workspace/library'
 import { withoutLayout } from '@lixpi/test-utils'
 
 const expectSourceToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 
 const expectSourceNotToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 
-const panelSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts'), 'utf-8')
-const panelStyles = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/workspace-library-panels.scss'), 'utf-8')
+const panelSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/frontend/library/media-library-panel.ts'), 'utf-8')
+const panelStyles = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/frontend/library/workspace-library-panels.scss'), 'utf-8')
 const canvasSource = [
     'workspace-canvas.ts',
     'workspace-canvas-libraries.ts',
     'workspace-generated-output-details.ts',
-].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`), 'utf-8')).join('\n')
+].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/${filename}`), 'utf-8')).join('\n')
 const workspaceCanvasViewSource = readFileSync(resolve(import.meta.dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'), 'utf-8')
-    + readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-surface.ts'), 'utf-8')
+    + readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-surface.ts'), 'utf-8')
 
 describe('Media Library panel contract', () => {
     it('is an embedded renderer the right side panel hosts, not a standalone drawer', () => {

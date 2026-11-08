@@ -8,7 +8,7 @@ import {
 } from 'vitest'
 
 import { createDefaultPromptControlFactories } from '$src/components/proseMirror/promptControlFactories.ts'
-import { createAiPromptComposer } from '@lixpi/canvas-components-lixpi-specific/frontend/composer'
+import { createAiPromptComposer } from '@lixpi/canvas-components/workspace/composer'
 import { createPromptComposerEditorPort } from './prompt-composer-editor.ts'
 
 type MockEditorInstance = {

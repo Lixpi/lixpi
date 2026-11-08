@@ -10,7 +10,7 @@ import {
 } from 'prosemirror-view'
 import {
     type CanvasConversationEditorMount,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import {
     doc,
     p,

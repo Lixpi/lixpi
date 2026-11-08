@@ -1,0 +1,15 @@
+name: lixpi
+
+services:
+    lixpi-config-utils:
+        extends:
+            file: ../../../../dev-tools/config-utils/runner-compose/config-utils.base.yml
+            service: config-utils-base
+        user: "${LOCAL_UID:-0}:${LOCAL_GID:-0}"
+        environment:
+            LIXPI_REPOSITORY_PATH: ${LIXPI_REPOSITORY_PATH}
+        volumes:
+            - ../../../..:/workspace
+            - ../../../../dev-tools/config-utils/setup-env.ts:/usr/src/config-utils/repository/setup-env.ts:ro,cached
+            - ../../../../dev-tools/config-utils/account-auth-configuration.ts:/usr/src/config-utils/repository/account-auth-configuration.ts:ro,cached
+            - ../../../../dev-tools/config-utils/templates:/usr/src/config-utils/repository/templates:ro,cached

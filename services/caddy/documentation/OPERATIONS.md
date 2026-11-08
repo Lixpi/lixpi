@@ -9,7 +9,7 @@ A successful certificate-manager invocation means it completed maintenance, publ
 
 ## Local certificates and trust
 
-Compose builds [the service image](../Dockerfile) from the repository root and runs local issuance as a one-shot dependency. Preserve the `caddy-certs` volume between runs. It holds the development CA as well as the exported certificate and key; removing it creates a different CA that existing host trust will not recognize.
+Compose builds [the service image](../Dockerfile) from the repository root. Local issuance is a one-shot utility in `infrastructure/docker/utilities/certificates/docker-compose.certificates.yml`, outside the application stack. **Initialize infrastructure** in `./run.sh` runs it. NATS and the local HTTPS gateway don't start it; they read the certificates it left in the volume, so run **Initialize infrastructure** again when the certificates need regenerating. Preserve the `caddy-certs` volume between runs. It holds the development CA as well as the exported certificate and key; removing it creates a different CA that existing host trust will not recognize.
 
 The service exports the public CA at `/certificates/ca.crt`. To copy it out of a default Compose volume:
 
@@ -27,11 +27,11 @@ Install the CA in the development machine's trusted roots:
 
 Restart clients after installing trust. A browser with a separate trust store may need an explicit CA import; Firefox exposes this under Settings, Privacy & Security, Certificates, Authorities. This root is for local development and must not be installed as the public deployment's trust anchor.
 
-Local issuance exits nonzero on timeout or invalid material, so dependent Compose services do not treat an incomplete export as ready. If an export fails after some files have been written, rerun local issuance before starting its consumers. The long local lifetimes reduce routine reissuance, but the CA and leaf still have expiry dates.
+Local issuance exits nonzero on timeout or invalid material, so **Initialize infrastructure** stops instead of continuing with an incomplete export. If an export fails after some files have been written, rerun it before starting NATS or the HTTPS gateway. The long local lifetimes reduce routine reissuance, but the CA and leaf still have expiry dates.
 
 ## Local application HTTPS
 
-The Docker gateway serves the workspace at `https://localhost:3443`, Profile at `https://localhost:3444`, and the API at `https://localhost:3445`. It binds only host loopback and reaches upstream services through Docker's `nats` network. No host mappings, custom local domains or public DNS records are needed. Set the main environment's `VITE_AUTH0_REDIRECT_URI`, `VITE_AUTH0_LOGIN_URL`, `VITE_USER_PORTAL_URL`, `VITE_API_URL`, `ORIGIN_HOST_URL` and `API_HOST_URL` to those HTTPS URLs, with `/login` on the login URL. Keep the existing Auth0 audience identifier. Set `COMPOSE_PROFILES=local-https` to include the shared gateway in ordinary Compose startup.
+The Docker gateway serves the workspace at `https://localhost:3443`, Profile at `https://localhost:3444`, and the API at `https://localhost:3445`. It binds only host loopback and reaches upstream services through Docker's `nats` network. No host mappings, custom local domains or public DNS records are needed. Set the main environment's `VITE_AUTH0_REDIRECT_URI`, `VITE_AUTH0_LOGIN_URL`, `VITE_USER_PORTAL_URL`, `VITE_API_URL`, `ORIGIN_HOST_URL` and `API_HOST_URL` to those HTTPS URLs, with `/login` on the login URL. Keep the existing Auth0 audience identifier. The gateway is part of the `main` profile, so it starts with the base stack. It accepts only HTTPS origins and keeps restarting while those URLs are still plain HTTP.
 
 Direct visits to the frontend HTTP ports (`3001` for workspace and `3002` for Profile) move to the configured HTTPS origin before authentication starts. The shared auth client owns that redirect and preserves normal deep links. Starting an OAuth transaction on HTTP and returning to HTTPS would lose its origin-scoped SDK transaction and fail callback validation.
 

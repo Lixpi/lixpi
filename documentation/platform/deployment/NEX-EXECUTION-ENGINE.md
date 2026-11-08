@@ -127,7 +127,7 @@ Pulumi provisions the node as an internal Fargate service ([`nex-node.ts`](../..
 The task role carries no DynamoDB grant. The node's workloads reach AWS through the Fargate task-role credentials, which the entrypoint forwards into each start-request through the ECS credential-endpoint variable, and `tables` in [`nex-node.ts`](../../../infrastructure/pulumi/src/resources/nex-node/nex-node.ts) is the binding point if a workload needs one.
 
 {% callout type="warning" %}
-**The node connects with `nats://`, not `tls://`.** The NEX node uses the Go NATS client, which treats `tls://` as a hard requirement. The client port is plain, so on AWS the node is pointed at the cluster's internal CloudMap URL (`nats://nats.<cloudmap>.internal:4222`) rather than the `tls://` endpoint the browser-facing API uses. This is the mirror image of the API's [`tls://` reply-path requirement](./NATS-CLUSTER.md).
+**The node connects with `nats://`, not `tls://`.** The NEX node uses the Go NATS client, which treats `tls://` as a hard requirement. The client port is plain, so on AWS the node is pointed at the cluster's internal CloudMap URL (`nats://nats.<cloudmap>.internal:4222`) rather than the `tls://` endpoint the browser-facing API uses. This is the mirror image of the API's [`tls://` reply-path requirement](NATS-CLUSTER.md).
 {% /callout %}
 
 ## Why not EventBridge + Lambda?
@@ -143,6 +143,6 @@ Add `workloads/<name>/` under `services/nex/` with a thin entrypoint wrapper and
 | Page | What it covers |
 |------|----------------|
 | [NATS NEX Execution Engine — How It Works](../../knowledge/NATS-NEX-EXECUTION-ENGINE-EXPLAINED.md) | The general NEX reference: nodes/nexlets/workloads, the Nexfile, every way to run NEX |
-| [NATS Cluster](./NATS-CLUSTER.md) | The cluster the node connects to — ports, discovery, TLS, the auth-callout boundary |
-| [Infrastructure Overview](./INFRASTRUCTURE-OVERVIEW.md) | The wider AWS topology and the other Fargate services |
+| [NATS Cluster](NATS-CLUSTER.md) | The cluster the node connects to — ports, discovery, TLS, the auth-callout boundary |
+| [Infrastructure Overview](INFRASTRUCTURE-OVERVIEW.md) | The wider AWS topology and the other Fargate services |
 | [System Architecture](../SYSTEM-ARCHITECTURE.md) | How the services fit together on the NATS backbone |

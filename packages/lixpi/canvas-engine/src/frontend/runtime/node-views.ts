@@ -55,6 +55,9 @@ export class NodeViews {
     private destroyed = false
 
     constructor(private readonly options: NodeViewsOptions) {}
+    get size(): number {
+        return this.mounted.size
+    }
 
     sync(input: SyncInput): void {
         if (this.destroyed)

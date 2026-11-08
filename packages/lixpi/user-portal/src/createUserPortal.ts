@@ -3,8 +3,8 @@ import {
     type WebClientServiceInstance,
     type WebClientView,
 } from '@lixpi/web-client-service-factory'
-import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components-lixpi-specific/frontend/loading'
-import { createLixpiCanvasSettings } from '@lixpi/canvas-components-lixpi-specific/frontend/settings'
+import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components/workspace/loading'
+import { createLixpiCanvasSettings } from '@lixpi/canvas-components/workspace/settings'
 import {
     type LoadingLayer,
 } from '@lixpi/canvas-components/loading/layer'

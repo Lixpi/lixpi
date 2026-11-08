@@ -67,11 +67,55 @@ const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSet
     ['--help-tooltip-color', 'helpTooltipColor'],
 ]
 
+const canvasModelMenuVariables: Partial<Record<keyof AiPromptInputModelMenuStyleSettings, string>> = {
+    triggerColor: '--canvas-text-muted',
+    triggerActiveColor: '--canvas-text',
+    triggerActiveBackground: '--canvas-surface-hover',
+    triggerFocusOutline: '--canvas-control-focus-outline',
+    infoBubbleBorderRadius: '--canvas-panel-radius',
+    infoBubbleBackground: '--canvas-surface-raised',
+    infoBubbleBoxShadow: '--canvas-shadow',
+    infoBubbleColor: '--canvas-text',
+    sectionDividerGradient: '--canvas-node-footer-separator-gradient',
+    sectionDividerBorderRadius: '--canvas-control-radius',
+    sectionTitleColor: '--canvas-text',
+    controlLabelColor: '--canvas-text-muted',
+    controlLabelFontSize: '--canvas-font-size',
+    helpTooltipTriggerBorder: '--canvas-panel-border',
+    helpTooltipTriggerBackground: '--canvas-surface',
+    helpTooltipTriggerColor: '--canvas-text-muted',
+    helpTooltipTriggerHoverBackground: '--canvas-surface-hover',
+    helpTooltipTriggerHoverColor: '--canvas-text',
+    helpTooltipTriggerFocusOutline: '--canvas-control-focus-outline',
+    helpTooltipBackground: '--canvas-surface-raised',
+    helpTooltipBorder: '--canvas-panel-border',
+    helpTooltipBorderRadius: '--canvas-panel-radius',
+    helpTooltipBoxShadow: '--canvas-shadow',
+    helpTooltipColor: '--canvas-text',
+}
+
+const productModelMenuVariables: Partial<Record<keyof AiPromptInputModelMenuStyleSettings, string>> = {
+    triggerColor: '--canvas-lixpi-menu-trigger',
+    triggerActiveColor: '--canvas-lixpi-menu-trigger-active',
+    triggerActiveBackground: '--canvas-lixpi-menu-hover',
+    infoBubbleBackground: '--canvas-lixpi-menu-background',
+    infoBubbleBoxShadow: '--canvas-lixpi-menu-shadow',
+    infoBubbleColor: '--canvas-lixpi-menu-text',
+    sectionDividerGradient: '--canvas-lixpi-menu-divider',
+    sectionTitleColor: '--canvas-lixpi-menu-title',
+    controlLabelColor: '--canvas-lixpi-menu-label',
+    controlLabelFontSize: '--canvas-lixpi-menu-label-size',
+}
+
 export const applyAiModelMenuStyleSettings = (element: HTMLElement): void => {
     const modelMenuStyleSettings = settings.aiPromptInput.modelMenu.styles
 
     for (const [propertyName, settingKey] of modelMenuCssVariables) {
-        element.style.setProperty(propertyName, modelMenuStyleSettings[settingKey])
+        const token = canvasModelMenuVariables[settingKey]
+        const fallback = modelMenuStyleSettings[settingKey]
+        const themedFallback = token ? `var(${token}, ${fallback})` : fallback
+        const productToken = productModelMenuVariables[settingKey]
+        element.style.setProperty(propertyName, productToken ? `var(${productToken}, ${themedFallback})` : themedFallback)
     }
 }
 

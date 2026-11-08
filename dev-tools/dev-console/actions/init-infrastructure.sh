@@ -14,9 +14,12 @@ if [ -z "$selected_env" ]; then
     exit 1
 fi
 
+# Pulumi shares the application's Compose project, so the running stack isn't orphaned.
+export COMPOSE_IGNORE_ORPHANS=true
+
 # Start Caddy to generate certificates
 echo "Starting Caddy to generate TLS certificates..."
-docker compose -f infrastructure/docker/docker-compose.yml --env-file "$selected_env" up -d lixpi-caddy
+docker compose -f infrastructure/docker/utilities/certificates/docker-compose.certificates.yml --env-file "$selected_env" up -d lixpi-caddy
 
 # Wait for certificates to be generated
 echo "Waiting for certificates to be generated..."
@@ -80,7 +83,7 @@ echo ""
 
 # Stop Caddy
 echo "Stopping Caddy..."
-docker compose -f infrastructure/docker/docker-compose.yml --env-file "$selected_env" down
+docker compose -f infrastructure/docker/utilities/certificates/docker-compose.certificates.yml --env-file "$selected_env" down
 
 echo ""
 
@@ -88,7 +91,7 @@ echo ""
 echo "Initializing DynamoDB tables..."
 
 # Start DynamoDB first and wait for it to be healthy
-docker compose -f infrastructure/docker/docker-compose.yml --env-file "$selected_env" up -d lixpi-dynamodb
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file "$selected_env" up -d lixpi-dynamodb
 echo "Waiting for DynamoDB to be ready..."
 until docker inspect lixpi-dynamodb --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; do
     echo "Waiting for DynamoDB..."
@@ -97,11 +100,11 @@ done
 echo "DynamoDB is ready!"
 
 # Run pulumi-init and wait for it to complete
-docker compose -f infrastructure/docker/docker-compose.yml --env-file "$selected_env" up --build lixpi-pulumi-init
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file "$selected_env" up --build lixpi-pulumi-init
 init_exit_code=$?
 
 # Stop DynamoDB
-docker compose -f infrastructure/docker/docker-compose.yml --env-file "$selected_env" down
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file "$selected_env" down
 
 if [ $init_exit_code -ne 0 ]; then
     echo "Database initialization failed."

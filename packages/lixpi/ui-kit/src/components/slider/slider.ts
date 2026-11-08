@@ -1,3 +1,4 @@
+import { lixpiLightTheme } from '@lixpi/themes'
 import 'd3-transition'
 
 // @ts-ignore - runtime import
@@ -52,14 +53,7 @@ const VALUE_BUBBLE_CHARACTER_WIDTH = 7
 const VALUE_BUBBLE_MIN_WIDTH = 38
 const TRANSITION_DURATION_MS = 160
 
-const COLORS = {
-    rail: 'rgba(105, 115, 133, 0.18)',
-    railActive: '#6750a4',
-    thumb: '#6750a4',
-    thumbHalo: 'rgba(103, 80, 164, 0.12)',
-    valueBubble: '#6750a4',
-    valueText: '#ffffff',
-}
+const COLORS = lixpiLightTheme.components.slider.colors
 
 const clamp = (
     value: number,
@@ -175,8 +169,8 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
             .append('text')
             .attr('class', 'slider-value-text')
             .attr('fill', COLORS.valueText)
-            .attr('font-size', 12)
-            .attr('font-weight', 600)
+            .attr('font-size', lixpiLightTheme.components.slider.fontSize)
+            .attr('font-weight', lixpiLightTheme.components.slider.fontWeight)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
 

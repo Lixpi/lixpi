@@ -1,0 +1,15 @@
+@use "@lixpi/themes/scope";
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as light;
+
+.code-block-wrapper {
+    border-radius: 7px;
+    overflow: hidden;
+    // box-shadow: 1px 3px 7px 0 rgb(0 0 0 / 25%);
+    font-weight: 400;
+    margin: 1rem 0;
+    font-size: scope.token("code-size", light.$roles);
+    .cm-scroller {
+        font-family: scope.token("font-mono", light.$roles) !important;
+        padding: 0.3rem 0.3rem;
+    }
+}

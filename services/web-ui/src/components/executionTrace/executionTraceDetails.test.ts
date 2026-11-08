@@ -8,10 +8,8 @@ import {
     type ExecutionTrace,
 } from '@lixpi/constants'
 
-import {
-    colorPalette,
-    settings,
-} from '$src/settings.ts'
+import { settings } from "$src/settings.ts"
+import { lixpiLightTheme } from "@lixpi/themes"
 
 import {
     createExecutionTraceDetail,
@@ -117,12 +115,11 @@ describe('executionTraceDetails — formatters', () => {
     })
 
     it('assigns visible semantic colors and cycles category colors', () => {
-        expect(getExecutionTraceTagPillColors('passed').fillActive).toBe(colorPalette.perfectLightGreen)
-        expect(getExecutionTraceTagPillColors('failed').fillActive).toBe(colorPalette.codeRedHover)
-        expect(getExecutionTraceTagPillColors('pending').fillActive).toBe(colorPalette.codeYellowHover)
-        expect(getExecutionTraceTagPillColors('identity', 0).fillActive)
-            .toBe(settings.gradient.styles.shiftingColors[2])
-        expect(getExecutionTraceTagPillColors('style', 1).fillActive).toBe(colorPalette.perfectLightGreen)
+        expect(getExecutionTraceTagPillColors("passed").fillActive).toContain("--theme-feedback-tag-success-background")
+        expect(getExecutionTraceTagPillColors("failed").fillActive).toContain("--theme-feedback-tag-danger-background")
+        expect(getExecutionTraceTagPillColors("pending").fillActive).toContain("--theme-feedback-tag-warning-background")
+        expect(getExecutionTraceTagPillColors("identity", 0).fillActive).toBe(settings.gradient.styles.shiftingColors[2])
+        expect(getExecutionTraceTagPillColors('style', 1).fillActive).toBe(lixpiLightTheme.feedback.tags.success.background)
         expect(getExecutionTraceTagPillColors('pose', 2).fillActive)
             .toBe(settings.gradient.styles.shiftingColors[1])
     })
@@ -297,8 +294,10 @@ describe('createExecutionTraceDetail — rendered content', () => {
         expect(firstValueTag?.style.width).toBe(`${firstValueTag?.getAttribute('width')}px`)
         expect(firstValueTag?.style.backgroundColor).toBe(settings.gradient.styles.shiftingColors[2])
         expect(firstValueTag?.style.getPropertyPriority('background')).toBe('important')
-        expect(firstValueTag?.style.borderRadius).toBe('9px')
-        expect(firstValueTag?.style.boxShadow).toBe('none')
+        expect(firstValueTag?.style.borderRadius).toBe('var(--theme-feedback-tag-radius)')
+        expect(lixpiLightTheme.feedback.tagPresentation.radius).toBe('9px')
+        expect(firstValueTag?.style.boxShadow).toBe('var(--theme-feedback-tag-shadow)')
+        expect(firstValueTag?.style.getPropertyValue('--feedback-tag-border-color')).toBe('transparent')
         expect(firstValueTag?.querySelector('.tag-pill-label')?.getAttribute('font-size')).toBe('11')
         expect(firstValueTag?.querySelector('.tag-pill-label')?.getAttribute('y')).toBe('9')
         expect(firstValueTag?.querySelector('.tag-pill-label')?.getAttribute('dominant-baseline')).toBe('central')
@@ -307,7 +306,7 @@ describe('createExecutionTraceDetail — rendered content', () => {
         )].map(node => node.getAttribute('fill'))
         expect(valueTagFills.slice(0, 3)).toEqual([
             settings.gradient.styles.shiftingColors[2],
-            colorPalette.perfectLightGreen,
+            lixpiLightTheme.feedback.tags.success.background,
             settings.gradient.styles.shiftingColors[1],
         ])
         expect(new Set(valueTagFills).size).toBeGreaterThan(2)

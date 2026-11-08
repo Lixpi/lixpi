@@ -141,7 +141,7 @@ The model settings surface is capped to the viewport space above its trigger. It
 
 Each section has a title, help tooltip, `Add model` action, and one or more removable model rows. The final row's removal control stays disabled.
 
-`settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in `ai-prompt-input.scss`.
+`settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in `native-prompt-controls package stylesheet`.
 
 The NodeView hides the model menu on document `mousedown` outside the controls row, model menu, and sliding-dropdown scroll surfaces/SVGs. It removes that listener in `destroy()`.
 
@@ -185,7 +185,7 @@ The package-owned workspace composer mounts this plugin through the host editor 
 
 ## Styling
 
-SCSS lives in `ai-prompt-input.scss`.
+SCSS lives in `native-prompt-controls package stylesheet`.
 
 ```text
 .ai-prompt-input-floating
@@ -225,7 +225,7 @@ Settings hooks:
 - `aiPromptInputPlugin.ts`: plugin creation, submit payload construction, content extraction, attr reading, clearing, placeholder decorations, keydown handling, meta handling.
 - `aiPromptInputNode.ts`: node spec, attr parsing/serialization helpers, NodeView, model menu, control adapters, multi-model selectors, media config matrix rendering, selected tag rows, lifecycle handling.
 - `aiPromptInputPluginConstants.ts`: `AI_PROMPT_INPUT_PLUGIN_KEY`, `SUBMIT_AI_PROMPT_META`.
-- `ai-prompt-input.scss`: floating prompt input, wrapper, editable content, controls row, submit styling, model settings menu, and model configuration row styles.
+- `native-prompt-controls package stylesheet`: floating prompt input, wrapper, editable content, controls row, submit styling, model settings menu, and model configuration row styles.
 - `index.ts`: public exports.
 
 ## Related Modules
@@ -233,5 +233,5 @@ Settings hooks:
 - `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, and tracks thread receiving state for transcript projection.
 - `$src/components/aiModelControls/`: reusable model, media, and submit controls shared by prompt surfaces. Model selectors use `settings.aiModelControls.styles.modelDropdown`. Dimension controls use `settings.aiModelControls.styles.dimensionsDropdown`, while their glyph geometry uses `settings.aiModelControls.styles.dimensionsGlyph`; fixed ratios receive equal visual area so portrait and landscape options have matching weight.
 - `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
-- `@lixpi/canvas-components-lixpi-specific/frontend/workspace`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
+- `@lixpi/canvas-components/workspace`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
 - `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

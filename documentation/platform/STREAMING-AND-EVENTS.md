@@ -12,7 +12,7 @@ Lixpi uses NATS for live conversation and media updates. Conversation commands a
 
 Live delivery uses NATS WebSockets without a separate streaming server. Conversation controllers reconcile persisted events on reconnect and periodically refresh background status. Asset metadata/rendition cache synchronization uses tokenized Asset events plus a low-frequency reconciliation poll because those mutation notifications are invalidations, not a durable replay log.
 
-This page documents the wire shape: live subjects, replay subjects, event statuses, and browser render paths. For which workflow nodes emit these events and why the lifecycle is shaped this way, see [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md). For the system-wide messaging picture, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
+This page documents the wire shape: live subjects, replay subjects, event statuses, and browser render paths. For which workflow nodes emit these events and why the lifecycle is shaped this way, see [AI Generation Pipeline](AI-GENERATION-PIPELINE.md). For the system-wide messaging picture, see [System Architecture](SYSTEM-ARCHITECTURE.md).
 
 ## Subject Families
 
@@ -234,6 +234,6 @@ The markdown-to-ProseMirror assembly rules are covered in [Markdown Rendering](.
 
 ## Related Pages
 
-- [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md) - the workflow nodes that emit every event above, plus the stream-lifecycle reasoning.
-- [System Architecture](./SYSTEM-ARCHITECTURE.md) — NATS as the communication backbone and how the browser connects over WebSocket.
+- [AI Generation Pipeline](AI-GENERATION-PIPELINE.md) - the workflow nodes that emit every event above, plus the stream-lifecycle reasoning.
+- [System Architecture](SYSTEM-ARCHITECTURE.md) — NATS as the communication backbone and how the browser connects over WebSocket.
 - [Markdown Rendering](../ai-chat/MARKDOWN-RENDERING.md) - how streamed markdown becomes ProseMirror content.

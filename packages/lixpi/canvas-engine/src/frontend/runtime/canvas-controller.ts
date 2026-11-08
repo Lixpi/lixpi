@@ -88,7 +88,7 @@ export type CanvasInteractionOptions = {
         fromMarquee: boolean,
     ) => void
 }
-export type CanvasConnectionControls = Pick<ConnectionManager<EngineNode>, 'flowId' | 'cancelTransientConnection' | 'startConnectionFromMenu' | 'onHandlePointerDown' | 'selectEdge' | 'deleteSelectedEdge' | 'deselect' | 'getEdgeMidpointRect' | 'checkProximity' | 'commitProximityConnection' | 'recomputeConnectorGeometry' | 'render'>
+export type CanvasConnectionControls = Pick<ConnectionManager<EngineNode>, 'flowId' | 'cancelTransientConnection' | 'startConnectionFromMenu' | 'onHandlePointerDown' | 'selectEdge' | 'deleteSelectedEdge' | 'deselect' | 'getEdgeMidpointRect' | 'checkProximity' | 'commitProximityConnection' | 'recomputeConnectorGeometry' | 'updateSettings' | 'render'>
 export type CanvasConnectionOptions = {
     settings: ConnectionSettings
     renderer?: Omit<ConnectorRendererOptions, 'surface'>
@@ -332,6 +332,11 @@ export class CanvasController {
         )
     }
 
+    setConnectionSettings(settings: ConnectionSettings): void {
+        this.assertAlive()
+        this.connections?.updateSettings(settings)
+    }
+
     installConnections(options: CanvasConnectionOptions): CanvasConnectionControls {
         this.assertAlive()
 
@@ -343,12 +348,15 @@ export class CanvasController {
         try {
             const surface = this.renderer.createScope()
             lifetime.own(() => surface.destroy())
-            const drawing = new ConnectorRenderer({
+            const rendererOptions = {
+                zoomScaling: structuredClone(options.settings.scaling.zoomScaling),
                 ...options.renderer,
                 surface,
-            })
+            }
+            const drawing = new ConnectorRenderer(rendererOptions)
             lifetime.own(() => drawing.destroy())
             this.connections = new ConnectionManager({
+                onSettingsChange: settings => void (rendererOptions.zoomScaling = settings.scaling.zoomScaling),
                 isCentered: () => true,
                 isNodeTarget: target => Boolean(
                     target.closest('[data-canvas-node-id]'),

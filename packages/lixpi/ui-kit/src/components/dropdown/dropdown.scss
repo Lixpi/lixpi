@@ -30,19 +30,19 @@
     // Trigger button — M3 compact style
     @include dropdownTriggerStructure(
         (
-            fontSize: 0.8125rem,
-            fontWeight: 500,
+            fontSize: dropdownThemeToken("trigger-font-size"),
+            fontWeight: dropdownThemeToken("trigger-font-weight"),
             iconMargin: 0 6px 0 0,
             triggerPadding: 4px 8px,
-            triggerRadius: 8px,
-            triggerHeight: 28px
+            triggerRadius: dropdownThemeToken("trigger-radius"),
+            triggerHeight: dropdownThemeToken("trigger-height")
         )
     );
 
     // Dropdown items — compact proportional to 28px trigger
     @include dropdownItemsStructure(
         (
-            itemFontSize: 0.75rem,
+            itemFontSize: dropdownThemeToken("item-compact-font-size"),
             itemHeight: 32px,
             itemPadding: 0 10px,
             itemIconSize: 14px,
@@ -75,7 +75,7 @@
     // Ultra compact items — proportional to trigger
     @include dropdownItemsStructure(
         (
-            itemFontSize: 0.7rem,
+            itemFontSize: dropdownThemeToken("item-popover-font-size"),
             itemHeight: 26px,
             itemPadding: 0 8px,
             itemIconSize: 12px,

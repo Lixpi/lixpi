@@ -1,6 +1,6 @@
 import {
     type WorkspaceCanvasEditors,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { createDefaultPromptControlFactories } from '$src/components/proseMirror/promptControlFactories.ts'

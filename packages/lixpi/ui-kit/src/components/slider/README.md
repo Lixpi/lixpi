@@ -2,6 +2,8 @@
 
 `slider` is a reusable, domain-agnostic D3 SVG control for choosing one value from an ordered set. It renders a continuous rail, active progress, a draggable thumb, and a value bubble above the thumb. The component owns SVG rendering and pointer/keyboard interaction; the consumer owns the selected value.
 
+Default rail, thumb and value-bubble paints and typography come from `lixpiLightTheme.components.slider`.
+
 ## API
 
 `createSlider(parent, config)` appends one SVG `<g>` to a caller-provided D3 selection.

@@ -9,7 +9,27 @@
     },
     "exports": {
         ".": "./src/index.ts",
+        "./canvas-library": "./src/components/canvasLibrary/library-layout.ts",
+        "./styles/typography": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/typography.scss",
+            "style": "./styles/typography.scss",
+            "default": "./styles/typography.scss"
+        },
+        "./styles/canvas-library": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/canvas-library.scss",
+            "style": "./styles/canvas-library.scss",
+            "default": "./styles/canvas-library.scss"
+        },
+        "./styles/navigation-side-panel": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/navigation-side-panel.scss",
+            "style": "./styles/navigation-side-panel.scss",
+            "default": "./styles/navigation-side-panel.scss"
+        },
         "./styles/tokens": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/tokens.scss",
             "style": "./styles/tokens.scss",
             "default": "./styles/tokens.scss"
@@ -35,26 +55,31 @@
         "./components/tag-pill": "./src/components/tagPill/index.ts",
         "./components/toggle-switch": "./src/components/toggleSwitch/index.ts",
         "./styles/dropdown": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/dropdown.scss",
             "style": "./styles/dropdown.scss",
             "default": "./styles/dropdown.scss"
         },
         "./styles/info-bubble": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/info-bubble.scss",
             "style": "./styles/info-bubble.scss",
             "default": "./styles/info-bubble.scss"
         },
         "./styles/media-model-badge": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/media-model-badge.scss",
             "style": "./styles/media-model-badge.scss",
             "default": "./styles/media-model-badge.scss"
         },
         "./styles/progress-timeline": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/progress-timeline.scss",
             "style": "./styles/progress-timeline.scss",
             "default": "./styles/progress-timeline.scss"
         },
         "./styles/block-card-tiles-list": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/block-card-tiles-list.scss",
             "style": "./styles/block-card-tiles-list.scss",
             "default": "./styles/block-card-tiles-list.scss"
@@ -69,51 +94,66 @@
         "./components/preview": "./src/components/preview/contextPreviewPopover.ts",
         "./components/loading-placeholder": "./src/components/loadingPlaceholder/index.ts",
         "./styles/bubble-menu": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/bubble-menu.scss",
             "style": "./styles/bubble-menu.scss",
             "default": "./styles/bubble-menu.scss"
         },
         "./styles/side-panel": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/side-panel.scss",
             "style": "./styles/side-panel.scss",
             "default": "./styles/side-panel.scss"
         },
         "./styles/help-tooltip": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/help-tooltip.scss",
             "style": "./styles/help-tooltip.scss",
             "default": "./styles/help-tooltip.scss"
         },
         "./styles/canvas-node-footer": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/canvas-node-footer.scss",
             "style": "./styles/canvas-node-footer.scss",
             "default": "./styles/canvas-node-footer.scss"
         },
         "./styles/progress-ripple": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/progress-ripple.scss",
             "style": "./styles/progress-ripple.scss",
             "default": "./styles/progress-ripple.scss"
         },
         "./styles/preview": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/preview.scss",
             "style": "./styles/preview.scss",
             "default": "./styles/preview.scss"
         },
         "./styles/loading-placeholder": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/loading-placeholder.scss",
             "style": "./styles/loading-placeholder.scss",
             "default": "./styles/loading-placeholder.scss"
         },
         "./styles/loading-placeholder-mixins": {
+            "types": "./src/styles.d.ts",
             "sass": "./styles/loading-placeholder-mixins.scss",
             "style": "./styles/loading-placeholder-mixins.scss",
             "default": "./styles/loading-placeholder-mixins.scss"
+        },
+        "./styles/fonts": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/fonts.scss",
+            "style": "./styles/fonts.scss",
+            "default": "./styles/fonts.scss"
         }
     },
     "dependencies": {
         "d3-ease": "3.0.1",
         "d3-selection": "3.0.0",
         "d3-transition": "3.0.1",
-        "@lixpi/ui-primitives": "workspace:*"
+        "@lixpi/ui-primitives": "workspace:*",
+        "@lixpi/themes": "workspace:*"
     },
     "devDependencies": {
         "@lixpi/test-utils": "workspace:*",

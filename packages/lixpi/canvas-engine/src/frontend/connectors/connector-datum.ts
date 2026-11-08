@@ -95,35 +95,31 @@ export type ConnectorDatumStyle = {
     markerBodyLengthFraction: number
 }
 
-export const computeConnectorDatum = (
+export const computeConnectorEndpoints = (
     edgeConfig: EdgeConfig,
-    worldNodeMap: Map<string, NodeConfig>,
-    style: ConnectorDatumStyle,
-): ConnectorRenderDatum | null => {
+    worldNodeMap: ReadonlyMap<string, NodeConfig>,
+    style: Pick<ConnectorDatumStyle, 'markerOffset' | 'worldMarkerSize' | 'markerBodyLengthFraction'>,
+): {
+    source: {
+        x: number
+        y: number
+    }
+    target: {
+        x: number
+        y: number
+    }
+} | null => {
     const {
-        selected: isSelected,
-        color: defaultColor,
-        selectedColor: focusColor,
-        strokeWidth: baseScreenStrokeWidth,
-        markerSize: baseScreenMarkerSize,
         markerOffset,
         worldMarkerSize: scaledMarkerSizeWorld,
         markerBodyLengthFraction,
     } = style
     const {
-        id,
         source,
         target,
-        pathType = 'bezier',
         marker = 'none',
         markerStart,
-        curvature = 0.25,
-        borderRadius = 24,
-        laneIndex = 0,
-        laneCount = 1,
-        bendPoints,
     } = edgeConfig
-
     const sourceNode = worldNodeMap.get(source.nodeId)
     const targetNode = worldNodeMap.get(target.nodeId)
 
@@ -236,6 +232,52 @@ export const computeConnectorDatum = (
 
             break
     }
+
+    return {
+        source: srcCoords,
+        target: tgtCoords,
+    }
+}
+
+export const computeConnectorDatum = (
+    edgeConfig: EdgeConfig,
+    worldNodeMap: Map<string, NodeConfig>,
+    style: ConnectorDatumStyle,
+): ConnectorRenderDatum | null => {
+    const {
+        selected: isSelected,
+        color: defaultColor,
+        selectedColor: focusColor,
+        strokeWidth: baseScreenStrokeWidth,
+        markerSize: baseScreenMarkerSize,
+    } = style
+    const {
+        id,
+        source,
+        target,
+        pathType = 'bezier',
+        marker = 'none',
+        markerStart,
+        curvature = 0.25,
+        borderRadius = 24,
+        laneIndex = 0,
+        laneCount = 1,
+        bendPoints,
+    } = edgeConfig
+
+    const endpoints = computeConnectorEndpoints(
+        edgeConfig,
+        worldNodeMap,
+        style,
+    )
+
+    if (!endpoints)
+        return null
+
+    const {
+        source: srcCoords,
+        target: tgtCoords,
+    } = endpoints
 
     const { path: svgPath } = computePath(
         pathType,

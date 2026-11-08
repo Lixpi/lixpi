@@ -1,0 +1,126 @@
+@use "@lixpi/ui-kit/styles/fonts";
+@use "@lixpi/themes/scope";
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as light;
+@import url("https://fonts.cdnfonts.com/css/herculanum-lt-pro");
+
+// Font antialiasing
+* {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+// Fonts and sizes
+html {
+    font-size: scope.token("root-font-size", light.$roles);
+}
+
+body {
+    font-size: scope.token("font-size", light.$roles);
+}
+
+html, body {
+    // font-family: 'Lato', sans-serif; // Is it used at all????? Consider removing
+    // font-family: "Source Sans Pro", Helvetica ,sans-serif;
+    // font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    // font-weight: 300;
+    color: scope.token("text", light.$roles);
+
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-decoration-skip: ink;
+    text-decoration-skip-ink: auto;
+    unicode-bidi: isolate;
+
+    // Buy Söhne and Söhne Mono fonts
+    font-family: scope.token("font-family", light.$roles);
+}
+
+pre, code {
+    font-family: scope.token("font-mono", light.$roles);
+    font-weight: scope.token("font-weight", light.$roles);
+    font-size: scope.token("code-inline-size", light.$roles);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    // font-family: 'Raleway', sans-serif;
+    // font-family: 'Lato', sans-serif; // Is it used at all????? Consider removing
+    font-weight: scope.token("heading-font-weight", light.$roles);
+    // color: $nightBlue;
+    // color: #565e67;
+    color: scope.token("heading", light.$roles);
+}
+h1 {
+    // font-size: 2em;
+    margin-top: 0.4rem;
+    margin-bottom: 0.8rem;
+
+    font-size: scope.token("h1-size", light.$roles);
+    line-height: scope.token("heading-line-height", light.$roles);
+    letter-spacing: scope.token("heading-letter-spacing", light.$roles);
+    // font-weight: 400;
+}
+h2 {
+    font-size: scope.token("h2-size", light.$roles);
+    margin-top: 0.35rem;
+    margin-bottom: 0.7rem;
+}
+h3 {
+    font-size: scope.token("h3-size", light.$roles);
+    margin-top: 0.3rem;
+    margin-bottom: 0.6rem;
+}
+h4 {
+    font-size: scope.token("h4-size", light.$roles);
+    margin-top: 0.2rem;
+    margin-bottom: 0.4rem;
+}
+h5 {
+    font-size: scope.token("h5-size", light.$roles);
+    margin-top: 0.175rem;
+    margin-bottom: 0.35rem;
+}
+h6 {
+    font-size: scope.token("h6-size", light.$roles);
+    margin-top: 0.15rem;
+    margin-bottom: 0.3rem;
+}
+p, ul, ol, dl, span, b, i, input {
+    font-weight: scope.token("font-weight", light.$roles);
+    font-family: inherit;
+
+    // margin-bottom: 15px;
+    // font-size: 15px;
+}
+
+p, ul, ol, dl {
+    margin-bottom: 0.3rem;
+    // line-height: 1.2rem;
+    // line-height: 1.6em;
+}
+ul, ol, dl {
+    > * {
+        margin-bottom: 0.2rem;
+    }
+}
+
+b, strong {
+    font-weight: scope.token("font-weight-strong", light.$roles);
+    color: scope.token("text-strong", light.$roles);
+}
+
+em, i {
+    font-style: italic;
+}
+
+a {
+    // color: #5bb3b1;
+    color: scope.token("link", light.$roles);
+    text-decoration: none;
+    cursor: pointer;
+    &:not(.no-hover):hover {
+        text-decoration: underline;
+    }
+}

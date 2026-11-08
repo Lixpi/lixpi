@@ -38,6 +38,7 @@ import {
 } from '../../shared/connectors/path-types.ts'
 import {
     type ConnectionNode,
+    type ConnectionSettings,
     type ConnectionEdge,
     type ConnectionManagerConfig,
     type ProximityCandidate,
@@ -281,6 +282,22 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 y: y - (port.direction === 'bottom' ? node.dimensions.height : 0),
             },
         }
+    }
+
+    public updateSettings(settings: ConnectionSettings): void {
+        if (this.destroyed)
+            return
+
+        const proximityChanged = settings.proximityConnectThreshold !== this.config.settings.proximityConnectThreshold
+        this.config.settings = structuredClone(settings)
+        this.config.onSettingsChange?.(
+            structuredClone(this.config.settings),
+        )
+
+        if (proximityChanged)
+            this.proximityCandidate = null
+
+        this.render()
     }
 
     public syncNodes(canvasNodes: Node[]) {

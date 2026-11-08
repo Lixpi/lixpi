@@ -23,7 +23,6 @@
         "@lixpi/auth-service": "workspace:*",
         "@lixpi/capability-system": "workspace:*",
         "@lixpi/canvas-engine": "workspace:*",
-        "@lixpi/canvas-components-lixpi-specific": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
@@ -60,7 +59,8 @@
         "zod": "4.6.7",
         "prosemirror-model": "1.25.12",
         "prosemirror-state": "1.4.4",
-        "sharp": "0.35.5"
+        "sharp": "0.35.5",
+        "@lixpi/canvas-components": "workspace:*"
     },
     "devDependencies": {
         "@nats-io/nkeys": "2.0.3",

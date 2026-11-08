@@ -36,18 +36,18 @@ Every repository has the same layout, so a developer finds things in the same pl
 | `docker-prune` | The prune tree with measured disk usage, then a confirmation |
 | `service-commands` | Asks the action's script for its catalog, then offers the commands it reports |
 
-Under `services`, `composeFile` names the Compose file, `baseProfile` names the profile that makes up **Base**, and `groups` arranges the services. A service with no profile is always part of **Base**.
+`"services": true` adds the service tree to a `choices` step. The tree, the stack file and the base profile all come from the repository's `infrastructure/docker` directory, described in [Docker layout](#docker-layout), so a config never lists services. The step passes `compose-file` and `profile` on to the script.
 
 A script runs from the repository root. It receives the selected services or prune targets as arguments, and the rest as environment variables: `LIXPI_CONSOLE_WORKSPACE`, `LIXPI_CONSOLE_ENV_FILE` as an absolute path, and `LIXPI_CONSOLE_OPTION_<NAME>` for each param and radio row. `LIXPI_REPOSITORY_PATH` is set too.
 
-`shared:start-services` starts the selected services from the params `compose-file` and optionally `profile`, `up-flags` as a comma-separated list, and `started-url`. It reads the radio rows `rebuild` and `logs`. The other shared scripts are `aws-sso-login`, `prune-docker` and `setup-skills`.
+`shared:start-services` starts the selected services from `compose-file` and `profile`, which the service tree supplies, and the optional params `up-flags` as a comma-separated list and `started-url`. It reads the radio rows `rebuild` and `detach`. **Run** defaults to **Foreground**, which keeps the console attached to the Compose logs until Ctrl+C. **Detached** starts the services in the background and returns, waiting until they're ready first when `started-url` is set. The other shared scripts are `aws-sso-login`, `prune-docker` and `setup-skills`.
 
 ## Main menu
 
 | Action | What it does |
 |---|---|
-| Sign in to AWS SSO | Asks for an environment file, then signs in as that file's `AWS_PROFILE` |
 | Start services | Asks for an environment file, then shows one page with the container and service choices above the service tree, then starts them |
+| Sign in to AWS SSO | Asks for an environment file, then signs in as that file's `AWS_PROFILE` |
 | Create or edit a configuration | Opens the [configuration wizard](../config-utils/README.md) |
 | Initialize infrastructure | Asks for an environment file, then sets up TLS certificates and DynamoDB tables |
 | Deploy and manage infrastructure | Asks for an environment file, states the deployment target, then offers every command the Pulumi service reports |
@@ -63,7 +63,7 @@ Submitting an action ends the console when its script finishes, with that script
 
 ## Starting services
 
-**Start services** asks for an environment file, then shows one page with everything else. Two radio rows sit above the service tree, and Left and Right switch them. **Containers** defaults to **Use existing**, in which case Compose builds only images that are missing, or **Rebuild**. **Services** defaults to **Base**, which starts the `main` profile the application needs, or **All**, which adds the admin and developer tools. Switching it updates the tree below, and changing anything in the tree leaves neither option marked until the selection matches one again.
+**Start services** asks for an environment file, then shows one page with everything else. Two rows sit at the top, and Left and Right switch them. **Containers** defaults to **Use existing**, in which case Compose builds only images that are missing, or **Rebuild**. **Run** defaults to **Foreground**, which keeps the console attached to the logs, or **Detached**. The tree below starts with two preset rows. **Base services** is selected by default and starts the `main` profile the application needs. **All services** adds the admin and developer tools. Space on a preset applies it to the groups below, and changing any service leaves neither preset marked until the selection matches one again.
 
 | Key | Action |
 |---|---|
@@ -74,8 +74,6 @@ Submitting an action ends the console when its script finishes, with that script
 | Enter | Confirm |
 
 A group with only some of its services selected shows a half-filled checkbox, and Space on it selects the rest. Compose still starts whatever a selected service depends on, so the plan shown before launch lists those dependencies. Selecting only `lixpi-api`, for example, also starts NATS and DynamoDB.
-
-The `infrastructure/docker/docker-compose.yml` file holds only the `include` list and the shared volumes and networks. Each service lives in a partial file for its group, such as `docker-compose.ui.yml` or `docker-compose.databases.yml`.
 
 If a rebuild was chosen, the selected containers are removed and their images are built without cache. The previous images are then left dangling, so the console deletes dangling images. That cleanup covers the whole Docker host, not only this project, although images still in use are kept. Dependencies that weren't selected keep their existing images. A failed rebuild starts nothing, and the previous image stays in place.
 
@@ -114,13 +112,40 @@ SELECTED=lixpi-api
 
 The scripts in `actions/` are internal to the console, with two exceptions that have callers outside the menu. Automation creates configurations through `init-config.sh --non-interactive`, and other repositories sign in through `aws-sso-login.sh <profile>`.
 
+## Docker layout
+
+Every repository that uses the console keeps its Compose files in `infrastructure/docker` with the same shape:
+
+```text
+infrastructure/docker/
+├── docker-group.json            label, and the base profile
+├── docker-compose.yml           the stack: includes every partial under services/
+├── services/
+│   ├── docker-group.json        "kind": "services"
+│   └── <group>/                 one directory per group, nested as deep as needed
+│       ├── docker-group.json    label, optional order and description
+│       └── docker-compose.<name>.yml
+└── utilities/
+    ├── docker-group.json        "kind": "utilities"
+    └── <group>/
+        ├── docker-group.json
+        └── docker-compose.<name>.yml
+```
+
+`services/` holds what the application runs: the frontends, the API, the brokers, the databases, and developer apps such as the design system. `utilities/` holds what runs on demand from its own file: Pulumi, the local certificate generator, the AWS CLI, the test and quality runners, the configuration wizard and the console itself.
+
+[`docker-layout.ts`](src/docker-layout.ts) reads the directory and enforces these rules, reporting every broken one at once before the tree is drawn:
+
+- Every directory has a `docker-group.json` with a `label`. `order` sorts sibling groups, and groups without one come last, sorted by label. `description` says what the group holds.
+- Only the top `docker-group.json` sets `baseProfile`, the profile that makes up **Base services**. Only `services/` and `utilities/` set `kind`, which must match their name.
+- Partials are named `docker-compose.<name>.yml` and live in group directories. The top directory holds only `docker-group.json`, `docker-compose.yml` and an optional `README.md`. So do `services/` and `utilities/`, apart from their group directories.
+- `docker-compose.yml` declares no services of its own. It includes every partial under `services/` and nothing else, because a missing partial couldn't start and an included utility would start with every `up`.
+
 ## Where the service tree comes from
 
-Compose decides what exists. [`compose-catalog.ts`](src/compose-catalog.ts) parses the configured Compose file and its `include` list without interpolating them, because this happens before an environment file is chosen. It follows `extends` to find profiles declared in base files. A service belongs to **All services** when it has the `main` profile or no profile at all, which is the same set `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main up` starts.
+The tree mirrors `services/`. Each directory is a group with its `docker-group.json` label, nested the same way, and each partial in it adds its services in file order. A group with exactly one partial and no subgroups shows that file's name. Adding a service means adding it to a partial, and adding a group means adding a directory with a `docker-group.json` and a partial, then including that partial in the stack. The console config doesn't change.
 
-[`service-tree.ts`](src/service-tree.ts) only arranges those services into groups, and each group mirrors a partial Compose file. A service is in the base stack when it has the `main` profile or no profile at all, so a group can hold both kinds: the NATS group contains the three brokers and the unselected `lixpi-nats-cli`. The console always names the selected services when it starts them, so `up` runs exactly what you chose. A name Compose no longer defines is dropped, and a group left empty goes with it. A new `main`-profile service that nobody has grouped yet appears under **Other services** rather than disappearing. A group whose services all live in one partial Compose file shows that file's name.
-
-One-shot runners, such as the test and quality containers, aren't offered because no group names them.
+Compose decides which services start by default. [`compose-catalog.ts`](src/compose-catalog.ts) parses the stack file and its `include` list without interpolating them, because this happens before an environment file is chosen. It follows `extends` to find profiles declared in base files. A service belongs to **Base services** when it has the base profile or no profile at all, which is the same set `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile main up` starts. A group can hold both kinds: the NATS group contains the three brokers and the unselected `lixpi-nats-cli`. The console always names the selected services when it starts them, so `up` runs exactly what you chose.
 
 The tree prompt, the environment-file listing and the wizard title bar come from [`@lixpi/cli-ui`](../../packages/lixpi/cli-ui/README.md), which the configuration wizard and skill installer also use.
 
@@ -131,11 +156,11 @@ The console and `@lixpi/cli-ui` sources are bind-mounted, so an edit to either a
 When `CODING_AGENTS_TEST_EXECUTION_MODE` permits, run the tests through the shared TypeScript test runner. They use synthetic Compose files and mocked prompts, and the tree prompt's own tests live with its package. `run.sh` and the `actions/` scripts act on Docker directly and aren't covered by them.
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner dev-console
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner dev-console
 ```
 
 Formatting and lint checks follow `CODING_AGENTS_TEST_LINTER_MODE`:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner files validate dev-tools/dev-console/src dev-tools/dev-console/vitest.config.ts
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner files validate dev-tools/dev-console/src dev-tools/dev-console/vitest.config.ts
 ```

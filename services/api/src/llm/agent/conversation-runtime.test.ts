@@ -170,6 +170,7 @@ const runtimeFixture = async (tools: CapabilityAgentTool[] = [], operations?: Co
         resolveReferences: async () => [],
         activate: async (_meta, writes) => await repository.commit(writes),
         publish: async () => {},
+        dispatchScheduled: () => {},
         now: Date.now,
         createId: () => `turn-${++id}`,
     })

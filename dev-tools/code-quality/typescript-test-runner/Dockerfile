@@ -2,8 +2,8 @@
 #
 # Owns test execution for services/web-ui, services/api, services/nex, and the
 # shared packages/lixpi packages. Each domain is bind-mounted (see
-# infrastructure/docker/docker-compose.typescript-test-runner.yml, included from
-# infrastructure/docker/docker-compose.yml) as its own isolated pnpm workspace root under
+# infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml) as its own isolated
+# pnpm workspace root under
 # /usr/src/service/<domain>, so this image ships no dependencies of its own —
 # run-tests.sh installs each domain's deps on demand before running vitest.
 ARG NODE_JS_ALPINE_IMAGE_REFERENCE=node:24.22.2-alpine
@@ -17,14 +17,14 @@ RUN apk add --no-cache util-linux-misc ffmpeg font-dejavu
 
 WORKDIR /usr/src/service
 
-# run-tests.sh is bind-mounted (infrastructure/docker/docker-compose.typescript-test-runner.yml) so edits apply without a
+# run-tests.sh is bind-mounted (infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml) so edits apply without a
 # rebuild; bind mounts are attached before ENTRYPOINT runs, so this works
 # without baking the script into the image. Bind mounts don't preserve the
 # host exec bit, hence "sh <path>" rather than exec'ing it directly.
 #
-# One-shot per invocation: `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml run --rm lixpi-typescript-test-runner
+# One-shot per invocation: `docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml run --rm lixpi-typescript-test-runner
 # <domain> [args]` builds a fresh container per call (always reflects the
-# current infrastructure/docker/docker-compose.yml, unlike a long-lived container that can go stale
+# current Compose file, unlike a long-lived container that can go stale
 # after a compose file edit) and Compose auto-names each run uniquely, so
 # concurrent invocations never collide.
 ENTRYPOINT ["sh", "/usr/src/service/run-tests.sh"]

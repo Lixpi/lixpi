@@ -34,7 +34,8 @@ export type PlaybackNodeOptions<Data> = {
     geometry: NodeGeometryPolicy<Data>
     getContent: (node: EngineNode<Data>) => PlaybackContent | null
     image?: Omit<ImageSurfaceOptions, 'surface' | 'onError' | 'onImageLoaded'>
-    playback?: Pick<NativePlaybackOptions, 'muted' | 'loop' | 'preload' | 'crossOrigin'>
+    getImageStyle?: (node: EngineNode<Data>) => Pick<ImageSurfaceOptions, 'radius' | 'placeholder'>
+    playback?: Pick<NativePlaybackOptions, 'muted' | 'loop' | 'preload' | 'crossOrigin' | 'controls'>
     pauseWhenHidden?: boolean
     isImageVisible?: (node: EngineNode<Data>) => boolean
     onElement?: (
@@ -113,6 +114,15 @@ class PlaybackNodeView<Data> implements NodeView<Data> {
             return
 
         this.node = node
+        const style = this.options.getImageStyle?.(node)
+        this.image.setRadius(style?.radius ?? this.options.image?.radius ?? 0)
+
+        if (
+            style
+            && 'placeholder' in style
+        )
+            this.image.setPlaceholder(style.placeholder)
+
         const content = this.options.getContent(node)
         const poster = content?.posterRenditionId
             ? {

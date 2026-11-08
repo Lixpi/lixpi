@@ -35,6 +35,20 @@ Every factory returns an instance that owns its root element and a `destroy()` m
 
 Buttons attach their spinner only while `setBusy(true)` is active and remove it on `setBusy(false)`. This keeps the theme's explicit spinner display rule from making an idle button appear busy.
 
+## Shared color themes
+
+Named themes live in `@lixpi/themes`; [Application themes](../ui-kit/README.md#application-themes) describes the shared contract. Applications that use the adapter depend directly on `@lixpi/themes`. Existing Gentelella consumers can load its adapter after their base styles:
+
+```scss
+@use "@lixpi/ui-kit-gentelella/styles/theme";
+@use "@lixpi/themes/dist/scss/one-dark-pro-mariana/theme" as mariana;
+@use "@lixpi/themes/dist/scss/adapters/gentelella";
+
+@include gentelella.apply(mariana.$selector);
+```
+
+The mixin uses the selected scope's shared theme roles. TypeScript callers import `adaptGentelella` and the chosen preset from the single `@lixpi/themes` entry point.
+
 ## Public surfaces
 
 - `components/*` covers the complete reusable component vocabulary from the upstream production demos: foundation, navigation, layouts, feedback, forms, tables, charts and maps, widgets, app surfaces, commerce, admin, auth, media, marketing, theme controls, and overlays. It does not copy complete demo pages.
@@ -53,6 +67,6 @@ Read [Component Coverage](documentation/COMPONENT-COVERAGE.md) for the module ma
 Run the package tests and quality checks through the repository's Docker runners:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared ui-kit-gentelella
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared ui-kit-gentelella validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared ui-kit-gentelella
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner shared ui-kit-gentelella validate
 ```

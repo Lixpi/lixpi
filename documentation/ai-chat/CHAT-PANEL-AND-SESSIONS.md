@@ -162,12 +162,12 @@ Panel width, open state, top-level mode and the selected generated-output detail
 ## Relevant code
 
 - [`services/api/src/llm/agent/conversation-service.ts`](../../services/api/src/llm/agent/conversation-service.ts)
-- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-controller.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-controller.ts)
-- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-panel.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-conversation-panel.ts)
+- [`packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-conversation-controller.ts`](../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-conversation-controller.ts)
+- [`packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-conversation-panel.ts`](../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-conversation-panel.ts)
 - [`services/api/src/services/asset-document-service.ts`](../../services/api/src/services/asset-document-service.ts)
 - [`services/api/src/prosemirror/asset-prosemirror-step-transport.ts`](../../services/api/src/prosemirror/asset-prosemirror-step-transport.ts)
 - [`services/api/src/prosemirror/ai-chat-stream-assembler.ts`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts)
 - [`services/web-ui/src/services/prosemirror-authority-service.ts`](../../services/web-ui/src/services/prosemirror-authority-service.ts)
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
-- [`packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-panel-state.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-panel-state.ts)
-- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.ts)
+- [`packages/lixpi/canvas-components/src/workspace/shared/scene/workspace-panel-state.ts`](../../packages/lixpi/canvas-components/src/workspace/shared/scene/workspace-panel-state.ts)
+- [`packages/lixpi/canvas-components/src/workspace/frontend/review/generated-output-details-sidebar.ts`](../../packages/lixpi/canvas-components/src/workspace/frontend/review/generated-output-details-sidebar.ts)

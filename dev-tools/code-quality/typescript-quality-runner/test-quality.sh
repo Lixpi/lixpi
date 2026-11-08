@@ -55,6 +55,53 @@ fi
 cp "$fixture_dir/lint-valid.txt" "$temporary_dir/lint-valid.ts"
 "$oxlint_bin" --config "$oxlint_config" "$temporary_dir/lint-valid.ts" >/dev/null
 
+# Native console logging stays enabled in both frontend path layouts, while backend calls
+# still fail lint and fix to debug-tools imports. Keep the config-relative paths intact.
+logging_project="$temporary_dir/logging-project"
+logging_config="$logging_project/.oxlintrc.json"
+mkdir -p "$logging_project/packages/lixpi/fixture/src/frontend" "$logging_project/packages/lixpi/fixture/src/workspace/frontend" "$logging_project/packages/lixpi/fixture/src/backend"
+cp "$oxlint_config" "$logging_config"
+logging_source="$temporary_dir/native-console-logging.ts"
+printf "console.info('diagnostic')\n" > "$logging_source"
+frontend_source="packages/lixpi/fixture/src/frontend/logging.ts"
+nested_frontend_source="packages/lixpi/fixture/src/workspace/frontend/logging.ts"
+backend_source="packages/lixpi/fixture/src/backend/logging.ts"
+cp "$logging_source" "$logging_project/$frontend_source"
+cp "$logging_source" "$logging_project/$nested_frontend_source"
+cp "$logging_source" "$logging_project/$backend_source"
+
+for frontend_path in "$frontend_source" "$nested_frontend_source"
+do
+    (
+        cd "$logging_project"
+        "$oxlint_bin" --config "$logging_config" --fix "$frontend_path" >/dev/null
+    )
+    if ! cmp -s "$logging_source" "$logging_project/$frontend_path"; then
+        echo "Oxlint rewrote native console logging in frontend path $frontend_path" >&2
+        diff -u "$logging_source" "$logging_project/$frontend_path" >&2 || true
+        exit 1
+    fi
+done
+
+if (
+    cd "$logging_project"
+    "$oxlint_bin" --config "$logging_config" "$backend_source" >/dev/null 2>&1
+); then
+    echo "Expected Oxlint to reject native console logging in a backend path" >&2
+    exit 1
+fi
+
+(
+    cd "$logging_project"
+    "$oxlint_bin" --config "$logging_config" --fix "$backend_source" >/dev/null
+    "$oxlint_bin" --config "$logging_config" "$backend_source" >/dev/null
+)
+if ! grep -F "info as debugInfo" "$logging_project/$backend_source" >/dev/null || ! grep -F "from '@lixpi/debug-tools'" "$logging_project/$backend_source" >/dev/null || grep -F "console.info(" "$logging_project/$backend_source" >/dev/null; then
+    echo "Oxlint did not convert backend console logging to debug-tools" >&2
+    diff -u "$logging_source" "$logging_project/$backend_source" >&2 || true
+    exit 1
+fi
+
 # Top-level `import type` must fail while the equivalent inline type specifier remains valid.
 cp "$fixture_dir/type-import-invalid.txt" "$temporary_dir/type-import-invalid.ts"
 if "$oxlint_bin" --config "$oxlint_config" "$temporary_dir/type-import-invalid.ts" >/dev/null 2>&1; then

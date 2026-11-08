@@ -69,6 +69,7 @@ export type ConnectionManagerConfig<Node extends ConnectionNode> = {
     onError: (error: unknown) => void
     onSelectedEdgeChange?: (edgeId: string | null) => void
     onConnectorGeometry?: (edges: ConnectorRenderDatum[]) => void
+    onSettingsChange?: (settings: ConnectionSettings) => void
     settings: ConnectionSettings
     markerBodyLengthFraction: number
 } & ConnectionPolicy<Node>

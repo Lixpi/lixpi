@@ -6,20 +6,15 @@
     position: relative;
     width: 100%;
     overflow: hidden;
-    border-radius: var(--diagram-canvas-radius, 12px);
-    background: var(--diagram-canvas-background, transparent);
-    color: var(--diagram-canvas-text, inherit);
+    border-radius: var(--diagram-canvas-radius, var(--canvas-panel-radius, 12px));
+    background: var(--diagram-canvas-background, var(--canvas-background, transparent));
+    color: var(--diagram-canvas-text, var(--canvas-text, inherit));
+    font-family: var(--canvas-font-family, inherit);
     transition: transitions.standardTransition(box-shadow);
 }
 
 .diagram-canvas .canvas-engine-pane {
-    isolation: isolate;
     cursor: grab;
-}
-
-.diagram-canvas .canvas-engine-pane > canvas {
-    position: relative;
-    z-index: -1;
 }
 
 .diagram-canvas .canvas-node-resize-handle {
@@ -27,7 +22,7 @@
 }
 
 .diagram-canvas .canvas-loading-overlay.is-visible {
-    background-color: color-mix(in srgb, var(--diagram-canvas-background, transparent) 78%, transparent);
+    background-color: var(--canvas-loading-scrim, color-mix(in srgb, var(--diagram-canvas-background, var(--canvas-background, transparent)) 78%, transparent));
 }
 
 .diagram-canvas-dragging .canvas-engine-pane {
@@ -35,13 +30,13 @@
 }
 
 .diagram-canvas[data-armed="true"] {
-    box-shadow: inset 0 0 2px 0 var(--diagram-canvas-accent, currentColor), 0 0 2px 0 var(--diagram-canvas-accent, currentColor);
+    box-shadow: inset 0 0 2px 0 var(--diagram-canvas-accent, var(--canvas-accent, currentColor)), 0 0 2px 0 var(--diagram-canvas-accent, var(--canvas-accent, currentColor));
 }
 
 .diagram-canvas-hint {
     margin-top: 8px;
-    color: var(--diagram-canvas-muted, inherit);
-    font-size: var(--diagram-canvas-hint-size, 14px);
+    color: var(--diagram-canvas-muted, var(--canvas-text-muted, inherit));
+    font-size: var(--diagram-canvas-hint-size, var(--canvas-font-size, 14px));
     line-height: 1.5;
 }
 
@@ -52,8 +47,8 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    color: var(--diagram-canvas-text, inherit);
-    background: var(--diagram-canvas-background, transparent);
+    color: var(--diagram-canvas-text, var(--canvas-text, inherit));
+    background: var(--diagram-canvas-background, var(--canvas-background, transparent));
     text-align: center;
 }
 
@@ -68,13 +63,13 @@
     justify-content: center;
     gap: 2px;
     padding: 8px 12px;
-    border-radius: var(--diagram-node-radius, 12px);
+    border-radius: var(--diagram-node-radius, var(--canvas-node-radius, 12px));
     pointer-events: none;
-    color: var(--diagram-node-text);
-    font-family: inherit;
-    font-size: var(--diagram-node-font-body, 15px);
+    color: var(--diagram-node-text, var(--canvas-text));
+    font-family: var(--canvas-font-family, inherit);
+    font-size: var(--diagram-node-font-body, var(--canvas-font-size, 15px));
     font-variant-numeric: tabular-nums;
-    line-height: 1.35;
+    line-height: var(--canvas-line-height, 1.35);
     white-space: nowrap;
 }
 
@@ -94,27 +89,27 @@
 }
 
 .diagram-node-title {
-    font-size: var(--diagram-node-font-heading, 18.75px);
-    font-weight: 700;
+    font-size: var(--diagram-node-font-heading, var(--canvas-title-font-size, 18.75px));
+    font-weight: var(--canvas-title-font-weight, 700);
 }
 
 .diagram-node-title[data-heading="metric"] {
-    font-size: var(--diagram-node-font-metric, 26px);
+    font-size: var(--diagram-node-font-metric, var(--canvas-title-font-size, 26px));
     line-height: 1;
 }
 
 .diagram-node-tag {
     padding: 0 6px;
     border-radius: 999px;
-    font-size: var(--diagram-node-font-small, 14px);
+    font-size: var(--diagram-node-font-small, var(--canvas-font-size, 14px));
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    background: var(--diagram-node-tag-background);
-    color: var(--diagram-node-tag-text);
+    background: var(--diagram-node-tag-background, var(--canvas-surface-raised));
+    color: var(--diagram-node-tag-text, var(--canvas-text));
 }
 
 .diagram-node-line {
-    color: var(--diagram-node-muted);
+    color: var(--diagram-node-muted, var(--canvas-text-muted));
 }
 
 .diagram-node-labels [hidden] {
@@ -127,6 +122,5 @@
 }
 
 .diagram-node-labels[role="button"]:focus-visible {
-    outline: 2px solid var(--diagram-node-accent);
-    outline-offset: -5px;
+    outline: none;
 }

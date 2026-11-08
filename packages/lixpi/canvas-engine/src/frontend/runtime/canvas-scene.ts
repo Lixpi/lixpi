@@ -44,6 +44,13 @@ import {
 
 export type MeasuredNodeGeometry = ReturnType<NodeGeometryPolicy['measure']> & { worldBounds: CanvasEngineRect }
 
+export type CanvasSceneStatistics = {
+    nodes: number
+    edges: number
+    mountedViews: number
+    visibleNodes: number
+}
+
 export type CanvasSceneOptions = {
     renderer: CanvasRenderer
     root: HTMLElement
@@ -173,6 +180,14 @@ export class CanvasScene {
     }
     get screenBounds(): CanvasEngineRect {
         return this.view.screenBounds
+    }
+    getStatistics(): CanvasSceneStatistics {
+        return {
+            nodes: this.snapshot.nodes.length,
+            edges: this.snapshot.edges.length,
+            mountedViews: this.views.size,
+            visibleNodes: this.visible.size,
+        }
     }
     getWorldBounds(nodeId: string): CanvasEngineRect | undefined {
         const bounds = this.bounds.get(nodeId)

@@ -5,12 +5,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import { WorkspacePromptComposer } from '@lixpi/canvas-components-lixpi-specific/frontend/composer'
+import { WorkspacePromptComposer } from '@lixpi/canvas-components/workspace/composer'
 import {
     WorkspaceConversationController,
     WorkspaceConversationPanel,
     type WorkspaceConversationPorts,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 import {
     createConversationSettings,
     type ConversationSnapshot,

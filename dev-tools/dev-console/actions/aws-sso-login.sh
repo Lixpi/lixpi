@@ -13,7 +13,7 @@
 # the session, also exits 0, so an unrelated problem never triggers a sign-in.
 #
 # The login runs in the standalone lixpi-aws-cli container
-# (infrastructure/docker/docker-compose.aws-cli.yml). The SSO token cache lands in the shared
+# (infrastructure/docker/utilities/infrastructure/docker-compose.aws-cli.yml). The SSO token cache lands in the shared
 # lixpi-aws-config volume mounted at /root/.aws, so every other container that
 # calls AWS (api, nex, pulumi, and other repositories' services that mount the
 # same volume) picks up the refreshed credentials without logging in again.
@@ -65,7 +65,7 @@ if [ ! -f ".aws/config" ]; then
 fi
 
 if [ "$CHECK_SESSION" = "true" ]; then
-    if docker compose -f infrastructure/docker/docker-compose.aws-cli.yml --progress quiet run --rm -T lixpi-aws-cli sts get-caller-identity --profile "$aws_profile" --output text --query Account </dev/null 2>&1 >/dev/null | grep -qiE 'expired|refresh failed|SSO session|Error loading SSO|UnauthorizedException'; then
+    if docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.aws-cli.yml --progress quiet run --rm -T lixpi-aws-cli sts get-caller-identity --profile "$aws_profile" --output text --query Account </dev/null 2>&1 >/dev/null | grep -qiE 'expired|refresh failed|SSO session|Error loading SSO|UnauthorizedException'; then
         exit "$SESSION_EXPIRED_STATUS"
     fi
 
@@ -76,7 +76,7 @@ echo "Signing in to AWS SSO as profile '$aws_profile'..."
 echo "A URL and a verification code will be printed below. Open the URL on this machine and approve the code."
 echo ""
 
-docker compose -f infrastructure/docker/docker-compose.aws-cli.yml run --rm lixpi-aws-cli sso login --profile "$aws_profile" --use-device-code
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.aws-cli.yml run --rm lixpi-aws-cli sso login --profile "$aws_profile" --use-device-code
 login_exit_code=$?
 
 if [ $login_exit_code -ne 0 ]; then

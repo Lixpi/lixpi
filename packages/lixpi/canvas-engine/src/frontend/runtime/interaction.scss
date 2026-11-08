@@ -2,11 +2,13 @@
     position: absolute;
     inset: 0;
     overflow: hidden;
+    isolation: isolate;
 
     > canvas {
         position: absolute;
         inset: 0;
         pointer-events: none;
+        z-index: -1;
     }
 }
 
@@ -29,12 +31,10 @@
     position: absolute;
     pointer-events: auto;
     box-sizing: border-box;
-    border: 1px solid currentColor;
 }
 
 .canvas-port {
     transform: translate(-50%, -50%);
-    border-radius: 50%;
 }
 
 .canvas-selection-marquee {

@@ -10,7 +10,7 @@ Image generation is the image branch of Lixpi's shared AI generation pipeline. A
 This page covers the current image-model provider paths, synchronized model controls, reference adaptation, prompt construction, content-hash deduplication, multi-turn editing, and image-specific stream behavior. The shared workflow, model-matrix routing, `ProviderState`, `ImageRouter`, and stream lifecycle are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
-The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection live in [Branch Lineage](./BRANCH-LINEAGE.md). Uploaded/source/reference images can anchor placement, but only API-selected existing generated-media branch members become `parentMediaNodeId` connector parents. The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
+The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection live in [Branch Lineage](BRANCH-LINEAGE.md). Uploaded/source/reference images can anchor placement, but only API-selected existing generated-media branch members become `parentMediaNodeId` connector parents. The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
 {% /callout %}
 
 ## Where Image Generation Sits
@@ -104,7 +104,7 @@ all three block formats:
 | Google | `inline_data` | `block.data` (base64) + `block.mime_type` |
 
 {% callout type="note" %}
-The reference set the text model writes against is not "every attached photo" — it is the exact VLM-approved set produced by `resolveMediaBranch` *before* the text model streams. Which media become target, base-context, style-reference, comparison-target, or excluded — and how those choices drive canvas placement and branch lineage — is owned by [Branch Lineage](./BRANCH-LINEAGE.md). This section only covers the per-provider *format* of the blocks `extractReferenceImages()` reads.
+The reference set the text model writes against is not "every attached photo" — it is the exact VLM-approved set produced by `resolveMediaBranch` *before* the text model streams. Which media become target, base-context, style-reference, comparison-target, or excluded — and how those choices drive canvas placement and branch lineage — is owned by [Branch Lineage](BRANCH-LINEAGE.md). This section only covers the per-provider *format* of the blocks `extractReferenceImages()` reads.
 {% /callout %}
 
 ## Provider-neutral reference adaptation
@@ -117,7 +117,7 @@ The unresolved relationships live in the `imageGenerationReferences` LangGraph s
 - Google interleaves the same provider-neutral role labels with image parts.
 - Stability uses only the image, style, and structure inputs exposed by the selected endpoint. Style transfer does not satisfy identity conditioning.
 
-Lixpi sends a pipeline-owned seed on Stability requests across the REST and Bedrock transports, reads back the seed the response reports, and stores it on the generated Asset as `lineage.generationSeed`. OpenAI and Google image requests do not receive a user-configurable seed. Seeds are never composer controls, and Stability seed selection follows the shared rule in [Seed inheritance](./VIDEO-GENERATION.md#seed-inheritance).
+Lixpi sends a pipeline-owned seed on Stability requests across the REST and Bedrock transports, reads back the seed the response reports, and stores it on the generated Asset as `lineage.generationSeed`. OpenAI and Google image requests do not receive a user-configurable seed. Seeds are never composer controls, and Stability seed selection follows the shared rule in [Seed inheritance](VIDEO-GENERATION.md#seed-inheritance).
 
 A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. Reference authority, ordering, and omission are determined from the shared graph state and declared model capabilities; the Character graph contains no provider-name branches.
 
@@ -131,14 +131,14 @@ For prior-sheet edits, the branch resolver supplies the active edit-target Asset
 
 Sharp removes near-white margins, fits each visible subject into a compact cell with bounded padding, and assembles the final 3840x2560 PNG. Providers never render the full sheet, and the compositor renders no headings, labels, grids, notes, statuses, swatches, or other typography. The final PNG and isolated panel components enter the preassigned Asset's media-composition settlement path; transient references and candidate shots are deleted at terminal cleanup. See [Character Creator](../library/CHARACTER-CREATOR.md).
 
-Before this extraction path, the [media reference boundary](./MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) compiles explicit references and uniquely matched free-form Asset mentions to `REFERENCE_n`. Reasoning context contains aliases, safe descriptors, medium, and subject-identity classification—not mutable titles or filenames. OpenAI GPT Image requests use the registered `moderation: 'low'` profile. A provider rejection is normalized into the durable run problem and is never retried automatically.
+Before this extraction path, the [media reference boundary](MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) compiles explicit references and uniquely matched free-form Asset mentions to `REFERENCE_n`. Reasoning context contains aliases, safe descriptors, medium, and subject-identity classification—not mutable titles or filenames. OpenAI GPT Image requests use the registered `moderation: 'low'` profile. A provider rejection is normalized into the durable run problem and is never retried automatically.
 
 ## System-Prompt Enhancement
 
 When an image model is selected, the text model's system prompt is augmented via `get_system_prompt(include_image_generation=True)`, which appends `prompts/image_generation_instructions.txt` to the base prompt. These instructions are what turn a terse user request into an exhaustive generation prompt. They tell the text model to:
 
 1. **Always use the `generate_image` tool** for visual requests — never describe an image in prose.
-2. **Show the enhanced prompt** to the user in a `>` quote block, so the user sees exactly what is being sent to the image model. (This is the image-flow convention; video uses `<video_prompt>` XML tags instead — see [Video Generation](./VIDEO-GENERATION.md).)
+2. **Show the enhanced prompt** to the user in a `>` quote block, so the user sees exactly what is being sent to the image model. (This is the image-flow convention; video uses `<video_prompt>` XML tags instead — see [Video Generation](VIDEO-GENERATION.md).)
 3. **Write exhaustive prompts** (100+ words) covering subject description, artistic direction, composition, color palette, lighting, and mood.
 4. **Handle reference images explicitly** — when the user provides photos, describe every observable detail (facial features, hair, skin tone, body type, clothing, pose, expression) and instruct the image model to use the provided reference images.
 
@@ -194,7 +194,7 @@ Image editing is **provider-agnostic** and driven by canvas edges rather than pr
 ```
 
 {% callout type="note" %}
-Generated-media size and branch-lineage spacing are controlled by `settings.mediaBranchLineage`; the "Edit in New Thread" horizontal-chain geometry is controlled by `settings.aiChatThread`. The full placement, collision, and lineage rules are owned by [Branch Lineage](./BRANCH-LINEAGE.md) and [Collision Resolution](../../packages/lixpi/canvas-engine/docs/COLLISION-RESOLUTION.md).
+Generated-media size and branch-lineage spacing are controlled by `settings.mediaBranchLineage`; the "Edit in New Thread" horizontal-chain geometry is controlled by `settings.aiChatThread`. The full placement, collision, and lineage rules are owned by [Branch Lineage](BRANCH-LINEAGE.md) and [Collision Resolution](../../packages/lixpi/canvas-engine/docs/COLLISION-RESOLUTION.md).
 {% /callout %}
 
 ### Editor Preservation During Generation
@@ -243,7 +243,7 @@ services/api/src/llm/
     ├── load-prompts.ts             # get_system_prompt(include_image_generation)
     └── image_generation_instructions.txt   # exhaustive-prompt + reference-handling instructions
 
-packages/lixpi/canvas-components-lixpi-specific/src/frontend/
+packages/lixpi/canvas-components/src/workspace/frontend/
 ├── workspace/workspace-canvas.ts   # workspace composition and host callbacks
 └── media/                         # generation handlers, media nodes and progress projection
 
@@ -255,9 +255,9 @@ packages/lixpi/canvas-components/src/frontend/
 ## Related Pages
 
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, dual-model routing, `generate_image` tool mechanism, `ImageRouter`, `ProviderState`, and stream lifecycle.
-- [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-root provenance, balanced branch-tree layout, and the structured VLM resolver that selects which references reach the image model.
+- [Branch Lineage](BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-root provenance, balanced branch-tree layout, and the structured VLM resolver that selects which references reach the image model.
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the complete stream-event catalog and the browser render path.
-- [Video Generation](./VIDEO-GENERATION.md) — the sibling video branch (Google VEO) that extends this pipeline.
+- [Video Generation](VIDEO-GENERATION.md) — the sibling video branch (Google VEO) that extends this pipeline.
 - [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the VLM analysis descriptor generated images request after the final frame is stored.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving reusable copies of finished images.
 - [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — generic rendering and resource contracts. Product media and provenance composition are documented in the Lixpi canvas package.

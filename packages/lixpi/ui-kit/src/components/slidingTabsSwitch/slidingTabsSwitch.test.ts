@@ -81,6 +81,16 @@ const tabGroups = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.tag-
 const closeIcons = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.tag-pill-close'))
 
 describe('createSlidingTabsSwitch', () => {
+    it('passes the switch typography and inactive state color to its tag-pill labels', () => {
+        const { svg } = mount()
+        const labels = [...svg.querySelectorAll('.tag-pill-label')]
+        expect(labels[0]?.getAttribute('font-size')).toBe('12')
+        expect(labels[0]?.getAttribute('font-weight')).toBe('400')
+        expect(labels[0]?.getAttribute('font-family')).toBe('inherit')
+        expect(labels[0]?.getAttribute('fill')).toBe('#1a2744')
+        expect(labels[1]?.getAttribute('fill')).toBe('rgba(49, 59, 78, 0.68)')
+    })
+
     beforeEach(() => void (document.body.innerHTML = ''))
 
     it('renders tab pills through tag pills and configures accessibility roles', () => {

@@ -12,6 +12,9 @@
     },
     "exports": {
         ".": "./src/index.ts",
+        "./frontend/code-block": "./src/frontend/code-block.ts",
+        "./frontend/themes/gruvbox-light": "./src/frontend/themes/gruvbox-light.ts",
+        "./styles/code-mirror": "./src/styles/code-mirror.scss",
         "./shared/base-schema": "./src/shared/base-schema.ts",
         "./shared/prompt-reference": "./src/shared/prompt-reference.ts",
         "./shared/generated-media-turn-projection": "./src/shared/generated-media-turn-projection.ts",
@@ -25,9 +28,21 @@
         "./backend/headless-engine": "./src/backend/headless-engine.ts"
     },
     "dependencies": {
+        "@codemirror/commands": "6.11.1",
+        "@codemirror/lang-javascript": "6.2.5",
+        "@codemirror/language": "6.13.1",
+        "@codemirror/state": "6.7.6",
+        "@codemirror/view": "6.43.15",
+        "@lezer/highlight": "1.2.5",
         "@lixpi/constants": "workspace:*",
+        "@lixpi/ui-primitives": "workspace:*",
+        "prosemirror-commands": "1.7.2",
+        "prosemirror-history": "1.5.1",
+        "prosemirror-inputrules": "1.5.1",
         "prosemirror-model": "1.25.12",
         "prosemirror-state": "1.4.4",
-        "prosemirror-transform": "1.12.4"
+        "prosemirror-transform": "1.12.4",
+        "prosemirror-view": "1.42.8",
+        "@lixpi/themes": "workspace:*"
     }
 }

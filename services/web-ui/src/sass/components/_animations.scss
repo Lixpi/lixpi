@@ -5,19 +5,18 @@
 @keyframes heartbeatAnimation {
     0% {
         transform: scale(100%);
-        fill: #ff3f3f;
+        fill: var(--theme-heartbeat-rest);
     }
     35.84% {
         transform: scale(164.16%);
     }
     60.06% {
         transform: scale(80.06%);
-        fill: #ff6363;
-        fill: $gptBrandColor;
+        fill: var(--theme-heartbeat-alternate);
     }
     76.43% {
         transform: scale(133.57%);
-        fill: #ff0000;
+        fill: var(--theme-heartbeat-peak);
     }
     87.48% {
         transform: scale(87.48%);
@@ -27,51 +26,8 @@
     }
     100.00% {
         transform: scale(100.00%);
-        fill: #ff3f3f;
+        fill: var(--theme-heartbeat-rest);
     }
 }
 
-// ********** PopOut animation **********
-// INFO: use like this:
-// animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
-@keyframes popOut {
-    from {
-        transform: scale(0);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-@keyframes popOutAndGrow {
-    from {
-        transform: scale(0);
-        opacity: 0;
-        height: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-        height: 100%;
-    }
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.ai-response-loading-spinner {
-    display: block;
-    width: 14px;
-    height: 14px;
-    box-sizing: border-box;
-    border: 2px solid rgba(42, 45, 47, 0.15);
-    border-top-color: rgba(42, 45, 47, 0.55);
-    border-radius: 50%;
-    pointer-events: none;
-    animation: spin 0.8s linear infinite;
-}
+@import "@lixpi/canvas-components/styles/workspace/chat-animations";

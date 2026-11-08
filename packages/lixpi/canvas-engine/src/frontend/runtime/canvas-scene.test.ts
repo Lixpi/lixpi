@@ -446,3 +446,111 @@ describe('CanvasScene', () => {
         scene.destroy()
     })
 })
+
+
+describe('CanvasScene statistics', () => {
+    it('reports scene totals, retained views and viewport visibility independently', () => {
+        const {
+            scene,
+            mounted,
+        } = fixture()
+        const withPorts = (nodeId: string, x: number): EngineNode => ({
+            ...node(nodeId, {
+                x,
+                y: 20,
+            }),
+            ports: [
+                {
+                    id: 'out',
+                    role: 'output',
+                    direction: 'right',
+                    anchor: {
+                        x: 50,
+                        y: 20,
+                    },
+                },
+                {
+                    id: 'in',
+                    role: 'input',
+                    direction: 'left',
+                    anchor: {
+                        x: 0,
+                        y: 20,
+                    },
+                },
+            ],
+        })
+        const near = withPorts('near', 10)
+        const middle = withPorts('middle', 100)
+        const far = withPorts('far', 900)
+        const nearToMiddle = {
+            edgeId: 'near-middle',
+            source: {
+                nodeId: 'near',
+                portId: 'out',
+            },
+            target: {
+                nodeId: 'middle',
+                portId: 'in',
+            },
+            path: 'straight' as const,
+            data: null,
+        }
+        const middleToFar = {
+            edgeId: 'middle-far',
+            source: {
+                nodeId: 'middle',
+                portId: 'out',
+            },
+            target: {
+                nodeId: 'far',
+                portId: 'in',
+            },
+            path: 'straight' as const,
+            data: null,
+        }
+
+        scene.setScene({
+            ...snapshot([near, middle, far]),
+            edges: [nearToMiddle, middleToFar],
+        })
+        const farView = scene.getNodeView('far')
+
+        expect(scene.getStatistics()).toEqual({
+            nodes: 3,
+            edges: 2,
+            mountedViews: 3,
+            visibleNodes: 2,
+        })
+
+        scene.setViewport({
+            x: -850,
+            y: 0,
+            zoom: 1,
+        })
+
+        expect(scene.getStatistics()).toEqual({
+            nodes: 3,
+            edges: 2,
+            mountedViews: 3,
+            visibleNodes: 1,
+        })
+        expect(scene.getNodeView('far')).toBe(farView)
+        expect(scene.getNodeView('near')).toBe(mounted.get('near')!.view)
+        expect(scene.getNodeView('middle')).toBe(mounted.get('middle')!.view)
+
+        scene.setScene({
+            ...snapshot([near, middle]),
+            edges: [nearToMiddle],
+        })
+
+        expect(scene.getStatistics()).toEqual({
+            nodes: 2,
+            edges: 1,
+            mountedViews: 2,
+            visibleNodes: 0,
+        })
+        expect(mounted.get('far')!.view.destroy).toHaveBeenCalledOnce()
+        scene.destroy()
+    })
+})

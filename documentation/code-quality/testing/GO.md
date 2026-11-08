@@ -18,15 +18,15 @@ Use temporary storage, generated test credentials, and disposable embedded broke
 Build the runners from the repository root:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev build
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev build
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml --profile dev build
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev build
 ```
 
 Run the complete Go suite with the Linux race detector, or select a package and test:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner nats
-docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner nats -run TestEmbeddedBrokerInProcessRoundTrip ./internal/broker
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner nats
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner nats -run TestEmbeddedBrokerInProcessRoundTrip ./internal/broker
 ```
 
 The main Compose file includes both runners. Using their standalone Compose files avoids loading application credentials and starting application services. Each invocation gets a generated name and the current mounts. The compiler's module and build caches support concurrent access; lint containers use their separate cache.
@@ -38,9 +38,9 @@ After editing imports or dependency versions, reconcile `go.mod` and `go.sum` in
 The normal [configuration wizard](../../../dev-tools/config-utils/README.md) signs application permissions when it saves the environment file. The Go image contains no generated application permission artifact.
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats dependencies
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats fix
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats validate
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats dependencies
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats fix
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner nats validate
 ```
 
 `fix` runs the AST-based source convention fixes, `gofumpt`, `goimports`, `golines`, and `golangci-lint run --fix`; it is required during implementation. The specialized linters check contexts, runtime globals, interfaces, error wrapping, structured logging, SQL, cleanup, command exits, and control-flow spacing. A typed `go/analysis` checker also runs through `go vet`: it resolves prohibited builtin, package, and method symbols, checks constant error messages, and recognizes comparisons against actual error methods. Its checks distinguish aliases and shadowed names without regex source matching. An assignment stays attached to a following validation `if` when its condition reads an assigned value. `validate` checks without editing source, and both actions report failure if any stage fails while still running the remaining checks.
@@ -49,16 +49,16 @@ The `go-quality-tools` target runs the checkers' own regression tests and qualit
 
 For module-source inspection or an additional compiler command, override the test runner entrypoint with `--entrypoint sh`. Keep source read-only and outputs under `/tmp` or the existing Docker cache paths. Production and development image targets are built with `docker build -f services/nats/Dockerfile --target embedded-runtime -t lixpi/nats-embedded .` and the same command with `--target development -t lixpi/nats-development`. Tool inventory runs inside the development image using `docker run --rm --entrypoint sh lixpi/nats-development -c 'go version && gopls version && dlv version && golangci-lint version'`.
 
-For an isolated production-image check, `TestContainerFixture` exports synthetic credentials and local TLS material into an explicitly mounted output directory. It also validates the production configuration through the serve command. This fixture must never target an application data volume. Run it with `docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T -e NATS_TEST_FIXTURE_DIR=/fixture -v /private/tmp/lixpi-nats-embedded-proof:/fixture lixpi-go-test-runner nats -run TestContainerFixture ./cmd/lixpi-nats`. Create the empty host output directory first; generation itself happens in Docker. Start `lixpi/nats-embedded` with that directory's `environment` file, mount the directory read-only at `/fixture`, use a separate named data volume, and publish no host ports. Run `docker exec <proof-container> /usr/local/bin/lixpi-nats health ready` to verify admission starts even though the fixture's JWKS endpoint is unavailable. Remove only the proof container and its disposable volume when finished.
+For an isolated production-image check, `TestContainerFixture` exports synthetic credentials and local TLS material into an explicitly mounted output directory. It also validates the production configuration through the serve command. This fixture must never target an application data volume. Run it with `docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T -e NATS_TEST_FIXTURE_DIR=/fixture -v /private/tmp/lixpi-nats-embedded-proof:/fixture lixpi-go-test-runner nats -run TestContainerFixture ./cmd/lixpi-nats`. Create the empty host output directory first; generation itself happens in Docker. Start `lixpi/nats-embedded` with that directory's `environment` file, mount the directory read-only at `/fixture`, use a separate named data volume, and publish no host ports. Run `docker exec <proof-container> /usr/local/bin/lixpi-nats health ready` to verify admission starts even though the fixture's JWKS endpoint is unavailable. Remove only the proof container and its disposable volume when finished.
 
 The production configuration requires cluster routes for JetStream. Create a private `lixpi-nats-embedded-proof` network and three containers named `lixpi-nats-embedded-proof`, `lixpi-nats-embedded-proof-2` and `lixpi-nats-embedded-proof-3`. Give each its own data volume and `NATS_SERVER_NAME`, and pass all three synthetic `nats://sys:synthetic-system@<name>:6222` routes to each container. The fixture contains no real credentials.
 
-Use the optional `infrastructure/docker/docker-compose.go-integration.yml` override to attach the test runner to this network. Set `NATS_TEST_CLIENT_FIXTURE=/fixture` and `NATS_TEST_TARGETS=nats://lixpi-nats-embedded-proof:4222,nats://lixpi-nats-embedded-proof-2:4222,nats://lixpi-nats-embedded-proof-3:4222`, and mount the generated fixture read-only at `/fixture`. Run `nats -v -run 'TestContainerServicePermissions|TestContainerNativeBackupRestore|TestContainerAdmissionBurst' ./cmd/lixpi-nats`. The tests reject target names outside this disposable namespace. `NATS_TEST_PHASE=seed` keeps the replicated object-store payload for a restart check; `verify` reads it after restart and removes the test bucket. Burst output reports local Docker timing and failures; it is not an EC2 capacity estimate.
+Use the optional `infrastructure/docker/utilities/code-quality/docker-compose.go-integration.yml` override to attach the test runner to this network. Set `NATS_TEST_CLIENT_FIXTURE=/fixture` and `NATS_TEST_TARGETS=nats://lixpi-nats-embedded-proof:4222,nats://lixpi-nats-embedded-proof-2:4222,nats://lixpi-nats-embedded-proof-3:4222`, and mount the generated fixture read-only at `/fixture`. Run `nats -v -run 'TestContainerServicePermissions|TestContainerNativeBackupRestore|TestContainerAdmissionBurst' ./cmd/lixpi-nats`. The tests reject target names outside this disposable namespace. `NATS_TEST_PHASE=seed` keeps the replicated object-store payload for a restart check; `verify` reads it after restart and removes the test bucket. Burst output reports local Docker timing and failures; it is not an EC2 capacity estimate.
 
 The TypeScript runtime test uses the same isolated brokers and synthetic authority to submit the application's actual declaration format. It verifies native JavaScript NKey connections, browser JWTs, request/reply permissions on every broker, and rejection of a tampered declaration:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.typescript-test-runner.yml -f infrastructure/docker/docker-compose.go-integration.yml --profile dev run --rm --no-deps -T \
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml -f infrastructure/docker/utilities/code-quality/docker-compose.go-integration.yml --profile dev run --rm --no-deps -T \
   -e NATS_REGISTRATION_TEST_TARGETS=nats://lixpi-nats-embedded-proof:4222,nats://lixpi-nats-embedded-proof-2:4222,nats://lixpi-nats-embedded-proof-3:4222 \
   -e NATS_TEST_CLIENT_FIXTURE=/fixture \
   -v /private/tmp/lixpi-nats-embedded-proof:/fixture:ro \
@@ -72,10 +72,10 @@ Run this after the Go production-image tests. It installs a higher manifest vers
 The `caddy` domain uses the same Go runners and isolated caches. It tests a real embedded internal CA with temporary storage, synthetic X.509 chains and AWS client substitutes. Tests must not issue public certificates or contact AWS. Production-image checks use a disposable certificate directory, never the application's `caddy-certs` volume.
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner caddy dependencies
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner caddy fix
-docker compose -f infrastructure/docker/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner caddy validate
-docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner caddy
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner caddy dependencies
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner caddy fix
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-go-quality-runner caddy validate
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner caddy
 docker build -f services/caddy/Dockerfile --target embedded-runtime -t lixpi/caddy-embedded .
 docker build --platform linux/amd64 --provenance=false -f services/caddy/Dockerfile --target embedded-runtime -t lixpi/caddy-lambda-proof .
 ```

@@ -43,7 +43,6 @@ import '@lixpi/web-client-service-factory/styles/foundation'
 
 import { workspaceRouting } from '$src/routes.ts'
 import { createLayout } from '$src/views/layouts/layout.ts'
-import '$src/sass/styles.scss'
 
 const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
 

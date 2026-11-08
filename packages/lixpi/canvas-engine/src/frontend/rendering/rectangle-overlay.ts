@@ -51,6 +51,17 @@ export class RectangleOverlay {
         )
     }
 
+    setAppearance(style: Pick<RectangleOverlayOptions, 'stroke' | 'fill' | 'radius' | 'width'>): void {
+        if (this.destroyed)
+            return
+
+        this.options.stroke = style.stroke
+        this.options.fill = style.fill
+        this.options.radius = style.radius
+        this.options.width = style.width
+        this.paint()
+    }
+
     setBounds(
         bounds: CanvasEngineRect | null,
         filled = true,

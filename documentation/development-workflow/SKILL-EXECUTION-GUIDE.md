@@ -30,7 +30,7 @@ Read `LIXPI_REPOSITORY_PATH` from the consuming repository's `env.lixpi` and use
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/utilities/setup/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
     <skill-name> "${LIXPI_REPOSITORY_PATH}/skills/<skill-name>/scripts/<script-name>" [args...]
 ```
 
@@ -38,7 +38,7 @@ docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/utilities/setup/docker-compose.lixpi-utils.yml" run --rm -T lixpi-utils \
     fetch-byteplus-documentation "${LIXPI_REPOSITORY_PATH}/skills/fetch-byteplus-documentation/scripts/fetch-byteplus-doc.ts" ModelArk/2377608
 ```
 
@@ -50,7 +50,7 @@ Build the image once, and again after any change to the Dockerfile:
 
 ```bash
 docker compose --env-file "${LIXPI_REPOSITORY_PATH}/env.lixpi" \
-    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/docker-compose.lixpi-utils.yml" build lixpi-utils
+    -f "${LIXPI_REPOSITORY_PATH}/infrastructure/docker/utilities/setup/docker-compose.lixpi-utils.yml" build lixpi-utils
 ```
 
 Editing a skill script or `${LIXPI_REPOSITORY_PATH}/dev-tools/lixpi-utils/run-skill.sh` needs no rebuild. Both are bind-mounted, so the next run picks up the change.

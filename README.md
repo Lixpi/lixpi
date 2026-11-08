@@ -4,7 +4,7 @@
 
 [Watch the demo →](https://youtu.be/Eee2Ku-Tl_8)
 
-![UI screenshot](./documentation/assets/ui-screenshot.jpeg)
+![UI screenshot](documentation/assets/ui-screenshot.jpeg)
 
 Lixpi looks like an AI concept board where an artist runs their entire creative workflow on an infinite canvas. Technically, it's a visual, node-based workflow engine for AI image and video pipelines — the spatial arrangement of nodes *is* the workflow.
 
@@ -38,7 +38,7 @@ This is the one entry point for local development. It opens a menu that runs ins
 
 The menu also signs in to AWS SSO, prunes Docker and installs agent skills. Esc or Ctrl+C leaves any step and returns to the menu. Submitting an action ends the console when it finishes, except creating or editing a configuration, which comes back to the menu.
 
-There is no default environment file, so the console asks for one whenever an action needs it. All Compose files live in `infrastructure/docker/`. To run one by hand, do it from the repository root and name both files, as in `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml up lixpi-api`. To rebuild an image, switch **Containers** to **Rebuild** and select only that service. See the [dev console](dev-tools/dev-console/README.md).
+There is no default environment file, so the console asks for one whenever an action needs it. All Compose files live in `infrastructure/docker/`: the application stack in `docker-compose.yml` and its partials under `services/`, and on-demand tools under `utilities/`. To run one by hand, do it from the repository root and name both files, as in `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml up lixpi-api`. To rebuild an image, switch **Containers** to **Rebuild** and select only that service. See the [dev console](dev-tools/dev-console/README.md).
 
 The avatar at the bottom of the left sidebar opens the account menu. Navigation menus mount outside the sidebar and render above its surface and backdrop. **Profile** opens the configured user portal in a new tab and resumes authentication if that origin has no session for the same account. The user portal's **Back to workspace** link uses the same handoff. **Sign out** ends the application's Auth0 session. With a standard Auth0 tenant hostname, the application login page waits for Sign in. With a custom Auth0 hostname, logout leads directly to hosted sign-in without returning through the application. After authentication, the workspace router resolves `/login` and other unmatched paths to its intro view while preserving valid workspace destinations.
 
@@ -88,7 +88,7 @@ An animated placeholder appears immediately when generation starts; up to three 
 
 ## Tech Stack
 
-Dependency versions are authored in [`dev-tools/versions-registry/`](dev-tools/versions-registry/) and synchronized into native Dockerfiles, package manifests, Go modules, and CI declarations. See [Dependency Version Registry](dev-tools/versions-registry/README.md) for the Docker-only update commands and ownership rules.
+Dependency versions are authored in [`dev-tools/versions-registry/`](dev-tools/versions-registry) and synchronized into native Dockerfiles, package manifests, Go modules, and CI declarations. See [Dependency Version Registry](dev-tools/versions-registry/README.md) for the Docker-only update commands and ownership rules.
 
 - **LangGraph** — AI workflow orchestration
 - **NATS / NATS JetStream** — messaging backbone for the entire system (end-to-end communication and object storage)
@@ -103,7 +103,7 @@ Dependency versions are authored in [`dev-tools/versions-registry/`](dev-tools/v
 
 ## Architecture: How It Works
 
-![High-Level System Overview](./documentation/assets/services-architecture-diagram.jpeg)
+![High-Level System Overview](documentation/assets/services-architecture-diagram.jpeg)
 
 - **Everything talks through NATS** — browser clients and backend services share the same message bus.
 - **Web UI connects directly to NATS** via WebSocket, enabling real-time streaming without HTTP polling.
@@ -114,7 +114,7 @@ For the full architecture deep-dive — including AI chat request/response flow,
 
 The main app and user portal share [authentication and recovery](documentation/platform/AUTHENTICATION.md) through one Sign in entry. Auth0 handles existing and new identities after verification, without an application-side account lookup. A rejected callback displays a generic retry message and clears protected views; a normal signed-out visit has no error message.
 
-Local workspace, API and user portal HTTPS use the [shared Caddy gateway and existing development CA](services/caddy/documentation/OPERATIONS.md#local-application-https). Enable the `local-https` Compose profile with matching HTTPS origins and exact Auth0 URL allowlists. The gateway can route to a separately deployed portal through `CADDY_USER_PORTAL_UPSTREAM`; frontend containers do not receive certificate keys.
+Local workspace, API and user portal HTTPS use the [shared Caddy gateway and existing development CA](services/caddy/documentation/OPERATIONS.md#local-application-https). The gateway starts with the base stack and needs matching HTTPS origins and exact Auth0 URL allowlists. The gateway can route to a separately deployed portal through `CADDY_USER_PORTAL_UPSTREAM`; frontend containers do not receive certificate keys.
 
 ---
 

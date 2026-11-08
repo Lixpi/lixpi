@@ -9,16 +9,16 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 
 | Workload | Type / lifecycle | What it does |
 |---|---|---|
-| `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as `svc:file-conversion` in AUTH using its own NKey seed to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
-| `character-fidelity` | `native` / `service` | Active responder for photographic Character Creator panel checks. It runs pinned OpenCV Zoo YuNet and SFace ONNX artifacts through single-threaded WASM, reads only validated organization-scoped transient objects, and returns detections plus scalar cosine similarity without embeddings. ([`workloads/character-fidelity`](./workloads/character-fidelity)) |
-| `media-render` | `native` / `service` | Exports frozen media sequences to MP4 (H.264/AAC), WAV (PCM), or MP3. The Capability module compiles the graph; this workload verifies source Blob hashes, runs FFmpeg, probes and hashes the output, and returns an immutable Blob descriptor for API finalization. It connects as `svc:media-render` with its own NKey. ([`workloads/media-render`](./workloads/media-render)) |
-| `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
+| `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as `svc:file-conversion` in AUTH using its own NKey seed to reach Object Store. ([`workloads/file-conversion`](workloads/file-conversion)) |
+| `character-fidelity` | `native` / `service` | Active responder for photographic Character Creator panel checks. It runs pinned OpenCV Zoo YuNet and SFace ONNX artifacts through single-threaded WASM, reads only validated organization-scoped transient objects, and returns detections plus scalar cosine similarity without embeddings. ([`workloads/character-fidelity`](workloads/character-fidelity)) |
+| `media-render` | `native` / `service` | Exports frozen media sequences to MP4 (H.264/AAC), WAV (PCM), or MP3. The Capability module compiles the graph; this workload verifies source Blob hashes, runs FFmpeg, probes and hashes the output, and returns an immutable Blob descriptor for API finalization. It connects as `svc:media-render` with its own NKey. ([`workloads/media-render`](workloads/media-render)) |
+| `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](workloads/system-reporter)) |
 
 The model catalog is not here. [`services/ai-model-registry`](../ai-model-registry) owns it, including the per-model rule files, the provider fetch, the merge, and the DynamoDB write.
 
 ## How it works
 
-The image uses an Alpine Node.js base and builds a static `nex` binary from the selected upstream release tag. [The version registry](../../dev-tools/versions-registry/README.md) supplies the base image, NATS Execution Engine, pnpm, and npm dependency versions. On start, [`entrypoint.sh`](./entrypoint.sh):
+The image uses an Alpine Node.js base and builds a static `nex` binary from the selected upstream release tag. [The version registry](../../dev-tools/versions-registry/README.md) supplies the base image, NATS Execution Engine, pnpm, and npm dependency versions. On start, [`entrypoint.sh`](entrypoint.sh):
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from the pnpm workspace (mirrors `services/api`).
 2. `nex node up` connects with the NEX nkey; the embedded broker's auth worker verifies the raw NKey challenge response and issues a NATS user JWT for the `NEX` account. The node starts the bundled **native nexlet** and mints the same NEX nkey for the nexlet/workloads (`--issuer-nkey`). Runs in the background.
@@ -39,7 +39,7 @@ docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.y
 docker logs -f lixpi-nex-1              # node + workload startup output
 ```
 
-Required env (supplied by [`infrastructure/docker/docker-compose.nex.yml`](../../infrastructure/docker/docker-compose.nex.yml) from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
+Required env (supplied by [`infrastructure/docker/services/messaging/nex/docker-compose.nex.yml`](../../infrastructure/docker/services/messaging/nex/docker-compose.nex.yml) from `.env.<stage>`): `NATS_SERVERS`, `NATS_NEX_NODE_NKEY_PUBLIC`, `NATS_NEX_NODE_NKEY_SEED`, `NATS_FILE_CONVERSION_NKEY_SEED`, `NATS_CHARACTER_FIDELITY_NKEY_SEED`, `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional: `LIXPI_SYNC_INTERVAL_MS` (default `3600000`), `LIXPI_NODE_TAGS` (default `app=lixpi`; `KEY=VALUE` pairs separated by `;`).
 
 Credential ownership matters:
 
@@ -87,8 +87,8 @@ The API persists private render progress only while the matching attempt owns a 
 The entrypoint passes `NATS_MEDIA_RENDER_NKEY_SEED` and the render limits into the native workload. Environment setup generates the dedicated key pair. Run the FFmpeg fixture tests through the documented test runner:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared capability-system src/capabilities/media-sequence/backend/render/sequence-render-compiler.runtime.test.ts
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex workloads/media-render/media-render-worker.runtime.test.ts
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared capability-system src/capabilities/media-sequence/backend/render/sequence-render-compiler.runtime.test.ts
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner nex workloads/media-render/media-render-worker.runtime.test.ts
 ```
 
 ## Adding a workload

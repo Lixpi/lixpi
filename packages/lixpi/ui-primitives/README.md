@@ -48,5 +48,5 @@ The stylesheet exports hover, standard, pop-out, overlay visibility, panel slide
 Run colocated tests through the repository's Docker runner:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared ui-primitives
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared ui-primitives
 ```

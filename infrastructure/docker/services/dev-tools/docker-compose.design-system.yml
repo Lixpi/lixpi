@@ -1,0 +1,37 @@
+services:
+    # Off by default. Tick it in the dev console to browse the canvas library.
+    lixpi-design-system:
+        profiles: ["dev"]
+        image: lixpi/design-system
+        build:
+            context: ../../../..
+            dockerfile: services/design-system/Dockerfile
+        container_name: lixpi-design-system
+        init: true
+        ports:
+            - '127.0.0.1:3003:3003'
+        environment:
+            HOST_PACKAGES_DIR: /usr/src/host-packages/lixpi
+            SERVICE_PACKAGES_DIR: /usr/src/service/packages/lixpi
+            PACKAGE_SYNC_INTERVAL: '1'
+        volumes:
+            - ../../../../services/design-system/src:/usr/src/service/src:ro
+            - ../../../../services/design-system/public:/usr/src/service/public:ro
+            - ../../../../services/design-system/index.html:/usr/src/service/index.html:ro
+            - ../../../../services/design-system/vite.config.ts:/usr/src/service/vite.config.ts:ro
+            - ../../../../services/design-system/tsconfig.json:/usr/src/service/tsconfig.json:ro
+            - ../../../../services/design-system/package.json:/usr/src/service/package.json:ro
+            - ../../../../services/design-system/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:ro
+            - ../../../../packages/lixpi:/usr/src/host-packages/lixpi:ro
+            - design-system-node-modules:/usr/src/service/node_modules
+            - design-system-packages:/usr/src/service/packages/lixpi
+        command:
+            - /usr/local/bin/workspace-package-sync.sh
+            - run
+            - sh
+            - -lc
+            - pnpm install --no-frozen-lockfile && pnpm run dev
+
+volumes:
+    design-system-node-modules:
+    design-system-packages:

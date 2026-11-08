@@ -143,4 +143,4 @@ createSlidingSwitch(svg, {
 - Custom renderers inherit selection, hover, disabled, geometry, and close state through their `render(state)` method.
 - The consumer owns the meaning of each value. If the parent selection is not an `<svg>` root, the consumer remains responsible for sizing the outer SVG.
 
-Lixpi application surfaces use the component defaults and do not pass appearance overrides. The public appearance API remains available to external consumers of UI-kit.
+Lixpi application surfaces use the `lixpi-light` theme's native defaults for switch colors and compact typography. The canvas theme projects those same roles for live editing. The public appearance API remains available to external consumers of UI-kit.

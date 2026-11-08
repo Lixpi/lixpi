@@ -37,13 +37,13 @@ Omit `createDependencies` for a client such as the AI Model Registry browser UI 
 
 `createStore()` passes an untouched base-store API to its method factory and composes the returned domain methods onto a separate public store object. Domain stores can reuse names such as `get` or `set` without changing the methods used inside their own implementations.
 
-Import `@lixpi/web-client-service-factory/styles/foundation` once before application styles. Build Vite and Vitest configuration through `@lixpi/web-client-service-factory/vite`.
+Import `@lixpi/web-client-service-factory/styles/foundation` once before application styles. The document foundation suppresses browser focus outlines for both HTML and SVG controls; keyboard focus, tab order and component selection behavior remain active. Build Vite and Vitest configuration through `@lixpi/web-client-service-factory/vite`.
 
 Read [Using the Web Client Service Factory](documentation/USING-WEB-CLIENT-SERVICE-FACTORY.md) for dependency injection, startup hooks, route views, Vite, Sass, and cleanup.
 
 Run its tests and quality checks through the repository Docker runners:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared web-client-service-factory
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared web-client-service-factory validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared web-client-service-factory
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner shared web-client-service-factory validate
 ```

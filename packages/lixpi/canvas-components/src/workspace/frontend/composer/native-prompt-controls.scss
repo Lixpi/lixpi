@@ -1,0 +1,338 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@import "@lixpi/ui-primitives/styles/transitions";
+
+.ai-prompt-input-controls {
+    // ===== SUBMIT BUTTON =====
+    .ai-submit-button {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--canvas-control-height, 32px);
+        height: var(--canvas-control-height, 32px);
+        flex: 0 0 var(--canvas-control-height, 32px);
+        border-radius: #{themeScope.token("components-composer-controls-submit-button-base-border-radius", themePalette.$roles)};
+        opacity: 0.6;
+        transition: hoverTransition(all, 400ms);
+        cursor: pointer;
+        box-sizing: border-box;
+
+        .button-default,
+        .button-hover {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            transition: hoverTransition(all, 250ms);
+        }
+
+        .button-default {
+            opacity: 1;
+            position: relative;
+            z-index: 1;
+        }
+
+        .button-hover {
+            position: absolute;
+            z-index: 2;
+            inset: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .send-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+
+            svg {
+                width: 20px;
+                height: 20px;
+                fill: #{themeScope.token("components-composer-controls-send-icon-base-fill", themePalette.$roles)};
+                color: #{themeScope.token("components-composer-controls-send-icon-base-foreground", themePalette.$roles)};
+                transition: hoverTransition(fill, 150ms);
+            }
+        }
+
+        &:hover {
+            opacity: 1;
+
+            .button-default {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .button-hover {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .send-icon svg {
+                fill: #{themeScope.token("components-composer-controls-send-icon-hover-fill", themePalette.$roles)};
+                color: #{themeScope.token("components-composer-controls-send-icon-hover-foreground", themePalette.$roles)};
+            }
+        }
+    }
+}
+
+.ai-prompt-model-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    height: var(--canvas-control-height, 32px);
+    flex: 1 1 auto;
+    padding: 0 12px;
+    border: none;
+    border-radius: #{themeScope.token("components-composer-controls-model-menu-trigger-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-composer-controls-model-menu-trigger-base-background", themePalette.$roles)};
+    color: var(--ai-prompt-model-menu-trigger-color, #{themeScope.token("components-composer-model-menu-trigger-color", themePalette.$roles)});
+    cursor: pointer;
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(color);
+}
+
+.ai-prompt-model-menu-trigger:hover,
+.ai-prompt-model-menu-trigger.is-active {
+    background: var(--ai-prompt-model-menu-trigger-active-background, #{themeScope.token("components-composer-model-menu-trigger-active-background", themePalette.$roles)});
+    color: var(--ai-prompt-model-menu-trigger-active-color, #{themeScope.token("components-composer-model-menu-trigger-active-color", themePalette.$roles)});
+}
+
+.ai-prompt-model-menu-trigger:focus-visible {
+    outline: none;
+}
+
+.ai-prompt-model-menu-trigger-summary {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    color: #{themeScope.token("components-composer-controls-model-menu-trigger-summary-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-composer-controls-model-menu-trigger-summary-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-composer-controls-model-menu-trigger-summary-base-font-weight", themePalette.$roles)};
+    white-space: nowrap;
+}
+
+.ai-prompt-model-menu-trigger-summary-item {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 5px;
+}
+
+.ai-prompt-model-menu-trigger-summary-icon {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    color: currentColor;
+}
+
+.ai-prompt-model-menu-trigger-summary-clock-icon {
+    width: 12px;
+    height: 12px;
+    flex-basis: 12px;
+}
+
+.ai-prompt-model-menu-trigger-summary-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.ai-prompt-model-menu-trigger-summary-icon svg path {
+    fill: currentColor;
+}
+
+.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon {
+    display: inline-block;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    border-style: solid;
+    border-color: currentColor;
+}
+
+.ai-prompt-model-menu-trigger-summary-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-prompt-model-menu-trigger-summary-separator {
+    --canvas-node-footer-icon-size: 34px;
+
+    height: 34px;
+    margin-right: 7px;
+    margin-left: 7px;
+}
+
+.ai-prompt-model-menu-trigger-summary-dot-separator {
+    flex: 0 0 auto;
+    margin-right: 5px;
+    margin-left: 5px;
+}
+
+.ai-prompt-media-mode-switch {
+    position: absolute;
+    left: calc(-2 * var(--canvas-control-height, 40px) - 8px);
+    bottom: 4px;
+    width: calc(2 * var(--canvas-control-height, 40px) - 4px);
+    height: var(--canvas-control-height, 40px);
+    box-sizing: border-box;
+    border-radius: #{themeScope.token("components-composer-controls-media-mode-switch-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-composer-controls-media-mode-switch-base-background", themePalette.$roles)};
+    backdrop-filter: #{themeScope.token("components-composer-controls-media-mode-switch-base-backdrop-filter", themePalette.$roles)};
+    pointer-events: auto;
+    user-select: none;
+    box-shadow: #{themeScope.token("components-composer-controls-media-mode-switch-base-shadow", themePalette.$roles)};
+}
+
+.ai-prompt-media-mode-switch-svg {
+    display: block;
+    width: calc(2 * var(--canvas-control-height, 40px) - 4px);
+    height: var(--canvas-control-height, 40px);
+    overflow: visible;
+}
+
+.ai-prompt-model-menu-info-bubble {
+    z-index: var(--ai-prompt-model-menu-info-bubble-z-index, 10080);
+}
+
+.ai-prompt-model-selector-popover {
+    z-index: var(--ai-prompt-model-selector-popover-z-index, 10090);
+}
+
+.ai-prompt-model-menu-info-bubble .bubble-menu-content {
+    display: block;
+    width: max-content;
+    min-width: var(--ai-prompt-model-menu-info-bubble-width, 410px);
+    max-width: var(--ai-prompt-model-menu-info-bubble-max-width, min(640px, calc(100vw - 20px)));
+    max-height: min(var(--ai-prompt-model-menu-info-bubble-max-height, calc(100dvh - 16px)), calc(100dvh - 16px));
+    box-sizing: border-box;
+    padding: var(--ai-prompt-model-menu-info-bubble-padding, 12px 14px);
+    border: none;
+    border-radius: var(--ai-prompt-model-menu-info-bubble-border-radius, #{themeScope.token("components-composer-model-menu-info-bubble-border-radius", themePalette.$roles)});
+    background: var(--ai-prompt-model-menu-info-bubble-background, #{themeScope.token("components-composer-model-menu-info-bubble-background", themePalette.$roles)});
+    box-shadow: var(--ai-prompt-model-menu-info-bubble-box-shadow, #{themeScope.token("components-composer-controls-bubble-menu-content-base-shadow", themePalette.$roles)});
+    color: var(--ai-prompt-model-menu-info-bubble-color, #{themeScope.token("components-composer-model-menu-info-bubble-color", themePalette.$roles)});
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.ai-prompt-model-menu-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-content-gap, 12px);
+    width: 100%;
+}
+
+.ai-prompt-model-menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-section-gap, 8px);
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-section[data-visible="false"] {
+    display: none;
+}
+
+.ai-prompt-model-menu-section + .ai-prompt-model-menu-section {
+    position: relative;
+    padding-top: var(--ai-prompt-model-menu-section-divider-padding-top, 14px);
+}
+
+.ai-prompt-model-menu-section + .ai-prompt-model-menu-section::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: var(--ai-prompt-model-menu-section-divider-width, 92%);
+    height: var(--ai-prompt-model-menu-section-divider-height, 2px);
+    background: var(--ai-prompt-model-menu-section-divider-gradient, #{themeScope.token("components-composer-model-menu-section-divider-gradient", themePalette.$roles)});
+    border-radius: var(--ai-prompt-model-menu-section-divider-border-radius, #{themeScope.token("components-composer-model-menu-section-divider-border-radius", themePalette.$roles)});
+    transform: translateX(-50%);
+}
+
+.ai-prompt-model-menu-section-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--ai-prompt-model-menu-section-heading-gap, 8px);
+    width: 100%;
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-section-heading-main {
+    display: flex;
+    align-items: center;
+    gap: var(--ai-prompt-model-menu-section-title-help-gap, 6px);
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-section-heading-action {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.ai-prompt-model-menu-section-help {
+    flex: 0 0 auto;
+}
+
+.ai-prompt-model-menu-section-title {
+    color: var(--ai-prompt-model-menu-section-title-color, #{themeScope.token("components-composer-model-menu-section-title-color", themePalette.$roles)});
+    font-size: var(--ai-prompt-model-menu-section-title-font-size, #{themeScope.token("components-composer-controls-model-menu-section-title-base-font-size", themePalette.$roles)});
+    font-weight: var(--ai-prompt-model-menu-section-title-font-weight, #{themeScope.token("components-composer-controls-model-menu-section-title-base-font-weight", themePalette.$roles)});
+    line-height: var(--ai-prompt-model-menu-section-title-line-height, #{themeScope.token("components-composer-controls-model-menu-section-title-base-line-height", themePalette.$roles)});
+}
+
+.ai-prompt-model-menu-section-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--ai-prompt-model-menu-controls-gap, 8px);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-prompt-model-menu-control {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-control-gap, 3px);
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-control[data-visible="false"] {
+    display: none;
+}
+
+.ai-prompt-model-menu-control-label {
+    color: var(--ai-prompt-model-menu-control-label-color, #{themeScope.token("components-composer-controls-model-menu-control-label-base-foreground", themePalette.$roles)});
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+    font-size: var(--ai-prompt-model-menu-control-label-font-size, #{themeScope.token("components-composer-controls-model-menu-control-label-base-font-size", themePalette.$roles)});
+    font-weight: var(--ai-prompt-model-menu-control-label-font-weight, #{themeScope.token("components-composer-controls-model-menu-control-label-base-font-weight", themePalette.$roles)});
+    line-height: var(--ai-prompt-model-menu-control-label-line-height, #{themeScope.token("components-composer-controls-model-menu-control-label-base-line-height", themePalette.$roles)});
+    white-space: nowrap;
+}
+
+.ai-prompt-model-menu-control-field {
+    display: flex;
+    min-width: 0;
+}
+
+.ai-prompt-input-controls .ai-submit-button .send-icon svg path {
+    fill: currentColor;
+}
+
+@import "./prompt-input";

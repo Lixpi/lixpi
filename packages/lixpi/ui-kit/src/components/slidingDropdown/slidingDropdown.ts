@@ -46,6 +46,8 @@ export type SlidingDropdownConfig<Value extends string = string> = {
     className?: string
     ariaLabel?: string
     observeParentResize?: boolean
+    portalStyleSource?: Element | (() => Element | null)
+    portalScopeAttributes?: Readonly<Record<string, string>> | (() => Readonly<Record<string, string>>)
     visualOverflowPadding?: Partial<SlidingDropdownVisualOverflowPadding>
     indicatorBoxShadow?: string
     indicatorInsetShadow?: SlidingDropdownIndicatorInsetShadow
@@ -156,6 +158,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private readonly openShadowFilterId: string
     private readonly transitionConfig: SlidingDropdownTransitionConfig
     private readonly renderOption?: SlidingDropdownOptionRenderer<Value>
+    private readonly portalStyleSource?: SlidingDropdownConfig<Value>['portalStyleSource']
+    private readonly portalScopeAttributes?: SlidingDropdownConfig<Value>['portalScopeAttributes']
     private readonly onChange?: (
         value: Value,
         id: string,
@@ -171,6 +175,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private availableWidth = Number.POSITIVE_INFINITY
     private width: number
     private height: number
+    private configuredHeight: number
     private currentValue: Value
     private hoveredValue: Value | null = null
     private pendingValue: Value | null = null
@@ -225,6 +230,16 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private syncingScrollPosition = false
     private tapeSnapAnimating = false
     private portaled = false
+    private inheritedStyleObserver: MutationObserver | null = null
+    private inheritedStyleFrame: number | null = null
+    private inheritedStyleSignature = ''
+    private readonly inheritedCustomProperties = new Set<string>()
+    private readonly inheritedScopeAttributes = new Set<string>()
+    private readonly inheritedSvgStyleSnapshot = new Map<string, {
+        value: string
+        priority: string
+    }>()
+    private readonly inheritedSvgAttributeSnapshot = new Map<string, string | null>()
 
     constructor(
         parent: any,
@@ -246,6 +261,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.transitionConfig = this.createTransitionConfig(config.transition)
         this.visualOverflowPadding = this.createVisualOverflowPadding(config.visualOverflowPadding)
         this.renderOption = config.renderOption
+        this.portalStyleSource = config.portalStyleSource
+        this.portalScopeAttributes = config.portalScopeAttributes
         this.onChange = config.onChange
         this.onOpenChange = config.onOpenChange
         this.x = config.x
@@ -253,6 +270,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.requestedWidth = config.width ?? DEFAULT_WIDTH
         this.width = this.requestedWidth
         this.height = config.height ?? DEFAULT_HEIGHT
+        this.configuredHeight = this.height
         this.currentValue = config.selectedValue !== undefined
             && this.indexOf(config.selectedValue) >= 0
             ? config.selectedValue
@@ -425,6 +443,161 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.renderInternal()
         this.measureOptionContentRightEdges()
         this.renderInternal()
+
+        if (config.portalStyleSource) {
+            this.observeInheritedStyle()
+
+            if (typeof requestAnimationFrame === 'function')
+                this.inheritedStyleFrame = requestAnimationFrame(() => {
+                    this.inheritedStyleFrame = null
+                    this.observeInheritedStyle()
+                    this.refreshInheritedStyle()
+                })
+        }
+    }
+
+    private resolveStyleSource(): Element | null {
+        return typeof this.portalStyleSource === 'function' ? this.portalStyleSource() : (this.portalStyleSource ?? null)
+    }
+
+    private observeInheritedStyle(): void {
+        this.inheritedStyleObserver?.disconnect()
+
+        if (typeof MutationObserver === 'undefined')
+            return
+
+        this.inheritedStyleObserver ??= new MutationObserver(this.refreshInheritedStyle)
+        let source = this.resolveStyleSource()
+
+        while (source) {
+            this.inheritedStyleObserver.observe(source, { attributes: true })
+            source = source.parentElement
+        }
+    }
+
+    private refreshInheritedStyle = (): void => {
+        if (this.destroyed)
+            return
+
+        if (this.syncInheritedStyle()) {
+            this.measureOptionContentRightEdges()
+            this.renderInternal()
+        }
+    }
+
+    private syncInheritedStyle(force = false): boolean {
+        const source = this.resolveStyleSource()
+        const computed = source?.ownerDocument.defaultView?.getComputedStyle(source)
+
+        if (
+            !source
+            || !computed
+        )
+            return false
+
+        const properties = new Map<string, string>()
+
+        for (let index = 0; index < computed.length; index++) {
+            const name = computed.item(index)
+
+            if (name.startsWith('--'))
+                properties.set(
+                    name,
+                    computed.getPropertyValue(name),
+                )
+        }
+
+        for (const name of ['font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'color'])
+            properties.set(
+                name,
+                computed.getPropertyValue(name),
+            )
+
+        const attributes = typeof this.portalScopeAttributes === 'function' ? this.portalScopeAttributes() : (this.portalScopeAttributes ?? {})
+        const signature = JSON.stringify([[...properties], attributes])
+
+        if (
+            !force
+            && signature === this.inheritedStyleSignature
+        )
+            return false
+
+        this.inheritedStyleSignature = signature
+        const targets = [this.svgNode, this.scrollPortalNode, this.chevronPortalSvg?.node?.() as SVGSVGElement | undefined].filter(
+            (element): element is SVGSVGElement | HTMLDivElement => Boolean(element),
+        )
+
+        for (const target of targets) {
+            for (const name of this.inheritedCustomProperties)
+                if (!properties.has(name))
+                    target.style.removeProperty(name)
+
+            for (const [name, value] of properties) {
+                if (
+                    target === this.svgNode
+                    && !this.inheritedSvgStyleSnapshot.has(name)
+                )
+                    this.inheritedSvgStyleSnapshot.set(
+                        name,
+                        {
+                            value: target.style.getPropertyValue(name),
+                            priority: target.style.getPropertyPriority(name),
+                        },
+                    )
+
+                target.style.setProperty(name, value)
+            }
+
+            for (const name of this.inheritedScopeAttributes)
+                if (!(name in attributes))
+                    target.removeAttribute(name)
+
+            for (const [name, value] of Object.entries(attributes)) {
+                if (
+                    target === this.svgNode
+                    && !this.inheritedSvgAttributeSnapshot.has(name)
+                )
+                    this.inheritedSvgAttributeSnapshot.set(
+                        name,
+                        target.getAttribute(name),
+                    )
+
+                target.setAttribute(name, value)
+            }
+        }
+
+        this.inheritedCustomProperties.clear()
+
+        for (const name of properties.keys())
+            if (name.startsWith('--'))
+                this.inheritedCustomProperties.add(name)
+
+        this.inheritedScopeAttributes.clear()
+
+        for (const name of Object.keys(attributes))
+            this.inheritedScopeAttributes.add(name)
+
+        const configuredControlHeight = Number.parseFloat(
+            computed.getPropertyValue('--sliding-dropdown-control-height'),
+        )
+        const configuredHeightOffset = Number.parseFloat(
+            computed.getPropertyValue('--sliding-dropdown-control-height-offset'),
+        )
+        const heightOffset = Number.isFinite(configuredHeightOffset) ? configuredHeightOffset : 0
+        const height = Number.isFinite(configuredControlHeight)
+            && configuredControlHeight - heightOffset > 0
+            ? configuredControlHeight - heightOffset
+            : this.configuredHeight
+
+        if (height !== this.height) {
+            const tapePosition = this.height > 0 ? -this.tapeOffset / this.height : this.selectedIndex()
+            this.height = height
+            this.tapeOffset = this.open ? this.clampTapeOffset(-tapePosition * height) : this.optionsOffset(
+                this.selectedIndex(),
+            )
+        }
+
+        return true
     }
 
     private captureHostStyleSnapshot(): SlidingDropdownHostStyleSnapshot | null {
@@ -749,6 +922,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.scrollPortalNode.append(this.svgNode)
         this.portaled = true
         this.portalChevron()
+        this.observeInheritedStyle()
+        this.syncInheritedStyle(true)
         this.updateScrollPortalGeometry()
         this.syncScrollPortalToTape()
     }
@@ -2345,6 +2520,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     render = (): void => {
+        this.syncInheritedStyle()
+
         if (this.animating)
             return
 
@@ -2356,8 +2533,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         x: number,
         y: number,
         width: number,
-        height: number = this.height,
+        height: number = this.configuredHeight,
     ): void {
+        this.configuredHeight = height
         const tapePosition = this.height > 0
             ? -this.tapeOffset / this.height
             : this.selectedIndex()
@@ -2450,6 +2628,14 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
 
         this.resizeObserver?.disconnect()
         this.observedResizeTargets.clear()
+        this.inheritedStyleObserver?.disconnect()
+
+        if (
+            this.inheritedStyleFrame !== null
+            && typeof cancelAnimationFrame === 'function'
+        )
+            cancelAnimationFrame(this.inheritedStyleFrame)
+
         this.interruptTapeSnapAnimation()
 
         if (typeof document !== 'undefined') {
@@ -2472,6 +2658,24 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.restoreSvgPortal()
         this.group.remove()
         this.restoreOwnedLayout()
+
+        if (this.svgNode) {
+            for (const [name, snapshot] of this.inheritedSvgStyleSnapshot)
+                if (snapshot.value)
+                    this.svgNode.style.setProperty(
+                        name,
+                        snapshot.value,
+                        snapshot.priority,
+                    )
+                else
+                    this.svgNode.style.removeProperty(name)
+
+            for (const [name, value] of this.inheritedSvgAttributeSnapshot)
+                if (value === null)
+                    this.svgNode.removeAttribute(name)
+                else
+                    this.svgNode.setAttribute(name, value)
+        }
     }
 }
 

@@ -7,7 +7,7 @@ description: How Lixpi is deployed to AWS — the Pulumi program, the high-level
 
 This page explains how Lixpi is deployed to AWS: how Pulumi provisions the infrastructure, how the topology fits together, how the network is laid out, and how each piece — the `api` service, the Web UI, and DynamoDB — lives inside AWS.
 
-It is the entry point for the deployment domain. The NATS cluster has enough moving parts to deserve its own page; see [NATS Cluster](./NATS-CLUSTER.md). Scaling, environments, and day-to-day operations live in [Scaling & Operations](./SCALING-AND-OPERATIONS.md). For the runtime architecture and service responsibilities, see [System Architecture](../SYSTEM-ARCHITECTURE.md).
+It is the entry point for the deployment domain. The NATS cluster has enough moving parts to deserve its own page; see [NATS Cluster](NATS-CLUSTER.md). Scaling, environments, and day-to-day operations live in [Scaling & Operations](SCALING-AND-OPERATIONS.md). For the runtime architecture and service responsibilities, see [System Architecture](../SYSTEM-ARCHITECTURE.md).
 
 ## Core Concepts
 
@@ -22,7 +22,7 @@ A handful of building blocks recur throughout the deployment. Understanding them
 | **CloudFront + S3** | Each browser SPA is built into its own S3 bucket and served through its own global CloudFront distribution. The main UI uses the stack domain; the user portal uses `user-portal.<domain>`. |
 
 {% callout type="note" %}
-**NATS auth callout.** Each Go broker embeds connection admission. Its dispatcher verifies browser and registered service credentials locally, with bounded peer retries on operational failure, and NATS enforces the returned permissions. The API verifies application requests separately. This page only names the mechanism — the conceptual model lives in [Authentication](../AUTHENTICATION.md), and the AWS-specific wiring lives in [NATS Cluster](./NATS-CLUSTER.md).
+**NATS auth callout.** Each Go broker embeds connection admission. Its dispatcher verifies browser and registered service credentials locally, with bounded peer retries on operational failure, and NATS enforces the returned permissions. The API verifies application requests separately. This page only names the mechanism — the conceptual model lives in [Authentication](../AUTHENTICATION.md), and the AWS-specific wiring lives in [NATS Cluster](NATS-CLUSTER.md).
 {% /callout %}
 
 ## High-Level AWS Topology
@@ -111,7 +111,7 @@ flowchart TB
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
 | `web-ui-user-portal` | S3 + CloudFront | Independent account-management SPA served from `user-portal.<domain>` |
 | `api` | ECS/Fargate (private subnets) | CRUD, request authorization, DynamoDB access, AND in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, vendor SDK egress) |
-| `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](./NEX-EXECUTION-ENGINE.md) |
+| `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](NEX-EXECUTION-ENGINE.md) |
 | `nats` | ECS EC2 daemon service (initially 3 public-subnet instances, one encrypted EBS volume each) | Message bus, native JetStream event streams and work queues, and permanent organization Blob Object Stores |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
@@ -124,7 +124,7 @@ flowchart TB
 
 ## Pulumi: How Infrastructure is Described
 
-The Pulumi program lives in [`infrastructure/pulumi/src/`](../../../infrastructure/pulumi/src/). The entry point is [`pulumiProgram.ts`](../../../infrastructure/pulumi/src/pulumiProgram.ts), which calls resource factories in order.
+The Pulumi program lives in [`infrastructure/pulumi/src/`](../../../infrastructure/pulumi/src). The entry point is [`pulumiProgram.ts`](../../../infrastructure/pulumi/src/pulumiProgram.ts), which calls resource factories in order.
 
 ### Project Layout
 
@@ -168,7 +168,7 @@ The shared [Pulumi Compose base](../../../infrastructure/pulumi/runner-compose/p
 
 Set `PULUMI_PROGRAM=static-website` to use the shared [static website program](../../../infrastructure/pulumi/src/static-website/program.ts). `PULUMI_PROJECT_NAME`, `STAGE` and `STATE_STORAGE_URL` identify the existing project, stack and backend. With `PULUMI_REQUIRE_EXISTING_STACK=true`, the runner selects that stack and fails instead of creating one. `AWS_EXPECTED_ACCOUNT_ID` restricts both the default AWS provider and the certificate provider. The normal application program and project remain the defaults when these selectors are absent.
 
-The website program preserves its established resource identities through explicit hosting, certificate and DNS naming options. The shared static client factory also accepts local artifact commands; its existing Docker build mode and externally managed artifact mode retain their behavior. [Build preparation](../../../infrastructure/pulumi/src/static-website/prepare-build.ts) copies only website build inputs and the required shared UI packages into an isolated directory before installation and compilation. Deployment consumes the existing shared SSO cache and never configures authentication.
+The website program preserves its established resource identities through explicit hosting, certificate and DNS naming options. The shared static client factory also accepts local artifact commands; its existing Docker build mode and externally managed artifact mode retain their behavior. [Build preparation](../../../infrastructure/pulumi/src/static-website/prepare-build.ts) copies website build inputs and the required shared UI packages, including the named themes from `@lixpi/ui-kit`, into an isolated directory before installation and compilation. Deployment consumes the existing shared SSO cache and never configures authentication.
 
 ### Local vs AWS Mode
 
@@ -490,7 +490,7 @@ Two things to note:
 
 | Page | What it covers |
 |------|----------------|
-| [NATS Cluster](./NATS-CLUSTER.md) | The NATS cluster internals: ports, CloudMap discovery, the Lambda sidecar for public access, Caddy-in-Lambda TLS, and the auth-callout security boundary |
-| [Scaling & Operations](./SCALING-AND-OPERATIONS.md) | Horizontal scaling, capacity ceilings, failure modes, environments and stacks, operational workflow, and observability |
+| [NATS Cluster](NATS-CLUSTER.md) | The NATS cluster internals: ports, CloudMap discovery, the Lambda sidecar for public access, Caddy-in-Lambda TLS, and the auth-callout security boundary |
+| [Scaling & Operations](SCALING-AND-OPERATIONS.md) | Horizontal scaling, capacity ceilings, failure modes, environments and stacks, operational workflow, and observability |
 | [System Architecture](../SYSTEM-ARCHITECTURE.md) | The runtime architecture, queue groups, subject conventions, and design decisions |
 | [Authentication](../AUTHENTICATION.md) | The conceptual dual-auth model and the NATS auth callout |

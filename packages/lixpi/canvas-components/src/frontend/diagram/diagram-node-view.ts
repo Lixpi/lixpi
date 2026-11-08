@@ -14,6 +14,11 @@ import {
     createDocumentHtml,
 } from '@lixpi/ui-primitives/dom'
 import {
+    createCanvasTheme,
+    type CanvasTheme,
+    type CanvasThemeSource,
+} from '../theme/canvas-theme.ts'
+import {
     createFixedDiagramNodeGeometry,
     DiagramNodeSurface,
     type DiagramNodeAppearance,
@@ -32,11 +37,14 @@ export type DiagramNodeLabelAppearance = DiagramNodeAppearance & {
     accent?: string
     tagBackground?: string
     tagText?: string
+    shadow?: string
+    selectedShadow?: string
     alignment?: 'start' | 'center'
     heading?: 'title' | 'metric'
 }
 
 export type DiagramNodeViewOptions<Data> = {
+    theme?: CanvasThemeSource
     getContent: (node: EngineNode<Data>) => DiagramNodeContent
     getAppearance?: (node: EngineNode<Data>) => DiagramNodeLabelAppearance
     onActivate?: (nodeId: string) => void
@@ -46,22 +54,23 @@ export type DiagramNodeRegistrationOptions<Data> = DiagramNodeViewOptions<Data> 
     type: string
 }
 
-export const createDiagramNodeAppearance = (shape: DiagramNodeAppearance['shape'] = 'rounded-rectangle'): DiagramNodeLabelAppearance => ({
+export const createDiagramNodeAppearance = (
+    shape: DiagramNodeAppearance['shape'] = 'rounded-rectangle',
+    theme: CanvasTheme = createCanvasTheme(),
+): DiagramNodeLabelAppearance => ({
     shape,
-    fill: shape === 'circle' ? '#edf0f4' : '#f9fafb',
-    stroke: shape === 'circle' ? '#aeb8c7' : '#d4dae2',
-    strokeWidth: 1.25,
-    cornerRadius: 12,
-    text: '#42494f',
-    muted: '#5d656d',
-    accent: '#5d656d',
-    tagBackground: 'rgba(93, 101, 109, 0.12)',
-    tagText: '#5d656d',
+    fill: shape === 'circle' ? theme.colors.raised : theme.colors.surface,
+    stroke: theme.colors.border,
+    strokeWidth: theme.shape.borderWidth,
+    cornerRadius: theme.shape.nodeRadius,
+    shadow: theme.shadows.node,
+    selectedShadow: theme.shadows.selected,
+    text: theme.colors.text,
+    muted: theme.colors.muted,
+    accent: theme.colors.accent,
+    tagBackground: theme.colors.hover,
+    tagText: theme.colors.muted,
     alignment: shape === 'circle' ? 'center' : 'start',
-    selectedStyle: {
-        stroke: '#c5c0ee',
-        strokeWidth: 3,
-    },
 })
 
 // IDBD and embedded research diagrams share this compact heading, tag and
@@ -117,6 +126,12 @@ export class DiagramNodeView<Data> implements NodeView<Data> {
 
             context.contentRoot.append(this.labels)
             this.update(node)
+
+            if (options.theme)
+                this.lifetime.own(
+                    options.theme.subscribe(() => this.update(this.node)),
+                )
+
             this.setGeometry(
                 {
                     ...node.position,
@@ -171,6 +186,7 @@ export class DiagramNodeView<Data> implements NodeView<Data> {
         this.labels.style.setProperty('--diagram-node-accent', appearance.accent ?? appearance.text)
         this.labels.style.setProperty('--diagram-node-tag-background', appearance.tagBackground ?? 'transparent')
         this.labels.style.setProperty('--diagram-node-tag-text', appearance.tagText ?? appearance.muted)
+        this.updateBodyPresentation(appearance)
 
         if (this.options.onActivate)
             this.labels.ariaPressed = String(this.selected || Boolean(appearance.selected))
@@ -179,7 +195,7 @@ export class DiagramNodeView<Data> implements NodeView<Data> {
     }
 
     private getAppearance(node: EngineNode<Data>): DiagramNodeLabelAppearance {
-        return this.options.getAppearance?.(node) ?? createDiagramNodeAppearance()
+        return this.options.getAppearance?.(node) ?? createDiagramNodeAppearance('rounded-rectangle', this.options.theme?.value)
     }
 
     setGeometry(
@@ -199,9 +215,25 @@ export class DiagramNodeView<Data> implements NodeView<Data> {
     setSelected(selected: boolean): void {
         this.selected = selected
         this.surface.setSelected(selected)
+        this.updateBodyPresentation(
+            this.getAppearance(this.node),
+        )
 
         if (this.options.onActivate)
             this.labels.ariaPressed = String(selected || Boolean(this.getAppearance(this.node).selected))
+    }
+
+    private updateBodyPresentation(appearance: DiagramNodeLabelAppearance): void {
+        applyStyle(
+            this.labels,
+            {
+                borderRadius: appearance.shape === 'circle' ? '50%' : `${appearance.cornerRadius ?? 12}px`,
+                boxShadow: this.selected
+                    || appearance.selected
+                    ? appearance.selectedShadow ?? appearance.shadow ?? 'none'
+                    : appearance.shadow ?? 'none',
+            },
+        )
     }
 
     setVisible(visible: boolean): void {

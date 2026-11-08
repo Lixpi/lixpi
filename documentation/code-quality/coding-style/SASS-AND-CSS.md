@@ -5,7 +5,7 @@ These rules apply to `.scss` files and TypeScript code that creates or selects s
 ## Style Ownership
 
 - Keep component styles next to the component or framework-agnostic UI module that owns them.
-- `services/web-ui/src/settings.ts` is for product configuration and theme tokens, not a mirror of CSS. Keep behavior flags, interaction thresholds, semantic sizing knobs, colors, shadows, borders, border radii, line styles, and line thicknesses there only when changing the value is meant to be supported.
+- `packages/lixpi/canvas-components/src/workspace/frontend/settings/ui-settings.ts` is for product configuration and theme tokens, not a mirror of CSS. Keep behavior flags, interaction thresholds, semantic sizing knobs, colors, shadows, borders, border radii, line styles, and line thicknesses there only when changing the value is meant to be supported.
 - Put theme-only values under a nested `styles` key inside the relevant settings group. Keep non-style configuration at the group root.
 - Keep CSS mechanics in CSS: `display`, `position`, offsets, z-index, grid templates, background repeat/size, layout padding/gaps that exist only to make the component work, typography metrics that would break fitting, and fallback values for local CSS custom properties.
 - Reuse existing variables, mixins, and shared component styles before introducing new equivalents.
@@ -47,7 +47,7 @@ This applies to every application-owned class declaration, including child eleme
 
 ## Tooltips
 
-Do not create feature-local hover labels, arrows, positioning rules, or tooltip CSS. Native `title` tooltips are forbidden, and every visible hover or focus tooltip must use the shared custom tooltip component and its owned stylesheet. Follow the complete rule in [`UI-COMPONENTS.md`](./UI-COMPONENTS.md#tooltips).
+Do not create feature-local hover labels, arrows, positioning rules, or tooltip CSS. Native `title` tooltips are forbidden, and every visible hover or focus tooltip must use the shared custom tooltip component and its owned stylesheet. Follow the complete rule in [`UI-COMPONENTS.md`](UI-COMPONENTS.md#tooltips).
 
 ## External Class Contracts
 

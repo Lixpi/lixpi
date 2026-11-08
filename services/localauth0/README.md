@@ -37,14 +37,14 @@ The fixture requires `ENVIRONMENT=local`, both mock flags enabled, the fixed moc
 Build the tooling and mock images through Compose:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.yml --env-file .env.shelby-local build lixpi-pulumi-init lixpi-localauth0
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file .env.shelby-local build lixpi-pulumi-init lixpi-localauth0
 ```
 
 To load or validate the fixture without running the table initializer:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.yml --env-file .env.shelby-local run --rm --no-deps -T lixpi-pulumi-init pnpm run fixture:local load
-docker compose -f infrastructure/docker/docker-compose.yml --env-file .env.shelby-local run --rm --no-deps -T lixpi-pulumi-init pnpm run fixture:local validate
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file .env.shelby-local run --rm --no-deps -T lixpi-pulumi-init pnpm run fixture:local load
+docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --env-file .env.shelby-local run --rm --no-deps -T lixpi-pulumi-init pnpm run fixture:local validate
 ```
 
 For an existing partial mock account, stop application writers, inspect its organization grants, then run `fixture:local repair <existing-organization-id>` through the same container. The selected organization must already grant this fixed user owner access. Repair adds only a missing user association, matching owner membership, or fixed user record. It can replace this fixture's active epoch-1 receipt after an explicitly requested table reset; it refuses conflicting roles, email, blocked/reconciling/superseded receipts, and another epoch or identity. `fixture:local repair new` is allowed only when the fixed user has no organization association, membership, or embedded grant. All writes remain conditional. These commands accept no arbitrary user identity.

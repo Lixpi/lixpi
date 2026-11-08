@@ -25,7 +25,7 @@
 
     &.is-visible {
         opacity: 1;
-        background-color: rgba(248, 250, 253, 0.84);
+        background-color: var(--canvas-loading-scrim, rgba(248, 250, 253, 0.84));
         backdrop-filter: blur(24px) saturate(145%);
         -webkit-backdrop-filter: blur(24px) saturate(145%);
     }
@@ -58,11 +58,13 @@
     width: min(360px, calc(100% - 48px));
     transform: translate(-50%, -50%);
     padding: 18px 20px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 18px 60px rgba(15, 23, 42, 0.18), 0 2px 12px rgba(15, 23, 42, 0.1);
-    color: var(--canvas-loading-text-color, #42494f);
+    border-radius: var(--canvas-panel-radius, 8px);
+    background: var(--canvas-surface-raised, rgba(255, 255, 255, 0.92));
+    box-shadow: var(--canvas-shadow, 0 18px 60px rgba(15, 23, 42, 0.18), 0 2px 12px rgba(15, 23, 42, 0.1));
+    color: var(--canvas-text, var(--canvas-loading-text-color, #42494f));
     text-align: center;
+    font-family: var(--canvas-font-family, inherit);
+    line-height: var(--canvas-line-height, 1.35);
 }
 
 .canvas-loading-overlay.is-error .canvas-loading-error {
@@ -73,38 +75,38 @@
 }
 
 .canvas-loading-error-title {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: var(--canvas-title-font-size, 15px);
+    font-weight: var(--canvas-title-font-weight, 700);
     line-height: 1.2;
 }
 
 .canvas-loading-error-message {
-    font-size: 13px;
+    font-size: var(--canvas-font-size, 13px);
     line-height: 1.35;
-    color: rgba(66, 73, 79, 0.78);
+    color: var(--canvas-text-muted, rgba(66, 73, 79, 0.78));
 }
 
 .canvas-loading-error-retry {
     min-width: 86px;
-    height: 32px;
+    height: var(--canvas-control-height, 32px);
     margin-top: 2px;
-    padding: 0 14px;
+    padding: var(--canvas-control-padding, 0 14px);
     border: 0;
-    border-radius: 999px;
-    background: var(--canvas-loading-retry-background, #5d656d);
-    color: var(--canvas-loading-retry-color, #f5f3f3);
-    font-size: 13px;
-    font-weight: 700;
+    border-radius: var(--canvas-control-radius, 999px);
+    background: var(--canvas-accent, var(--canvas-loading-retry-background, #5d656d));
+    color: var(--canvas-on-accent, var(--canvas-loading-retry-color, #f5f3f3));
+    font-size: var(--canvas-font-size, 13px);
+    font-weight: var(--canvas-title-font-weight, 700);
     cursor: pointer;
 
     &:hover {
-        background: var(--canvas-loading-text-color, #42494f);
+        background: var(--canvas-accent, var(--canvas-loading-text-color, #42494f));
     }
 }
 
 @media (prefers-reduced-transparency: reduce) {
     .canvas-loading-overlay.is-visible {
-        background-color: #f8fafd;
+        background-color: var(--canvas-surface, #f8fafd);
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
     }

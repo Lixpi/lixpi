@@ -1,6 +1,7 @@
 export {
     SLIDING_SWITCH_TRANSITION_DURATION_MS,
     createSlidingSwitch,
+    type SlidingSwitchAppearance,
     type SlidingSwitchConfig,
     type SlidingSwitchIndicatorInsetShadow,
     type SlidingSwitchInstance,

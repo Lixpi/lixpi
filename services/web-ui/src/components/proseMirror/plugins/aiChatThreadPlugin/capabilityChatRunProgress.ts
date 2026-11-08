@@ -10,10 +10,10 @@ import {
 
 import {
     type PromptReferencePreviewRenderer,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import {
     type WorkspaceConversationOutputPorts,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+} from '@lixpi/canvas-components/workspace'
 
 import {
     createCapabilityRunProgress,

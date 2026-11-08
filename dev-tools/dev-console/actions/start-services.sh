@@ -7,7 +7,8 @@
 #   LIXPI_CONSOLE_ENV_FILE              optional environment file
 #   LIXPI_CONSOLE_OPTION_REBUILD        true rebuilds the services first
 #   LIXPI_CONSOLE_OPTION_UP_FLAGS       optional comma-separated flags for `up`
-#   LIXPI_CONSOLE_OPTION_LOGS           true follows logs after a detached start
+#   LIXPI_CONSOLE_OPTION_DETACH         true starts in the background, otherwise the
+#                                       console stays attached to the logs
 #   LIXPI_CONSOLE_OPTION_STARTED_URL    optional address to print once started
 #
 #   start-services.sh <service...>
@@ -35,11 +36,20 @@ if [[ "${LIXPI_CONSOLE_OPTION_REBUILD:-false}" == "true" ]]; then
 fi
 
 # Compose's interactive menu would compete with the console for the terminal.
-COMPOSE_MENU=false "${COMPOSE[@]}" up ${UP_FLAGS[@]+"${UP_FLAGS[@]}"} "$@"
+if [[ "${LIXPI_CONSOLE_OPTION_DETACH:-false}" != "true" ]]; then
+    if [[ -n "${LIXPI_CONSOLE_OPTION_STARTED_URL:-}" ]]; then
+        printf 'Starting at %s\n' "${LIXPI_CONSOLE_OPTION_STARTED_URL}"
+    fi
+    COMPOSE_MENU=false exec "${COMPOSE[@]}" up ${UP_FLAGS[@]+"${UP_FLAGS[@]}"} "$@"
+fi
+
+# With an address to print, wait until the services are ready so it works when shown.
+DETACH_FLAGS=(-d)
+if [[ -n "${LIXPI_CONSOLE_OPTION_STARTED_URL:-}" ]]; then
+    DETACH_FLAGS=(--wait)
+fi
+COMPOSE_MENU=false "${COMPOSE[@]}" up "${DETACH_FLAGS[@]}" ${UP_FLAGS[@]+"${UP_FLAGS[@]}"} "$@"
 
 if [[ -n "${LIXPI_CONSOLE_OPTION_STARTED_URL:-}" ]]; then
     printf 'Running at %s\n' "${LIXPI_CONSOLE_OPTION_STARTED_URL}"
-fi
-if [[ "${LIXPI_CONSOLE_OPTION_LOGS:-false}" == "true" ]]; then
-    exec "${COMPOSE[@]}" logs -f "$@"
 fi

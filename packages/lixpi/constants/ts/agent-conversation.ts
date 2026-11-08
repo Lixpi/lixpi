@@ -6,7 +6,7 @@ export const AGENT_CONVERSATION_PROTOCOL_VERSION = 1
 export const AGENT_DISPATCH_SHARDS = 16
 export const AGENT_OWNER_LEASE_MS = 30_000
 export const AGENT_OWNER_RENEWAL_MS = 10_000
-export const AGENT_DISPATCH_POLL_MS = 1_000
+export const AGENT_DISPATCH_RETRY_MS = 1_000
 export const CONVERSATION_RESPONSE_MAX_BYTES = 768_000
 
 export type ConversationContextMode = 'explicit' | 'discovery' | 'mixed'

@@ -18,7 +18,7 @@ This guide gets Lixpi running locally. Everything runs in **Docker** via Docker 
 | **localauth0** | `services/localauth0/` | Mock Auth0 for zero-config offline dev (Rust — vendored `primait/localauth0` image) |
 | **ai-model-registry** | `services/ai-model-registry/` | Development-only provider model and parameter registry; all administration runs inside `lixpi-ai-model-registry` |
 
-See [System Architecture](./SYSTEM-ARCHITECTURE.md) for the full service responsibilities and the NATS backbone, and [Authentication](./AUTHENTICATION.md) for the auth model.
+See [System Architecture](SYSTEM-ARCHITECTURE.md) for the full service responsibilities and the NATS backbone, and [Authentication](AUTHENTICATION.md) for the auth model.
 
 The [AI Model Registry](../../services/ai-model-registry/documentation/AI-MODEL-REGISTRY.md) defines the mandatory synchronization contract for provider model and parameter changes. Its registry API and maintenance tools run only inside the registry container.
 
@@ -60,7 +60,7 @@ Run `./run.sh` and choose **Start services**. It asks which environment file to 
 
 Containers that call AWS locally, such as `api` for Bedrock inference and `pulumi` for deployments, read your AWS SSO session from the `lixpi-aws-config` Docker volume mounted at `/root/.aws`. The profiles come from `.aws/config`, which the setup wizard writes from `dev-tools/config-utils/templates/aws-config.template`. To sign in or refresh an expired session, run `./run.sh`, choose **Sign in to AWS SSO** and pick the environment file whose `AWS_PROFILE` you want.
 
-The login runs in the standalone `lixpi-aws-cli` container from [`infrastructure/docker/docker-compose.aws-cli.yml`](../../infrastructure/docker/docker-compose.aws-cli.yml), its own Compose project, so it never starts the application stack. The CLI prints a URL and a code, and you approve the code in the browser on your host. Restart running containers afterwards.
+The login runs in the standalone `lixpi-aws-cli` container from [`infrastructure/docker/utilities/infrastructure/docker-compose.aws-cli.yml`](../../infrastructure/docker/utilities/infrastructure/docker-compose.aws-cli.yml), its own Compose project, so it never starts the application stack. The CLI prints a URL and a code, and you approve the code in the browser on your host. Restart running containers afterwards.
 
 The volume has a fixed name rather than a Compose-project prefix, so other repositories share the same session. Their Compose files declare an `aws-config` volume named `lixpi-aws-config`, mount it at `/root/.aws`, and bind-mount this checkout's `.aws/config` over `/root/.aws/config`. They sign in by running this repository's `dev-tools/dev-console/actions/aws-sso-login.sh` with their profile name. The Pulumi image keeps its own AWS CLI because deployments need it.
 
@@ -69,15 +69,15 @@ The volume has a fixed name rather than a Compose-project prefix, so other repos
 Inspect a dependency update and its complete upstream release information before applying it:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
-docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
+docker compose -f infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply --dry-run npmPackages:typescript
+docker compose -f infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry-update apply npmPackages:typescript
 ```
 
 The selector can name one dependency, several dependencies, a dependency group, or `all`. The update command can cross major versions and synchronizes the committed native declarations after applying a reviewed release. To select an exact version manually, edit the type-specific JSON catalog under `dev-tools/versions-registry/`, then run:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
-docker compose -f infrastructure/docker/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
+docker compose -f infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry sync
+docker compose -f infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml run --rm --no-deps -T versions-registry check
 ```
 
 These commands run inside standalone Node containers without installing dependencies or starting application services. The check is read-only. Native Dockerfiles, package manifests, Go modules, and CI workflows remain usable by their ordinary tools. See [Dependency Version Registry](../../dev-tools/versions-registry/README.md) for selectors, release-note sources, generated reports, catalog ownership, and failure behavior.
@@ -119,7 +119,7 @@ To build the Web UI bundle inside its container:
 docker exec -it lixpi-web-ui pnpm build
 ```
 
-For the full AWS deployment story (Pulumi, ECS/Fargate, CloudFront, the NATS cluster), see [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md).
+For the full AWS deployment story (Pulumi, ECS/Fargate, CloudFront, the NATS cluster), see [Infrastructure Overview](deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](deployment/SCALING-AND-OPERATIONS.md).
 
 ## Local authentication
 
@@ -129,7 +129,7 @@ LocalAuth0 provides zero-config Auth0 mocking for offline development — it gen
 - **Default user:** `test@local.dev` / `local|test-user-001`.
 - **Image / language:** the Rust `public.ecr.aws/primaassicurazioni/localauth0` image (upstream [`primait/localauth0`](https://github.com/primait/localauth0)).
 
-See [`services/localauth0/README.md`](../../services/localauth0/README.md) for endpoints, default claims, and troubleshooting, and [Authentication](./AUTHENTICATION.md) for how it fits the dual-auth model.
+See [`services/localauth0/README.md`](../../services/localauth0/README.md) for endpoints, default claims, and troubleshooting, and [Authentication](AUTHENTICATION.md) for how it fits the dual-auth model.
 
 For tests requiring a provisioned account and provider-usage authorization, use the [hosted account configuration commands](../../dev-tools/config-utils/README.md). The account service's `documentation/platform/DEVELOPMENT.md`, under **Automated sign-in inbox**, documents SES test addresses and the Docker helper that reads Auth0 codes from S3. Use that flow before requesting manual code entry; reuse an existing test recipient when its organization and credit are required.
 
@@ -145,13 +145,13 @@ First, create two S3 buckets for Pulumi state:
 To rebuild the Pulumi container from scratch:
 
 ```shell
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile deploy build --no-cache lixpi-pulumi
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml --profile deploy build --no-cache lixpi-pulumi
 ```
 
 To run Pulumi:
 
 ```shell
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml up lixpi-pulumi
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/infrastructure/docker-compose.pulumi.yml up lixpi-pulumi
 ```
 
 For how the Pulumi program is structured and the full set of commands (`up`, `preview`, `destroy`, …), see [Infrastructure Overview](deployment/INFRASTRUCTURE-OVERVIEW.md).

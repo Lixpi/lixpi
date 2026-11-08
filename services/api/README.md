@@ -58,7 +58,7 @@ Asset lease acquisition records the authenticated editor's user ID on each holde
 The local authentication integration test uses the running API, embedded NATS cluster, and LocalAuth0. It requests the mock authorization page with the login parameters and verifies that its preloaded JavaScript, snippets and WebAssembly share a versioned URL prefix. It checks every asset's integrity hash and validates the WebAssembly, then checks the fixed identity and structured admission claim. It rejects invalid connection credentials, connects with a fresh local token and user-scoped inbox, rejects missing/invalid request tokens, reads the authenticated user's profile and workspace list, and creates, reads, renames, and deletes its own temporary workspace. It uses HTTP and TCP NATS and does not inspect a browser. With those local services running and test execution permitted by `CODING_AGENTS_TEST_EXECUTION_MODE` in `env.lixpi`, run:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T -e LIXPI_NATS_RUNTIME_TEST=true lixpi-typescript-test-runner api src/NATS/middleware/nats-auth-middleware.runtime.test.ts
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T -e LIXPI_NATS_RUNTIME_TEST=true lixpi-typescript-test-runner api src/NATS/middleware/nats-auth-middleware.runtime.test.ts
 ```
 
 The test is skipped during ordinary unit-test runs.

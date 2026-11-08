@@ -14,7 +14,7 @@ src/
   styles/              Package-local tokens
   svg/                 SVG icons, textures and concrete animated icons (`@lixpi/ui-kit/svg`)
   runtime-settings.ts  Application-configurable component settings
-styles/                Public Sass entry points forwarding to component-owned styles
+styles/                Public Sass entry points and shared application styles
 ```
 
 Use public package imports:
@@ -32,15 +32,86 @@ import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 ```scss
 @use '@lixpi/ui-kit/styles/progress-timeline';
 @use '@lixpi/ui-kit/styles/block-card-tiles-list';
+@use '@lixpi/ui-kit/styles/typography';
+@use '@lixpi/ui-kit/styles/navigation-side-panel';
 ```
 
 Applications import each ui-kit stylesheet once at the application root. Feature styles must not `@use` or `@import` the same stylesheet again, because each compiled copy becomes a separate CSS module and prevents one HMR update from being the only active component stylesheet.
 
-The Web UI calls `configureUiKit(settings)` once during startup so package primitives receive the application-owned runtime values. Defaults keep the package usable in isolation and in component tests.
+UI-kit controls do not paint focus outlines. Applications use the shared Web Client Service Factory foundation to suppress browser-default outlines, including those on focusable SVG controls. Keyboard navigation, focus restoration and selected or checked state remain owned by each component.
+
+Web UI and the canvas library call `configureUiKit(createLixpiUiSettings())` during startup. That package factory copies the complete light theme's component appearance into independent runtime settings alongside behavior and geometry. `configureUiKit` takes overrides: any section a host leaves out keeps the ui-kit default in `uiKitSettings`. Standalone primitives read the same theme-owned profiles; per-instance configuration remains supported.
+
+`uiKitSettings.sidePanel` holds the motion every SidePanel shares: slide duration and easing from the theme, overlay opacity, and swipe-to-close thresholds. Its `placement` decides whether an open panel draws on top of the content (`overlay`, the default) or takes its own space and shrinks the content (`push`). Hosts do not pass these values, so the web UI and the canvas library open and close panels identically.
+
+The navigation panel, right panel and canvas library read panel geometry and toggle sizes from `@lixpi/themes`. A library dock uses its own configured width and the same resize and toggle geometry. `CanvasLibraryLayout.setOpen` owns a panel's open and close: opening marks the panel open and slides it in, and closing slides it out before releasing it. A close that is overtaken by a reopen leaves the panel open. Panels overlay the stage unless the host passes `placements` to the layout constructor, for example `{ navigation: 'push' }`. A pushed panel claims a grid column, so the stage shrinks while it is open; an overlaid panel sits above the stage and never resizes it. Navigation headings and rows share the theme's sidebar roles. The navigation icon treatment applies only to the left navigation toggle.
 
 The shared animated collapse/expand icon describes the available action: collapsed content shows outward expand chevrons, while expanded content shows inward collapse chevrons. Hosts provide the label and ARIA state; they do not reverse the icon state themselves.
 
 Portaled sliding dropdowns reserve the overlay layer directly below the default help-tooltip layer, so help content rendered from a dropdown option covers the dropdown surface and chevron.
+
+A sliding dropdown can inherit a local host's theme while its SVG and chevron are portaled to the document body. Set `portalStyleSource` to that host, or supply a getter when the control is constructed before mounting. The dropdown copies the source's custom properties and typography to its original SVG and both portals, observes the original source and its ancestors for changes, and restores owned SVG styles and attributes on disposal. Optional `portalScopeAttributes` supplies an attribute map or getter for the caller's scoped styles. These settings are per instance and do not change UI-kit's global configuration. A positive `--sliding-dropdown-control-height` on the source updates the dropdown's native option geometry along with its inherited styles. Optional `--sliding-dropdown-control-height-offset` subtracts a numeric pixel inset from that height, allowing a host's smaller selector rows to follow a shared control size. Its default is zero; unthemed configured heights remain unchanged.
+
+Import `@lixpi/ui-kit/styles/fonts` once to load the same bundled Söhne and Söhne Mono font faces used by the main web UI. The stylesheet defines the existing 200, 300, 400 and 500 normal and italic faces; application styles and theme settings choose the font family and size. Font URLs are package-relative and are handled by the consuming build.
+
+`@lixpi/ui-kit/styles/typography` supplies the web UI's existing application typography, including those bundled fonts, body text, headings, links and code. The web UI and canvas library import this same stylesheet so their application text uses the same families and rules.
+
+`@lixpi/ui-kit/styles/navigation-side-panel` supplies the production navigation drawer and workspace-list styles. Its `navigation-side-panel`, `navigation-side-panel-list`, `navigation-side-panel-row`, `navigation-side-panel-row-title` and `navigation-side-panel-row-active` classes define the shared surface and row treatment. Hosts provide content and SidePanel behavior. A docked host can adapt the container's position and width without replacing its appearance or introducing a separate navigation palette.
+
+SlidingSwitch and SlidingTabsSwitch expose `setAppearance(Partial<SlidingSwitchAppearance>)` for track, indicator and state colors, shadows and label typography. ToggleSwitch exposes `setAppearance(Partial<ToggleSwitchAppearance>)` for track, knob and checkmark colors, stroke and disabled opacity, plus `resize`. Appearance changes retain selected or checked state, mounted content, handlers and positional animations. Constructor appearance options keep standalone defaults unchanged.
+
+## Application themes
+
+The standalone `@lixpi/themes` package owns theme values. Web UI and the canvas library use its `lixpi-light` preset; [One Dark Pro Mariana](../themes/src/presets/one-dark-pro-mariana/README.md) uses the same complete template. UI-kit consumes these values for its controls and styles.
+
+All TypeScript consumers import from `@lixpi/themes`. That entrypoint owns the preset registry: `themePresets` and `themeNames` enumerate it, `getTheme(name)` returns the registered native preset, and `getThemeStylesheet(name)` returns its CSS projection. Unknown names throw instead of selecting another theme. The entrypoint has no browser component, editor, or Node tooling dependencies.
+
+```typescript
+import { lixpiLightTheme } from '@lixpi/themes'
+import { createLixpiCanvasThemeFromPreset } from '@lixpi/canvas-components/workspace/settings'
+
+const canvasTheme = createLixpiCanvasThemeFromPreset(lixpiLightTheme)
+```
+
+The package separates the values developers edit from their emitted stylesheets:
+
+```text
+src/
+  template/       Complete TypeScript theme definitions, without default values
+  palettes/       Raw color swatches named by appearance
+  shared/         Component appearance values deliberately reused by both presets
+  presets/        Each preset's role assignments and complete theme composition
+  adapters/       CSS-variable and framework mappings
+  projections/    SCSS role projection and value-free Sass helper
+  index.ts        Public TypeScript API and preset registry
+dist/scss/        Generated Sass palettes, preset stylesheets and framework output
+tooling/         Generator and drift checks
+```
+
+Every preset has the same `roles.ts` and `theme.ts` structure and calls `defineTheme` with complete role and component values. The template supplies no defaults, and no preset falls back to another preset. Raw palettes remain separate from semantic roles such as `text.body`, `feedback.warning` and `editor.syntax.keyword`. Shared component values are copied independently for each preset.
+
+Component appearance follows the same named domains for native controls and DOM styles. For example, `components.dropdown` owns `popover` and `menu`, `components.contextPreview` owns `styles` and `elements`, and `components.composer` owns its controls, input and references. Typography keeps body text, compact controls, panel content, headings, Markdown, introductory text and feedback tags separate. The light preset uses 15px body text, 12px regular control labels and 14px panel content. Reference chips select `editor.referenceChip.onLight` or `onDark` for their surface.
+
+Import generated styles at the application root. The light stylesheet applies to an unthemed document. To switch a document or subtree, load both presets and set `data-color-theme` to its registered name and `data-theme` to its color scheme. The aggregate entrypoint includes every registered preset:
+
+```scss
+@use "@lixpi/themes/dist/scss";
+```
+
+Individual presets and their generated palette maps are also available at `@lixpi/themes/dist/scss/<name>/theme` and `@lixpi/themes/dist/scss/<name>/palette`. The value-free `@lixpi/themes/scope` helper reads a role from those maps. Configurable Sass mixins use generated `$value-roles` for calculations requiring concrete colors or numbers; CSS fallbacks use `$roles`. Both maps come from the same TypeScript definition.
+
+Change appearance values in TypeScript, then regenerate the checked-in SCSS. The generator iterates the same public registry as consumers. From the repository root:
+
+```sh
+docker run --rm --network none -v "$PWD/packages/lixpi/themes:/workspace" -w /workspace node:24.22.2-alpine node tooling/generate.ts
+docker run --rm --network none -v "$PWD/packages/lixpi/themes:/workspace:ro" -w /workspace node:24.22.2-alpine node tooling/generate.ts --check
+```
+
+The package scripts `themes:generate` and `themes:check` run those same operations. Generated files carry a provenance header and must not be edited directly. `typecheck` checks the complete definitions; package tests cover preset shape, registry identity, shared-value isolation and CSS adaptation.
+
+The [Gentelella adapter](../ui-kit-gentelella/README.md#shared-color-themes) projects these roles into Gentelella variables and selectors. Its TypeScript functions use the package root; its generated Sass is `@lixpi/themes/dist/scss/adapters/gentelella`.
+
+The canvas library uses `@lixpi/ui-kit/canvas-library` for panel dimensions and `@lixpi/ui-kit/styles/canvas-library` for layout and navigation. The canvas package owns node presentation and the transparent drawing surface. `CanvasLibraryLayout.mountPanel(name, element, panel)` attaches the native SidePanel resize element and glass backdrop. Call it before mounting or reopening a panel; repeated calls reuse the same elements. Library styles align the backdrops with their docks and hide them with the corresponding navigation, inspector or theme-panel state.
 
 ## Components
 

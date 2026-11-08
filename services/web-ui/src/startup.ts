@@ -4,7 +4,7 @@ import {
     type AuthClientSession,
 } from '@lixpi/auth-client'
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
-import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components-lixpi-specific/frontend/loading'
+import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components/workspace/loading'
 import {
     type LoadingLayer,
     type LoadingLease,
@@ -13,7 +13,7 @@ import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import {
     type WebClientServiceInstance,
 } from '@lixpi/web-client-service-factory'
-import { settings } from './settings.ts'
+import { settings } from '$src/settings.ts'
 
 type WorkspaceConfig = {
     loadingLayer: LoadingLayer

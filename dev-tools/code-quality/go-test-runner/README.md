@@ -7,7 +7,7 @@ description: Docker image and mount contract for isolated, race-enabled Go test 
 
 This directory builds the shared Go test image. A repository-specific Compose adapter mounts Go manifests and source, then invokes [`run-tests.sh`](run-tests.sh) with a target name and optional `go test` arguments.
 
-The reusable service is defined in [`../runner-compose/go-test.base.yml`](../runner-compose/go-test.base.yml). The main repository extends it from [`../../../infrastructure/docker/docker-compose.go-test-runner.yml`](../../../infrastructure/docker/docker-compose.go-test-runner.yml). Other repositories extend the same base file and supply their own read-only targets.
+The reusable service is defined in [`../runner-compose/go-test.base.yml`](../runner-compose/go-test.base.yml). The main repository extends it from [`../../../infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml`](../../../infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml). Other repositories extend the same base file and supply their own read-only targets.
 
 ## Target mount contract
 
@@ -32,7 +32,7 @@ The base service provides separate module and build cache volumes. The consuming
 Run a main-repository target from the repository root:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner <target> [go test arguments]
+docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.go-test-runner.yml --profile dev run --rm --no-deps -T lixpi-go-test-runner <target> [go test arguments]
 ```
 
 The complete Go test workflow, including the isolated broker acceptance sequence, is in [Go Testing and Tooling](../../../documentation/code-quality/testing/GO.md).

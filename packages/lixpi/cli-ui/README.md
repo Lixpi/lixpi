@@ -7,7 +7,7 @@ The developer tools under `dev-tools/` ask their questions in a terminal, inside
 | `@lixpi/cli-ui/prompt-session` | `showWizardIntro` for the title bar, `renderInstructionFooter` for the guide below every menu, and `unwrapPrompt` with `PromptCancelled` so a wizard handles cancellation once around all its questions |
 | `@lixpi/cli-ui/environment-files` | `listEnvironmentFiles` for the repository's `.env.*` files |
 | `@lixpi/cli-ui/select-menu` | `selectMenu`, a single-choice menu that opens on its first option unless given an initial value. Like the tree, it marks the focused row with a chevron |
-| `@lixpi/cli-ui/tree-multiselect-prompt` | `TreeMultiSelectPrompt`, a Clack-styled multiselect for trees of any depth, with optional horizontal radio rows above the tree |
+| `@lixpi/cli-ui/tree-multiselect-prompt` | `TreeMultiSelectPrompt`, a Clack-styled multiselect for trees of any depth, with optional horizontal radio rows above the tree and preset rows inside it that apply a fixed selection |
 | `@lixpi/cli-ui/tree-selection` | `TreeSelection`, the prompt's selection model. It stores selection on leaves and derives each group's state from them |
 | `@lixpi/cli-ui/secret-input` | `SecretInputPrompt`, a chunk-based input for long credentials |
 
@@ -22,5 +22,5 @@ A tool lists `@lixpi/cli-ui` as a `workspace:*` dependency and adds `packages/li
 When `CODING_AGENTS_TEST_EXECUTION_MODE` permits, run the tests through the shared TypeScript test runner. The secret-input tests use the image's `script` utility to exercise a real pseudo-terminal, including typing, a 1 MiB paste, cancellation, and the Clack prompts before and after it.
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared cli-ui
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner shared cli-ui
 ```

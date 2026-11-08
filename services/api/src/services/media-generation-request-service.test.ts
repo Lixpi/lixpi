@@ -16,7 +16,7 @@ import {
 import {
     getMediaGenerationOperationNodeId,
     getPendingGeneratedMediaNodeId,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 
 const mocks = vi.hoisted(() => ({
     mediaRequestModel: {

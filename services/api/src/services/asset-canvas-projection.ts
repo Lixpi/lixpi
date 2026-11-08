@@ -8,7 +8,7 @@ import {
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
     resizeBranchMarkerToDimensions,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 import {
     settleMediaGenerationRunProgress,
     type AiModelId,

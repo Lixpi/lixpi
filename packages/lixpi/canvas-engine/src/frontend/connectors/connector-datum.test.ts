@@ -5,12 +5,14 @@ import {
 } from 'vitest'
 import {
     computeConnectorDatum,
+    computeConnectorEndpoints,
     type ConnectorDatumStyle,
 } from './connector-datum.ts'
 import {
     type EdgeConfig,
     type NodeConfig,
 } from '../../shared/connectors/path-types.ts'
+import matrixFixture from '../../shared/connectors/paths/matrix-anchor-regression-fixtures.json'
 
 const nodes = new Map<string, NodeConfig>([
     ['a', {
@@ -83,5 +85,52 @@ describe('Connector geometry', () => {
         expect(result.strokeColor).toBe('#ffffff')
         expect(result.isDashed).toBe(true)
         expect(computeConnectorDatum(edge, new Map(), style)).toBeNull()
+    })
+})
+
+
+type CapturedMatrixCase = {
+    source: string
+    target: string
+    edges: Array<{
+        edge: EdgeConfig
+        endpoints: {
+            source: {
+                x: number
+                y: number
+            }
+            target: {
+                x: number
+                y: number
+            }
+        }
+        style: ConnectorDatumStyle
+    }>
+}
+
+const capturedMatrixCases = matrixFixture.cases as CapturedMatrixCase[]
+const capturedMatrixNodes = matrixFixture.nodes as NodeConfig[]
+
+describe('captured connector matrix datum regression', () => {
+    it.each(capturedMatrixCases)('creates both connector datums for $source to $target anchors', ({ edges }) => {
+        const worldNodeMap = new Map(capturedMatrixNodes.map(node => [node.id, node]))
+
+        for (const sample of edges) {
+            const {
+                edge,
+                endpoints,
+                style: capturedStyle,
+            } = sample
+            const label = `${edge.id} ${edge.source.position} to ${edge.target.position}`
+            const actualEndpoints = computeConnectorEndpoints(edge, worldNodeMap, capturedStyle)
+
+            expect(actualEndpoints, `${label} resolves world endpoints`).not.toBeNull()
+            expect(actualEndpoints, `${label} matches the captured browser endpoints`).toEqual(endpoints)
+
+            const datum = computeConnectorDatum(edge, worldNodeMap, capturedStyle)
+
+            expect(datum, `${label} creates a connector datum`).not.toBeNull()
+            expect(datum?.svgPath, `${label} creates an SVG route`).toMatch(/^M /)
+        }
     })
 })

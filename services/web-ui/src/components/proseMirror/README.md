@@ -6,7 +6,7 @@ This document is the canonical, deep-dive reference for the ProseMirror-based ed
 ## High-level overview
 
 - Workspace canvas hosts own editor lifecycle and join Asset metadata with role snapshots before instantiating the editor driver.
-- Asset context-preview tiles come from `@lixpi/canvas-components-lixpi-specific/frontend/context`. The canvas adapter supplies authenticated rendition URLs, document text and installed Artifact icons; UI-kit owns the generic popover and tooltip. Preview disposal releases native media and ignores late URL responses.
+- Asset context-preview tiles come from `@lixpi/canvas-components/workspace/context`. The canvas adapter supplies authenticated rendition URLs, document text and installed Artifact icons; UI-kit owns the generic popover and tooltip. Preview disposal releases native media and ignores late URL responses.
 - The Lixpi package owns the workspace composer shell, gradient, draft storage and context trays. `canvas-adapters/prompt-composer-editor.ts` mounts the application editor through the package's typed port. `promptControlFactories.ts` supplies the application's existing model and installed-Capability controls without changing their defaults or submission contract.
 - `components/editor.ts` imports the shared ProseMirror schema factory from `@lixpi/prosemirror` and wires all editor plugins.
 - A rich plugin stack handles state propagation, AI triggers, authority-backed step application, placeholders/menus, CodeMirror code blocks, and UX behaviors.
@@ -241,21 +241,16 @@ graph TD
   - Mod-_ to insert horizontal rule.
 
 - `components/inputRules.ts` includes smart quotes, ellipsis, em-dash, blockquote, ordered/bullet lists, heading `#` levels.
-- Code fences ``` are handled by `plugins/codeBlockPlugin.ts`'s `codeBlockInputRule(schema)` replacing the current paragraph with a `code_block` and ensuring an empty line after.
+- Code fences ``` are handled by `codeBlockInputRule(schema)` from `@lixpi/prosemirror/frontend/code-block`, replacing the current paragraph with a `code_block` and ensuring an empty line after.
 
 
-## Code blocks with CodeMirror 6 (`plugins/codeBlockPlugin.ts`)
+## Code blocks with CodeMirror 6
 
-- Provides a NodeView `CodeBlockView` wrapping a CM6 editor, supporting:
-  - Theme via `node.attrs.theme` (defaults to gruvboxLight/dark mapping inside plugin).
-  - Selection synchronization PM↔CM6:
-    - `syncProseMirrorSelection`: if PM selection enters CM, mirror it inside CM.
-    - `syncCodeMirrorSelection`: if CM selection hits boundaries, move PM selection before/after the node.
-    - Global “Select All” behavior spans PM doc and all CM instances.
-  - Keymap inside CM6: Mod-A (select all across doc), Mod-Enter exit code (exitCode), undo/redo fallthrough to PM.
-  - `forwardUpdate`: writes CM doc edits into PM transaction using `changes.iterChanges`.
-- Decorations: draws selection highlights across code blocks when PM selection intersects CM ranges.
-- Input rule `codeBlockInputRule(schema)`: converts ``` line to code_block and inserts an empty paragraph after.
+`createCodeBlockPlugin(schema)` and `codeBlockInputRule(schema)` come from `@lixpi/prosemirror/frontend/code-block`. The package owns the existing `CodeBlockView`, the Gruvbox Light theme at `@lixpi/prosemirror/frontend/themes/gruvbox-light`, and the `@lixpi/prosemirror/styles/code-mirror` stylesheet. Web UI imports these defining modules directly.
+
+The NodeView synchronizes code content and selections between ProseMirror and CodeMirror. Arrow keys can move the outer selection before or after a code block at its boundaries. Select All spans the ProseMirror document and every code block; selection decorations include intersected code ranges. In editable documents, Mod-Enter exits code and undo/redo use ProseMirror history. The code-fence input rule replaces the current paragraph with a code block and ensures an empty paragraph follows it.
+
+An outer read-only ProseMirror view makes CodeMirror read-only and disables its editable DOM. Mutating CodeMirror transactions and the bridge's exit/undo/redo commands are blocked, while text selection and copying remain available. Host document updates still reach the retained CodeMirror view, and changes to outer editability reconfigure the same instance.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -452,9 +447,9 @@ flowchart LR
 
 ## File map
 
-- Workspace host: `components/workspaceCanvasView/workspaceCanvasView.ts` mounts the package surface through `canvas-adapters/workspace-canvas-host.ts`. Lixpi composition lives in `@lixpi/canvas-components-lixpi-specific/frontend/workspace`
+- Workspace host: `components/workspaceCanvasView/workspaceCanvasView.ts` mounts the package surface through `canvas-adapters/workspace-canvas-host.ts`. Lixpi composition lives in `@lixpi/canvas-components/workspace`
 - Editor driver: `components/editor.ts`
-- Prompt composer wrapper: `@lixpi/canvas-components-lixpi-specific/frontend/composer`; application editor mounting: `canvas-adapters/prompt-composer-editor.ts`
+- Prompt composer wrapper: `@lixpi/canvas-components/workspace/composer`; application editor mounting: `canvas-adapters/prompt-composer-editor.ts`
 - Shared schema package: `packages/lixpi/prosemirror`
 - Schema compatibility export: `components/schema.ts`
 - Bubble menu: `plugins/bubbleMenuPlugin/*`

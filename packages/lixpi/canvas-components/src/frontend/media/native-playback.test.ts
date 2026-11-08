@@ -137,6 +137,37 @@ describe('NativePlayback', () => {
         playback.destroy()
     })
 
+    it('keeps audio hidden by default and shows native controls when opted in', () => {
+        const hidden = fixture({ kind: 'audio' })
+        expect(hidden.playback.element.controls).toBe(false)
+        expect(hidden.playback.element.style.width).toBe('1px')
+        expect(hidden.playback.element.style.height).toBe('1px')
+        hidden.playback.destroy()
+
+        const visible = fixture({
+            kind: 'audio',
+            controls: true,
+        })
+        expect(visible.playback.element.controls).toBe(true)
+        expect(visible.playback.element.style.width).toBe('100%')
+        expect(visible.playback.element.style.height).toBe('100%')
+        visible.playback.destroy()
+    })
+
+    it('keeps video controls opt-in while sizing the native video to its node', () => {
+        const hidden = fixture()
+        expect(hidden.playback.element.controls).toBe(false)
+        expect(hidden.playback.element.style.width).toBe('100%')
+        expect(hidden.playback.element.style.height).toBe('100%')
+        hidden.playback.destroy()
+
+        const visible = fixture({ controls: true })
+        expect(visible.playback.element.controls).toBe(true)
+        expect(visible.playback.element.style.width).toBe('100%')
+        expect(visible.playback.element.style.height).toBe('100%')
+        visible.playback.destroy()
+    })
+
     it('registers native playback and a poster as one scoped node without reading product data', async () => {
         const {
             playback,
@@ -223,6 +254,7 @@ describe('NativePlayback', () => {
             kind: 'video',
             geometry,
             getContent: node => node.data,
+            playback: { controls: true },
             onElement,
             onError,
         }))
@@ -246,6 +278,9 @@ describe('NativePlayback', () => {
         }
         const view = registry.get('clip')!.mount(node, context)
         expect(onElement).toHaveBeenCalledWith(node, root.querySelector('video'))
+        expect(root.querySelector<HTMLVideoElement>('video')?.controls).toBe(true)
+        view.update(node)
+        expect(root.querySelector<HTMLVideoElement>('video')?.controls).toBe(true)
         view.setGeometry({
             ...node.position,
             ...node.dimensions,

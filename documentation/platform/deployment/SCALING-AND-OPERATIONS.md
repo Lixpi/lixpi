@@ -7,7 +7,7 @@ description: How a Lixpi stack scales — horizontal scaling profile, NATS sizin
 
 This page covers what happens as a Lixpi stack grows and how it is operated day to day: the horizontal scaling profile, NATS cluster sizing, the realistic traffic ceiling, the steps to scale up for real load, and how the system behaves when components fail. It then walks through environments and stacks, the operational workflow, and observability.
 
-For the topology these pieces scale within, see [Infrastructure Overview](./INFRASTRUCTURE-OVERVIEW.md). For the NATS cluster internals, see [NATS Cluster](./NATS-CLUSTER.md). For the runtime architecture and queue-group model, see [System Architecture](../SYSTEM-ARCHITECTURE.md).
+For the topology these pieces scale within, see [Infrastructure Overview](INFRASTRUCTURE-OVERVIEW.md). For the NATS cluster internals, see [NATS Cluster](NATS-CLUSTER.md). For the runtime architecture and queue-group model, see [System Architecture](../SYSTEM-ARCHITECTURE.md).
 
 ## Scaling and Capacity
 
@@ -69,7 +69,7 @@ If a stack needs to handle higher real-world load, the steps in order of impact 
 
 ## Environments and Stacks
 
-Every developer and environment has its own full AWS copy — there are no shared environments. A stack is bootstrapped by the config utility ([`dev-tools/config-utils/`](../../../dev-tools/config-utils/)) which:
+Every developer and environment has its own full AWS copy — there are no shared environments. A stack is bootstrapped by the config utility ([`dev-tools/config-utils/`](../../../dev-tools/config-utils)) which:
 
 1. Prompts for a name and environment type (`local`, `dev`, `production`).
 2. Generates fresh NATS NKeys + XKeys + passwords using `@nats-io/nkeys`.
@@ -117,6 +117,6 @@ flowchart LR
 
 | Page | What it covers |
 |------|----------------|
-| [Infrastructure Overview](./INFRASTRUCTURE-OVERVIEW.md) | The high-level AWS topology, Pulumi, network layout, the `api` ECS service, Web UI, and DynamoDB |
-| [NATS Cluster](./NATS-CLUSTER.md) | The NATS cluster internals: ports, CloudMap discovery, the Lambda sidecar, Caddy-in-Lambda TLS, and the auth callout |
+| [Infrastructure Overview](INFRASTRUCTURE-OVERVIEW.md) | The high-level AWS topology, Pulumi, network layout, the `api` ECS service, Web UI, and DynamoDB |
+| [NATS Cluster](NATS-CLUSTER.md) | The NATS cluster internals: ports, CloudMap discovery, the Lambda sidecar, Caddy-in-Lambda TLS, and the auth callout |
 | [System Architecture](../SYSTEM-ARCHITECTURE.md) | The runtime architecture, queue groups, and design decisions |

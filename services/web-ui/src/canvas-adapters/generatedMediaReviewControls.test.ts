@@ -46,14 +46,14 @@ const extractBlock = (source: string, selector: string): string => {
 }
 
 describe('generated media review controls', () => {
-    const canvasSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts')
-        + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-branch-marker-presentation.ts')
-    const scssSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/generated-output-node-chrome.scss')
-    const chromeSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/generated-output-node-chrome.ts')
-    const branchActionsSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-actions.ts')
-    const branchScssSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-content.scss')
+    const canvasSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas.ts')
+        + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-branch-marker-presentation.ts')
+    const scssSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-chrome.scss')
+    const chromeSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-chrome.ts')
+    const branchActionsSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-actions.ts')
+    const branchScssSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-content.scss')
     const layoutSource = readSourceFile('../views/layouts/layout.ts')
-    const settingsSource = readSourceFile('../settings.ts')
+    const settingsSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/settings/ui-settings.ts')
     const iconSource = readSourceFile('../../packages/lixpi/ui-kit/src/svg/svgIcons.ts')
     const footerSource = readSourceFile('../../packages/lixpi/ui-kit/src/components/canvasNodeFooter/canvasNodeFooter.ts')
     const footerScssSource = readSourceFile('../../packages/lixpi/ui-kit/src/components/canvasNodeFooter/canvas-node-footer.scss')

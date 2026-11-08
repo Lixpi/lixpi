@@ -1,8 +1,5 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import {
-    type ServiceGroup,
-} from './service-tree.ts'
 
 export const CONSOLE_CONFIG_PATH = 'dev-tools/dev-console/console.config.json'
 
@@ -30,11 +27,10 @@ export type ConsoleStep =
         type: 'choices'
         message: string
         options?: ConsoleOption[]
-        services?: {
-            composeFile: string
-            baseProfile?: string
-            groups: ServiceGroup[]
-        }
+
+        // Shows the service tree, read from infrastructure/docker. The selection
+        // starts that directory's stack with its base profile.
+        services?: true
     }
 
 export type ConsoleAction = {
@@ -86,6 +82,15 @@ export const parseConsoleConfig = (text: string): ConsoleConfig => {
 
         if (!SCRIPT_PATTERN.test(action.script ?? ''))
             throw new Error(`Console action ${action.id} needs a script named shared:<name> or local:<name>.`)
+
+        for (const step of action.steps ?? []) {
+            if (
+                step.type === 'choices'
+                && step.services !== undefined
+                && step.services !== true
+            )
+                throw new Error(`Console action ${action.id} must set "services": true. The service tree comes from infrastructure/docker.`)
+        }
     }
 
     return config

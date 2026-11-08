@@ -42,6 +42,18 @@ export class DomGlassBorder {
         )
     }
 
+    setAppearance(
+        style: GlassBorderOptions['style'],
+        texture: GlassBorderOptions['texture'],
+    ): void {
+        if (this.destroyed)
+            return
+
+        this.border.setAppearance(style, texture)
+        this.radii.clear()
+        this.refresh()
+    }
+
     setTargets(targets: readonly DomGlassTarget[]): void {
         if (this.destroyed)
             return

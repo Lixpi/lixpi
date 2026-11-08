@@ -1,3 +1,6 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
 @use "@lixpi/ui-primitives/styles/transitions" as *;
 @use "../../styles/tokens" as tokens;
 @import url("https://fonts.cdnfonts.com/css/herculanum-lt-pro");
@@ -7,12 +10,12 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     min-height: 100dvh;
     width: 100%;
-    color: tokens.$nightBlue;
-    background: #faf9f7;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #{themeScope.token("components-auth-panel-auth-panel-base-foreground", themePalette.$roles)};
+    background: #{themeScope.token("components-auth-panel-auth-panel-base-background", themePalette.$roles)};
+    font-family: #{themeScope.token("components-auth-panel-auth-panel-base-font-family", themePalette.$roles)};
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    line-height: 1.5;
+    line-height: #{themeScope.token("components-auth-panel-auth-panel-base-line-height", themePalette.$roles)};
     box-sizing: border-box;
     outline: none;
 }
@@ -36,37 +39,37 @@
 
 .auth-panel-eyebrow {
     margin: 0 0 20px;
-    color: tokens.$steelBlue;
-    font-size: 10px;
-    font-weight: 650;
-    letter-spacing: 2px;
+    color: #{themeScope.token("components-auth-panel-eyebrow-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-auth-panel-eyebrow-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-auth-panel-eyebrow-base-font-weight", themePalette.$roles)};
+    letter-spacing: #{themeScope.token("components-auth-panel-eyebrow-base-letter-spacing", themePalette.$roles)};
 }
 
 .auth-panel-title {
     margin: 0 0 16px;
-    color: tokens.$nightBlue;
-    font-size: clamp(30px, 3vw, 42px);
-    font-weight: 550;
-    letter-spacing: -1.4px;
-    line-height: 1.15;
+    color: #{themeScope.token("components-auth-panel-title-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-auth-panel-title-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-auth-panel-title-base-font-weight", themePalette.$roles)};
+    letter-spacing: #{themeScope.token("components-auth-panel-title-base-letter-spacing", themePalette.$roles)};
+    line-height: #{themeScope.token("components-auth-panel-title-base-line-height", themePalette.$roles)};
 }
 
 .auth-panel-description {
     margin: 0 0 30px;
-    color: tokens.$steelBlue;
-    font-size: 15px;
-    line-height: 1.7;
+    color: #{themeScope.token("components-auth-panel-description-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-auth-panel-description-base-font-size", themePalette.$roles)};
+    line-height: #{themeScope.token("components-auth-panel-description-base-line-height", themePalette.$roles)};
 }
 
 .auth-panel-notice {
     padding: 14px 16px;
     margin: 0 0 24px;
-    border: 1px solid #dce4d9;
-    border-radius: 10px;
-    background: #f0f4ed;
-    color: #4e624f;
-    font-size: 13px;
-    line-height: 1.6;
+    border: #{themeScope.token("components-auth-panel-notice-base-border", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-auth-panel-notice-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-auth-panel-notice-base-background", themePalette.$roles)};
+    color: #{themeScope.token("components-auth-panel-notice-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-auth-panel-notice-base-font-size", themePalette.$roles)};
+    line-height: #{themeScope.token("components-auth-panel-notice-base-line-height", themePalette.$roles)};
 }
 
 .auth-panel-actions {
@@ -78,13 +81,13 @@
     width: 100%;
     min-height: 48px;
     padding: 12px 20px;
-    border: 1px solid tokens.$nightBlue;
-    border-radius: 12px;
-    background: tokens.$nightBlue;
-    color: #fff;
+    border: #{themeScope.token("components-auth-panel-button-button-base-border", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-auth-panel-button-button-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-auth-panel-button-button-base-background", themePalette.$roles)};
+    color: #{themeScope.token("components-auth-panel-button-button-base-foreground", themePalette.$roles)};
     font: inherit;
-    font-size: 14px;
-    font-weight: 550;
+    font-size: #{themeScope.token("components-auth-panel-button-button-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-auth-panel-button-button-base-font-weight", themePalette.$roles)};
     cursor: pointer;
     transition:
         hoverTransition(background-color),
@@ -92,13 +95,12 @@
         hoverTransition(color);
 
     &:hover:not(:disabled) {
-        background: tokens.$steelBlue;
-        border-color: tokens.$steelBlue;
+        background: #{themeScope.token("components-auth-panel-button-hover-background", themePalette.$roles)};
+        border-color: #{themeScope.token("components-auth-panel-button-hover-border-color", themePalette.$roles)};
     }
 
     &:focus-visible {
-        outline: 3px solid #87a97a;
-        outline-offset: 4px;
+        outline: none;
     }
 
     &:disabled {
@@ -108,13 +110,13 @@
 }
 
 .auth-panel-button-secondary {
-    color: tokens.$nightBlue;
+    color: #{themeScope.token("components-auth-panel-button-secondary-button-base-foreground", themePalette.$roles)};
     background: transparent;
-    border-color: #d7ddd4;
+    border-color: #{themeScope.token("components-auth-panel-button-secondary-button-base-border-color", themePalette.$roles)};
 
     &:hover:not(:disabled) {
-        background: #eef2eb;
-        border-color: #b6c4b0;
+        background: #{themeScope.token("components-auth-panel-button-secondary-hover-background", themePalette.$roles)};
+        border-color: #{themeScope.token("components-auth-panel-button-secondary-hover-border-color", themePalette.$roles)};
     }
 }
 
@@ -122,8 +124,8 @@
     position: absolute;
     bottom: 30px;
     margin: 0;
-    font-size: 12px;
-    color: #859084;
+    font-size: #{themeScope.token("components-auth-panel-footer-base-font-size", themePalette.$roles)};
+    color: #{themeScope.token("components-auth-panel-footer-base-foreground", themePalette.$roles)};
 }
 
 .auth-panel-brand {
@@ -134,8 +136,8 @@
     justify-content: center;
     overflow: hidden;
     min-height: 100%;
-    color: tokens.$nightBlue;
-    background: #6e9860;
+    color: #{themeScope.token("components-auth-panel-brand-base-foreground", themePalette.$roles)};
+    background: #{themeScope.token("components-auth-panel-brand-base-background", themePalette.$roles)};
     isolation: isolate;
 
     &::before {
@@ -144,7 +146,7 @@
         inset: 0;
         z-index: 1;
         pointer-events: none;
-        background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 100%);
+        background: #{themeScope.token("components-auth-panel-brand-underlay-base-background", themePalette.$roles)};
     }
 
     &::after {
@@ -153,7 +155,7 @@
         inset: 0;
         z-index: 2;
         pointer-events: none;
-        box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.28), inset 0 -1px 2px rgba(255, 255, 255, 0.14);
+        box-shadow: #{themeScope.token("components-auth-panel-brand-overlay-base-shadow", themePalette.$roles)};
     }
 }
 
@@ -168,7 +170,7 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
-    font-size: 16px;
+    font-size: #{themeScope.token("components-auth-panel-brand-content-base-font-size", themePalette.$roles)};
     line-height: normal;
     width: 100%;
     box-sizing: border-box;
@@ -203,22 +205,22 @@
 }
 
 .auth-panel .auth-panel-wordmark {
-    font-family: "Herculanum LT Pro", sans-serif;
-    font-size: clamp(57.6px, 7.5vw, 88px);
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.72);
+    font-family: #{themeScope.token("components-auth-panel-wordmark-base-font-family", themePalette.$roles)};
+    font-size: #{themeScope.token("components-auth-panel-wordmark-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-auth-panel-wordmark-base-font-weight", themePalette.$roles)};
+    color: #{themeScope.token("components-auth-panel-wordmark-base-foreground", themePalette.$roles)};
     margin: 0;
-    letter-spacing: 0.08em;
-    line-height: 1;
+    letter-spacing: #{themeScope.token("components-auth-panel-wordmark-base-letter-spacing", themePalette.$roles)};
+    line-height: #{themeScope.token("components-auth-panel-wordmark-base-line-height", themePalette.$roles)};
     user-select: none;
 }
 
 .auth-panel-brand-caption {
     margin: 0 0 8px;
-    color: rgba(255, 255, 255, 0.78);
-    font-size: clamp(16px, 2.5vw, 19.2px);
-    font-weight: 400;
-    letter-spacing: 0.015em;
+    color: #{themeScope.token("components-auth-panel-brand-caption-base-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("components-auth-panel-brand-caption-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-auth-panel-brand-caption-base-font-weight", themePalette.$roles)};
+    letter-spacing: #{themeScope.token("components-auth-panel-brand-caption-base-letter-spacing", themePalette.$roles)};
     text-align: center;
 }
 
@@ -240,9 +242,9 @@
         position: absolute;
         top: 28px;
         left: 28px;
-        font-family: "Herculanum LT Pro", sans-serif;
-        font-size: 28px;
-        font-weight: 500;
-        letter-spacing: 0.08em;
+        font-family: #{themeScope.token("components-auth-panel-mobile-brand-compact-font-family", themePalette.$roles)};
+        font-size: #{themeScope.token("components-auth-panel-mobile-brand-compact-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-auth-panel-mobile-brand-compact-font-weight", themePalette.$roles)};
+        letter-spacing: #{themeScope.token("components-auth-panel-mobile-brand-compact-letter-spacing", themePalette.$roles)};
     }
 }

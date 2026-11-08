@@ -1,7 +1,7 @@
 import {
     WorkspaceCanvasSessionHub,
     normalizeWorkspaceCanvasState,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+} from '@lixpi/canvas-components/workspace/shared'
 import {
     type WebClientRouterService,
 } from '@lixpi/web-client-service-factory'

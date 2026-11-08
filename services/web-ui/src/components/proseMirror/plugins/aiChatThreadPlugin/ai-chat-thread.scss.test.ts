@@ -1,4 +1,5 @@
 import {
+    beforeAll,
     describe,
     it,
     expect,
@@ -6,6 +7,7 @@ import {
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { withoutLayout } from '@lixpi/test-utils'
+import { compileThemedStylesheet } from '@lixpi/test-utils/stylesheets'
 
 const expectSourceToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 
@@ -60,7 +62,13 @@ const getBraceBalancedBlock = (source: string, selector: string): string => {
 }
 
 describe('ai-chat-thread.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'ai-chat-thread.scss'), 'utf-8')
+    const stylesheetPath = resolve(import.meta.dirname, '../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/chat-thread.scss')
+    const scss = readFileSync(stylesheetPath, 'utf-8')
+    // Values come from theme tokens, so value checks read what the default
+    // theme renders. The source keeps the structural checks.
+    let css = ''
+
+    beforeAll(async () => void (css = await compileThemedStylesheet(stylesheetPath)))
 
     it('defines thread and user message wrapper primitives', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
@@ -78,7 +86,7 @@ describe('ai-chat-thread.scss', () => {
             'utf-8',
         )
 
-        expectSourceToContain(scss, '@import "$src/sass/_prompt-reference-chip.scss";')
+        expectSourceToContain(scss, '@import "./prompt-reference-colors";')
         expectSourceToContain(workspaceScss, '@include prompt-reference-chip-on-dark-surface;')
         expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-color')).toBeUndefined()
         expect(
@@ -95,7 +103,7 @@ describe('ai-chat-thread.scss', () => {
         expectSourceToContain(scss, '.ai-response-message-content')
     })
 
-    it('keeps materialized lineage icons free of canvas-node shadows', () => void expect(getPropertyValue(scss, '.ai-lineage-event-icon {', 'box-shadow')).toBe('none'))
+    it('keeps materialized lineage icons free of canvas-node shadows', () => void expect(getPropertyValue(css, '.ai-lineage-event-icon {', 'box-shadow')).toBe('none'))
 
     it('shares the generation-prompt surface style with the prompt timeline item', () => {
         const traceBlock = getBraceBalancedBlock(scss, '.ai-generation-trace-block')
@@ -103,8 +111,8 @@ describe('ai-chat-thread.scss', () => {
         const timelineSelector = '.workspace-media-generation-progress .progress-timeline-item[data-item-id="lineage:media-generation-prompt"] > .progress-timeline-content > .progress-timeline-details > .progress-timeline-summary {'
 
         expectSourceToContain(scss, '@mixin ai-generation-prompt-surface {')
-        expectSourceToContain(scss, 'border-left: 2px solid rgba(115, 87, 184, 0.34);')
-        expectSourceToContain(scss, 'background: rgba(115, 87, 184, 0.06);')
+        expectSourceToContain(css, 'border-left: 2px solid rgba(115, 87, 184, 0.34);')
+        expectSourceToContain(css, 'background: rgba(115, 87, 184, 0.06);')
         expectSourceToContain(scss, timelineSelector)
         expectSourceToContain(
             getBraceBalancedBlock(scss, timelineSelector),

@@ -58,6 +58,7 @@ describe('DiagramNodeSurface', () => {
                 stroke: '#445566',
                 strokeWidth: 2,
                 shape: 'circle',
+                selectedStyle: { fill: '#abcdef' },
             },
         })
 
@@ -91,6 +92,20 @@ describe('DiagramNodeSurface', () => {
         })
 
         nodeSurface.setSelected(true)
+        const selectedShapes = drawing.resources.updatePath.mock.calls.at(-1)?.[1] as Array<{
+            fill: { color: string }
+            stroke: {
+                color: string
+                width: number
+            }
+        }>
+        expect(selectedShapes[0]).toMatchObject({
+            fill: { color: '#abcdef' },
+            stroke: {
+                color: '#445566',
+                width: 2,
+            },
+        })
         nodeSurface.setVisible(false)
         nodeSurface.destroy()
         nodeSurface.destroy()

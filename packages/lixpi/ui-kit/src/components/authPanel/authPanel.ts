@@ -1,4 +1,5 @@
 import { html } from '@lixpi/ui-primitives/dom'
+import { lixpiLightTheme } from '@lixpi/themes'
 import {
     createShiftingGradientBackground,
     type ShiftingGradientBackground,
@@ -88,7 +89,7 @@ export class AuthPanel {
             this.dom.querySelector<HTMLElement>('.auth-panel-brand')!,
             {
                 // Match company-website/src/components/HeroSection.svelte at the renderer's initial phase.
-                colors: ['#7a9e6b', '#769a68', '#789c6a', '#7ca06c'],
+                colors: [...lixpiLightTheme.components.authPanel.brandGradient],
             },
         )
     }

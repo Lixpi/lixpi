@@ -1,3 +1,6 @@
-// Toggle switch component exports
-
-export { createToggleSwitch } from './toggleSwitch.ts'
+export {
+    createToggleSwitch,
+    type ToggleSwitchAppearance,
+    type ToggleSwitchConfig,
+    type ToggleSwitchInstance,
+} from './toggleSwitch.ts'

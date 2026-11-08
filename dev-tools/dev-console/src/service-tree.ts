@@ -5,19 +5,14 @@ import {
 import {
     type TreeNode,
 } from '@lixpi/cli-ui/tree-selection'
+import {
+    type DockerGroup,
+    type DockerLayout,
+} from './docker-layout.ts'
 
-export type ServiceGroup = {
-    label: string
-    groups?: ServiceGroup[]
-    services?: string[]
-}
-
-export const SERVICE_GROUP_VALUE = 'group'
-
-// Compose decides which services exist and which are part of the base stack. The
-// repository's console config only arranges them for people: a name Compose no longer
-// has is dropped, and a base service missing from the groups still appears under
-// "Other services", so the base stack can't lose one.
+// The tree mirrors infrastructure/docker/services/: each directory is a group, named
+// by its docker-group.json, and each partial in it adds its services in file order.
+// Compose decides which services are part of the base stack through the base profile.
 export class ServiceTree {
     readonly roots: TreeNode[]
     readonly allServices: string[]
@@ -27,44 +22,24 @@ export class ServiceTree {
 
     constructor(
         private readonly catalog: ComposeCatalog,
-        groups: ServiceGroup[],
-        private readonly rootComposeFile: string,
-        baseProfile?: string,
+        layout: DockerLayout,
     ) {
-        const placed = new Set(
-            groups.flatMap(group => this.servicesIn(group)),
-        )
-        const unplaced = catalog
-            .all().map(service => service.name).filter(name => catalog.startsByDefault(name, baseProfile) && !placed.has(name))
-        const children = [
-            ...groups,
-            {
-                label: 'Other services',
-                services: unplaced,
-            },
-        ].flatMap(group => this.groupNode(group, SERVICE_GROUP_VALUE))
+        const children = (layout.services?.groups ?? []).map(group => this.groupNode(group))
 
         this.allServices = children.flatMap(node => this.leaves(node))
-        this.baseServices = this.allServices.filter(name => catalog.startsByDefault(name, baseProfile))
+        this.baseServices = this.allServices.filter(name => catalog.startsByDefault(name, layout.baseProfile))
         this.roots = [
             {
-                value: 'choice:services',
-                label: 'Services',
-                hint: 'Custom selection',
-                choices: [
-                    {
-                        value: 'base',
-                        label: 'Base',
-                        hint: 'What the application needs to run',
-                        selection: this.baseServices,
-                    },
-                    {
-                        value: 'all',
-                        label: 'All',
-                        hint: 'Base plus the admin and developer tools',
-                        selection: this.allServices,
-                    },
-                ],
+                value: 'preset:base',
+                label: 'Base services',
+                hint: 'What the application needs to run',
+                selection: this.baseServices,
+            },
+            {
+                value: 'preset:all',
+                label: 'All services',
+                hint: 'Base plus the admin and developer tools',
+                selection: this.allServices,
             },
             ...children,
         ]
@@ -84,55 +59,26 @@ export class ServiceTree {
         return left.length === right.length && right.every(name => left.includes(name))
     }
 
-    private groupNode(
-        group: ServiceGroup,
-        parentValue: string,
-    ): TreeNode[] {
-        const value = `${parentValue}/${group.label}`
-        const children = [
-            ...(group.groups ?? []).flatMap(child => this.groupNode(child, value)),
-            ...this.serviceNodes(group.services ?? []),
-        ]
+    private groupNode(group: DockerGroup): TreeNode {
+        const services = this.catalog.all().filter(service => group.files.includes(service.file))
 
-        if (!children.length)
-            return []
-
-        return [{
-            value,
+        return {
+            value: `group:${group.directory}`,
             label: group.label,
-            hint: this.partialFileOf(group),
-            children,
-        }]
-    }
-
-    private serviceNodes(names: string[]): TreeNode[] {
-        return names.filter(name => this.catalog.has(name)).map(
-            name => ({
-                value: name,
-                label: name,
-            }),
-        )
-    }
-
-    // Names the partial Compose file when a whole group lives in one, which shows
-    // where that group is defined.
-    private partialFileOf(group: ServiceGroup): string | undefined {
-        const files = new Set(
-            this.servicesIn(group).filter(name => this.catalog.has(name)).map(name => this.catalog.fileOf(name)),
-        )
-        const [file] = files
-
-        return files.size === 1
-            && file !== this.rootComposeFile
-            ? path.basename(file!)
-            : undefined
-    }
-
-    private servicesIn(group: ServiceGroup): string[] {
-        return [
-            ...(group.groups ?? []).flatMap(child => this.servicesIn(child)),
-            ...(group.services ?? []),
-        ]
+            hint: group.files.length === 1
+                && !group.groups.length
+                ? path.basename(group.files[0])
+                : undefined,
+            children: [
+                ...group.groups.map(child => this.groupNode(child)),
+                ...services.map(
+                    service => ({
+                        value: service.name,
+                        label: service.name,
+                    }),
+                ),
+            ],
+        }
     }
 
     private leaves(node: TreeNode): string[] {

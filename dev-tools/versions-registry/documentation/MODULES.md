@@ -17,7 +17,7 @@ The source separates three jobs. `shared` reads registry data and repository fil
 
 The update command resolves and reviews every selected dependency before it builds prospective data. Actual apply refuses changed dependencies whose release review is `unavailable`. It creates the native-file plan before writing the catalogs, so an unregistered or unsupported native declaration fails the command before an authoritative catalog change.
 
-Both commands are plain Node entry points. [`infrastructure/docker/docker-compose.versions-registry.yml`](../../../infrastructure/docker/docker-compose.versions-registry.yml) supplies the repository mount, Node image, working directory, network policy, optional GitHub token, and entrypoint. The offline service has no network. The update service has network access because publisher resolution requires it.
+Both commands are plain Node entry points. [`infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml`](../../../infrastructure/docker/utilities/setup/docker-compose.versions-registry.yml) supplies the repository mount, Node image, working directory, network policy, optional GitHub token, and entrypoint. The offline service has no network. The update service has network access because publisher resolution requires it.
 
 ## Repository and catalog access
 
@@ -28,7 +28,7 @@ Both commands are plain Node entry points. [`infrastructure/docker/docker-compos
 - `package.json` files anywhere outside ignored directories;
 - `go.mod` files anywhere outside ignored directories;
 - files whose names contain `Dockerfile` or `dockerfile`;
-- `docker-compose*.yml` and `docker-compose*.yaml` files under `infrastructure/docker/`;
+- `docker-compose*.yml` and `docker-compose*.yaml` files anywhere under `infrastructure/docker/`, including the `services/` and `utilities/` group directories;
 - `.github/workflows/*.yml` and `.github/workflows/*.yaml`.
 
 [`src/shared/version-catalog.ts`](../src/shared/version-catalog.ts) loads the five catalog files and the Docker build-argument adapter. `VersionCatalog` exposes the typed catalog data, resolves `{{...}}` templates, applies supported transforms, expands image tags, and builds the final Docker argument values.

@@ -23,7 +23,7 @@ The files at the top of the directory are runner infrastructure. The `setup-env.
 
 ## Mount contract
 
-[`runner-compose/config-utils.base.yml`](runner-compose/config-utils.base.yml) builds the shared image and mounts the shared runtime into `/usr/src/config-utils`. The repository's `infrastructure/docker/docker-compose.config-utils.yml` extends that service and supplies these mounts:
+[`runner-compose/config-utils.base.yml`](runner-compose/config-utils.base.yml) builds the shared image and mounts the shared runtime into `/usr/src/config-utils`. The repository's `infrastructure/docker/utilities/setup/docker-compose.config-utils.yml` extends that service and supplies these mounts:
 
 | Container path | Access | Owner | Purpose |
 |---|---|---|---|
@@ -76,14 +76,14 @@ For end-to-end sign-in verification, follow [Local authentication](../../documen
 The hosted account release can prepare a local configuration without reopening the wizard:
 
 ```bash
-docker compose --env-file env.lixpi -f infrastructure/docker/docker-compose.config-utils.yml --profile dev build lixpi-config-utils
-docker compose --env-file env.lixpi -f infrastructure/docker/docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils preview-local-account-auth .env.shelby-local
-docker compose --env-file env.lixpi -f infrastructure/docker/docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils setup-local-account-auth .env.shelby-local
+docker compose --env-file env.lixpi -f infrastructure/docker/utilities/setup/docker-compose.config-utils.yml --profile dev build lixpi-config-utils
+docker compose --env-file env.lixpi -f infrastructure/docker/utilities/setup/docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils preview-local-account-auth .env.shelby-local
+docker compose --env-file env.lixpi -f infrastructure/docker/utilities/setup/docker-compose.config-utils.yml --profile dev run --rm --no-deps -T lixpi-config-utils setup-local-account-auth .env.shelby-local
 ```
 
 The setup command requires `ENVIRONMENT=local` and an existing signed registration. It atomically sets `MOCK_AUTH0=false`, `VITE_MOCK_AUTH=false` and `ACCOUNT_ADMISSION_ENABLED=true`, selects the configured Auth0 login hostname and signs the matching browser permissions. It validates the generated account requirement before saving and rejects a stale configuration image. It preserves unrelated values and refuses a concurrent file change. It does not restart services. Run it only after the deployment's Auth0 resources and account gateway are ready; restart enforcing APIs and brokers before activating the login Action, then restart browser clients. Keep enforcement enabled when recovering a failed release.
 
-Run `./run.sh` and choose **Create or edit a configuration**. That action starts `infrastructure/docker/docker-compose.config-utils.yml`. The shared runner creates `env.lixpi`, then the Lixpi adapter creates or updates `.env.<developer>-<environment>` and optional `.aws/config` files.
+Run `./run.sh` and choose **Create or edit a configuration**. That action starts `infrastructure/docker/utilities/setup/docker-compose.config-utils.yml`. The shared runner creates `env.lixpi`, then the Lixpi adapter creates or updates `.env.<developer>-<environment>` and optional `.aws/config` files.
 
 The Lixpi wizard offers **Generate new** and **Edit existing**. Existing files can be replaced or edited by group. Partial edits preserve unrelated variables, comments, quoting, interpolation, multiline values, and line endings. NATS keys and passwords are reused unless replacement is selected. Every save regenerates or refreshes the signed NATS application registration from the resulting configuration.
 
@@ -109,7 +109,7 @@ A repository adapter is an executable TypeScript module, not a branch in the sha
 
 1. Add `dev-tools/config-utils/setup-env.ts` in that repository.
 2. Add `dev-tools/config-utils/templates/env.lixpi.template` and `env.template` there.
-3. Add `infrastructure/docker/docker-compose.config-utils.yml` that extends `config-utils-base` and mounts the repository adapter paths.
+3. Add `infrastructure/docker/utilities/setup/docker-compose.config-utils.yml` that extends `config-utils-base` and mounts the repository adapter paths.
 4. Add a launcher that supplies any bootstrap variables required to locate the shared Lixpi checkout, then invokes the Compose adapter.
 5. Keep repository-specific prompts, defaults, file names, and side effects inside the adapter.
 
@@ -120,7 +120,7 @@ Do not add consuming-repository switches to `run-config.ts`. Shared behavior bel
 When `CODING_AGENTS_TEST_EXECUTION_MODE` permits configuration tests, run them through the shared TypeScript test runner:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner init-config
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner init-config
 ```
 
 The tests use synthetic content and isolated prompts; they must not read or update a developer's generated configuration files. The shared prompts have their own tests in [`@lixpi/cli-ui`](../../packages/lixpi/cli-ui/README.md).

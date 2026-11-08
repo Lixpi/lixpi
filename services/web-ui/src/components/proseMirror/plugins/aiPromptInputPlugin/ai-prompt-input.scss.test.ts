@@ -11,8 +11,8 @@ const expectSourceToContain = (source: string, snippet: string): void => void ex
 
 const expectSourceNotToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 
-describe('ai-prompt-input.scss', () => {
-    const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
+describe('shared prompt input styles', () => {
+    const scss = readFileSync(resolve(import.meta.dirname, "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/native-prompt-controls.scss"), "utf-8") + readFileSync(resolve(import.meta.dirname, "../../../../../packages/lixpi/canvas-components/src/workspace/frontend/composer/prompt-input.scss"), "utf-8")
 
     it('defines floating input host and wrapper states', () => {
         expectSourceToContain(scss, '.ai-prompt-input-floating')
@@ -33,8 +33,8 @@ describe('ai-prompt-input.scss', () => {
 
     it('keeps the embedded image/video fallback compact and leaves model trigger content to its summary', () => {
         expectSourceToContain(scss, '.ai-prompt-media-mode-switch')
-        expectSourceToContain(scss, 'width: 76px;')
-        expectSourceToContain(scss, 'height: 40px;')
+        expectSourceToContain(scss, 'width: calc(2 * var(--canvas-control-height, 40px) - 4px);')
+        expectSourceToContain(scss, 'height: var(--canvas-control-height, 40px);')
         expectSourceToContain(scss, '.ai-prompt-media-mode-switch-svg')
         expectSourceToContain(scss, '.ai-prompt-model-menu-trigger-summary')
         expectSourceNotToContain(scss, '.ai-prompt-model-menu-trigger-leading')

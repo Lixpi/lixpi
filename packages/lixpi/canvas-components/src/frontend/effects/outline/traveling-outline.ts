@@ -72,6 +72,21 @@ export class TravelingOutline {
         )
     }
 
+    setAppearance(
+        style: TravelingOutlineStyle,
+        texture: TextureInput,
+    ): void {
+        if (this.destroyed)
+            return
+
+        this.options.style = style
+        this.options.texture = texture
+        this.options.surface.resources.updateTexture(this.texture, texture)
+
+        for (const entry of this.entries.values())
+            this.paint(entry)
+    }
+
     sync(datums: readonly TravelingOutlineDatum[]): void {
         if (this.destroyed)
             return

@@ -73,6 +73,7 @@ export class ImageSurface {
         y: 0,
         zoom: 1,
     }
+    private fit: NonNullable<ImageSurfaceOptions['fit']>
     private radius = 0
     private placeholderPaint: ImageSurfaceOptions['placeholder']
     private media: MediaDescriptor | null = null
@@ -94,6 +95,7 @@ export class ImageSurface {
         if (signal.aborted)
             throw new Error('Cannot mount an image in a disposed drawing scope')
 
+        this.fit = options.fit ?? 'stretch'
         this.radius = options.radius ?? 0
         this.placeholderPaint = options.placeholder === undefined ? {
             color: '#e7eaee',
@@ -155,7 +157,7 @@ export class ImageSurface {
     setGeometry(
         bounds: CanvasEngineRect,
         viewport: CanvasViewport,
-        radius = this.options.radius ?? 0,
+        radius = this.radius,
     ): void {
         if (this.destroyed)
             return
@@ -181,6 +183,34 @@ export class ImageSurface {
             this.syncGeometry()
 
         this.ensureImage()
+    }
+
+    setFit(fit: NonNullable<ImageSurfaceOptions['fit']>): void {
+        if (
+            this.destroyed
+            || this.fit === fit
+        )
+            return
+
+        this.fit = fit
+        this.syncMesh()
+    }
+
+    setRadius(radius: number): void {
+        if (this.destroyed)
+            return
+
+        if (
+            !Number.isFinite(radius)
+            || radius < 0
+        )
+            throw new RangeError('Image radius must be finite and non-negative')
+
+        if (this.radius === radius)
+            return
+
+        this.radius = radius
+        this.syncGeometry()
     }
 
     setPlaceholder(paint: ImageSurfaceOptions['placeholder']): void {
@@ -451,15 +481,14 @@ export class ImageSurface {
             intrinsic
             && width > 0
             && height > 0
-            && this.options.fit
-            && this.options.fit !== 'stretch'
+            && this.fit !== 'stretch'
         ) {
-            const scale = this.options.fit === 'contain' ? Math.min(width / intrinsic.width, height / intrinsic.height) : Math.max(
+            const scale = this.fit === 'contain' ? Math.min(width / intrinsic.width, height / intrinsic.height) : Math.max(
                 width / intrinsic.width,
                 height / intrinsic.height,
             )
 
-            if (this.options.fit === 'contain') {
+            if (this.fit === 'contain') {
                 imageWidth = intrinsic.width * scale
                 imageHeight = intrinsic.height * scale
                 x = (width - imageWidth) / 2

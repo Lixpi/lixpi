@@ -12,7 +12,7 @@ Never run `node`, `npm`, `npx`, `pnpm`, `pnpx`, `dprint`, Oxlint, Stylelint, Typ
 Direct quality-runner dependency versions are generated from the [version registry](../../versions-registry/README.md). Each invocation installs those selections with `pnpm install --no-lockfile` inside the isolated tool workspace. The pnpm store and every `node_modules` directory are named Docker volumes; the runner never creates a lockfile, package store, or `node_modules` directory in the host checkout. Rebuild the base image when its Dockerfile changes:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main build --no-cache lixpi-typescript-quality-runner
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev build --no-cache lixpi-typescript-quality-runner
 ```
 
 ## Commands
@@ -20,31 +20,31 @@ docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.y
 The quality runner follows the TypeScript test runner's domain shape. Run a service independently:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner web-ui validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner web-ui-user-portal validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner api validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner nex validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner quality-runner validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner web-ui validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner web-ui-user-portal validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner api validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner nex validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner quality-runner validate
 ```
 
 Run all shared packages or select one package by its directory name:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-engine validate
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-components format
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner shared validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-engine validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-components format
 ```
 
 The runner also exposes `infrastructure`, `random-useful-things`, and `quality-runner` domains. TypeScript rules apply to every TypeScript file, while Sass and CSS rules apply to every first-party stylesheet. Use `all` when a repository-wide change needs every configured domain:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner all validate
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner all validate
 ```
 
 The action is optional and defaults to `validate`.
 
-For a focused change, `docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner files fix <repository-path> ...` applies the same autofix pipeline to explicit paths. Use this for files without domain-specific source aliases; domains remain responsible for alias conversion. It avoids formatting unrelated files in a large workspace. External repositories use the same mode from their own Compose adapter: extend `dev-tools/code-quality/runner-compose/typescript-quality.base.yml`, mount only their selected source paths under `/usr/src/repository`, declare the four runner cache volumes locally, and pass those container-relative paths to `files`.
+For a focused change, `docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner files fix <repository-path> ...` applies the same autofix pipeline to explicit paths. Use this for files without domain-specific source aliases; domains remain responsible for alias conversion. It avoids formatting unrelated files in a large workspace. External repositories use the same mode from their own Compose adapter: extend `dev-tools/code-quality/runner-compose/typescript-quality.base.yml`, mount only their selected source paths under `/usr/src/repository`, declare the four runner cache volumes locally, and pass those container-relative paths to `files`.
 
 Domain configuration passes source aliases to the extension runner as `specifierPrefix`, `importerScope`, and `targetDirectory` data. The extension runner resolves the narrowest matching importer scope and contains no service names or application paths. Domains without aliases pass an empty list.
 
@@ -92,7 +92,7 @@ The formatter preserves deliberately expanded types, arrays, objects, destructur
 Run the runner's fixture test after changing its image, scripts, dprint configuration, Oxlint configuration, or Stylelint configuration:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.yml --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner self-test
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner self-test
 ```
 
 The fixture test proves the named-import matrix, native TypeScript execution, Sass four-space formatting, configured Oxlint violations, configured Stylelint violations, shared transition enforcement, React import rejection, and JSX source-file rejection.
@@ -172,7 +172,7 @@ docker compose --env-file .env.<stage> -f infrastructure/docker/docker-compose.y
 
 ## Container and Cache Model
 
-[`infrastructure/docker/docker-compose.typescript-quality-runner.yml`](../../../infrastructure/docker/docker-compose.typescript-quality-runner.yml) is the main repository's mount adapter for a separate one-shot service. The reusable service definition is `dev-tools/code-quality/runner-compose/typescript-quality.base.yml`. Its command dispatcher mirrors the test runner, so a normal edit checks or formats only the selected service or package. Source paths are mounted selectively under `/usr/src/repository`; the repository root and package manifests are never bind-mounted there. Tool manifests, scripts, configuration, and wrappers are mounted separately under `/usr/src/quality-runner`, while tool dependencies use named Docker volumes. This prevents pnpm from writing installation artifacts into the host checkout.
+[`infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml`](../../../infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml) is the main repository's mount adapter for a separate one-shot service. The reusable service definition is `dev-tools/code-quality/runner-compose/typescript-quality.base.yml`. Its command dispatcher mirrors the test runner, so a normal edit checks or formats only the selected service or package. Source paths are mounted selectively under `/usr/src/repository`; the repository root and package manifests are never bind-mounted there. Tool manifests, scripts, configuration, and wrappers are mounted separately under `/usr/src/quality-runner`, while tool dependencies use named Docker volumes. This prevents pnpm from writing installation artifacts into the host checkout.
 
 dprint uses the `typescript-quality-runner-dprint-cache` volume for its compiled plugins and incremental file-state cache. pnpm uses `typescript-quality-runner-pnpm-store`, and both the tool workspace and its local debug-tools workspace have dedicated `node_modules` volumes. Oxlint and Stylelint receive only the selected domain paths. The formatter, import/export, Oxlint-plugin, and Stylelint wrappers are erasable TypeScript files executed directly by Node 24's stable type stripping; there is no generated JavaScript copy.
 
@@ -190,6 +190,8 @@ Compose mounts `src/` as one directory, so adding a rule file needs no Compose c
 
 All linter and formatter configuration lives beside this documentation: [`oxfmt.json`](oxfmt.json), [`dprint.json`](dprint.json), [`oxlint.json`](oxlint.json), and [`stylelint.config.ts`](stylelint.config.ts). The wildcard package manifest is resolved without a lockfile on every invocation. There is no TypeScript build step and the tools do not emit JavaScript.
 
+The frontend logging exemption covers `frontend` directories at any depth below a shared package's `src`, including `src/workspace/frontend`. These modules retain native console calls because `@lixpi/debug-tools` depends on Node utilities and terminal formatting.
+
 Warnings name code to rewrite without failing a run, so Oxlint is invoked without `--deny-warnings`. A fix round that changes no file ends the fix loop, so findings no fixer can resolve, such as a nested conditional, are reported once instead of retried until the attempt limit runs out.
 
 Oxlint starts from an explicit rule baseline so adopting the runner does not silently turn unrelated existing findings into repository-wide failures. The quality runner rejects JavaScript and JSX source files, React imports, `debugger`, top-level `import type`, file imports without their TypeScript extension, duplicate module imports, CommonJS imports, `interface` declarations outside ambient `.d.ts` files, plain function declarations, unnecessary arrow-body blocks, expression-bodied arrows longer than 150 characters whose body remains on the signature line, unnecessary braces around simple `if` bodies, `if` conditions with more than two logical evaluations that remain inline, simple brace-less `if` bodies that are not on the following indented line, comma-separated declarations and sequence expressions, semicolons that are not ASI guards, inline object destructuring with multiple properties, inline multi-value Map/Set-style initializers, inline multi-attribute D3/SVG chains, string concatenation, legacy own-property checks, JSON serialization used as a deep-clone substitute, restricted HTTP client packages, restricted raw DOM construction in web-ui implementation files, and native console logging outside frontend code and the debug-tools implementation. Named exports follow the same one-versus-many layout as named imports. Fix actions migrate JavaScript source files to TypeScript, remove unused imports without deleting unused local variables, and replace native backend console calls with `@lixpi/debug-tools` imports and calls.
@@ -198,6 +200,6 @@ The `lixpi/require-ast-formatter-rules` guard runs against every TypeScript impl
 
 ## GitHub Actions
 
-The `CI` workflow's `typescript-quality` matrix runs the quality-runner self-test and every configured quality domain under `TypeScript / Formatting and linting` status names. Each job builds and invokes `lixpi-typescript-quality-runner` through `infrastructure/docker/docker-compose.typescript-quality-runner.yml`, so dprint, Oxlint, Stylelint, and the repository validation scripts never run on the GitHub host.
+The `CI` workflow's `typescript-quality` matrix runs the quality-runner self-test and every configured quality domain under `TypeScript / Formatting and linting` status names. Each job builds and invokes `lixpi-typescript-quality-runner` through `infrastructure/docker/utilities/code-quality/docker-compose.typescript-quality-runner.yml`, so dprint, Oxlint, Stylelint, and the repository validation scripts never run on the GitHub host.
 
 CI points Compose at the one-shot runner file directly. This keeps the same image, bind mounts, dispatcher, and domain commands used locally without parsing the unrelated application and deployment services from the main Compose graph. The stable `Required CI gate` status requires both TypeScript matrices and the separate Go quality, test, and build jobs to succeed.

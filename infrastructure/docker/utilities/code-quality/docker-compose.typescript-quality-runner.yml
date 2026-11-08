@@ -1,0 +1,92 @@
+name: lixpi
+
+services:
+
+    # One-shot TypeScript formatter and linter. Tool dependencies live only in
+    # named Docker volumes. Repository paths are mounted separately so pnpm
+    # cannot create a lockfile, store, or node_modules on the host.
+    lixpi-typescript-quality-runner:
+        extends:
+            file: ../../../../dev-tools/code-quality/runner-compose/typescript-quality.base.yml
+            service: typescript-quality-runner-base
+        volumes:
+            - ../../../../dev-tools/config-utils/account-auth-configuration.ts:/usr/src/repository/dev-tools/config-utils/account-auth-configuration.ts:cached
+            - ../../../../dev-tools/config-utils/account-auth-configuration.test.ts:/usr/src/repository/dev-tools/config-utils/account-auth-configuration.test.ts:cached
+            - ../../../../dev-tools/config-utils/setup-env.test.ts:/usr/src/repository/dev-tools/config-utils/setup-env.test.ts:cached
+
+            # Application and library source. Package manifests are not mounted
+            # into this writable tree, so dependency artifacts cannot leak.
+            - ../../../../dev-tools/versions-registry/src:/usr/src/repository/dev-tools/versions-registry/src:cached
+            - ../../../../dev-tools/dev-console/src:/usr/src/repository/dev-tools/dev-console/src:cached
+            - ../../../../dev-tools/dev-console/vitest.config.ts:/usr/src/repository/dev-tools/dev-console/vitest.config.ts:cached
+            - ../../../../services/web-ui/index.html:/usr/src/repository/services/web-ui/index.html:cached
+            - ../../../../services/web-ui/src:/usr/src/repository/services/web-ui/src:cached
+            - ../../../../services/web-ui/vite.config.ts:/usr/src/repository/services/web-ui/vite.config.ts:cached
+            - ../../../../services/web-ui/vitest.config.ts:/usr/src/repository/services/web-ui/vitest.config.ts:cached
+            - ../../../../services/web-ui-user-portal/index.html:/usr/src/repository/services/web-ui-user-portal/index.html:cached
+            - ../../../../services/web-ui-user-portal/src:/usr/src/repository/services/web-ui-user-portal/src:cached
+            - ../../../../services/web-ui-user-portal/vite.config.ts:/usr/src/repository/services/web-ui-user-portal/vite.config.ts:cached
+            - ../../../../services/web-ui-user-portal/vitest.config.ts:/usr/src/repository/services/web-ui-user-portal/vitest.config.ts:cached
+            - ../../../../services/api/src:/usr/src/repository/services/api/src:cached
+            - ../../../../services/api/vitest.config.ts:/usr/src/repository/services/api/vitest.config.ts:cached
+            - ../../../../services/nex/workloads:/usr/src/repository/services/nex/workloads:cached
+            - ../../../../services/nex/vitest.config.ts:/usr/src/repository/services/nex/vitest.config.ts:cached
+            - ../../../../services/ai-model-registry/src:/usr/src/repository/services/ai-model-registry/src:cached
+            - ../../../../services/ai-model-registry/vite.config.ts:/usr/src/repository/services/ai-model-registry/vite.config.ts:cached
+            - ../../../../services/ai-model-registry/vitest.config.ts:/usr/src/repository/services/ai-model-registry/vitest.config.ts:cached
+            - ../../../../dev-tools/config-utils/setup-env.ts:/usr/src/repository/dev-tools/config-utils/setup-env.ts:cached
+            - ../../../../dev-tools/config-utils/environment-file.ts:/usr/src/repository/dev-tools/config-utils/environment-file.ts:cached
+            - ../../../../dev-tools/config-utils/run-config.ts:/usr/src/repository/dev-tools/config-utils/run-config.ts:cached
+            - ../../../../dev-tools/config-utils/setup-skills.ts:/usr/src/repository/dev-tools/config-utils/setup-skills.ts:cached
+            - ../../../../infrastructure/pulumi/src:/usr/src/repository/infrastructure/pulumi/src:cached
+            - ../../../../infrastructure/pulumi/vitest.config.ts:/usr/src/repository/infrastructure/pulumi/vitest.config.ts:cached
+            - ../../../../random-useful-things:/usr/src/repository/random-useful-things:cached
+            - ../../../../packages/lixpi/auth-service/src:/usr/src/repository/packages/lixpi/auth-service/src:cached
+            - ../../../../packages/lixpi/capability-system/src:/usr/src/repository/packages/lixpi/capability-system/src:cached
+            - ../../../../packages/lixpi/canvas-engine/src:/usr/src/repository/packages/lixpi/canvas-engine/src:cached
+            - ../../../../packages/lixpi/canvas-engine/examples:/usr/src/repository/packages/lixpi/canvas-engine/examples:cached
+            - ../../../../packages/lixpi/canvas-components/src:/usr/src/repository/packages/lixpi/canvas-components/src:cached
+            - ../../../../packages/lixpi/canvas-components/examples:/usr/src/repository/packages/lixpi/canvas-components/examples:cached
+            - ../../../../packages/lixpi/constants/ts/asset-types.ts:/usr/src/repository/packages/lixpi/constants/ts/asset-types.ts:cached
+            - ../../../../packages/lixpi/constants/ts/aws-resources.ts:/usr/src/repository/packages/lixpi/constants/ts/aws-resources.ts:cached
+            - ../../../../packages/lixpi/constants/ts/index.ts:/usr/src/repository/packages/lixpi/constants/ts/index.ts:cached
+            - ../../../../packages/lixpi/constants/ts/account-admission.ts:/usr/src/repository/packages/lixpi/constants/ts/account-admission.ts:cached
+            - ../../../../packages/lixpi/constants/ts/agent-conversation.ts:/usr/src/repository/packages/lixpi/constants/ts/agent-conversation.ts:cached
+            - ../../../../packages/lixpi/constants/ts/account-admission.test.ts:/usr/src/repository/packages/lixpi/constants/ts/account-admission.test.ts:cached
+            - ../../../../packages/lixpi/constants/ts/nats-subject-path.test.ts:/usr/src/repository/packages/lixpi/constants/ts/nats-subject-path.test.ts:cached
+            - ../../../../packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-layout-settings.ts:cached
+            - ../../../../packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-progress.ts:cached
+            - ../../../../packages/lixpi/constants/ts/types.ts:/usr/src/repository/packages/lixpi/constants/ts/types.ts:cached
+            - ../../../../packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/workspace-persistence-settings.ts:cached
+            - ../../../../packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/repository/packages/lixpi/debug-tools/ts/debug-tools.ts:cached
+            - ../../../../packages/lixpi/dynamodb-service/src:/usr/src/repository/packages/lixpi/dynamodb-service/src:cached
+            - ../../../../packages/lixpi/usage-reporter/src:/usr/src/repository/packages/lixpi/usage-reporter/src:cached
+            - ../../../../packages/lixpi/nats-subject-registry/src:/usr/src/repository/packages/lixpi/nats-subject-registry/src:cached
+            - ../../../../packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/repository/packages/lixpi/nats-service/ts/nats-service.ts:cached
+            - ../../../../packages/lixpi/nats-service/ts/nats-service.test.ts:/usr/src/repository/packages/lixpi/nats-service/ts/nats-service.test.ts:cached
+            - ../../../../packages/lixpi/nats-service/ts/registration.ts:/usr/src/repository/packages/lixpi/nats-service/ts/registration.ts:cached
+            - ../../../../packages/lixpi/nats-service/ts/registration.test.ts:/usr/src/repository/packages/lixpi/nats-service/ts/registration.test.ts:cached
+            - ../../../../packages/lixpi/prosemirror/src:/usr/src/repository/packages/lixpi/prosemirror/src:cached
+            - ../../../../packages/lixpi/cli-ui/src:/usr/src/repository/packages/lixpi/cli-ui/src:cached
+            - ../../../../packages/lixpi/cli-ui/vitest.config.ts:/usr/src/repository/packages/lixpi/cli-ui/vitest.config.ts:cached
+            - ../../../../packages/lixpi/test-utils/src:/usr/src/repository/packages/lixpi/test-utils/src:cached
+            - ../../../../packages/lixpi/ui-kit/src:/usr/src/repository/packages/lixpi/ui-kit/src:cached
+            - ../../../../packages/lixpi/ui-kit/styles:/usr/src/repository/packages/lixpi/ui-kit/styles:cached
+            - ../../../../packages/lixpi/themes/src:/usr/src/repository/packages/lixpi/themes/src:cached
+            - ../../../../packages/lixpi/themes/dist/scss:/usr/src/repository/packages/lixpi/themes/dist/scss:cached
+            - ../../../../packages/lixpi/themes/tooling:/usr/src/repository/packages/lixpi/themes/tooling:cached
+            - ../../../../packages/lixpi/themes/vitest.config.ts:/usr/src/repository/packages/lixpi/themes/vitest.config.ts:cached
+            - ../../../../packages/lixpi/ui-kit-gentelella/src:/usr/src/repository/packages/lixpi/ui-kit-gentelella/src:cached
+            - ../../../../packages/lixpi/ui-kit-gentelella/styles:/usr/src/repository/packages/lixpi/ui-kit-gentelella/styles:cached
+            - ../../../../packages/lixpi/ui-primitives/src:/usr/src/repository/packages/lixpi/ui-primitives/src:cached
+            - ../../../../packages/lixpi/auth-client/src:/usr/src/repository/packages/lixpi/auth-client/src:cached
+            - ../../../../packages/lixpi/user-portal/src:/usr/src/repository/packages/lixpi/user-portal/src:cached
+            - ../../../../packages/lixpi/web-client-service-factory/src:/usr/src/repository/packages/lixpi/web-client-service-factory/src:cached
+            - ../../../../packages/lixpi/web-client-service-factory/styles:/usr/src/repository/packages/lixpi/web-client-service-factory/styles:cached
+        working_dir: /usr/src/repository
+
+volumes:
+    typescript-quality-runner-node-modules:
+    typescript-quality-runner-debug-tools-node-modules:
+    typescript-quality-runner-pnpm-store:
+    typescript-quality-runner-dprint-cache:

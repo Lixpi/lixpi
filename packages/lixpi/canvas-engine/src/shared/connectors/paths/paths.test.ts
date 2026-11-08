@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import fixtures from './path-baseline.json'
+import matrixFixture from './matrix-anchor-regression-fixtures.json'
 import {
     computePath,
     getOrthogonalRoutePoints,
+    isOrthogonalRouteClear,
     OrthogonalRoutingError,
 } from './index.ts'
-import { type AnchorPosition, type PathType } from '../path-types.ts'
+import { isOrthogonalRouteSimple } from './route-simplicity.ts'
+import { type AnchorPosition, type EdgeConfig, type NodeConfig, type PathType } from '../path-types.ts'
 
 const expectPathClearOfObstacles = (
     path: string,
@@ -392,5 +395,116 @@ describe('shared orthogonal route point planner', () => {
 
         expect(Math.abs(points[1].x - points[0].x)).toBeGreaterThanOrEqual(64)
         expect(Math.abs(points.at(-1)!.x - points.at(-2)!.x)).toBeGreaterThanOrEqual(64)
+    })
+})
+
+
+type MatrixRouteCase = {
+    source: AnchorPosition
+    target: AnchorPosition
+    edges: Array<{
+        edge: EdgeConfig
+        endpoints: {
+            source: {
+                x: number
+                y: number
+            }
+            target: {
+                x: number
+                y: number
+            }
+        }
+    }>
+}
+
+const matrixNodes = matrixFixture.nodes as NodeConfig[]
+const matrixCases = matrixFixture.cases as MatrixRouteCase[]
+
+const directionToward = (
+    from: {
+        x: number
+        y: number
+    },
+    to: {
+        x: number
+        y: number
+    },
+): Exclude<AnchorPosition, 'center'> => {
+    const deltaX = to.x - from.x
+    const deltaY = to.y - from.y
+
+    if (Math.abs(deltaX) >= Math.abs(deltaY))
+        return deltaX >= 0 ? 'right' : 'left'
+
+    return deltaY >= 0 ? 'bottom' : 'top'
+}
+
+const leadsOutward = (
+    endpoint: {
+        x: number
+        y: number
+    },
+    adjacent: {
+        x: number
+        y: number
+    },
+    direction: Exclude<AnchorPosition, 'center'>,
+): boolean => {
+    switch (direction) {
+        case 'left':
+            return adjacent.x < endpoint.x && adjacent.y === endpoint.y
+        case 'right':
+            return adjacent.x > endpoint.x && adjacent.y === endpoint.y
+        case 'top':
+            return adjacent.y < endpoint.y && adjacent.x === endpoint.x
+        case 'bottom':
+            return adjacent.y > endpoint.y && adjacent.x === endpoint.x
+    }
+}
+
+describe('captured connector matrix anchor routing', () => {
+    it.each(matrixCases)('routes both orthogonal samples for $source to $target anchors', ({ edges }) => {
+        const nodeMap = new Map(matrixNodes.map(node => [node.id, node]))
+
+        for (const sample of edges) {
+            const {
+                edge,
+                endpoints,
+            } = sample
+            const label = `${edge.id} ${edge.source.position} to ${edge.target.position}`
+            const points = getOrthogonalRoutePoints(
+                endpoints.source.x,
+                endpoints.source.y,
+                endpoints.target.x,
+                endpoints.target.y,
+                edge.source.position,
+                edge.target.position,
+                edge.borderRadius ?? 24,
+                edge.bendPoints,
+                [...nodeMap.values()],
+                edge.source.nodeId,
+                edge.target.nodeId,
+                edge.laneIndex ?? 0,
+                edge.laneCount ?? 1,
+            )
+            const sourceLead = points.find(point => point.x !== endpoints.source.x || point.y !== endpoints.source.y)
+            const targetLead = points.slice().reverse().find(point => point.x !== endpoints.target.x || point.y !== endpoints.target.y)
+            const sourceDirection = edge.source.position === 'center'
+                ? directionToward(endpoints.source, endpoints.target)
+                : edge.source.position
+            const targetDirection = edge.target.position === 'center'
+                ? directionToward(endpoints.target, endpoints.source)
+                : edge.target.position
+            const obstacles = matrixNodes.filter(node => node.id !== edge.source.nodeId && node.id !== edge.target.nodeId)
+
+            expect(points[0], `${label} starts at the captured source endpoint`).toEqual(endpoints.source)
+            expect(points.at(-1), `${label} ends at the captured target endpoint`).toEqual(endpoints.target)
+            expect(sourceLead, `${label} has a source lead`).toBeDefined()
+            expect(targetLead, `${label} has a target lead`).toBeDefined()
+            expect(leadsOutward(endpoints.source, sourceLead!, sourceDirection), `${label} leaves along the source anchor direction`).toBe(true)
+            expect(leadsOutward(endpoints.target, targetLead!, targetDirection), `${label} approaches from the target anchor direction`).toBe(true)
+            expect(isOrthogonalRouteSimple(points), `${label} does not cross or retrace itself`).toBe(true)
+            expect(isOrthogonalRouteClear(points, obstacles), `${label} clears intermediate nodes`).toBe(true)
+        }
     })
 })

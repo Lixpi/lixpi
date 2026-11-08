@@ -36,7 +36,7 @@ const synchronizeFile = (
             catalog,
         )
 
-    if (/^infrastructure\/docker\/docker-compose[^/]*\.ya?ml$/.test(path))
+    if (/^infrastructure\/docker\/(?:[^/]+\/)*docker-compose[^/]*\.ya?ml$/.test(path))
         return synchronizeDockerCompose(
             path,
             source,

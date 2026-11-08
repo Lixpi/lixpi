@@ -21,15 +21,19 @@ export type ImageNodeOptions<Data> = Omit<ImageSurfaceOptions, 'surface' | 'onIm
     type: string
     geometry: NodeGeometryPolicy<Data>
     getMedia: (node: EngineNode<Data>) => MediaDescriptor | null
+    getStyle?: (node: EngineNode<Data>) => Pick<ImageSurfaceOptions, 'fit' | 'radius' | 'placeholder'>
     onImageLoaded?: (
         node: EngineNode<Data>,
-        image: Parameters<NonNullable<ImageSurfaceOptions['onImageLoaded']>>[0],
+        image: Parameters<NonNullable<ImageSurfaceOptions['onImageLoaded']>>[0] & {
+            initialLoad: boolean
+        },
     ) => void
 }
 
 class ImageNodeView<Data> implements NodeView<Data> {
     private node: EngineNode<Data>
     private readonly image: ImageSurface
+    private loaded = false
 
     constructor(
         node: EngineNode<Data>,
@@ -40,7 +44,17 @@ class ImageNodeView<Data> implements NodeView<Data> {
         this.image = new ImageSurface({
             ...options,
             surface: context,
-            onImageLoaded: image => options.onImageLoaded?.(this.node, image),
+            onImageLoaded: image => {
+                const initialLoad = !this.loaded
+                this.loaded = true
+                options.onImageLoaded?.(
+                    this.node,
+                    {
+                        ...image,
+                        initialLoad,
+                    },
+                )
+            },
         })
 
         try {
@@ -54,6 +68,16 @@ class ImageNodeView<Data> implements NodeView<Data> {
 
     update(node: EngineNode<Data>): void {
         this.node = node
+        const style = this.options.getStyle?.(node)
+        this.image.setFit(style?.fit ?? this.options.fit ?? 'stretch')
+        this.image.setRadius(style?.radius ?? this.options.radius ?? 0)
+
+        if (
+            style
+            && 'placeholder' in style
+        )
+            this.image.setPlaceholder(style.placeholder)
+
         this.image.setMedia(
             this.options.getMedia(node),
         )
@@ -77,14 +101,12 @@ class ImageNodeView<Data> implements NodeView<Data> {
     }
 }
 
-export const createImageNodeRegistration = <Data>(options: ImageNodeOptions<Data>): NodeRegistration<Data> => {
-    return {
-        type: options.type,
-        geometry: options.geometry,
-        mount: (node, context) => new ImageNodeView(
-            node,
-            context,
-            options,
-        ),
-    }
-}
+export const createImageNodeRegistration = <Data>(options: ImageNodeOptions<Data>): NodeRegistration<Data> => ({
+    type: options.type,
+    geometry: options.geometry,
+    mount: (node, context) => new ImageNodeView(
+        node,
+        context,
+        options,
+    ),
+})

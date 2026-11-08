@@ -1,0 +1,35 @@
+.canvas-node-shell {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--canvas-text);
+    font: var(--canvas-font-size) / var(--canvas-line-height) var(--canvas-font-family);
+    pointer-events: none;
+    transform-origin: top left;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.canvas-node-shell-title {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    transform: translateY(-100%);
+    color: var(--canvas-text);
+    font-size: var(--canvas-title-font-size);
+    font-weight: var(--canvas-title-font-weight);
+    pointer-events: auto;
+}
+
+.canvas-node-shell-metadata {
+    color: var(--canvas-text-muted);
+    pointer-events: auto;
+}
+
+.canvas-node-shell-actions {
+    pointer-events: auto;
+}

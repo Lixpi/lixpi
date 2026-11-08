@@ -1,23 +1,21 @@
 name: lixpi
 
+# The application stack. It includes every partial under services/ and nothing
+# else. Utilities live under utilities/ and run from their own files. The dev
+# console checks both rules and builds its service tree from the directories.
 include:
-    - docker-compose.ui.yml
-    - docker-compose.api.yml
-    - docker-compose.databases.yml
-    - docker-compose.auth.yml
-    - docker-compose.nats.yml
-    - docker-compose.nex.yml
-    - docker-compose.ai-model-registry.yml
-    - docker-compose.pulumi.yml
-    - docker-compose.typescript-test-runner.yml
-    - docker-compose.typescript-quality-runner.yml
-    - docker-compose.go-test-runner.yml
-    - docker-compose.go-quality-runner.yml
+    - services/ui/docker-compose.ui.yml
+    - services/api/docker-compose.api.yml
+    - services/messaging/nats/docker-compose.nats.yml
+    - services/messaging/nex/docker-compose.nex.yml
+    - services/databases/docker-compose.databases.yml
+    - services/auth/docker-compose.auth.yml
+    - services/dev-tools/docker-compose.ai-model-registry.yml
+    - services/dev-tools/docker-compose.design-system.yml
 
 volumes:
     aws-config:    # AWS SSO credentials, shared with lixpi-aws-cli and other repositories' containers
         name: lixpi-aws-config
-    pulumi-local-state:    # A volume where Pulumi stores stack state. Used only for local development.
     caddy-certs:   # Shared volume for certificate storage
     dynamodb-data: # Persistent storage for DynamoDB Local
     localauth0-data: # Persistent storage for LocalAuth0 mock service

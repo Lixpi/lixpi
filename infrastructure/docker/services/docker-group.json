@@ -1,0 +1,5 @@
+{
+    "kind": "services",
+    "label": "Services",
+    "description": "The application stack. Each directory is a group in the dev console service tree, and every partial is included by ../docker-compose.yml."
+}

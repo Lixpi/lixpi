@@ -25,7 +25,7 @@ import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/a
 import {
     createCodeBlockPlugin,
     codeBlockInputRule,
-} from '$src/components/proseMirror/plugins/codeBlockPlugin.ts'
+} from '@lixpi/prosemirror/frontend/code-block'
 import { activeNodePlugin } from '$src/components/proseMirror/plugins/activeNodePlugin.ts'
 
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
@@ -38,7 +38,7 @@ import {
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 import {
     type PromptReferencePreviewRenderer,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+} from '@lixpi/canvas-components/workspace/context'
 import {
     type AuthClientInstance,
 } from '@lixpi/auth-client'
