@@ -80,7 +80,8 @@ export const createCanvasDefaultsFromPreset = (preset: ApplicationTheme): Canvas
         },
         states: {
             disabledOpacity: 0.5,
-            loadingScrim: 'rgba(15, 23, 42, 0.18)',
+            // A white frost over the blurred workspace while it loads.
+            loadingScrim: 'rgba(255, 255, 255, 0.9)',
         },
         selection: {
             border: 'rgba(176, 173, 224, 0.88)',
