@@ -44,7 +44,23 @@
             "label": "Initialize infrastructure",
             "hint": "TLS certificates and DynamoDB tables",
             "script": "local:init-infrastructure",
-            "steps": [{ "type": "env-file" }]
+            "steps": [
+                { "type": "env-file" },
+                {
+                    "type": "choices",
+                    "message": "The local stack serves HTTPS with certificates from its own certificate authority. Browsers accept them only if this computer trusts that authority. The desktop app trusts it on its own.",
+                    "options": [
+                        {
+                            "name": "trust-certificate",
+                            "label": "Trust",
+                            "choices": [
+                                { "value": "skip", "label": "Skip", "hint": "Leaves this computer's trust store unchanged. Enough for the desktop app and remote environments" },
+                                { "value": "install", "label": "Install", "hint": "Adds the authority to this computer's trust store (asks for your password), so a browser opens the local web-ui, Profile, API and NATS without certificate errors" }
+                            ]
+                        }
+                    ]
+                }
+            ]
         },
         {
             "id": "pulumi",
@@ -52,6 +68,45 @@
             "hint": "Everything the Pulumi service offers",
             "script": "local:pulumi",
             "steps": [{ "type": "env-file" }, { "type": "service-commands" }]
+        },
+        {
+            "id": "desktop-app",
+            "label": "Build the macOS desktop app",
+            "hint": "Lixpi.app for the chosen environment",
+            "script": "local:build-desktop-app",
+            "steps": [
+                { "type": "env-file" },
+                {
+                    "type": "choices",
+                    "message": "How should the app be built?",
+                    "options": [
+                        {
+                            "name": "target",
+                            "label": "Mac",
+                            "choices": [
+                                { "value": "aarch64-apple-darwin", "label": "Apple silicon" },
+                                { "value": "x86_64-apple-darwin", "label": "Intel" }
+                            ]
+                        },
+                        {
+                            "name": "diagnostics",
+                            "label": "Diagnostics",
+                            "choices": [
+                                { "value": "false", "label": "Off", "hint": "A normal build" },
+                                { "value": "true", "label": "On", "hint": "Logs the page's console, errors and page loads to ~/Library/Logs/com.lixpi.desktop/diagnostics.log" }
+                            ]
+                        },
+                        {
+                            "name": "rebuild",
+                            "label": "Builder",
+                            "choices": [
+                                { "value": "false", "label": "Use existing", "hint": "Builds the builder image only when it is missing" },
+                                { "value": "true", "label": "Rebuild", "hint": "Rebuilds the builder image without cache, picking up a new macOS SDK" }
+                            ]
+                        }
+                    ]
+                }
+            ]
         },
         {
             "id": "prune",

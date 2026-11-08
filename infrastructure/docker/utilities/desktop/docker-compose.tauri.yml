@@ -1,0 +1,41 @@
+# Builds the macOS desktop app (gui/tauri) into gui/tauri/dist/Lixpi.app, then
+# exits. It is its own Compose project, so a build never touches the running
+# stack. The dev console's "Build the macOS desktop app" action runs it:
+#
+#   docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/desktop/docker-compose.tauri.yml run --rm lixpi-tauri-macos-builder
+#
+# The app opens web-ui at the stage's ORIGIN_HOST_URL, so each environment file
+# produces an app for that environment. A build for the local stack also embeds
+# the stack's certificate authority from the caddy-certs volume, which is why
+# the builder shares the application's Compose project, like the certificate
+# generator that writes that volume.
+name: lixpi
+
+services:
+
+    # No container_name: this service is invoked via `docker compose run --rm`
+    # (never `up`/`exec`), so concurrent invocations never collide on a fixed name.
+    lixpi-tauri-macos-builder:
+        image: lixpi/tauri-macos-builder
+        build:
+            context: ../../../../gui/tauri
+            dockerfile: Dockerfile
+            # The macOS SDK from the Command Line Tools on this Mac. Docker Desktop
+            # can't bind-mount /Library, but a build context can read it.
+            additional_contexts:
+                macos-sdk: ${MACOS_SDK_PATH:-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk}
+        environment:
+            LIXPI_WEB_UI_URL: ${ORIGIN_HOST_URL}
+            LIXPI_API_URL: ${VITE_API_URL}
+            LIXPI_DESKTOP_TARGET: ${LIXPI_DESKTOP_TARGET:-aarch64-apple-darwin}
+            LIXPI_DESKTOP_DIAGNOSTICS: ${LIXPI_DESKTOP_DIAGNOSTICS:-false}
+        volumes:
+            - ../../../../gui/tauri:/usr/src/desktop:cached
+            - caddy-certs:/usr/src/caddy-certs:ro
+            - tauri-builder-cargo-registry:/usr/local/cargo/registry
+            - tauri-builder-cargo-target:/cargo-target
+
+volumes:
+    caddy-certs:
+    tauri-builder-cargo-registry:
+    tauri-builder-cargo-target:

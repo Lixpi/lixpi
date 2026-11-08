@@ -1,6 +1,6 @@
 # Code Quality Runners
 
-This directory contains the Docker images, entrypoints, tool configuration, fixtures, and reusable Compose services for Lixpi's Go and TypeScript test and quality runners. A consuming repository supplies only its source mounts, cache declarations, and any test-specific privileges.
+This directory contains the Docker images, entrypoints, tool configuration, fixtures, and reusable Compose services for Lixpi's Go, Rust, and TypeScript test and quality runners. A consuming repository supplies only its source mounts, cache declarations, and any test-specific privileges.
 
 ## Directory layout
 
@@ -8,6 +8,8 @@ This directory contains the Docker images, entrypoints, tool configuration, fixt
 |-----------|---------|
 | [`go-test-runner/`](go-test-runner/README.md) | Go test image and mounted-target dispatcher |
 | [`go-quality-runner/`](go-quality-runner/README.md) | Go dependency, formatting, source-convention, and lint runner |
+| [`rust-test-runner/`](rust-test-runner/README.md) | Rust test image and mounted-target dispatcher |
+| [`rust-quality-runner/`](rust-quality-runner/README.md) | Rust formatting, source-convention, lint, and lockfile runner |
 | [`typescript-test-runner/`](typescript-test-runner/README.md) | pnpm workspace assembly and Vitest dispatcher |
 | [`typescript-quality-runner/`](typescript-quality-runner/README.md) | TypeScript, HTML, Sass, and CSS formatter and linter toolchain |
 | [`runner-compose/`](runner-compose/README.md) | Reusable Compose service definitions with no application source mounts |
@@ -55,10 +57,12 @@ Required-variable interpolation happens while Compose loads the file, before it 
 |--------|------------|-----------------|----------------------------|
 | Go test | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | module and build cache volumes |
 | Go quality | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | module, build, and lint cache volumes |
+| Rust test | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | Cargo registry and build output volumes |
+| Rust quality | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | Cargo registry and build output volumes |
 | TypeScript test | `/usr/src/service/run-tests.sh` | `/usr/src/service/<workspace>` and staged workspace manifests | pnpm store and per-workspace `node_modules` volumes |
 | TypeScript quality | `/usr/src/quality-runner` | selected paths under `/usr/src/repository` | tool `node_modules`, pnpm store, and dprint cache volumes |
 
-The runner scripts use these container paths as their API. Adding a Go target or ordinary TypeScript workspace is a mount-only change in the consumer adapter.
+The runner scripts use these container paths as their API. Adding a Go or Rust target or an ordinary TypeScript workspace is a mount-only change in the consumer adapter.
 
 ## Go mount behavior
 
@@ -71,6 +75,12 @@ Quality adapters mount source and manifests read-write because `fix` edits sourc
 The main adapters include `go-quality-tools` for the shared Go checkers' own module. The [Go quality runner](go-quality-runner/README.md) combines syntax-based formatting, specialized GolangCI-Lint analyzers, and a typed `go/analysis` executable for Lixpi's symbol and error conventions. Its image build runs regression tests before publishing the executables used by every consuming repository.
 
 A Go target name may contain lowercase letters, digits, and internal hyphens. It is accepted only when the corresponding manifest files and source directory are mounted.
+
+## Rust mount behavior
+
+The Rust runners follow the Go mount model. The adapters mount `Cargo.toml` and `Cargo.lock` separately from source, and the runner copies both into the container-owned crate root before invoking Cargo. That keeps files a build script writes beside the crate, such as Tauri's generated schemas, out of the checkout. Test adapters mount everything read-only; quality adapters mount source and the lockfile writable because `fix` edits source and `dependencies` rewrites `Cargo.lock`. Every other command uses `--locked`.
+
+The [Rust quality runner](rust-quality-runner/README.md) combines rustfmt, a clippy lint policy, and a source-convention checker built on rust-analyzer's lossless syntax tree. Its image build formats, tests, and lints the checker against its own rules, and the `rust-quality-tools` target runs the checker's regression tests. Both images carry the GTK and WebKitGTK development packages, because the desktop app's web view links them on Linux.
 
 ## TypeScript test workspace assembly
 
@@ -88,4 +98,4 @@ The TypeScript quality runner has two filesystems with different responsibilitie
 
 Application package manifests are not mounted into `/usr/src/repository`, so the tool installation cannot create application lockfiles or `node_modules` directories. Fix-capable adapters mount selected source paths read-write. Validation uses the same paths without modifying them. External repositories normally call the generic `files` domain with explicit container-relative paths instead of adding private domain names to the shared dispatcher.
 
-The detailed TypeScript rules and commands are in [TypeScript and Stylesheet Linting and Formatting](typescript-quality-runner/README.md). Go commands and target behavior are in [Go Testing and Tooling](../../documentation/code-quality/testing/GO.md), and TypeScript test commands are in [TypeScript Testing](../../documentation/code-quality/testing/TYPESCRIPT.md).
+The detailed TypeScript rules and commands are in [TypeScript and Stylesheet Linting and Formatting](typescript-quality-runner/README.md). Go commands and target behavior are in [Go Testing and Tooling](../../documentation/code-quality/testing/GO.md), Rust commands are in [Rust Testing and Tooling](../../documentation/code-quality/testing/RUST.md), and TypeScript test commands are in [TypeScript Testing](../../documentation/code-quality/testing/TYPESCRIPT.md).

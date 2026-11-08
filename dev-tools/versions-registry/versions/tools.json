@@ -1,6 +1,11 @@
 {
+    "apple-codesign": "0.29.0",
+    "cargo-zigbuild": "0.24.1",
     "fnm": "1.39.0",
     "nex": "0.5.0",
     "pulumi": "3.273.0",
-    "trunk": "0.22.1"
+    "rust-nightly": "2026-11-01",
+    "tauri-cli": "3.0.0-alpha.6",
+    "trunk": "0.22.1",
+    "zig": "0.17.1"
 }

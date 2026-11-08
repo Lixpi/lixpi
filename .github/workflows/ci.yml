@@ -161,7 +161,44 @@ jobs:
               run: docker build -f services/${{ matrix.service }}/Dockerfile --target embedded-runtime -t lixpi/${{ matrix.service }}-embedded .
 
     # -------------------------------------------------------------------------
-    # Required status across both languages
+    # Rust
+    # -------------------------------------------------------------------------
+    rust-quality:
+        name: Rust / Formatting and linting / ${{ matrix.target }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                target: [desktop, rust-quality-tools]
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v7.0.1
+
+            - name: Build Rust quality runner
+              run: docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.rust-quality-runner.yml --profile dev build lixpi-rust-quality-runner
+
+            - name: Validate Rust formatting and lint rules
+              run: docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.rust-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-rust-quality-runner ${{ matrix.target }} validate
+
+    rust-tests:
+        name: Rust / Tests / ${{ matrix.target }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                target: [desktop, rust-quality-tools]
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v7.0.1
+
+            - name: Build Rust test runner
+              run: docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.rust-test-runner.yml --profile dev build lixpi-rust-test-runner
+
+            - name: Run Rust tests
+              run: docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.rust-test-runner.yml --profile dev run --rm --no-deps -T lixpi-rust-test-runner ${{ matrix.target }}
+
+    # -------------------------------------------------------------------------
+    # Required status across every language
     # -------------------------------------------------------------------------
     gate:
         name: Required CI gate
@@ -173,9 +210,11 @@ jobs:
             - go-quality
             - go-tests
             - go-build
+            - rust-quality
+            - rust-tests
         runs-on: ubuntu-latest
         steps:
-            - name: Require TypeScript and Go checks
+            - name: Require TypeScript, Go and Rust checks
               env:
                   VERSIONS_REGISTRY_RESULT: ${{ needs.versions-registry.result }}
                   TYPESCRIPT_QUALITY_RESULT: ${{ needs.typescript-quality.result }}
@@ -183,6 +222,8 @@ jobs:
                   GO_QUALITY_RESULT: ${{ needs.go-quality.result }}
                   GO_TEST_RESULT: ${{ needs.go-tests.result }}
                   GO_BUILD_RESULT: ${{ needs.go-build.result }}
+                  RUST_QUALITY_RESULT: ${{ needs.rust-quality.result }}
+                  RUST_TEST_RESULT: ${{ needs.rust-tests.result }}
               run: |
                   test "$VERSIONS_REGISTRY_RESULT" = "success"
                   test "$TYPESCRIPT_QUALITY_RESULT" = "success"
@@ -190,3 +231,5 @@ jobs:
                   test "$GO_QUALITY_RESULT" = "success"
                   test "$GO_TEST_RESULT" = "success"
                   test "$GO_BUILD_RESULT" = "success"
+                  test "$RUST_QUALITY_RESULT" = "success"
+                  test "$RUST_TEST_RESULT" = "success"

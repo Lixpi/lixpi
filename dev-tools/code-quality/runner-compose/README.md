@@ -1,6 +1,6 @@
 ---
 title: Reusable Runner Compose Services
-description: Compose extension contracts for sharing Lixpi's Go and TypeScript quality and test runners between repositories.
+description: Compose extension contracts for sharing Lixpi's Go, Rust, and TypeScript quality and test runners between repositories.
 ---
 
 # Reusable Runner Compose Services
@@ -11,6 +11,8 @@ These files define the shared image, entrypoint, tool mounts, working directory,
 |-----------|------------------|-------------------------|
 | [`go-quality.base.yml`](go-quality.base.yml) | `go-quality-runner-base` | Writable Go source and manifests, plus module, build, and lint cache declarations. |
 | [`go-test.base.yml`](go-test.base.yml) | `go-test-runner-base` | Read-only Go source and manifests, plus module and build cache declarations. |
+| [`rust-quality.base.yml`](rust-quality.base.yml) | `rust-quality-runner-base` | Writable Rust source and lockfile, the manifest, and Cargo registry and build output declarations. |
+| [`rust-test.base.yml`](rust-test.base.yml) | `rust-test-runner-base` | Read-only Rust source and manifests, plus Cargo registry and build output declarations. |
 | [`typescript-quality.base.yml`](typescript-quality.base.yml) | `typescript-quality-runner-base` | Selected repository paths, the repository Oxlint configuration path, and four cache declarations. |
 | [`typescript-test.base.yml`](typescript-test.base.yml) | `typescript-test-runner-base` | Workspace manifests, source mounts, environment, and pnpm and `node_modules` cache declarations. |
 
@@ -44,7 +46,7 @@ The volume names form the interface between the base and adapter, but the physic
 
 ## Mount permissions
 
-Test adapters mount source and manifests read-only because test execution must not change the checkout. Quality adapters mount selected paths writable because fix actions edit source. Go quality adapters also mount `go.mod` and `go.sum` writable for the explicit `dependencies` action.
+Test adapters mount source and manifests read-only because test execution must not change the checkout. Quality adapters mount selected paths writable because fix actions edit source. Go quality adapters also mount `go.mod` and `go.sum` writable for the explicit `dependencies` action, and Rust quality adapters mount `Cargo.lock` writable for theirs.
 
 TypeScript workspaces that need a nested `node_modules` volume must keep the package root container-owned. Mount the package manifest and source paths separately. A read-only bind of the entire package directory prevents the container runtime from creating the nested volume mount point.
 

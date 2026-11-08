@@ -22,6 +22,14 @@ type Pair struct {
 	PrivateKey  string `json:"private_key"`
 }
 
+// Apple's TLS stack, which Safari and every WebKit view use, rejects a server
+// certificate valid for more than 825 days even when a locally trusted root
+// issued it. Local leaves stay below that limit.
+const (
+	MaxLocalLifetime  = 825 * 24 * time.Hour
+	LocalLeafLifetime = 800 * 24 * time.Hour
+)
+
 type Candidate struct {
 	Pair
 	Leaf    *x509.Certificate
@@ -68,6 +76,62 @@ func Read(root, domain string, roots *x509.CertPool, now time.Time) (Candidate, 
 	}
 
 	return best, nil
+}
+
+// DiscardOverlongLocal removes stored local leaves valid for longer than
+// MaxLocalLifetime, together with their key and metadata, so Caddy issues a
+// replacement that Apple clients accept. Earlier releases issued such leaves.
+func DiscardOverlongLocal(root, domain string) (int, error) {
+	filename := certmagic.StorageKeys.Safe(domain) + ".crt"
+	var overlong []string
+
+	err := filepath.WalkDir(filepath.Join(root, "certificates"), func(path string, entry fs.DirEntry, walkErr error) error {
+		if errors.Is(walkErr, fs.ErrNotExist) {
+			return fs.SkipAll
+		}
+
+		if walkErr != nil {
+			return fmt.Errorf("walk certificate path %q: %w", path, walkErr)
+		}
+
+		if !entry.Type().IsRegular() || entry.Name() != filename {
+			return nil
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read certificate file %q: %w", path, err)
+		}
+
+		block, _ := pem.Decode(data)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return fmt.Errorf("decode certificate file %q: no certificate block", path)
+		}
+
+		leaf, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return fmt.Errorf("parse certificate file %q: %w", path, err)
+		}
+
+		if leaf.NotAfter.Sub(leaf.NotBefore) > MaxLocalLifetime {
+			overlong = append(overlong, strings.TrimSuffix(path, ".crt"))
+		}
+
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("search local certificate directories: %w", err)
+	}
+
+	for _, base := range overlong {
+		for _, extension := range []string{".crt", ".key", ".json"} {
+			if err := os.Remove(base + extension); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return 0, fmt.Errorf("remove overlong certificate file %q: %w", base+extension, err)
+			}
+		}
+	}
+
+	return len(overlong), nil
 }
 
 func readCandidate(path, domain string, roots *x509.CertPool, now time.Time) (Candidate, error) {

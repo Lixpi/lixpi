@@ -18,7 +18,12 @@
     "tools": {
         "FNM_VERSION": "fnm",
         "NEX_VERSION": "nex",
-        "TRUNK_VERSION": "trunk"
+        "TRUNK_VERSION": "trunk",
+        "APPLE_CODESIGN_VERSION": "apple-codesign",
+        "CARGO_ZIGBUILD_VERSION": "cargo-zigbuild",
+        "TAURI_CLI_VERSION": "tauri-cli",
+        "ZIG_VERSION": "zig",
+        "RUST_NIGHTLY_VERSION": "rust-nightly"
     },
     "go": {
         "GOPLS_VERSION": "tools.gopls",

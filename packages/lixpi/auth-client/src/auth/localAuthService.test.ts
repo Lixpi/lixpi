@@ -10,7 +10,10 @@ import {
 import { createAuthStore } from '../stores/authStore.ts'
 import { createAuthClient } from '../authClient.ts'
 import { AuthenticationFailure } from '../authenticationFailure.ts'
-import { createLocalAuthService } from './localAuthService.ts'
+import {
+    SILENT_REFRESH_TIMEOUT_MS,
+    createLocalAuthService,
+} from './localAuthService.ts'
 
 vi.mock('@lixpi/ui-primitives/gradients', () => ({
     createShiftingGradientBackground: () => ({ destroy: vi.fn() }),
@@ -89,6 +92,39 @@ describe('LocalAuth0 web client service', () => {
 
         await expect(service.getTokenSilently(true)).resolves.toBe('fresh-token')
         expect(refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('gives up a silent refresh the browser never completes and clears the session', async () => {
+        vi.useFakeTimers()
+        // WebKit cancels the frame's navigation without firing load or error,
+        // so the frame never reports back.
+        vi.spyOn(HTMLIFrameElement.prototype, 'addEventListener').mockImplementation(() => {})
+
+        try {
+            const store = createAuthStore()
+            const service = createLocalAuthService(config, store)
+            localStorage.setItem('localauth0_token', makeToken(3600))
+            let settled = false
+            const refreshed = (async () => {
+                const token = await service.getTokenSilently(true)
+                settled = true
+
+                return token
+            })()
+
+            await vi.advanceTimersByTimeAsync(SILENT_REFRESH_TIMEOUT_MS - 1)
+            expect(settled).toBe(false)
+            expect(document.querySelector('iframe')).not.toBeNull()
+
+            await vi.advanceTimersByTimeAsync(1)
+
+            await expect(refreshed).resolves.toBe(false)
+            expect(document.querySelector('iframe')).toBeNull()
+            expect(localStorage.getItem('localauth0_token')).toBeNull()
+            expect(store.getMeta('isAuthenticated')).toBe(false)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('clears a rejected refresh without starting another login', async () => {

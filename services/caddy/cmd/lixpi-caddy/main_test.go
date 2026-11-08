@@ -43,8 +43,9 @@ func TestLocalEmbeddedCaddyPreservesCAAndCertificate(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if time.Until(leaf.NotAfter) < 2499*24*time.Hour {
-			t.Fatal("local development lifetime changed")
+		lifetime := leaf.NotAfter.Sub(leaf.NotBefore)
+		if lifetime < certificates.LocalLeafLifetime-24*time.Hour || lifetime > certificates.MaxLocalLifetime {
+			t.Fatalf("local leaf lifetime %s is outside the range Apple clients accept", lifetime)
 		}
 
 		for _, file := range []struct {

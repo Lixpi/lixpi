@@ -27,6 +27,7 @@ The shared coding-style guides map to work as follows:
 | Files being touched | Shared guide |
 |---------------------|--------------|
 | Any `.go` file in a Lixpi repository | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/GO.md` |
+| Any `.rs` file Lixpi authors (not the vendored `services/localauth0` source) | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/RUST.md` |
 | Any `.ts` file anywhere in the repository | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/TYPESCRIPT.md` |
 | `.scss` or `.css` files, or code that creates or selects styled DOM elements | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/SASS-AND-CSS.md` |
 | `services/web-ui` UI work, including TypeScript DOM components, D3 or SVG, canvas chrome, ProseMirror plugins, and shared components | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/UI-COMPONENTS.md`, in addition to the applicable language and style guides |
@@ -47,5 +48,6 @@ When test work is permitted by the test mode or an explicit user request, use th
 
 - TypeScript: `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/testing/TYPESCRIPT.md`
 - Go: `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/testing/GO.md`
+- Rust: `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/testing/RUST.md`
 
 Run permitted project verification only through the documented Docker container. Never substitute host package-manager commands, browser automation, screenshots, or manual visual inspection. If the permitted checks do not cover the changed behavior, report the remaining verification gap.

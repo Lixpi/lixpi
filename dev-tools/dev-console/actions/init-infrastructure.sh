@@ -4,6 +4,11 @@
 # environment file chosen in its menu:
 #
 #   init-infrastructure.sh <env-file>
+#
+#   LIXPI_CONSOLE_OPTION_TRUST_CERTIFICATE   install adds the local certificate
+#                                            authority to this computer's trust
+#                                            store; skip (the default) leaves the
+#                                            computer unchanged
 
 cd "$(dirname "$0")/../../.." || exit 1
 
@@ -13,6 +18,12 @@ if [ -z "$selected_env" ]; then
     echo "Usage: init-infrastructure.sh <env-file>"
     exit 1
 fi
+
+trust_certificate="${LIXPI_CONSOLE_OPTION_TRUST_CERTIFICATE:-skip}"
+case "$trust_certificate" in
+    skip|install) ;;
+    *) echo "LIXPI_CONSOLE_OPTION_TRUST_CERTIFICATE must be skip or install, found $trust_certificate." >&2; exit 2 ;;
+esac
 
 # Pulumi shares the application's Compose project, so the running stack isn't orphaned.
 export COMPOSE_IGNORE_ORPHANS=true
@@ -34,49 +45,66 @@ done
 echo "Certificates generated successfully!"
 echo ""
 
-# Extract CA certificate
-echo "Extracting CA certificate..."
-docker run --rm -v lixpi_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
+# The local stack serves HTTPS with certificates from its own certificate
+# authority. A browser trusts them only when that authority is in the
+# computer's trust store, so running web-ui in a browser needs this step. The
+# desktop app embeds the authority and trusts it itself, and remote
+# environments use public certificates, so neither needs it.
+install_certificate_authority() {
+    # Extract CA certificate
+    echo "Extracting CA certificate..."
+    docker run --rm -v lixpi_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
 
-# Detect OS and install certificate
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    echo "Installing CA certificate on macOS..."
-    sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt
-    if [ $? -eq 0 ]; then
-        echo "✓ Certificate installed successfully on macOS"
-    else
-        echo "✗ Failed to install certificate on macOS"
-        exit 1
-    fi
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    echo "Installing CA certificate on Linux..."
+    # Detect OS and install certificate
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        echo "Installing CA certificate on macOS..."
+        sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt
+        if [ $? -eq 0 ]; then
+            echo "✓ Certificate installed successfully on macOS"
+        else
+            echo "✗ Failed to install certificate on macOS"
+            exit 1
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux
+        echo "Installing CA certificate on Linux..."
 
-    # Check which Linux distro
-    if [ -f /etc/debian_version ]; then
-        # Debian/Ubuntu
-        sudo cp ca.crt /usr/local/share/ca-certificates/lixpi-caddy-ca.crt
-        sudo update-ca-certificates
-    elif [ -f /etc/redhat-release ]; then
-        # RedHat/CentOS/Fedora
-        sudo cp ca.crt /etc/pki/ca-trust/source/anchors/lixpi-caddy-ca.crt
-        sudo update-ca-trust
+        # Check which Linux distro
+        if [ -f /etc/debian_version ]; then
+            # Debian/Ubuntu
+            sudo cp ca.crt /usr/local/share/ca-certificates/lixpi-caddy-ca.crt
+            sudo update-ca-certificates
+        elif [ -f /etc/redhat-release ]; then
+            # RedHat/CentOS/Fedora
+            sudo cp ca.crt /etc/pki/ca-trust/source/anchors/lixpi-caddy-ca.crt
+            sudo update-ca-trust
+        else
+            echo "Warning: Unknown Linux distribution. Please install ca.crt manually."
+            echo "Certificate saved to: $(pwd)/ca.crt"
+        fi
+
+        if [ $? -eq 0 ]; then
+            echo "✓ Certificate installed successfully on Linux"
+        else
+            echo "✗ Failed to install certificate on Linux"
+            exit 1
+        fi
     else
-        echo "Warning: Unknown Linux distribution. Please install ca.crt manually."
+        echo "Warning: Unsupported OS type: $OSTYPE"
         echo "Certificate saved to: $(pwd)/ca.crt"
+        echo "Please install it manually."
     fi
 
-    if [ $? -eq 0 ]; then
-        echo "✓ Certificate installed successfully on Linux"
-    else
-        echo "✗ Failed to install certificate on Linux"
-        exit 1
-    fi
+    echo ""
+}
+
+if [ "$trust_certificate" = install ]; then
+    install_certificate_authority
 else
-    echo "Warning: Unsupported OS type: $OSTYPE"
-    echo "Certificate saved to: $(pwd)/ca.crt"
-    echo "Please install it manually."
+    echo "Skipping the certificate authority install, so this computer's trust store is unchanged."
+    echo "The desktop app trusts the local certificates itself. To open the local web-ui in a"
+    echo "browser without certificate errors, rerun Initialize infrastructure with Trust: Install."
 fi
 
 echo ""

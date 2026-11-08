@@ -1,0 +1,13 @@
+services:
+    rust-quality-runner-base:
+        profiles: ["dev"]
+        image: lixpi/rust-quality-runner
+        build:
+            context: ../rust-quality-runner
+        volumes:
+            - ../rust-quality-runner/run-quality.sh:/usr/src/runner/run-quality.sh:ro,cached
+            - ../rust-quality-runner/rustfmt.toml:/usr/src/runner/rustfmt.toml:ro,cached
+            - ../rust-quality-runner/clippy.toml:/usr/src/runner/clippy.toml:ro,cached
+            - ../rust-quality-runner/clippy-lints:/usr/src/runner/clippy-lints:ro,cached
+            - rust-quality-runner-registry-cache:/usr/local/cargo/registry
+            - rust-quality-runner-target-cache:/cargo-target

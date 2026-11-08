@@ -1,0 +1,50 @@
+[package]
+name = "lixpi-desktop"
+version = "0.0.1"
+description = "Lixpi desktop app"
+authors = ["Lixpi"]
+license = "MIT"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[lib]
+name = "lixpi_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "lixpi-desktop"
+path = "src/main.rs"
+
+[features]
+# Records the page's console, errors and page loads to stderr and to
+# diagnostics.log in the app's log directory. Off in normal builds; the desktop
+# builder enables it on request.
+diagnostics = []
+
+[build-dependencies]
+tauri-build = { version = "=3.0.0-alpha.4", features = [] }
+
+[dependencies]
+serde_json = "1"
+tauri = { version = "=3.0.0-alpha.6", features = ["devtools"] }
+tauri-plugin-opener = "=3.0.0-alpha.3"
+tauri-plugin-window-state = "=3.0.0-alpha.2"
+# Tauri 3 separates the core from the runtime. Wry drives the system WebKit view.
+tauri-runtime-wry = { version = "=3.0.0-alpha.6", default-features = false, features = ["devtools"] }
+
+# The local certificate authority is trusted inside the app through WebKit's
+# authentication challenge, which these bindings reach. The versions match the
+# ones wry already uses.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "=0.6.2"
+objc2 = "=0.6.5"
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFArray", "CFData"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSURLAuthenticationChallenge", "NSURLProtectionSpace"] }
+objc2-security = { version = "=0.3.2", default-features = false, features = ["std", "objc2", "SecBase", "SecCertificate", "SecTrust"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"

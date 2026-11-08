@@ -1,0 +1,10 @@
+# Clippy settings for the lint levels in clippy-lints. The runner points
+# CLIPPY_CONF_DIR at this directory, so targets do not carry their own copy.
+
+# A failing assertion is how a test reports, so tests may unwrap, expect and
+# panic. Production code may not.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = false

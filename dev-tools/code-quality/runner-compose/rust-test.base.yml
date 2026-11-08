@@ -1,0 +1,10 @@
+services:
+    rust-test-runner-base:
+        profiles: ["dev"]
+        image: lixpi/rust-test-runner
+        build:
+            context: ../rust-test-runner
+        volumes:
+            - ../rust-test-runner/run-tests.sh:/usr/src/runner/run-tests.sh:ro,cached
+            - rust-test-runner-registry-cache:/usr/local/cargo/registry
+            - rust-test-runner-target-cache:/cargo-target

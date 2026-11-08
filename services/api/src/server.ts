@@ -288,9 +288,12 @@ const httpServer = createServer(app)
 
 app.set('trust proxy', true)
 
+// The desktop app saves API downloads by fetching them from web-ui, so the
+// attachment's file name has to be readable across origins.
 const corsOptions = {
     origin: env.ORIGIN_HOST_URL,
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
 }
 
 app.use(

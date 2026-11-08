@@ -8,6 +8,12 @@ import {
 
 const DEFAULT_STORAGE_KEY = 'localauth0_token'
 
+// A browser can stop the hidden refresh frame without firing any event: WebKit
+// cancels a plain-HTTP LocalAuth0 frame inside an HTTPS page. The refresh then
+// fails after this long, so the caller can fall back to an explicit sign-in
+// instead of waiting forever.
+export const SILENT_REFRESH_TIMEOUT_MS = 10_000
+
 class LocalAuthService implements WebClientAuthService {
     constructor(
         private readonly config: LocalAuthConfig,
@@ -142,7 +148,19 @@ class LocalAuthService implements WebClientAuthService {
             const iframe = html`<iframe style=${{ display: 'none' }}></iframe>` as HTMLIFrameElement
             const callbackPath = new URL(this.config.redirectUri).pathname
             let loadCount = 0
-            const cleanup = () => iframe.remove()
+            const timeout = setTimeout(
+                () => {
+                    cleanup()
+                    reject(
+                        new Error('Silent token refresh timed out'),
+                    )
+                },
+                SILENT_REFRESH_TIMEOUT_MS,
+            )
+            const cleanup = () => {
+                clearTimeout(timeout)
+                iframe.remove()
+            }
 
             iframe.addEventListener('load', () => {
                 loadCount++

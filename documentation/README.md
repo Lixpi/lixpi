@@ -22,6 +22,8 @@ These docs are maintained as Markdown and read directly in GitHub or an editor. 
 | [Code Quality Runners](../dev-tools/code-quality/README.md) | Shared Docker runner services, repository mount adapters, cache isolation, and cross-repository extension contracts |
 | [TypeScript Linting and Formatting](../dev-tools/code-quality/typescript-quality-runner/README.md) | AST-based formatting and linting rules plus Docker-only per-service and per-package commands |
 | [Go Testing and Tooling](code-quality/testing/GO.md) | Docker-only Go builds, race tests, formatter/linter autofix, module maintenance and isolated broker acceptance |
+| [Rust Testing and Tooling](code-quality/testing/RUST.md) | Docker-only Rust tests, rustfmt, clippy and source-convention checks, lockfile maintenance and the Rust CI jobs |
+| [Rust Coding Style](code-quality/coding-style/RUST.md) | Crate structure, errors, process exit, output, suppressions, unsafe code and layout for Lixpi's Rust crates |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
@@ -44,6 +46,7 @@ When the architecture changes, update this map and the affected domain pages tog
 | `services/` | Application services, including the TypeScript web UI and API plus the Go NATS and Caddy services |
 | `packages/lixpi/` | Shared TypeScript libraries, contracts, UI packages, and constants |
 | `dev-tools/` | Configuration and dependency utilities, the dev console, the code-quality runner toolchain, and the shared skill utility runner |
+| `gui/` | Native app shells. `gui/tauri` is the macOS desktop app that runs web-ui |
 | `infrastructure/` | Pulumi infrastructure code |
 | `documentation/` | Product, architecture, platform, code-quality, and development workflow documentation |
 | `documentation/memory/` | Active implementation plans, spike reports, and task continuity files |
@@ -62,6 +65,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [NATS Service](../services/nats/README.md) | Embedded broker architecture, peer admission, runtime configuration, certificates, health, maintenance commands and Docker development |
 | [Caddy Certificate Service](../services/caddy/README.md) | Embedded certificate issuance, local CA trust, public renewal, durable ACME state and serving-secret publication |
 | [NATS Subject Registry](../packages/lixpi/nats-subject-registry/README.md) | Subject ownership, endpoint permissions, service allowlists, subscription creation, validation, and release identity |
+| [Desktop App](platform/DESKTOP-APP.md) | The native macOS app that runs web-ui, its Docker-only cross-compiled build, and how it handles sign-in, links and downloads |
 | [Dev Console](../dev-tools/dev-console/README.md) | The `./run.sh` menu, its environment picker, service tree and actions, and how its plan reaches the host |
 | [Dependency Version Registry](../dev-tools/versions-registry/README.md) | Central versions, generated native declarations, release discovery, and update commands |
 | [Usage Reporting](../packages/lixpi/usage-reporter/README.md) | Provider request authorization, measured usage, and provider tariff metadata |
