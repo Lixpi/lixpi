@@ -463,9 +463,12 @@ describe('services/api server startup', () => {
             limit: '100mb',
             extended: true,
         })
+        // Content-Disposition is exposed so the desktop app can keep a
+        // download's file name when it fetches the file from web-ui.
         expect(mocks.cors).toHaveBeenCalledWith({
             origin: 'https://api.example.test',
             credentials: true,
+            exposedHeaders: ['Content-Disposition'],
         })
         expect(mocks.cookieParser).toHaveBeenCalledWith()
 
