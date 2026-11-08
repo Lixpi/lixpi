@@ -30,7 +30,7 @@ import {
     capabilityArtifactSharedRegistry,
     ensureCapabilityStyles,
 } from '$src/installed-capabilities.ts'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import {
     type AssetService,

@@ -17,7 +17,7 @@ import {
     type LoadingOverlayOptions,
 } from '@lixpi/canvas-components/loading'
 import { WebUiStartup } from './startup.ts'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 
 const overlayOptions = vi.hoisted(() => [] as LoadingOverlayOptions[])
 

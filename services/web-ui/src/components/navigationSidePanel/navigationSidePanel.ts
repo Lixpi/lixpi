@@ -19,7 +19,7 @@ import {
     type SidePanelInstance,
 } from '@lixpi/ui-kit/components/side-panel'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import {
     createNewFileIcon,
     navigationSidePanelToggleIcon,

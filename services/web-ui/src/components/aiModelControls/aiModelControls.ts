@@ -30,7 +30,7 @@ import {
     createHelpTooltip,
     type HelpTooltipInstance,
 } from '@lixpi/ui-kit/components/help-tooltip'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import { createModelConfigurationRow } from '$src/components/aiModelControls/modelConfigurationRow.ts'
 
 import {

@@ -18,7 +18,7 @@ import { createNavigationSidePanel } from '$src/components/navigationSidePanel/i
 import '@lixpi/ui-kit/styles/navigation-side-panel'
 
 import { routes } from '$src/routes.ts'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import '$src/views/layouts/layout.scss'
 
 export type LayoutInstance = {

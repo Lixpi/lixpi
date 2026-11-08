@@ -7,7 +7,7 @@ import {
     createLixpiLightCanvasTheme,
     createLixpiCanvasThemeFromCss,
     createLixpiCanvasThemeFromPreset,
-} from '@lixpi/canvas-components/workspace/settings'
+} from '$src/settings.ts'
 
 export const canvasThemeStore = new CanvasThemeStore(
     createLixpiLightCanvasTheme(),

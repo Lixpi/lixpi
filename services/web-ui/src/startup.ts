@@ -13,7 +13,7 @@ import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import {
     type WebClientServiceInstance,
 } from '@lixpi/web-client-service-factory'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 
 type WorkspaceConfig = {
     loadingLayer: LoadingLayer

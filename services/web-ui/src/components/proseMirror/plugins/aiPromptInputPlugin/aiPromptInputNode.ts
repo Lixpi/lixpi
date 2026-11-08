@@ -21,7 +21,7 @@ import {
     plusIcon,
 } from '@lixpi/ui-kit/svg'
 
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     applyAiModelMenuStyleSettings,

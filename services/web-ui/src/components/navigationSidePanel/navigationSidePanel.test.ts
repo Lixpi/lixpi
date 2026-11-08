@@ -90,7 +90,7 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { createAuthStore } from '@lixpi/auth-client'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { navigationSidePanelStore } from '$src/stores/navigationSidePanelStore.ts'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 
 const USER_PORTAL_URL = 'https://user-portal.example.test'
 

@@ -25,7 +25,7 @@ import {
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/ui-kit/styles/bubble-menu'
 import '@lixpi/ui-kit/styles/canvas-node-footer'

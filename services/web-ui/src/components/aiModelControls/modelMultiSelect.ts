@@ -8,7 +8,7 @@ import {
 } from '@lixpi/ui-kit/components/info-bubble'
 import { html } from '@lixpi/ui-primitives/dom'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import {
     transformModelsToOptions,
     type AiModelDropdownOption,

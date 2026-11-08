@@ -7,7 +7,7 @@ import { html } from '@lixpi/ui-primitives/dom'
 import {
     settings,
     type AiPromptInputModelMenuSettings,
-} from '@lixpi/canvas-components/workspace/settings'
+} from '$src/settings.ts'
 
 export type AiModelMenuControlItem = {
     label: string | HTMLElement

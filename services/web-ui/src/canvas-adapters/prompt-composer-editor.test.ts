@@ -56,7 +56,7 @@ vi.mock('@lixpi/ui-primitives/gradients', () => ({
     },
 }))
 
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import {
     createGenericAiModelDropdown,
     createGenericAiModelMultiSelect,

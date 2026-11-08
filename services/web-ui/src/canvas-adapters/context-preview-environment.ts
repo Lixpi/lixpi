@@ -4,7 +4,7 @@ import {
 import {
     type AuthTokenProvider,
 } from '@lixpi/auth-client'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 import {

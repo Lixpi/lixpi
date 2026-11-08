@@ -23,7 +23,7 @@ import {
     applyMediaModelBadgeStyleProperties,
     resolveMediaModelBadgeConfig,
 } from '$src/components/mediaModelBadge/mediaModelBadge.ts'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import { lixpiLightTheme } from '@lixpi/themes'
 import { html } from '@lixpi/ui-primitives/dom'
 

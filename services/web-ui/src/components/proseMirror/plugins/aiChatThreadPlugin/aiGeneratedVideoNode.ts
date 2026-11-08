@@ -13,7 +13,7 @@ import {
 import {
     type AuthTokenProvider,
 } from '@lixpi/auth-client'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'

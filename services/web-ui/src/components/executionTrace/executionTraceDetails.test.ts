@@ -8,7 +8,7 @@ import {
     type ExecutionTrace,
 } from '@lixpi/constants'
 
-import { settings } from "@lixpi/canvas-components/workspace/settings"
+import { settings } from "$src/settings.ts"
 import { lixpiLightTheme } from "@lixpi/themes"
 
 import {

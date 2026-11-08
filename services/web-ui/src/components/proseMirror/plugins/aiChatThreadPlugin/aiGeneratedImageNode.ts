@@ -11,7 +11,7 @@ import {
 import {
     type AuthTokenProvider,
 } from '@lixpi/auth-client'
-import { settings } from '@lixpi/canvas-components/workspace/settings'
+import { settings } from '$src/settings.ts'
 import {
     applyMediaModelBadgeStyleProperties,
     resolveMediaModelBadgeConfig,

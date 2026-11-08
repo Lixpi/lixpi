@@ -24,7 +24,7 @@ import {
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 
 vi.mock('uuid', () => ({ v4: vi.fn(() => 'thread-id') }))
-vi.mock('@lixpi/canvas-components/workspace/settings', () => ({
+vi.mock('$src/settings.ts', () => ({
     settings: {
         aiChatThread: {
             defaultDimensions: {

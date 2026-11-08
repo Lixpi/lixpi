@@ -5,9 +5,10 @@ import {
     expect,
 } from 'vitest'
 import {
+    createLixpiUiSettings,
     settings,
     type Settings,
-} from '@lixpi/canvas-components/workspace/settings'
+} from '$src/settings.ts'
 import { workspaceCollisionSettings } from '@lixpi/constants'
 
 // Testing rule: assert config shape and ownership, not exact values.
@@ -93,6 +94,8 @@ const expectFiniteNumber = (value: unknown, path: string): void => {
 // =============================================================================
 
 describe('settings - grouped configuration', () => {
+    it('uses the shared package defaults while web-ui has no overrides', () => expect(settings).toEqual(createLixpiUiSettings()))
+
     it('exports expected sections and avoids getter-based static config', () => {
         const topLevelSettingsSections = [
             'modelSelectorDropdown',
