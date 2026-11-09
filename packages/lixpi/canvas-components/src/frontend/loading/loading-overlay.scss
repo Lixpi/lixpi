@@ -26,11 +26,18 @@
 // project switch doesn't blink the whole window.
 $overlayShowDelay: 150ms;
 
+// After the last load finishes, the overlay stays for this long while the
+// loaded content paints, then fades out quickly. Both run as one compositor
+// transition, so a busy main thread neither stalls nor stretches them.
+$overlayHideHold: 260ms;
+$overlayHideDuration: 90ms;
+
 // The scrim and blur stay on the overlay and only its opacity changes, so the
 // blurred backdrop fades in and out with it. Switching the blur on and off in
 // one frame made the whole window pop, most visibly in WebKit. `visibility` is
 // visible for the whole of a transition that starts or ends visible, so the
-// overlay stays rendered while it fades out and costs nothing once hidden.
+// overlay stays rendered while it lingers and fades out and costs nothing once
+// hidden.
 .canvas-loading-overlay {
     position: absolute;
     inset: 0;
@@ -44,8 +51,8 @@ $overlayShowDelay: 150ms;
     backdrop-filter: blur(24px) saturate(145%);
     -webkit-backdrop-filter: blur(24px) saturate(145%);
     transition:
-        transitions.overlayVisibilityTransition(opacity),
-        transitions.overlayVisibilityTransition(visibility);
+        transitions.overlayVisibilityTransition(opacity, $overlayHideHold, $overlayHideDuration),
+        transitions.overlayVisibilityTransition(visibility, $overlayHideHold, $overlayHideDuration);
     will-change: opacity;
 
     &.is-visible {
@@ -61,18 +68,25 @@ $overlayShowDelay: 150ms;
     }
 }
 
-.canvas-loading-outline {
+// The spinner stays rendered while the overlay fades out. `translate` centers
+// it independently of the `transform` that its rotation animates.
+.canvas-loading-spinner {
     position: absolute;
     left: 50%;
     top: 50%;
     z-index: 1;
-    display: none;
-    transform: translate(-50%, -50%);
+    translate: -50% -50%;
     pointer-events: none;
+    will-change: transform;
 }
 
-.canvas-loading-overlay.is-loading .canvas-loading-outline {
+.canvas-loading-outline {
     display: block;
+    will-change: transform;
+}
+
+.canvas-loading-overlay.is-error .canvas-loading-spinner {
+    display: none;
 }
 
 .canvas-loading-error {

@@ -17,8 +17,8 @@ $defaultHoverTransitionDuration: var(--default-hover-transition-duration, 150ms)
 
 $overlayVisibilityDuration: 120ms;
 
-@function overlayVisibilityTransition($property, $delay: 0s) {
-    @return #{$property} $overlayVisibilityDuration ease $delay;
+@function overlayVisibilityTransition($property, $delay: 0s, $duration: $overlayVisibilityDuration) {
+    @return #{$property} $duration ease $delay;
 }
 
 @function panelSlideTransition($property) {

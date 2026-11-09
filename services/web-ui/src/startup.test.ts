@@ -27,6 +27,7 @@ vi.mock('@lixpi/ui-primitives/gradients', () => ({
 
 vi.mock('@lixpi/canvas-components/loading/overlay', () => ({
     LoadingOverlay: class {
+        dom = document.createElement('div')
         constructor(options: LoadingOverlayOptions) {
             overlayOptions.push(options)
         }

@@ -171,6 +171,7 @@ export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> =
         workspaceLoadingOutline: {
             diameter: effects.loadingOutline.diameter,
             animationDurationMs: effects.loadingOutline.durationMs,
+            spinCycle: { ...effects.loadingOutline.spinCycle },
             snakeLengthFraction: effects.loadingOutline.snakeLengthFraction,
         },
 

@@ -62,6 +62,7 @@ export const resolveLixpiCanvasTheme = <Settings extends LixpiCanvasSettings>(
     next.workspaceLoadingOutline = {
         diameter: effects.loadingOutline.diameter,
         animationDurationMs: effects.loadingOutline.durationMs,
+        spinCycle: { ...effects.loadingOutline.spinCycle },
         snakeLengthFraction: effects.loadingOutline.snakeLengthFraction,
     }
     next.mediaBranchLineage.mediaModelCircle.glass = effects.circularGlass

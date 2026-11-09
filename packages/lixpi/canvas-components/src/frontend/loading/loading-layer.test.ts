@@ -13,12 +13,14 @@ import {
 
 const instances = vi.hoisted(() => [] as Array<{
     options: LoadingOverlayOptions
+    dom: { getAnimations: () => Animation[] }
     setVisible: ReturnType<typeof vi.fn>
     setErrorMessage: ReturnType<typeof vi.fn>
     destroy: ReturnType<typeof vi.fn>
 }>)
 vi.mock('./loading-overlay.ts', () => ({
     LoadingOverlay: class {
+        dom = { getAnimations: (): Animation[] => [] }
         setVisible = vi.fn()
         setErrorMessage = vi.fn()
         destroy = vi.fn()
@@ -40,6 +42,19 @@ const createLayer = () => {
     layers.push(layer)
 
     return layer
+}
+
+// The spinner inside the overlay never finishes, so only the overlay's
+// own fade decides when the layer leaves.
+const stubFade = (): () => void => {
+    let finish!: () => void
+    const finished = new Promise<void>(resolve => void (finish = resolve))
+    instances[0].dom.getAnimations = () => [{ finished } as unknown as Animation]
+
+    return () => {
+        instances[0].dom.getAnimations = () => []
+        finish()
+    }
 }
 
 afterEach(() => {
@@ -123,21 +138,10 @@ describe('application loading layer', () => {
 })
 
 describe('loading layer fade-out', () => {
-    const stubFade = (layer: LoadingLayer): () => void => {
-        let finish!: () => void
-        const finished = new Promise<void>(resolve => void (finish = resolve))
-        layer.dom.getAnimations = () => [{ finished } as unknown as Animation]
-
-        return () => {
-            layer.dom.getAnimations = () => []
-            finish()
-        }
-    }
-
     it('stays mounted and lets pointer input through until the overlay finishes fading out', async () => {
         const layer = createLayer()
         const load = layer.acquire({ visible: true })
-        const finishFade = stubFade(layer)
+        const finishFade = stubFade()
 
         load.destroy()
 
@@ -153,7 +157,7 @@ describe('loading layer fade-out', () => {
     it('keeps the layer for work that starts while the previous overlay is still fading out', async () => {
         const layer = createLayer()
         const first = layer.acquire({ visible: true })
-        const finishFade = stubFade(layer)
+        const finishFade = stubFade()
         first.destroy()
 
         const second = layer.acquire({ visible: true })
@@ -169,38 +173,66 @@ describe('loading layer fade-out', () => {
 })
 
 describe('contained loading layer', () => {
-    it('covers only the area it is contained in and returns to the window afterwards', () => {
+    it('keeps a window-wide spinner in place until it fades out and mounts the next load in the contained area', () => {
         const layer = createLayer()
         const pane = document.createElement('div')
         document.body.append(pane)
         const startup = layer.acquire({ visible: true })
 
+        layer.contain(pane)
+
         expect(layer.dom.parentElement).toBe(document.body)
         expect(layer.dom.classList.contains('is-contained')).toBe(false)
 
-        const release = layer.contain(pane)
+        const workspace = layer.acquire({ visible: true })
+        startup.destroy()
+
+        expect(layer.dom.parentElement).toBe(document.body)
+
+        workspace.destroy()
+        const next = layer.acquire({ visible: true })
 
         expect(layer.dom.parentElement).toBe(pane)
         expect(layer.dom.classList.contains('is-contained')).toBe(true)
-
-        release()
-
-        expect(layer.dom.parentElement).toBe(document.body)
-        expect(layer.dom.classList.contains('is-contained')).toBe(false)
-        startup.destroy()
+        next.destroy()
     })
 
-    it('mounts a later load inside the contained area', () => {
+    it('stays where it is while a new load starts during the fade-out', async () => {
         const layer = createLayer()
         const pane = document.createElement('div')
         document.body.append(pane)
+        const startup = layer.acquire({ visible: true })
+        const finishFade = stubFade()
         layer.contain(pane)
+        startup.destroy()
 
+        const workspace = layer.acquire({ visible: true })
+        finishFade()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(layer.dom.parentElement).toBe(document.body)
+        workspace.destroy()
+        expect(layer.dom.isConnected).toBe(false)
+    })
+
+    it('returns to the window once the containment is released', () => {
+        const layer = createLayer()
+        const pane = document.createElement('div')
+        document.body.append(pane)
+        const release = layer.contain(pane)
         const load = layer.acquire({ visible: true })
+
+        release()
 
         expect(layer.dom.parentElement).toBe(pane)
         load.destroy()
-        expect(layer.dom.isConnected).toBe(false)
+
+        const next = layer.acquire({ visible: true })
+
+        expect(layer.dom.parentElement).toBe(document.body)
+        expect(layer.dom.classList.contains('is-contained')).toBe(false)
+        next.destroy()
     })
 
     it('leaves a newer containment in place when an older one is released', () => {
@@ -208,11 +240,11 @@ describe('contained loading layer', () => {
         const firstPane = document.createElement('div')
         const secondPane = document.createElement('div')
         document.body.append(firstPane, secondPane)
-        const load = layer.acquire({ visible: true })
         const releaseFirst = layer.contain(firstPane)
         layer.contain(secondPane)
 
         releaseFirst()
+        const load = layer.acquire({ visible: true })
 
         expect(layer.dom.parentElement).toBe(secondPane)
         load.destroy()

@@ -12,16 +12,26 @@ type LoadingRequest = {
 
 export type LoadingLease = Pick<LoadingOverlay, 'setVisible' | 'setErrorMessage' | 'destroy'>
 
+type LoadingPlacement = {
+    root: HTMLElement
+    contained: boolean
+}
+
 // One renderer serves all pending work in an application. Releasing startup
 // cannot hide an outstanding workspace or document request.
 export class LoadingLayer {
     readonly dom: HTMLDivElement
     private readonly requests = new Map<object, LoadingRequest & { error: string | null }>()
     private overlay?: LoadingOverlay
+    private placement: LoadingPlacement
     private destroyed = false
     private detachGeneration = 0
 
     constructor(private readonly options: LoadingOverlayOptions) {
+        this.placement = {
+            root: options.root,
+            contained: false,
+        }
         const html = createDocumentHtml(options.root.ownerDocument)
         this.dom = html`
             <div
@@ -34,27 +44,26 @@ export class LoadingLayer {
     // Confines the layer to `root` instead of covering the whole window, so a
     // later load covers only the area it belongs to and leaves navigation
     // around it in place. Returns the function that puts the layer back.
+    // A layer already on screen keeps its place until it has faded out, so
+    // the startup spinner stays centered in the window while the workspace
+    // mounts and the navigation appears beside it.
     contain(root: HTMLElement): () => void {
-        const previousRoot = this.options.root
-        const wasContained = this.dom.classList.contains('is-contained')
+        const previous = this.placement
 
-        this.moveTo(root, true)
+        this.placement = {
+            root,
+            contained: true,
+        }
 
         return () => {
-            if (this.options.root === root)
-                this.moveTo(previousRoot, wasContained)
+            if (this.placement.root === root)
+                this.placement = previous
         }
     }
 
-    private moveTo(
-        root: HTMLElement,
-        contained: boolean,
-    ): void {
-        this.options.root = root
-        this.dom.classList.toggle('is-contained', contained)
-
-        if (this.dom.isConnected)
-            root.append(this.dom)
+    private attach(): void {
+        this.dom.classList.toggle('is-contained', this.placement.contained)
+        this.placement.root.append(this.dom)
     }
 
     setAppearance(appearance: Pick<LoadingOverlayOptions, 'outline'>): void {
@@ -118,7 +127,7 @@ export class LoadingLayer {
             this.dom.setAttribute('aria-label', active.label ?? 'Loading')
 
             if (!this.dom.isConnected)
-                this.options.root.append(this.dom)
+                this.attach()
 
             if (!this.overlay)
                 this.initialize()
@@ -136,9 +145,10 @@ export class LoadingLayer {
     // Removing the layer while its overlay fades out would pop the frosted
     // backdrop off the screen in one frame. The layer lets pointer input
     // through while it fades and leaves the document once the fade ends,
-    // unless new work arrived in the meantime.
+    // unless new work arrived in the meantime. Only the overlay's own
+    // transitions count, because its spinner animation never finishes.
     private detachWhenSettled(): void {
-        const fades = this.dom.getAnimations?.({ subtree: true }) ?? []
+        const fades = this.overlay?.dom.getAnimations?.() ?? []
 
         if (!fades.length) {
             this.dom.remove()
@@ -146,18 +156,23 @@ export class LoadingLayer {
             return
         }
 
-        const generation = ++this.detachGeneration
         this.dom.classList.add('is-idle')
-        const settled = Promise.allSettled(
+        void this.detachAfterFade(fades, ++this.detachGeneration)
+    }
+
+    private async detachAfterFade(
+        fades: Animation[],
+        generation: number,
+    ): Promise<void> {
+        await Promise.allSettled(
             fades.map(fade => fade.finished),
         )
-        void settled.then(() => {
-            if (
-                generation === this.detachGeneration
-                && !this.destroyed
-            )
-                this.dom.remove()
-        })
+
+        if (
+            generation === this.detachGeneration
+            && !this.destroyed
+        )
+            this.dom.remove()
     }
 
     private initialize(): void {
