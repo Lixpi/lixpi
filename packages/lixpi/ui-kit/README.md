@@ -58,6 +58,8 @@ Import `@lixpi/ui-kit/styles/fonts` once to load the same bundled Söhne and Sö
 
 `@lixpi/ui-kit/styles/navigation-side-panel` supplies the production navigation drawer and workspace-list styles. Its `navigation-side-panel`, `navigation-side-panel-list`, `navigation-side-panel-row`, `navigation-side-panel-row-title` and `navigation-side-panel-row-active` classes define the shared surface and row treatment. Hosts provide content and SidePanel behavior. A docked host can adapt the container's position and width without replacing its appearance or introducing a separate navigation palette.
 
+The list body follows the Gentelella sidebar layout used by AI Experiments, painted with Lixpi theme roles. Rows run edge to edge with square corners, their text aligns with the section headings, idle rows use secondary text and the active row uses heading text on the active surface. The theme's sidebar shadow marks the panel's edge. The resize-handle line is still rendered, but `navigation-resize-handle-width` sets its width to zero for navigation panels, so a theme can bring the line back by changing that one value. The header controls keep their own `components-navigation-header-*` spacing and radius, so the row geometry does not move them.
+
 SlidingSwitch and SlidingTabsSwitch expose `setAppearance(Partial<SlidingSwitchAppearance>)` for track, indicator and state colors, shadows and label typography. ToggleSwitch exposes `setAppearance(Partial<ToggleSwitchAppearance>)` for track, knob and checkmark colors, stroke and disabled opacity, plus `resize`. Appearance changes retain selected or checked state, mounted content, handlers and positional animations. Constructor appearance options keep standalone defaults unchanged.
 
 ## Application themes

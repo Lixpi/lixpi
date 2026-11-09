@@ -19,6 +19,7 @@ export class LoadingLayer {
     private readonly requests = new Map<object, LoadingRequest & { error: string | null }>()
     private overlay?: LoadingOverlay
     private destroyed = false
+    private detachGeneration = 0
 
     constructor(private readonly options: LoadingOverlayOptions) {
         const html = createDocumentHtml(options.root.ownerDocument)
@@ -112,6 +113,8 @@ export class LoadingLayer {
         const active = error ?? requests.find(request => request.visible)
 
         if (active) {
+            this.detachGeneration++
+            this.dom.classList.remove('is-idle')
             this.dom.setAttribute('aria-label', active.label ?? 'Loading')
 
             if (!this.dom.isConnected)
@@ -119,13 +122,42 @@ export class LoadingLayer {
 
             if (!this.overlay)
                 this.initialize()
-        } else
-            this.dom.remove()
+        }
 
         this.overlay?.setVisible(
             Boolean(active && !error),
         )
         this.overlay?.setErrorMessage(error?.error ?? null)
+
+        if (!active)
+            this.detachWhenSettled()
+    }
+
+    // Removing the layer while its overlay fades out would pop the frosted
+    // backdrop off the screen in one frame. The layer lets pointer input
+    // through while it fades and leaves the document once the fade ends,
+    // unless new work arrived in the meantime.
+    private detachWhenSettled(): void {
+        const fades = this.dom.getAnimations?.({ subtree: true }) ?? []
+
+        if (!fades.length) {
+            this.dom.remove()
+
+            return
+        }
+
+        const generation = ++this.detachGeneration
+        this.dom.classList.add('is-idle')
+        const settled = Promise.allSettled(
+            fades.map(fade => fade.finished),
+        )
+        void settled.then(() => {
+            if (
+                generation === this.detachGeneration
+                && !this.destroyed
+            )
+                this.dom.remove()
+        })
     }
 
     private initialize(): void {

@@ -2,6 +2,8 @@
 @use "@lixpi/ui-kit-gentelella/styles/theme";
 @use "@lixpi/ui-kit-gentelella/styles/application-shell";
 @use "@lixpi/ui-primitives/styles/transitions" as *;
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 
 .user-portal-shell {
     --sidebar-w: 224px;
@@ -19,10 +21,13 @@
     -webkit-font-smoothing: antialiased;
 }
 
+// The sidebar body follows the shared Lixpi navigation roles, the same ones
+// the workspace navigation panel uses. A shadow marks its boundary.
 .user-portal-shell .sidebar {
-    background: #f5f7f3;
-    border-right: 1px solid #e5e9e1;
-    color: #202124;
+    background: #{themeScope.token("navigation-backdrop-opaque", themePalette.$roles)};
+    border: 0;
+    box-shadow: #{themeScope.token("shadow-sidebar", themePalette.$roles)};
+    color: #{themeScope.token("text", themePalette.$roles)};
 }
 .user-portal-shell .sidebar-brand {
     min-height: 80px;
@@ -52,38 +57,50 @@
     color: #202124;
 }
 .user-portal-shell .sidebar-nav {
-    padding: 12px;
+    padding-block: #{themeScope.token("components-navigation-list-base-padding-block", themePalette.$roles)};
+    padding-inline: #{themeScope.token("components-navigation-list-base-padding-inline", themePalette.$roles)};
+}
+.user-portal-shell .nav-group {
+    margin-bottom: #{themeScope.token("components-navigation-section-group-base-margin-bottom", themePalette.$roles)};
+    padding-inline: 0;
 }
 .user-portal-shell .nav-label {
-    padding: 0 12px 10px;
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0;
-    text-transform: none;
-    color: #77797d;
+    margin: #{themeScope.token("components-navigation-section-heading-base-margin", themePalette.$roles)};
+    padding-block: #{themeScope.token("components-navigation-section-heading-base-padding-block", themePalette.$roles)};
+    padding-inline: #{themeScope.token("components-navigation-section-heading-base-padding-inline", themePalette.$roles)};
+    color: #{themeScope.token("sidebar-section", themePalette.$roles)};
+    font-size: #{themeScope.token("components-navigation-section-heading-base-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-navigation-section-heading-base-font-weight", themePalette.$roles)};
+    line-height: #{themeScope.token("components-navigation-section-heading-base-line-height", themePalette.$roles)};
+    letter-spacing: #{themeScope.token("components-navigation-section-heading-base-letter-spacing", themePalette.$roles)};
+    text-transform: #{themeScope.token("components-navigation-section-heading-base-text-transform", themePalette.$roles)};
 }
 .user-portal-shell .nav-link {
-    min-height: 40px;
-    padding: 10px 12px;
-    border-radius: 7px;
-    font-size: 14px;
-    color: #55585d;
+    // Matches the workspace navigation row: a menu-trigger-tall line plus the row's block padding.
+    min-height: calc(#{themeScope.token("components-dropdown-menu-trigger-height", themePalette.$roles)} + 8px);
+    margin-bottom: #{themeScope.token("components-navigation-list-base-gap", themePalette.$roles)};
+    padding: #{themeScope.token("components-navigation-row-base-padding", themePalette.$roles)};
+    border-radius: #{themeScope.token("navigation-item-radius", themePalette.$roles)};
+    font-size: #{themeScope.token("navigation-item-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("font-weight", themePalette.$roles)};
+    color: #{themeScope.token("text-secondary", themePalette.$roles)};
     transition:
         hoverTransition(background-color),
         hoverTransition(color);
 }
 .user-portal-shell .nav-link:hover {
-    background: #eaf0e5;
-    color: #293b2a;
+    background: #{themeScope.token("navigation-hover", themePalette.$roles)};
+    color: #{themeScope.token("text", themePalette.$roles)};
 }
 .user-portal-shell .nav-link.active {
-    background: #e1eadb;
-    color: #304331;
-    font-weight: 600;
+    background: #{themeScope.token("navigation-active", themePalette.$roles)};
+    color: #{themeScope.token("heading", themePalette.$roles)};
+    font-weight: #{themeScope.token("navigation-item-font-weight", themePalette.$roles)};
 }
 .user-portal-shell .sidebar-footer {
-    padding: 16px 12px;
-    border-top: 1px solid #e9e9eb;
+    padding-block: #{themeScope.token("components-navigation-list-base-padding-block", themePalette.$roles)};
+    padding-inline: 0;
+    border: 0;
 }
 .user-portal-shell .main {
     min-width: 0;

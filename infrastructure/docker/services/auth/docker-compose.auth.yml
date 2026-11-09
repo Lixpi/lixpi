@@ -21,7 +21,9 @@ services:
             start_period: 5s
 
     # Both the workspace and user portal use this Caddy instance and CA.
-    # Localhost ports need no host DNS or hosts-file configuration.
+    # Localhost ports need no host DNS or hosts-file configuration. LocalAuth0
+    # is served over HTTPS too: WebKit blocks a plain-HTTP frame inside an
+    # HTTPS page, so its silent token refresh only works from an HTTPS origin.
     lixpi-local-https:
         container_name: lixpi-local-https
         profiles: ["main", "local-https"]
@@ -33,14 +35,16 @@ services:
         environment:
             CADDY_LOCAL_ROUTES: >-
                 {"${VITE_AUTH0_REDIRECT_URI}":"lixpi-web-ui:5173",
-                 "${VITE_USER_PORTAL_URL}":"${CADDY_USER_PORTAL_UPSTREAM:-lixpi-web-ui-user-portal:5173}",
-                 "${VITE_API_URL}":"lixpi-api:3000"}
+                 "${VITE_USER_PORTAL_URL}":"${CADDY_USER_PORTAL_UPSTREAM}",
+                 "${VITE_API_URL}":"lixpi-api:3000",
+                 "https://localhost:3446":"lixpi-localauth0:3000"}
         volumes:
             - caddy-certs:/certificates
         ports:
             - "127.0.0.1:3443:3443"
             - "127.0.0.1:3444:3444"
             - "127.0.0.1:3445:3445"
+            - "127.0.0.1:3446:3446"
         networks:
             - nats
         restart: unless-stopped

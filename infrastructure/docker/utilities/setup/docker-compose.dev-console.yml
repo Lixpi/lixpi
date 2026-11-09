@@ -15,14 +15,14 @@ services:
             context: ../../../..
             dockerfile: dev-tools/dev-console/Dockerfile
         init: true
-        user: "${LOCAL_UID:-0}:${LOCAL_GID:-0}"
+        user: "${LOCAL_UID:?Run through ./run.sh, which sets LOCAL_UID}:${LOCAL_GID:?Run through ./run.sh, which sets LOCAL_GID}"
         network_mode: none
         read_only: true
         environment:
             FORCE_COLOR: 1
             NODE_OPTIONS: --disable-warning=ExperimentalWarning
         volumes:
-            - ${LIXPI_CONSOLE_WORKSPACE:-../../../..}:/workspace:ro,cached
+            - ${LIXPI_CONSOLE_WORKSPACE:?Run through ./run.sh, which sets LIXPI_CONSOLE_WORKSPACE}:/workspace:ro,cached
             - ../../../..:/lixpi:ro,cached
             - ../../../../dev-tools/dev-console/src:/opt/dev-console/src:ro,cached
             - ../../../../packages/lixpi/cli-ui/src:/opt/dev-console/packages/lixpi/cli-ui/src:ro,cached

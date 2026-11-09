@@ -1938,7 +1938,7 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{STABILITY_USE_AWS_BEDROCK_INFERENCE}}': String(config.stabilityUseAwsBedrockInference),
         '{{ARK_API_KEY}}': config.arkApiKey,
         '{{VITE_MOCK_AUTH}}': String(config.useLocalAuth0Mock),
-        '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
+        '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'https://localhost:3446' : '',
         '{{VITE_API_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
         '{{VITE_AUTH0_LOGIN_URL}}': isLocal ? 'http://localhost:3001/login' : `https://${config.domainName}/login`,
         '{{VITE_AUTH0_DOMAIN}}': auth0Domain.replace('https://', ''),

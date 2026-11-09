@@ -1,10 +1,14 @@
+mod app_menu;
 mod connection_url;
 #[cfg(feature = "diagnostics")]
 mod diagnostics;
 mod downloads;
+mod hot_reload;
+mod keyboard;
 mod local_trust;
 mod origins;
 mod webkit;
+mod window_commands;
 
 use origins::{
     NavigationAction,
@@ -26,10 +30,6 @@ pub(crate) const MAIN_WINDOW: &str = "main";
 
 const TITLE: &str = "Lixpi";
 
-// A diagnostics build says so in its title, so it can't be mistaken for a
-// normal one.
-const TITLE_SUFFIX: &str = if cfg!(feature = "diagnostics") { " (diagnostics)" } else { "" };
-
 /// Starts the desktop app and returns when its last window closes.
 ///
 /// # Errors
@@ -41,8 +41,13 @@ pub fn run() -> tauri::Result<()> {
         .runtime(tauri_runtime_wry::Wry {})
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .menu(app_menu::build)
         .setup(|app| {
-            open_main_window(app.handle(), Origins::from_build()?)?;
+            let origins = Origins::from_build()?;
+            let web_ui = origins.web_ui.clone();
+            app.on_menu_event(move |app, event| window_commands::run_menu_item(app, event.id().as_ref(), &web_ui));
+
+            open_main_window(app.handle(), origins)?;
 
             Ok(())
         })
@@ -109,6 +114,10 @@ fn open_main_window(
 
             true
         });
+    let builder = match hot_reload::initialization_script() {
+        Some(script) => builder.initialization_script(script),
+        None => builder,
+    };
 
     #[cfg(feature = "diagnostics")]
     let diagnostics = diagnostics::Diagnostics::new(app);
@@ -125,25 +134,25 @@ fn open_main_window(
     #[cfg(feature = "diagnostics")]
     diagnostics.watch(window.clone());
 
+    #[cfg(target_os = "macos")]
+    keyboard::install(window.clone());
+
     webkit::open(&window, web_ui)
 }
 
 fn window_title(document_title: &str) -> String {
     let title = if document_title.is_empty() { TITLE } else { document_title };
 
-    format!("{title}{TITLE_SUFFIX}")
+    title.to_owned()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        TITLE_SUFFIX,
-        window_title,
-    };
+    use super::window_title;
 
     #[test]
     fn titles_the_window_after_the_page() {
-        assert_eq!(window_title("Workspace"), format!("Workspace{TITLE_SUFFIX}"));
-        assert_eq!(window_title(""), format!("Lixpi{TITLE_SUFFIX}"));
+        assert_eq!(window_title("Workspace"), "Workspace");
+        assert_eq!(window_title(""), "Lixpi");
     }
 }

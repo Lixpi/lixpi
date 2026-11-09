@@ -98,7 +98,20 @@ describe('environment literals', () => {
         ['internal spaces stay unquoted', 'internal spaces stay unquoted'],
         ['', '""'],
         ['value # literal', '"value # literal"'],
+        ['["$JS.API.STREAM.INFO.ACCOUNT_ADMISSION"]', `'["$JS.API.STREAM.INFO.ACCOUNT_ADMISSION"]'`],
+        ['$', `'$'`],
     ])('serializes %j as %j', (value, expected) => void expect(envLiteral(value)).toBe(expected))
+
+    it('reads a value containing $ back unchanged', () => {
+        const value = '[{"allow":["$JS.API.CONSUMER.INFO.ACCOUNT_ADMISSION_x.*"]}]'
+
+        expect(parseEnv(`VALUE = ${envLiteral(value)}\n`).VALUE).toBe(value)
+    })
+
+    it('refuses a value containing $ with a single quote or a line break', () => {
+        for (const value of ["$it's", '$a\nb'])
+            expect(() => envLiteral(value), value).toThrow('cannot also contain')
+    })
 })
 
 

@@ -107,10 +107,20 @@ const createMockConnection = (overrides: Record<string, any> = {}) => {
         close: vi.fn().mockResolvedValue(undefined),
         drain: vi.fn().mockResolvedValue(undefined),
         status: vi.fn().mockReturnValue(createAsyncIterable([])),
+        // An open connection's closed() stays pending until it closes.
+        closed: vi.fn().mockReturnValue(new Promise(() => {})),
         protocol: { subscriptions: { subs: protocolSubs } },
         ...overrides,
     } as any
 }
+
+// A connection that has closed: its status stream reports `close` and closed()
+// has settled, as the client does for a real close.
+const createClosedConnection = (overrides: Record<string, any> = {}) => createMockConnection({
+    status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
+    closed: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+})
 
 const decodeJwtLikePayload = (token: string) => {
     const parts = token.split('.')
@@ -711,12 +721,8 @@ describe('NatsService', () => {
         })
 
         it('monitors every new connection so a second close also schedules a reconnect', async () => {
-            const firstConnection = createMockConnection({
-                status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
-            })
-            const secondConnection = createMockConnection({
-                status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
-            })
+            const firstConnection = createClosedConnection()
+            const secondConnection = createClosedConnection()
             connectMock
                 .mockResolvedValueOnce(firstConnection)
                 .mockResolvedValueOnce(secondConnection)
@@ -740,43 +746,80 @@ describe('NatsService', () => {
             // The regression: monitorStatus() used to see a monitoring flag that the
             // first loop never cleared and return without touching the new
             // connection, so this second close reached nobody and the service stayed
-            // down for good without logging a thing.
+            // down for good without logging a thing. Each connection now has its own
+            // status watcher and close watcher.
             expect(secondConnection.status).toHaveBeenCalledTimes(1)
             expect(countScheduledReconnects(setTimeoutSpy)).toBe(2)
             clearTimeout(service['reconnectTimer'])
         })
 
-        it('reports a failed status iterator and recovers instead of rejecting out of the monitor', async () => {
+        it('reports a failed status iterator and reconnects once the connection has closed', async () => {
             const monitorFailure = new Error('status iterator stopped with an error')
             const service = new (NatsService as any)({})
-            service['nc'] = createMockConnection({
+            const connection = createClosedConnection({
                 status: vi.fn().mockReturnValue(createFailingAsyncIterable(monitorFailure)),
             })
+            service['nc'] = connection
             service['subscriptionsInitialized'] = true
             const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
 
+            service['watchClose'](connection)
             service['monitorStatus']()
             await flushPending()
 
             expect(errorMock).toHaveBeenCalledWith('NATS -> status monitor failed', monitorFailure)
-            expect(service['isMonitoring']).toBe(false)
+            expect(service['monitoredConnection']).toBeNull()
             expect(service['subscriptionsInitialized']).toBe(false)
             expect(countScheduledReconnects(setTimeoutSpy)).toBe(1)
             clearTimeout(service['reconnectTimer'])
         })
 
-        it('leaves an intentionally closed connection alone when the monitor loop ends', async () => {
+        it('reconnects after a close the status stream never reports', async () => {
+            // The client queues `close` and stops the status stream in one step, so a
+            // loop still busy with the previous status ends without seeing `close`.
             const service = new (NatsService as any)({})
-            service['nc'] = createMockConnection({
-                status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
+            const connection = createMockConnection({
+                status: vi.fn().mockReturnValue(createAsyncIterable([])),
+                closed: vi.fn().mockResolvedValue(undefined),
             })
-            service['intentionalClose'] = true
+            service['nc'] = connection
+            service['subscriptionsInitialized'] = true
             const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
 
+            service['watchClose'](connection)
             service['monitorStatus']()
             await flushPending()
 
-            expect(service['isMonitoring']).toBe(false)
+            expect(warnMock).toHaveBeenCalledWith('NATS -> connection closed, reconnecting')
+            expect(service['subscriptionsInitialized']).toBe(false)
+            expect(countScheduledReconnects(setTimeoutSpy)).toBe(1)
+            clearTimeout(service['reconnectTimer'])
+        })
+
+        it('ignores the close of a connection that a newer one has replaced', async () => {
+            const service = new (NatsService as any)({})
+            const replaced = createMockConnection({ closed: vi.fn().mockResolvedValue(undefined) })
+            service['nc'] = createMockConnection()
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+            service['watchClose'](replaced)
+            await flushPending()
+
+            expect(countScheduledReconnects(setTimeoutSpy)).toBe(0)
+        })
+
+        it('leaves an intentionally closed connection alone when the monitor loop ends', async () => {
+            const service = new (NatsService as any)({})
+            const connection = createClosedConnection()
+            service['nc'] = connection
+            service['intentionalClose'] = true
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+            service['watchClose'](connection)
+            service['monitorStatus']()
+            await flushPending()
+
+            expect(service['monitoredConnection']).toBeNull()
             expect(countScheduledReconnects(setTimeoutSpy)).toBe(0)
         })
 
@@ -1065,6 +1108,50 @@ describe('NatsService', () => {
 
             expect(result).toBe(streamInfo)
             expect(jetstreamManagerMockInstance.streams.update).not.toHaveBeenCalled()
+        })
+
+        it('waits for a closed connection to come back before fetching', async () => {
+            jetstreamClientMock.consumers.get.mockResolvedValue({
+                fetch: vi.fn().mockResolvedValue(createAsyncIterable([])),
+            })
+            const service = new (NatsService as any)({})
+            const closed = createMockConnection({ isClosed: vi.fn().mockReturnValue(true) })
+            service['nc'] = closed
+
+            const processing = service.processJetStreamMessages('stream', 'consumer', async () => undefined)
+            await flushPending()
+
+            expect(jetstreamClientMock.consumers.get).not.toHaveBeenCalled()
+
+            service['nc'] = connectionMock
+            service['notifyReconnect']()
+
+            await expect(processing).resolves.toBe(0)
+            expect(jetstreamClientMock.consumers.get).toHaveBeenCalledWith('stream', 'consumer')
+        })
+
+        it('stops waiting for the connection when the service is closed on purpose', async () => {
+            const service = new (NatsService as any)({})
+            service['nc'] = createMockConnection({ isClosed: vi.fn().mockReturnValue(true) })
+
+            const waiting = service['waitForConnection'](60_000)
+            await service.disconnect()
+
+            await expect(waiting).resolves.toBeUndefined()
+            expect(service['connectionWaiters'].size).toBe(0)
+        })
+
+        it('gives up waiting for the connection after the time limit', async () => {
+            vi.useFakeTimers()
+            const service = new (NatsService as any)({})
+            service['nc'] = createMockConnection({ isClosed: vi.fn().mockReturnValue(true) })
+
+            const waiting = service['waitForConnection'](30_000)
+            await vi.advanceTimersByTimeAsync(30_000)
+
+            await expect(waiting).resolves.toBeUndefined()
+            expect(service['connectionWaiters'].size).toBe(0)
+            vi.useRealTimers()
         })
 
         it('supports consumeJetStreamMessages with ack and parsing', async () => {

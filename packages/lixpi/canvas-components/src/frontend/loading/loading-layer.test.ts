@@ -122,6 +122,52 @@ describe('application loading layer', () => {
     })
 })
 
+describe('loading layer fade-out', () => {
+    const stubFade = (layer: LoadingLayer): () => void => {
+        let finish!: () => void
+        const finished = new Promise<void>(resolve => void (finish = resolve))
+        layer.dom.getAnimations = () => [{ finished } as unknown as Animation]
+
+        return () => {
+            layer.dom.getAnimations = () => []
+            finish()
+        }
+    }
+
+    it('stays mounted and lets pointer input through until the overlay finishes fading out', async () => {
+        const layer = createLayer()
+        const load = layer.acquire({ visible: true })
+        const finishFade = stubFade(layer)
+
+        load.destroy()
+
+        expect(instances[0].setVisible).toHaveBeenLastCalledWith(false)
+        expect(layer.dom.isConnected).toBe(true)
+        expect(layer.dom.classList.contains('is-idle')).toBe(true)
+
+        finishFade()
+
+        await vi.waitFor(() => expect(layer.dom.isConnected).toBe(false))
+    })
+
+    it('keeps the layer for work that starts while the previous overlay is still fading out', async () => {
+        const layer = createLayer()
+        const first = layer.acquire({ visible: true })
+        const finishFade = stubFade(layer)
+        first.destroy()
+
+        const second = layer.acquire({ visible: true })
+
+        expect(layer.dom.classList.contains('is-idle')).toBe(false)
+        finishFade()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(layer.dom.isConnected).toBe(true)
+        second.destroy()
+        expect(layer.dom.isConnected).toBe(false)
+    })
+})
+
 describe('contained loading layer', () => {
     it('covers only the area it is contained in and returns to the window afterwards', () => {
         const layer = createLayer()

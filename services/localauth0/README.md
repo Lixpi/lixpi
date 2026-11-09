@@ -30,7 +30,7 @@ The image loads `localauth0.toml` through `LOCALAUTH0_CONFIG_PATH`. It fixes the
 
 Both compilers use two jobs and BuildKit memory mounts for Cargo downloads and intermediate outputs. Those temporary files consume build memory instead of accumulating in Docker's disk cache. The frontend's source files and compiler versions determine its URL prefix, including the generated JavaScript snippets. Rebuilding changed sources gives the browser a different asset URL, so cached snippets cannot conflict with the page's integrity hashes. The [API's opt-in local authentication test](../api/README.md) checks those versioned URLs, served asset hashes and authenticated application requests against the running mock.
 
-The public DynamoDB initializer loads the matching account fixture after preparing application tables. It belongs to the `main` and `deploy` profiles, and Compose waits for its successful exit before starting the API. Compose defaults `LOCAL_DYNAMODB_FORCE_RECREATE` to `false`, so repeated setup preserves existing tables. The fixture creates the fixed user, personal organization, owner membership, and `Account-Admission-<ORG_NAME>-<STAGE>` row in one conditional transaction. A coherent older mock account keeps its existing personal organization. Repeated loading validates the records and does not rewrite them. Partial or ambiguous records fail with a repair instruction.
+The public DynamoDB initializer loads the matching account fixture after preparing application tables. It belongs to the `main` and `deploy` profiles, and Compose waits for its successful exit before starting the API. The environment file sets `LOCAL_DYNAMODB_FORCE_RECREATE` to `false`, so repeated setup preserves existing tables. The fixture creates the fixed user, personal organization, owner membership, and `Account-Admission-<ORG_NAME>-<STAGE>` row in one conditional transaction. A coherent older mock account keeps its existing personal organization. Repeated loading validates the records and does not rewrite them. Partial or ambiguous records fail with a repair instruction.
 
 The fixture requires `ENVIRONMENT=local`, both mock flags enabled, the fixed mock issuer, and a local DynamoDB endpoint. Real Auth0 mode skips it; mismatched flags and hosted database endpoints are refused. It creates the admission table only when absent and never recreates tables or deletes records. Hosted admission tables belong to the private provisioner, not the main Pulumi stack.
 
@@ -58,6 +58,8 @@ Access the LocalAuth0 web interface at:
 ```
 http://localhost:3000
 ```
+
+The frontends reach LocalAuth0 through the local HTTPS gateway at `https://localhost:3446`, which `VITE_MOCK_AUTH0_DOMAIN` names. Their silent token refresh loads LocalAuth0 in a hidden frame, and WebKit blocks a plain-HTTP frame inside an HTTPS page. The issuer in the tokens stays `http://localhost:3000/` either way.
 
 Here you can:
 - View and generate JWTs

@@ -47,11 +47,11 @@ A script runs from the repository root. It receives the selected services or pru
 | Action | What it does |
 |---|---|
 | Start services | Asks for an environment file, then shows one page with the container and service choices above the service tree, then starts them |
+| Build the macOS desktop app | Asks for an environment file, the Mac's processor, whether to include hot reload (on by default, off for a release), whether to build in debug mode and whether to rebuild the builder image, then builds `gui/tauri/dist/Lixpi.app` in Docker. See [Desktop App](../../documentation/platform/DESKTOP-APP.md) |
 | Sign in to AWS SSO | Asks for an environment file, then signs in as that file's `AWS_PROFILE` |
 | Create or edit a configuration | Opens the [configuration wizard](../config-utils/README.md) |
 | Initialize infrastructure | Asks for an environment file and whether to trust the local certificate authority (**Skip** by default, **Install** for running web-ui in a browser), then sets up TLS certificates and DynamoDB tables |
 | Deploy and manage infrastructure | Asks for an environment file, states the deployment target, then offers every command the Pulumi service reports |
-| Build the macOS desktop app | Asks for an environment file, the Mac's processor, whether to include diagnostics and whether to rebuild the builder image, then builds `gui/tauri/dist/Lixpi.app` in Docker. See [Desktop App](../../documentation/platform/DESKTOP-APP.md) |
 | Prune Docker | Asks what to prune, confirms, then reclaims disk space |
 | Install agent skills | Opens the skill installer |
 | Exit | Leaves the console |

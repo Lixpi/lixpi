@@ -136,6 +136,7 @@ export type ApplicationTheme = {
             opaqueBackdrop: string
             sectionLabel: string
             separator: string
+            resizeHandleWidth: string
         }
         topbar: {
             background: string

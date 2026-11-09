@@ -146,6 +146,7 @@ export const createLixpiLightRoles = (palette: LixpiColors) =>
                 opaqueBackdrop: palette.frost,
                 sectionLabel: palette.ink,
                 separator: `linear-gradient(90deg, ${palette.black00} 0%, ${palette.black04} 10%, ${palette.black08} 26%, ${palette.black14} 50%, ${palette.black08} 74%, ${palette.black04} 90%, ${palette.black00} 100%)`,
+                resizeHandleWidth: '0px',
             },
             topbar: {
                 background: palette.white,
@@ -164,7 +165,7 @@ export const createLixpiLightRoles = (palette: LixpiColors) =>
                 fontWeight: 400,
             },
             item: {
-                radius: '8px',
+                radius: '0',
                 fontSize: '0.875rem',
                 fontWeight: 500,
                 hover: palette.black06,
@@ -217,7 +218,7 @@ export const createLixpiLightRoles = (palette: LixpiColors) =>
             foreground: palette.systemHighlightText,
         },
         shadow: {
-            sidebar: 'none',
+            sidebar: `2px 0 4px -2px ${palette.black14}`,
             topbar: 'none',
             card: `0 1px 6px ${palette.black15}`,
             control: `0.05rem 0.05rem 7px 0 ${palette.black20}`,

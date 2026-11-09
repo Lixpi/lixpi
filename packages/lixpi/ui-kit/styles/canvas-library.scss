@@ -93,15 +93,27 @@ textarea {
     justify-content: center;
     min-height: var(--canvas-library-navigation-header-height);
     margin-top: calc(themeScope.token("components-navigation-geometry-toggle-top", themePalette.$roles) + (var(--canvas-library-navigation-toggle-size) - var(--canvas-library-navigation-header-height)) / 2);
-    padding: 0 var(--navigation-side-panel-row-gap);
-    padding-inline-start: calc(themeScope.token("components-navigation-geometry-toggle-open-offset", themePalette.$roles) + var(--canvas-library-navigation-toggle-size) + var(--navigation-side-panel-row-gap));
+    padding: 0 var(--navigation-side-panel-header-gap);
+    padding-inline-start: calc(themeScope.token("components-navigation-geometry-toggle-open-offset", themePalette.$roles) + var(--canvas-library-navigation-toggle-size) + var(--navigation-side-panel-header-gap));
+    border-radius: #{themeScope.token("components-navigation-header-base-item-radius", themePalette.$roles)};
+}
+
+.canvas-library .canvas-library-brand,
+.canvas-library .canvas-library-brand:hover {
+    color: inherit;
+}
+
+// The brand link sits in the header, so it keeps the header's text weight
+// instead of the list rows' idle weight.
+.canvas-library-brand .navigation-side-panel-row-title {
+    font-weight: #{themeScope.token("navigation-item-font-weight", themePalette.$roles)};
 }
 
 .canvas-library-search {
     min-height: var(--canvas-control-height);
     box-sizing: border-box;
     min-width: 0;
-    margin: 0 var(--navigation-side-panel-list-inline-padding) 24px;
+    margin: 0 var(--navigation-side-panel-header-inline-padding) 24px;
 }
 
 .canvas-library-navigation {
@@ -120,7 +132,6 @@ textarea {
 }
 
 .canvas-library .navigation-side-panel-row {
-    color: inherit;
     text-decoration: none;
 }
 
@@ -341,6 +352,10 @@ textarea {
 
 .canvas-library :is(.canvas-example-button, .canvas-library-text-button):is(:hover, :focus-visible) {
     background: #{themeScope.token("button-hover", themePalette.$roles)};
+}
+
+.canvas-library :is(.canvas-example-button, .canvas-library-text-button) .navigation-side-panel-row-title {
+    font-weight: #{themeScope.token("navigation-item-font-weight", themePalette.$roles)};
 }
 
 .canvas-theme-editor textarea {

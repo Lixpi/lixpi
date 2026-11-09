@@ -7,9 +7,18 @@
     pointer-events: auto;
 
     // Contained in one area, such as the workspace pane, the layer covers only
-    // that area.
+    // that area. A host whose own chrome floats over the start of that area
+    // sets `--canvas-loading-layer-inset-inline-start` to keep the layer clear
+    // of it.
     &.is-contained {
         position: absolute;
+        inset-inline-start: var(--canvas-loading-layer-inset-inline-start, 0px);
+    }
+
+    // With no pending work the layer stays only until its overlay finishes
+    // fading out, and lets pointer input through to the content below.
+    &.is-idle {
+        pointer-events: none;
     }
 }
 

@@ -120,13 +120,19 @@ const auth = {
 }
 
 const mount = (): {
+    contentEl: HTMLDivElement
     paneEl: HTMLDivElement
     instance: NavigationSidePanelInstance
 } => {
     const paneEl = document.createElement('div')
-    document.body.appendChild(paneEl)
+    const contentEl = document.createElement('div')
+    document.body.append(
+        paneEl,
+        contentEl,
+    )
     const instance = createNavigationSidePanel({
         auth,
+        contentEl,
         paneEl,
         router,
         userPortalUrl: USER_PORTAL_URL,
@@ -134,16 +140,14 @@ const mount = (): {
     })
 
     return {
+        contentEl,
         paneEl,
         instance,
     }
 }
 
-// Nano Stores replay their current value to a listener the moment it
-// subscribes, so the constructor's `renderWorkspaceList()` call is immediately
-// followed by one more synchronous re-render from `workspacesStore.subscribe`.
-// The live dropdown for a workspace is therefore the *last* one captured, not
-// the first — the first is already torn down by the time mount() returns.
+// A row is rebuilt whenever its name or tags change, so the live dropdown for
+// a workspace is the *last* one captured for it.
 const liveDropdownFor = (workspaceId: string) => {
     const matches = mocks.dropdownInstances.filter((entry) => entry.config.id === `navigation-side-panel-workspace-menu-${workspaceId}`)
     const instance = matches.at(-1)
@@ -519,20 +523,82 @@ describe('NavigationSidePanel — workspace list', () => {
         instance.destroy()
     })
 
-    it('re-renders the list when the active router workspace changes after mount', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
+    it('moves the active row in place when the router workspace changes, keeping every row element and menu', () => {
+        workspacesStore.setWorkspaces([
+            makeWorkspace({
+                workspaceId: 'ws-1',
+                name: 'Alpha',
+            }),
+            makeWorkspace({
+                workspaceId: 'ws-2',
+                name: 'Beta',
+            }),
+        ])
+        setCurrentWorkspaceId('ws-1')
         const {
             paneEl,
             instance,
         } = mount()
-        expect(paneEl.querySelector('.navigation-side-panel-row')?.classList.contains('navigation-side-panel-row-active')).toBe(false)
+        const rowsBefore = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
+        const dropdownCount = mocks.dropdownInstances.length
+        expect(rowsBefore[0].classList.contains('navigation-side-panel-row-active')).toBe(true)
 
-        setCurrentWorkspaceId('ws-1')
+        paneEl.querySelectorAll<HTMLButtonElement>('.navigation-side-panel-row')[1].click()
 
-        expect(paneEl.querySelector('.navigation-side-panel-row')?.classList.contains('navigation-side-panel-row-active')).toBe(true)
+        const rowsAfter = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
+        expect(rowsAfter).toHaveLength(2)
+        expect(rowsAfter.every((row, index) => row === rowsBefore[index])).toBe(true)
+        expect(rowsAfter[0].classList.contains('navigation-side-panel-row-active')).toBe(false)
+        expect(rowsAfter[1].classList.contains('navigation-side-panel-row-active')).toBe(true)
+        expect(mocks.dropdownInstances).toHaveLength(dropdownCount)
+        expect(liveDropdownFor('ws-1').destroy).not.toHaveBeenCalled()
+        expect(liveDropdownFor('ws-2').destroy).not.toHaveBeenCalled()
+
+        instance.destroy()
+    })
+
+    it('keeps unchanged rows when the workspaces store publishes a new snapshot and rebuilds only the changed one', () => {
+        workspacesStore.setWorkspaces([
+            makeWorkspace({
+                workspaceId: 'ws-1',
+                name: 'Alpha',
+            }),
+            makeWorkspace({
+                workspaceId: 'ws-2',
+                name: 'Beta',
+            }),
+        ])
+        const {
+            paneEl,
+            instance,
+        } = mount()
+        const [alphaRow, betaRow] = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
+
+        workspacesStore.updateWorkspace('ws-2', { name: 'Beta (renamed)' })
+
+        const rows = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
+        expect(rows[0]).toBe(alphaRow)
+        expect(rows[1]).not.toBe(betaRow)
+        expect(rows[1].querySelector('.navigation-side-panel-row-title')?.textContent).toBe('Beta (renamed)')
+
+        workspacesStore.addWorkspaces([makeWorkspace({
+            workspaceId: 'ws-0',
+            name: 'Zero',
+        })])
+
+        const reordered = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
+        expect(reordered.map(row => row.querySelector('.navigation-side-panel-row-title')?.textContent)).toEqual([
+            'Zero',
+            'Alpha',
+            'Beta (renamed)',
+        ])
+        expect(reordered[1]).toBe(alphaRow)
+
+        workspacesStore.deleteWorkspace('ws-1')
+
+        expect(paneEl.querySelectorAll('.navigation-side-panel-row')).toHaveLength(2)
+        expect(alphaRow.isConnected).toBe(false)
+        expect(liveDropdownFor('ws-1').destroy).toHaveBeenCalledOnce()
 
         instance.destroy()
     })
@@ -981,6 +1047,38 @@ describe('NavigationSidePanel — open/close toggle', () => {
         paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
 
         expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
+
+        instance.destroy()
+    })
+
+    it('tells the content area how much of it the open panel covers', () => {
+        const {
+            contentEl,
+            paneEl,
+            instance,
+        } = mount()
+        const openInset = `${settings.navigationSidePanel.defaultDimensions.width}px`
+        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe(openInset)
+
+        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
+
+        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+
+        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
+
+        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe(openInset)
+
+        instance.destroy()
+    })
+
+    it('starts with no inset when the persisted state says closed', () => {
+        navigationSidePanelStore.setValues({ isOpen: false })
+        const {
+            contentEl,
+            instance,
+        } = mount()
+
+        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
 
         instance.destroy()
     })

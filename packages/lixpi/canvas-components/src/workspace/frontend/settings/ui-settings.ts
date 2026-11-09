@@ -404,7 +404,8 @@ export const createLixpiUiSettings = (): Settings => {
                     // Background gradient painted on the visible resize-handle line.
                     gradient: lixpiLightTheme.panel.resizeHandle.gradient,
                     // Visible line width; this does not change the draggable hit target.
-                    width: lixpiLightTheme.panel.resizeHandle.width,
+                    // The theme sets it to zero because the sidebar shadow marks the boundary.
+                    width: lixpiLightTheme.navigation.sidebar.resizeHandleWidth,
                 },
             },
             toggle: {
