@@ -281,7 +281,7 @@ export const createLixpiUiSettings = (): Settings => {
             // How long one full 360° turn of the spinner takes, in
             // milliseconds, during the first fast turns. Lower spins faster.
             // Later cycles add their slowdown on top of this.
-            animationDurationMs: 400,
+            animationDurationMs: 370,
             // The spinner turns in repeating cycles: a few fast turns, then
             // one slow turn. With the values below, one cycle is
             // fast, fast, slow. Each cycle after the first makes all of its
@@ -297,11 +297,11 @@ export const createLixpiUiSettings = (): Settings => {
                 // Milliseconds added to every turn when the second cycle
                 // starts. 0 turns the slowdown off and repeats the first
                 // cycle forever.
-                firstSlowdownMs: 40,
+                firstSlowdownMs: 100,
                 // Decay rate: how much bigger each cycle's slowdown is than
                 // the previous one. 2 adds 40ms, then 80ms, then 160ms.
                 // 1 adds 40ms every cycle. Higher slows down harder.
-                slowdownGrowthFactor: 2,
+                slowdownGrowthFactor: 1.3,
                 // The slowest a slow turn may get, in milliseconds. When the
                 // next cycle would pass it, the current cycle repeats forever.
                 maxSlowTurnDurationMs: 2400,
