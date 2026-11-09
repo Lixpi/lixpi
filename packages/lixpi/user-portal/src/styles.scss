@@ -77,7 +77,7 @@
 }
 .user-portal-shell .nav-link {
     // Matches the workspace navigation row: a menu-trigger-tall line plus the row's block padding.
-    min-height: calc(#{themeScope.token("components-dropdown-menu-trigger-height", themePalette.$roles)} + 8px);
+    min-height: calc(themeScope.token("components-dropdown-menu-trigger-height", themePalette.$roles) + 8px);
     margin-bottom: #{themeScope.token("components-navigation-list-base-gap", themePalette.$roles)};
     padding: #{themeScope.token("components-navigation-row-base-padding", themePalette.$roles)};
     border-radius: #{themeScope.token("navigation-item-radius", themePalette.$roles)};
