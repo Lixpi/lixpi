@@ -37,6 +37,8 @@
 .navigation-side-panel {
     --navigation-side-panel-list-inline-padding: #{themeScope.token("components-navigation-list-base-padding-inline", themePalette.$roles)};
     --navigation-side-panel-row-gap: #{themeScope.token("components-navigation-list-base-gap", themePalette.$roles)};
+    --navigation-side-panel-header-inline-padding: #{themeScope.token("components-navigation-header-base-padding-inline", themePalette.$roles)};
+    --navigation-side-panel-header-gap: #{themeScope.token("components-navigation-header-base-gap", themePalette.$roles)};
     --navigation-side-panel-section-separator-gradient: #{themeScope.token("navigation-separator", themePalette.$roles)};
 
     position: fixed;
@@ -51,7 +53,14 @@
     flex-direction: column;
     min-height: 0;
     background: #{themeScope.token("sidebar-background", themePalette.$roles)};
+    // The shadow marks the panel boundary. The resize-handle line stays
+    // available, but the theme sets its navigation width to zero.
+    box-shadow: #{themeScope.token("shadow-sidebar", themePalette.$roles)};
     overflow: hidden;
+}
+
+.side-panel-resize-handle.navigation-side-panel-resize-handle {
+    --side-panel-resize-handle-width: #{themeScope.token("navigation-resize-handle-width", themePalette.$roles)};
 }
 
 .navigation-side-panel-toggle svg {
@@ -175,19 +184,23 @@
     border-radius: #{themeScope.token("navigation-item-radius", themePalette.$roles)};
     padding: #{themeScope.token("components-navigation-row-base-padding", themePalette.$roles)};
     background: transparent;
+    color: #{themeScope.token("text-secondary", themePalette.$roles)};
     text-align: left;
     font-family: inherit;
     font-size: #{themeScope.token("navigation-item-font-size", themePalette.$roles)};
     cursor: pointer;
-    transition: #{hoverTransition(background, 75ms)};
+    transition: #{hoverTransition(background, 75ms)}, #{hoverTransition(color, 75ms)};
 }
 
 .navigation-side-panel-row:hover {
     background: #{themeScope.token("navigation-hover", themePalette.$roles)};
+    color: #{themeScope.token("text", themePalette.$roles)};
 }
 
-.navigation-side-panel-row-active {
+.navigation-side-panel-row-active,
+.navigation-side-panel-row-active:hover {
     background: #{themeScope.token("navigation-active", themePalette.$roles)};
+    color: #{themeScope.token("heading", themePalette.$roles)};
 }
 
 .navigation-side-panel-row-top {
@@ -198,7 +211,7 @@
 }
 
 .navigation-side-panel-row-title {
-    font-weight: #{themeScope.token("navigation-item-font-weight", themePalette.$roles)};
+    font-weight: #{themeScope.token("font-weight", themePalette.$roles)};
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -223,6 +236,10 @@
 // The open row menu turns its vertical dots horizontal instead of the dropdown's chevron flip.
 .navigation-side-panel-row-menu .dropdown-menu-tag-pill-wrapper.theme-dark .dots-dropdown-menu.is-active button span.state-indicator svg {
     transform: rotate(90deg);
+}
+
+.navigation-side-panel-row-active .navigation-side-panel-row-title {
+    font-weight: #{themeScope.token("navigation-item-font-weight", themePalette.$roles)};
 }
 
 .navigation-side-panel-row-tags {

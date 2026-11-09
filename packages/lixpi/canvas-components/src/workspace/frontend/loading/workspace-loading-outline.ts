@@ -72,6 +72,7 @@ export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettin
         outline: {
             size: loading.diameter,
             durationMs: loading.animationDurationMs,
+            spinCycle: loading.spinCycle,
             // Measure the trail against this circle, not the larger media node.
             snakeLengthFraction: loading.snakeLengthFraction,
             getStrokeScale,

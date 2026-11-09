@@ -5,7 +5,7 @@ services:
         extends:
             file: ../../../../dev-tools/config-utils/runner-compose/config-utils.base.yml
             service: config-utils-base
-        user: "${LOCAL_UID:-0}:${LOCAL_GID:-0}"
+        user: "${LOCAL_UID:?Run through ./run.sh, which sets LOCAL_UID}:${LOCAL_GID:?Run through ./run.sh, which sets LOCAL_GID}"
         environment:
             LIXPI_REPOSITORY_PATH: ${LIXPI_REPOSITORY_PATH}
         volumes:

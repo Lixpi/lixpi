@@ -197,18 +197,21 @@ export const panelValues: PanelTheme = {
         header: {
             base: {
                 padding: '12px 12px 0',
+                paddingInline: '12px',
+                gap: '8px',
+                itemRadius: '8px',
             },
         },
         list: {
             base: {
-                gap: '8px',
+                gap: '1px',
                 paddingBlock: '15px 12px',
-                paddingInline: '12px',
+                paddingInline: '0',
             },
         },
         row: {
             base: {
-                padding: '4px 4px 4px 12px',
+                padding: '4px 12px 4px 20px',
             },
         },
         rowTags: {

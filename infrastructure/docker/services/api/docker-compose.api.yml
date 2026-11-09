@@ -39,8 +39,8 @@ services:
             # Auth0 config
             AUTH0_DOMAIN: ${AUTH0_DOMAIN}
             AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
-            ACCOUNT_ADMISSION_ENABLED: ${ACCOUNT_ADMISSION_ENABLED:-false}
-            ACCOUNT_ADMISSION_STREAM: ${ACCOUNT_ADMISSION_STREAM:-}
+            ACCOUNT_ADMISSION_ENABLED: ${ACCOUNT_ADMISSION_ENABLED}
+            ACCOUNT_ADMISSION_STREAM: ${ACCOUNT_ADMISSION_STREAM}
 
             # LocalAuth0 mock config
             MOCK_AUTH0: ${MOCK_AUTH0}
@@ -57,26 +57,26 @@ services:
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
-            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE:-false}
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
             # Veo person-generation policy profile (standard|restricted). Required for any
             # Veo call — the Google media profile fails the run when it is unset.
             GOOGLE_VEO_PERSON_GENERATION_PROFILE: ${GOOGLE_VEO_PERSON_GENERATION_PROFILE}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
-            STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE}
             # BytePlus ModelArk (Seedance 2.0 video). The provider reads BYTEPLUS_ARK_API_KEY
             # or ARK_API_KEY; forward both so whichever name the .env sets reaches the
             # container (the unset one defaults to empty and is ignored by the provider's ||).
-            ARK_API_KEY: ${ARK_API_KEY:-}
-            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
+            ARK_API_KEY: ${ARK_API_KEY}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY}
             LLM_TIMEOUT_SECONDS: 1200
-            AGENT_MAX_MODEL_CALLS: ${AGENT_MAX_MODEL_CALLS:-24}
-            AGENT_MAX_TOOL_CALLS: ${AGENT_MAX_TOOL_CALLS:-64}
-            AGENT_MAX_SPECIALIST_CALLS: ${AGENT_MAX_SPECIALIST_CALLS:-4}
+            AGENT_MAX_MODEL_CALLS: ${AGENT_MAX_MODEL_CALLS}
+            AGENT_MAX_TOOL_CALLS: ${AGENT_MAX_TOOL_CALLS}
+            AGENT_MAX_SPECIALIST_CALLS: ${AGENT_MAX_SPECIALIST_CALLS}
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
-            METRICS_ENABLED: ${METRICS_ENABLED:-false}
+            METRICS_ENABLED: ${METRICS_ENABLED}
 
         volumes:
             - aws-config:/root/.aws:cached    # AWS SSO credentials

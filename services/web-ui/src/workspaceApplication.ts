@@ -84,6 +84,9 @@ export const createWorkspaceApplication = (config: {
                 : undefined,
                 onAccessDenied: recovery.deny,
             })
+            // The first connection succeeded inside init(), before this
+            // listener existed, so a later outage starts its own retry window.
+            recovery.connected()
             nats.onReconnect(recovery.connected)
 
             return {

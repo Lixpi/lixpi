@@ -1,8 +1,7 @@
 {
     "watch": [
         "src",
-        "packages/lixpi/*/src/**/*",
-        "packages/lixpi/*/ts/**/*"
+        "/dev/shm"
     ],
     "ext": "js,ts,json,env",
     "ignore": [

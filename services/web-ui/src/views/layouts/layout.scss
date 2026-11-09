@@ -3,7 +3,15 @@
     height: 100%;
 }
 
+// The navigation panel floats over the main pane. Isolating the pane keeps
+// everything the canvas stacks inside it, including its loading overlay,
+// beneath the panel. The loading overlay starts at the open panel's edge, so
+// a workspace switch never frosts the panel's glass.
 .workspace-main-pane {
+    --canvas-loading-layer-inset-inline-start: var(--navigation-side-panel-inset);
+
+    position: relative;
+    isolation: isolate;
     height: 100%;
 }
 

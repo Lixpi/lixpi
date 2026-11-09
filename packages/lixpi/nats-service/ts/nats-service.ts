@@ -41,6 +41,13 @@ const DEFAULT_STREAM_REPLICAS = 3
 // established, reconnects retry forever.
 const DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS = 9
 
+// The server rejects a connection the same way when the service that checks
+// access is briefly down, such as an API restarting after a code change. Those
+// rejections retry at most this far apart, so the client reconnects within a
+// couple of seconds of the service returning. The caller's onAuthError decides
+// how long rejections may last before the session counts as rejected.
+const AUTH_REJECTION_MAX_BACKOFF_MS = 2000
+
 import {
     log,
     info,
@@ -292,6 +299,11 @@ export const generateSelfIssuedJWT = (
     return jwtToken
 }
 
+// How long a JetStream fetch waits for a closed connection to come back before
+// it fails. Work loops retry after a failure, so this bounds how often a closed
+// connection is reported while the service reconnects.
+const CLOSED_CONNECTION_WAIT_MS = 30_000
+
 export default class NatsService {
     private static instance: NatsService | null = null
     private nc: NatsConnection | null = null
@@ -301,7 +313,13 @@ export default class NatsService {
     private objm: Objm | null = null
     private config: NatsServiceConfig
     private streamReplicas: number
-    private isMonitoring = false
+    // The connection whose status stream is being watched. Each connection gets
+    // its own watcher, so a new connection is watched even while the previous
+    // connection's loop is still finishing.
+    private monitoredConnection: NatsConnection | null = null
+    // Callers waiting for the connection to come back; settled on reconnect or on
+    // an intentional close.
+    private readonly connectionWaiters = new Set<() => void>()
     private isConnecting = false
     private reconnectTimer: NodeJS.Timeout | null = null
     private subscriptionsInitialized = false
@@ -316,6 +334,9 @@ export default class NatsService {
     // Consecutive failed connect attempts, used for exponential backoff so a
     // persistent auth failure does not flood the auth callout / JWKS endpoint.
     private reconnectAttempts = 0
+    // Whether the last connect attempt was rejected by the server. See
+    // AUTH_REJECTION_MAX_BACKOFF_MS.
+    private lastAttemptRejected = false
     // Timeout (ms) applied to each connect attempt; captured from connect().
     private connectTimeout = 2000
 
@@ -360,7 +381,8 @@ export default class NatsService {
     // timer and the first-connect retry loop take their delay from here so the two
     // paths cannot drift apart.
     private nextBackoffDelay(delay?: number): number {
-        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, 16000)
+        const maxBackoff = this.lastAttemptRejected ? AUTH_REJECTION_MAX_BACKOFF_MS : 16000
+        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, maxBackoff)
         this.reconnectAttempts++
 
         return backoff
@@ -387,14 +409,63 @@ export default class NatsService {
         await new Promise<void>(resolve => setTimeout(resolve, backoff))
     }
 
-    private monitorStatus(): void {
+    // The client can close without its status stream ever yielding `close`: it
+    // queues `close` and stops the stream in one step, so a loop still awaiting
+    // the previous status sees a stopped stream and ends. `closed()` settles for
+    // every close, so it decides whether to reconnect.
+    private watchClose(connection: NatsConnection): void {
+        void (async () => {
+            // closed() resolves with the error that closed the connection, if any;
+            // either way the connection is gone.
+            await connection.closed()
+
+            if (this.nc !== connection)
+                return
+
+            this.subscriptionsInitialized = false
+
+            if (this.intentionalClose)
+                return
+
+            warn('NATS -> connection closed, reconnecting')
+            this.scheduleReconnect()
+        })()
+    }
+
+    // Resolves once the connection is open again, after `timeoutMs`, or when the
+    // service is closed on purpose, whichever comes first. Work loops use it so a
+    // closed connection costs one wait instead of a failed request per poll.
+    private async waitForConnection(timeoutMs: number): Promise<void> {
         if (
-            !this.nc
-            || this.isMonitoring
+            this.isConnected()
+            || this.intentionalClose
         )
             return
 
-        this.isMonitoring = true
+        await new Promise<void>(resolve => {
+            const settle = () => {
+                clearTimeout(timer)
+                this.connectionWaiters.delete(settle)
+                resolve()
+            }
+            const timer = setTimeout(settle, timeoutMs)
+            this.connectionWaiters.add(settle)
+        })
+    }
+
+    private settleConnectionWaiters(): void {
+        for (const settle of Array.from(this.connectionWaiters))
+            settle()
+    }
+
+    private monitorStatus(): void {
+        if (
+            !this.nc
+            || this.monitoredConnection === this.nc
+        )
+            return
+
+        this.monitoredConnection = this.nc
         // Bind the loop to the connection it was started for. connect() installs a
         // fresh `this.nc` on every reconnect, so reading it inside the loop would
         // eventually iterate one connection's status while holding another.
@@ -445,35 +516,22 @@ export default class NatsService {
 
                             break
                         case 'close':
+                            // watchClose() reconnects; this event is not always delivered.
                             warn('NATS -> connection closed:', status)
-                            // Reset the initialized flag on close so we can reconnect properly
-                            this.subscriptionsInitialized = false
-
-                            // Reconnect unless we intentionally closed the connection.
-                            if (!this.intentionalClose)
-                                this.scheduleReconnect()
 
                             break
                     }
                 }
             } catch (error) {
-                // The status iterator itself failed. No 'close' status reached the
-                // handler above, so nothing has reset the subscription flag or
-                // scheduled the reconnect, and the connection is finished either way.
-                // Left uncaught this rejects out of the IIFE, and the API runs under
-                // --abort-on-uncaught-exception, which turns a monitoring failure
-                // into a process abort.
+                // The status iterator itself failed, which happens when the client
+                // stops it while closing; watchClose() reconnects once the close
+                // completes. Left uncaught this rejects out of the IIFE, and the API
+                // runs under --abort-on-uncaught-exception, which turns a monitoring
+                // failure into a process abort.
                 err('NATS -> status monitor failed', error)
-                this.subscriptionsInitialized = false
-
-                if (!this.intentionalClose)
-                    this.scheduleReconnect()
             } finally {
-                // The flag means "this loop is running", nothing more. The iterator
-                // ends whenever the connection closes, so leaving it set turned
-                // monitorStatus() into a no-op for every connection after the first:
-                // the second close was then observed by nobody and never reconnected.
-                this.isMonitoring = false
+                if (this.monitoredConnection === monitored)
+                    this.monitoredConnection = null
             }
         })()
     }
@@ -635,17 +693,21 @@ export default class NatsService {
         this.nc = await (this.config.webSocket ? wsconnect(options) : connect(options))
         // Connected: reset the reconnect backoff.
         this.reconnectAttempts = 0
+        this.lastAttemptRejected = false
         infoStr([
             c.green('NATS -> listening on: '),
             c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`),
         ])
+        this.watchClose(this.nc)
         this.monitorStatus()
         await this.initSubscriptions()
         this.notifyReconnect()
     }
 
     private async reportConnectError(error: unknown): Promise<void> {
-        if (this.isAuthError(error)) {
+        this.lastAttemptRejected = this.isAuthError(error)
+
+        if (this.lastAttemptRejected) {
             // Server rejected our credentials. Let the caller invalidate its cached
             // token so the next refreshToken() obtains a valid one instead of looping
             // forever on the same rejected token.
@@ -845,6 +907,7 @@ export default class NatsService {
 
     async disconnect(): Promise<void> {
         this.intentionalClose = true
+        this.settleConnectionWaiters()
 
         if (this.reconnectTimer)
             clearTimeout(this.reconnectTimer)
@@ -869,6 +932,7 @@ export default class NatsService {
             && !this.nc.isClosed()
         ) {
             this.intentionalClose = true
+            this.settleConnectionWaiters()
 
             if (this.reconnectTimer)
                 clearTimeout(this.reconnectTimer)
@@ -893,6 +957,8 @@ export default class NatsService {
     }
 
     private notifyReconnect(): void {
+        this.settleConnectionWaiters()
+
         for (const listener of this.reconnectListeners) {
             try {
                 listener()
@@ -1389,6 +1455,7 @@ export default class NatsService {
         subject: string
         seq: number
     }>> {
+        await this.waitForConnection(CLOSED_CONNECTION_WAIT_MS)
         const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
         const messages = await consumer.fetch({
             max_messages: options.maxMessages ?? 100,
@@ -1424,6 +1491,7 @@ export default class NatsService {
         }) => Promise<void | JetStreamMessageDisposition>,
         options: JetStreamConsumeOptions = {},
     ): Promise<number> {
+        await this.waitForConnection(CLOSED_CONNECTION_WAIT_MS)
         const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
         const messages = await consumer.fetch({
             max_messages: options.maxMessages ?? 100,

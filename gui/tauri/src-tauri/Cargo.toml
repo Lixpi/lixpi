@@ -21,6 +21,10 @@ path = "src/main.rs"
 # diagnostics.log in the app's log directory. Off in normal builds; the desktop
 # builder enables it on request.
 diagnostics = []
+# Lets Vite update the page as soon as web-ui rebuilds a change. Without it the
+# page stays as loaded until it is reloaded. The desktop builder enables it
+# unless the build is asked for without hot reload, as a release build is.
+hot-reload = []
 
 [build-dependencies]
 tauri-build = { version = "=3.0.0-alpha.4", features = [] }
@@ -34,11 +38,12 @@ tauri-plugin-window-state = "=3.0.0-alpha.2"
 tauri-runtime-wry = { version = "=3.0.0-alpha.6", default-features = false, features = ["devtools"] }
 
 # The local certificate authority is trusted inside the app through WebKit's
-# authentication challenge, which these bindings reach. The versions match the
-# ones wry already uses.
+# authentication challenge, and F12 is seen through AppKit's key monitor, which
+# these bindings reach. The versions match the ones wry already uses.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
 objc2 = "=0.6.5"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "block2", "NSEvent"] }
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFArray", "CFData"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSURLAuthenticationChallenge", "NSURLProtectionSpace"] }
 objc2-security = { version = "=0.3.2", default-features = false, features = ["std", "objc2", "SecBase", "SecCertificate", "SecTrust"] }

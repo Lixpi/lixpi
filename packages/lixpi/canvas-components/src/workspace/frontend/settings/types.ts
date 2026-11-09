@@ -12,6 +12,9 @@ import {
     type CircularGlassMaterialStyle,
     type GlassMaterialStyle,
 } from '@lixpi/canvas-components/effects/glass'
+import {
+    type LoadingSpinCycle,
+} from '@lixpi/canvas-components/loading'
 
 export type BoundedZoomScalingSettings = BoundedZoomScalingOptions
 export type ConnectorSettings = ConnectionSettings
@@ -115,6 +118,7 @@ export type MediaNodeSettings = {
 export type WorkspaceLoadingOutlineSettings = {
     diameter: number
     animationDurationMs: number
+    spinCycle: LoadingSpinCycle
     snakeLengthFraction: number
 }
 

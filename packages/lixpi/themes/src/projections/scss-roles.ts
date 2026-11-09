@@ -109,6 +109,7 @@ export const themeStylesheetRoles = (theme: ApplicationTheme) => ({
     'navigation-backdrop': theme.navigation.sidebar.backdrop,
     'navigation-backdrop-opaque': theme.navigation.sidebar.opaqueBackdrop,
     'sidebar-section': theme.navigation.sidebar.sectionLabel,
+    'navigation-resize-handle-width': theme.navigation.sidebar.resizeHandleWidth,
     'topbar-background': theme.navigation.topbar.background,
     'shadow-sidebar': theme.shadow.sidebar,
     'shadow-topbar': theme.shadow.topbar,

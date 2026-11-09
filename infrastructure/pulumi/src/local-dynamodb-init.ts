@@ -12,7 +12,7 @@
 // 2. Faster startup - no Pulumi state management overhead
 // 3. Simpler Docker integration - just run this script on container start
 //
-// Compose preserves existing tables by setting LOCAL_DYNAMODB_FORCE_RECREATE=false.
+// The environment file preserves existing tables with LOCAL_DYNAMODB_FORCE_RECREATE=false.
 // Explicit resets and direct invocations follow local-dynamodb-table-reconciler.ts.
 // The fixed mock fixture validates after table setup, before Compose starts the API.
 

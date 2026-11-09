@@ -41,9 +41,9 @@ services:
 
             # Skill scripts reach the public internet (docs.byteplus.com and
             # similar). Honour a proxy if the host sets one; harmless if unset.
-            HTTP_PROXY: ${HTTP_PROXY:-}
-            HTTPS_PROXY: ${HTTPS_PROXY:-}
-            NO_PROXY: ${NO_PROXY:-}
+            HTTP_PROXY:
+            HTTPS_PROXY:
+            NO_PROXY:
         working_dir: /skills
 
     # Interactive skill selection uses the same Clack prompt stack as the configuration wizard. The UI writes to

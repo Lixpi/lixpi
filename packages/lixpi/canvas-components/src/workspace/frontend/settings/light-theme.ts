@@ -178,6 +178,7 @@ export const createLixpiLightCanvasTheme = (preset: ApplicationTheme = lixpiLigh
                     loadingOutline: {
                         diameter: settings.workspaceLoadingOutline.diameter,
                         durationMs: settings.workspaceLoadingOutline.animationDurationMs,
+                        spinCycle: { ...settings.workspaceLoadingOutline.spinCycle },
                         snakeLengthFraction: settings.workspaceLoadingOutline.snakeLengthFraction,
                     },
                 },

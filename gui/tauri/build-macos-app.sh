@@ -7,15 +7,22 @@
 # Compose sets the inputs:
 #   LIXPI_WEB_UI_URL      the web-ui origin the window opens
 #   LIXPI_API_URL         the API origin that serves downloads
-#   LIXPI_DESKTOP_TARGET  aarch64-apple-darwin (default) or x86_64-apple-darwin
+#   LIXPI_DESKTOP_TARGET  aarch64-apple-darwin or x86_64-apple-darwin
 #   LIXPI_DESKTOP_DIAGNOSTICS  true builds the diagnostics feature into the app
+#   LIXPI_DESKTOP_HOT_RELOAD   true lets the page follow web-ui's rebuilds; false for a release
+#
+# Every input comes from the environment file; none has a default here.
 
 set -euo pipefail
 
 project_dir=/usr/src/desktop
 source_dir="${project_dir}/src-tauri"
 icon_source="${project_dir}/app-icon.svg"
-target="${LIXPI_DESKTOP_TARGET:-aarch64-apple-darwin}"
+for name in LIXPI_DESKTOP_TARGET LIXPI_DESKTOP_DIAGNOSTICS LIXPI_DESKTOP_HOT_RELOAD; do
+    [[ -n "${!name:-}" ]] || { echo "${name} is not set. Pass the environment file to docker compose with --env-file." >&2; exit 2; }
+done
+
+target="${LIXPI_DESKTOP_TARGET}"
 
 case "${target}" in
     aarch64-apple-darwin|x86_64-apple-darwin) ;;
@@ -61,13 +68,22 @@ case "${LIXPI_WEB_UI_URL}" in
 esac
 
 features=()
-case "${LIXPI_DESKTOP_DIAGNOSTICS:-false}" in
+case "${LIXPI_DESKTOP_DIAGNOSTICS}" in
     true)
         features=(--features diagnostics)
         echo "Including diagnostics: the app logs the page's console, errors and page loads to ~/Library/Logs/${identifier}/diagnostics.log."
         ;;
     false) ;;
     *) echo "LIXPI_DESKTOP_DIAGNOSTICS must be true or false, found ${LIXPI_DESKTOP_DIAGNOSTICS}." >&2; exit 2 ;;
+esac
+
+case "${LIXPI_DESKTOP_HOT_RELOAD}" in
+    true)
+        features+=(--features hot-reload)
+        echo "Including hot reload: the page updates as soon as web-ui rebuilds a change."
+        ;;
+    false) echo "Leaving out hot reload: the page changes only when it is reloaded with Cmd+R." ;;
+    *) echo "LIXPI_DESKTOP_HOT_RELOAD must be true or false, found ${LIXPI_DESKTOP_HOT_RELOAD}." >&2; exit 2 ;;
 esac
 
 echo "Building ${product_name} ${version} for ${target}, opening ${LIXPI_WEB_UI_URL}..."

@@ -9,6 +9,9 @@ import {
 import {
     type TravelingOutlineStyle,
 } from '../effects/outline/outline-geometry.ts'
+import {
+    type LoadingSpinCycle,
+} from '../loading/loading-spin.ts'
 
 export type CanvasEffectsPalette = {
     surface: string
@@ -33,6 +36,7 @@ export type CanvasGenerationOutlineTheme = Omit<TravelingOutlineStyle, 'edgeFeat
 export type CanvasLoadingOutlineTheme = {
     diameter: number
     durationMs: number
+    spinCycle: LoadingSpinCycle
     snakeLengthFraction: number
 }
 
@@ -186,7 +190,14 @@ export const createCanvasEffectsTheme = (palette: Partial<CanvasEffectsPalette> 
     },
     loadingOutline: {
         diameter: 100,
-        durationMs: 600,
+        durationMs: 400,
+        spinCycle: {
+            fastTurns: 2,
+            slowTurnDurationFactor: 1.75,
+            firstSlowdownMs: 40,
+            slowdownGrowthFactor: 2,
+            maxSlowTurnDurationMs: 2400,
+        },
         snakeLengthFraction: 0.6,
     },
     circularGlass: {

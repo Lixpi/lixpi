@@ -46,6 +46,7 @@ const loadingOutline = (theme: CanvasTheme): LoadingOverlayOptions['outline'] =>
     ...outlineAppearance(theme),
     size: theme.effects.loadingOutline.diameter,
     durationMs: theme.effects.loadingOutline.durationMs,
+    spinCycle: theme.effects.loadingOutline.spinCycle,
     snakeLengthFraction: theme.effects.loadingOutline.snakeLengthFraction,
 })
 
@@ -709,6 +710,7 @@ export class LoadingExample {
             '    outline: { texture, style,',
             `        size: ${this.frame.theme.value.effects.loadingOutline.diameter},`,
             `        durationMs: ${this.frame.theme.value.effects.loadingOutline.durationMs},`,
+            `        spinCycle: ${JSON.stringify(this.frame.theme.value.effects.loadingOutline.spinCycle)},`,
             `        snakeLengthFraction: ${this.frame.theme.value.effects.loadingOutline.snakeLengthFraction},`,
             '    },',
             "    errorTitle: 'Request failed', retryLabel: 'Retry',",

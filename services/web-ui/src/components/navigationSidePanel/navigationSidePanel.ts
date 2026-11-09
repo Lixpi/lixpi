@@ -36,6 +36,10 @@ const NAVIGATION_SIDE_PANEL_SETTINGS = settings.navigationSidePanel
 export type NavigationSidePanelConfig = {
     // Host element the panel/backdrop/overlay/toggle/resize-handle mount into.
     auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently' | 'logout' | 'createSessionHandoffUrl'>
+    // Content area the panel floats over. It receives
+    // `--navigation-side-panel-inset`, the width the open panel covers, so
+    // content can keep its own overlays clear of the panel.
+    contentEl: HTMLElement
     paneEl: HTMLElement
     router: Pick<WebClientRouterService, 'getCurrentRoute' | 'navigateTo' | 'subscribe'>
     userPortalUrl: string
@@ -50,10 +54,24 @@ export type NavigationSidePanelInstance = {
     destroy: () => void
 }
 
+type WorkspaceRow = {
+    el: HTMLButtonElement
+    dropdown: ReturnType<typeof createPureDropdown>
+    signature: string
+}
+
+// Name and tags are everything a row shows, so a row whose signature is
+// unchanged is kept as it is.
+const getWorkspaceRowSignature = (workspace: WorkspaceMeta): string => JSON.stringify([
+    workspace.name,
+    workspace.tags ?? [],
+])
+
 class NavigationSidePanel implements NavigationSidePanelInstance {
+    private readonly contentEl: HTMLElement
     private readonly paneEl: HTMLElement
     private readonly unsubscribers: Array<() => void> = []
-    private readonly workspaceDropdowns = new Map<string, ReturnType<typeof createPureDropdown>>()
+    private readonly workspaceRows = new Map<string, WorkspaceRow>()
     private readonly panelEl: HTMLDivElement
     private readonly headerEl: HTMLDivElement
     private readonly listEl: HTMLDivElement
@@ -66,11 +84,13 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private readonly router: NavigationSidePanelConfig['router']
     private readonly workspaceService: NavigationSidePanelConfig['workspaceService']
     private importTargetWorkspaceId: string | null = null
+    private width = 0
     private signingOut = false
     private destroyed = false
 
     constructor(config: NavigationSidePanelConfig) {
         this.auth = config.auth
+        this.contentEl = config.contentEl
         this.paneEl = config.paneEl
         this.router = config.router
         this.workspaceService = config.workspaceService
@@ -183,7 +203,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             workspacesStore.subscribe(this.renderWorkspaceList),
         )
         this.unsubscribers.push(
-            this.router.subscribe(this.renderWorkspaceList),
+            this.router.subscribe(this.reflectActiveWorkspace),
         )
 
         this.renderAvatar()
@@ -256,9 +276,16 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
     private reflectWidth = (width: number): void => {
         const widthValue = `${width}px`
+        this.width = width
         this.paneEl.style.setProperty('--workspace-navigation-side-panel-width', widthValue)
         this.paneEl.style.setProperty('--side-panel-backdrop-width', widthValue)
         this.panelEl.style.setProperty('--side-panel-backdrop-width', widthValue)
+        this.reflectInset()
+    }
+
+    private reflectInset = (): void => {
+        const inset = navigationSidePanelStore.getData().isOpen ? this.width : 0
+        this.contentEl.style.setProperty('--navigation-side-panel-inset', `${inset}px`)
     }
 
     private reflectStyleSettings = (): void => {
@@ -273,10 +300,13 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             this.sidePanel.mountOpen(this.panelEl)
         else
             this.sidePanel.mountClosed(this.panelEl)
+
+        this.reflectInset()
     }
 
     private handleOpenChange = (open: boolean): void => {
         navigationSidePanelStore.setValues({ isOpen: open })
+        this.reflectInset()
         void this.runSlide(open)
     }
 
@@ -290,35 +320,75 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private toggleVisibility = (): void => {
         const isOpen = navigationSidePanelStore.getData().isOpen
         navigationSidePanelStore.setValues({ isOpen: !isOpen })
+        this.reflectInset()
         void this.runSlide(!isOpen)
     }
 
     // --- Workspace list rendering -------------------------------------------------
 
+    // Rows stay in the DOM across renders, and only a row whose name or tags
+    // changed is rebuilt. Switching workspaces only moves the active class, so
+    // the row under the pointer keeps its hover and pressed state.
     private renderWorkspaceList = (): void => {
         const workspaces = workspacesStore.getData()
-        const currentWorkspaceId = this.router.getCurrentRoute().routeParams.workspaceId
+        const workspaceIds = new Set(
+            workspaces.map(workspace => workspace.workspaceId),
+        )
 
-        for (const dropdown of this.workspaceDropdowns.values())
-            dropdown.destroy()
+        for (const [workspaceId, row] of this.workspaceRows) {
+            if (workspaceIds.has(workspaceId))
+                continue
 
-        this.workspaceDropdowns.clear()
-
-        this.listEl.replaceChildren()
-
-        for (const workspace of workspaces) {
-            this.listEl.appendChild(
-                this.renderWorkspaceRow(workspace, currentWorkspaceId),
-            )
+            this.destroyWorkspaceRow(row)
+            this.workspaceRows.delete(workspaceId)
         }
+
+        const rowEls = workspaces.map(workspace => this.syncWorkspaceRow(workspace))
+        const inOrder = rowEls.length === this.listEl.children.length
+            && rowEls.every((rowEl, index) => this.listEl.children[index] === rowEl)
+
+        if (!inOrder)
+            this.listEl.replaceChildren(...rowEls)
+
+        this.reflectActiveWorkspace()
     }
 
-    private renderWorkspaceRow(
-        workspace: WorkspaceMeta,
-        currentWorkspaceId: string | undefined,
-    ): HTMLElement {
-        const isActive = currentWorkspaceId === workspace.workspaceId
+    private syncWorkspaceRow(workspace: WorkspaceMeta): HTMLButtonElement {
+        const signature = getWorkspaceRowSignature(workspace)
+        const existing = this.workspaceRows.get(workspace.workspaceId)
 
+        if (existing?.signature === signature)
+            return existing.el
+
+        const row = this.renderWorkspaceRow(workspace)
+        const next = {
+            ...row,
+            signature,
+        }
+
+        if (existing) {
+            existing.el.replaceWith(next.el)
+            this.destroyWorkspaceRow(existing)
+        }
+
+        this.workspaceRows.set(workspace.workspaceId, next)
+
+        return next.el
+    }
+
+    private destroyWorkspaceRow(row: WorkspaceRow): void {
+        row.dropdown.destroy()
+        row.el.remove()
+    }
+
+    private reflectActiveWorkspace = (): void => {
+        const currentWorkspaceId = this.router.getCurrentRoute().routeParams.workspaceId
+
+        for (const [workspaceId, row] of this.workspaceRows)
+            row.el.classList.toggle('navigation-side-panel-row-active', workspaceId === currentWorkspaceId)
+    }
+
+    private renderWorkspaceRow(workspace: WorkspaceMeta): Omit<WorkspaceRow, 'signature'> {
         const menuAnchor = html`<div className="navigation-side-panel-row-menu"></div>` as HTMLDivElement
         const dropdown = createPureDropdown({
             id: `navigation-side-panel-workspace-menu-${workspace.workspaceId}`,
@@ -344,7 +414,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
                     void this.onWorkspaceDeleteHandler(workspace.workspaceId)
             },
         })
-        this.workspaceDropdowns.set(workspace.workspaceId, dropdown)
         menuAnchor.appendChild(dropdown.dom)
         menuAnchor.addEventListener('click', event => event.stopPropagation())
 
@@ -359,7 +428,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         const row = html`
             <button
                 type="button"
-                className=${`navigation-side-panel-row${isActive ? ' navigation-side-panel-row-active' : ''}`}
+                className="navigation-side-panel-row"
                 onclick=${() => this.handleWorkspaceClick(workspace.workspaceId)}
             >
                 <div className="navigation-side-panel-row-top">
@@ -368,17 +437,15 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             </button>
         ` as HTMLButtonElement
 
-        const rowTop = row.querySelector<HTMLDivElement>('.navigation-side-panel-row-top')
-
-        if (!rowTop)
-            return row
-
-        rowTop.appendChild(menuAnchor)
+        row.querySelector<HTMLDivElement>('.navigation-side-panel-row-top')?.appendChild(menuAnchor)
 
         if (workspace.tags?.length)
             row.appendChild(tagsEl)
 
-        return row
+        return {
+            el: row,
+            dropdown,
+        }
     }
 
     private handleWorkspaceClick(workspaceId: string): void {
@@ -470,10 +537,10 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         for (const unsubscribe of this.unsubscribers)
             unsubscribe()
 
-        for (const dropdown of this.workspaceDropdowns.values())
-            dropdown.destroy()
+        for (const row of this.workspaceRows.values())
+            this.destroyWorkspaceRow(row)
 
-        this.workspaceDropdowns.clear()
+        this.workspaceRows.clear()
         this.sidePanel.destroy()
         this.panelEl.remove()
     }

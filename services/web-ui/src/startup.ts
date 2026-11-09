@@ -98,6 +98,14 @@ export class WebUiStartup {
             this.application = application
             await application.start()
         } catch (error) {
+            // A rejected session also fails startup. Offering to reload would
+            // only lead to the sign-in screen after one more click.
+            if (!this.config.auth.authStore.getMeta('isAuthenticated')) {
+                this.showSignIn(true)
+
+                return
+            }
+
             this.showWorkspaceError(error)
         }
     }

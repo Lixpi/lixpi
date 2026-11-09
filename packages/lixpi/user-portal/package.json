@@ -20,6 +20,7 @@
         "@lixpi/canvas-components": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
+        "@lixpi/themes": "workspace:*",
         "@lixpi/ui-kit": "workspace:*",
         "@lixpi/ui-kit-gentelella": "workspace:*",
         "@lixpi/ui-primitives": "workspace:*",

@@ -146,7 +146,9 @@ Thrown request/reply handler failures are transported as `{ error: message }` fo
 
 `inboxPrefix` (`inbox_prefix` in Python) configures the underlying connection's request/reply namespace. Browser callers pass `getNatsUserInboxPrefix(session.userId)` from `@lixpi/constants`, which produces `_INBOX.<hex-encoded-user-id>`. The auth callout grants only this user's inbox subtree. Service reply permissions are configured separately.
 
-`onReconnect(listener)` (`on_reconnect` in Python) returns a function that removes the listener. Listeners run after configured subscriptions are initialized on a recovered connection, including replacement of a closed connection. Dynamic subscriptions must be rebound by their owner when the underlying connection is replaced. Module pages use this hook to rebind their subscriptions and refetch authoritative state; they remove the listener during teardown. Python listeners may be asynchronous.
+`onReconnect(listener)` (`on_reconnect` in Python) returns a function that removes the listener. Listeners run after configured subscriptions are initialized on a recovered connection, including replacement of a closed connection. Dynamic subscriptions must be rebound by their owner when the underlying connection is replaced.
+
+The client can give up on a connection, for example after the broker rejects two reconnect attempts in a row while its JetStream cluster is still electing a leader after a restart. The TypeScript service then opens a new connection with backoff. It watches each connection's `closed()` promise rather than the `close` status event, because the client can stop the status stream before a busy listener sees that event. While the connection is closed, `processJetStreamMessages` and `consumeJetStreamMessages` wait up to 30 seconds for it to return before failing, so work loops that poll JetStream report a closed connection about once every 30 seconds instead of failing every poll. A graceful `disconnect()` or `drain()` releases those waits immediately. Module pages use this hook to rebind their subscriptions and refetch authoritative state; they remove the listener during teardown. Python listeners may be asynchronous.
 
 The embedded Go broker uses `nats.go` and an in-process connection for callout dispatch. This TypeScript lifecycle serves application clients; application JWT middleware is separate from connection admission.
 
@@ -447,6 +449,8 @@ config = NatsServiceConfig(
 `init()` resolves only once the connection is established. When the first connect cannot be made it retries on an exponential backoff (0.5s, 1s, 2s, 4s, 8s, then 16s) up to `initialConnectMaxAttempts` / `initial_connect_max_attempts`, which defaults to 9 attempts, roughly 80 seconds of wall clock. That budget covers a Docker cold boot where the NATS hostnames are not yet resolvable and every attempt fails with `EAI_AGAIN`. When the budget runs out `init()` rejects, so a caller never receives a service that is not connected.
 
 Once a connection has been established, every later failure goes through the reconnect path instead, which retries forever on the same backoff and re-registers subscriptions when the connection comes back. A NATS blip after startup never takes the process down.
+
+The broker rejects a connection with the same authorization error whether the credentials are bad or the service that checks them is briefly down, such as an API restarting after a code change. After a rejected attempt the backoff stops growing at 2 seconds, so a client reconnects within a couple of seconds of that service returning. The `onAuthError` callback decides how long rejections may continue before it returns `false` and the client stops.
 
 ### Messaging Patterns
 

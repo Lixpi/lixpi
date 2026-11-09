@@ -278,8 +278,34 @@ export const createLixpiUiSettings = (): Settings => {
         workspaceLoadingOutline: {
             // Screen-pixel diameter of the loading circle.
             diameter: 100,
-            // Milliseconds for one complete lap.
-            animationDurationMs: 600,
+            // How long one full 360° turn of the spinner takes, in
+            // milliseconds, during the first fast turns. Lower spins faster.
+            // Later cycles add their slowdown on top of this.
+            animationDurationMs: 370,
+            // The spinner turns in repeating cycles: a few fast turns, then
+            // one slow turn. With the values below, one cycle is
+            // fast, fast, slow. Each cycle after the first makes all of its
+            // turns slower by the same amount at once.
+            spinCycle: {
+                // How many fast turns each cycle starts with before its slow
+                // turn. 2 gives fast, fast, slow.
+                fastTurns: 2,
+                // How long the slow turn takes compared with a fast turn in
+                // the same cycle. 1.75 makes a 300ms fast turn's slow turn
+                // take 525ms.
+                slowTurnDurationFactor: 1.3,
+                // Milliseconds added to every turn when the second cycle
+                // starts. 0 turns the slowdown off and repeats the first
+                // cycle forever.
+                firstSlowdownMs: 100,
+                // Decay rate: how much bigger each cycle's slowdown is than
+                // the previous one. 2 adds 40ms, then 80ms, then 160ms.
+                // 1 adds 40ms every cycle. Higher slows down harder.
+                slowdownGrowthFactor: 1.3,
+                // The slowest a slow turn may get, in milliseconds. When the
+                // next cycle would pass it, the current cycle repeats forever.
+                maxSlowTurnDurationMs: 2400,
+            },
             // Fraction of the circle's circumference occupied by the trail.
             snakeLengthFraction: 0.6,
         },
@@ -404,7 +430,8 @@ export const createLixpiUiSettings = (): Settings => {
                     // Background gradient painted on the visible resize-handle line.
                     gradient: lixpiLightTheme.panel.resizeHandle.gradient,
                     // Visible line width; this does not change the draggable hit target.
-                    width: lixpiLightTheme.panel.resizeHandle.width,
+                    // The theme sets it to zero because the sidebar shadow marks the boundary.
+                    width: lixpiLightTheme.navigation.sidebar.resizeHandleWidth,
                 },
             },
             toggle: {

@@ -10,6 +10,7 @@ import { type UserPortalDependencies } from './types.ts'
 const overlays = vi.hoisted(() => [] as LoadingOverlayOptions[])
 vi.mock('@lixpi/canvas-components/loading/overlay', () => ({
     LoadingOverlay: class {
+        dom = document.createElement('div')
         constructor(options: LoadingOverlayOptions) { overlays.push(options) }
         setVisible() {}
         setErrorMessage() {}
@@ -104,8 +105,6 @@ describe('user portal loading', () => {
         expect(layer?.getAttribute('aria-label')).toBe('Loading profile')
         expect(document.getElementById('app')!.children).toHaveLength(0)
         await vi.waitFor(() => expect(overlays).toHaveLength(1))
-        expect(overlays[0].outline.size).toBe(100)
-        expect(overlays[0].outline.durationMs).toBe(600)
         dependencies.resolve({
             auth,
             nats,

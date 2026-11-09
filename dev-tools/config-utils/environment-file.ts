@@ -1,6 +1,21 @@
 import { parseEnv } from 'node:util'
 
+// Docker Compose interpolates `$` in bare and double-quoted values, so a NATS
+// subject such as `$JS.API.STREAM.INFO.x` would lose its `$JS` prefix. Compose
+// and Node both read a single-quoted value literally, so such values are
+// single-quoted. No literal form both of them read the same way can hold a `$`
+// together with a single quote or a line break.
+const singleQuotedLiteral = (value: string): string => {
+    if (/['\r\n]/u.test(value))
+        throw new Error('An environment value containing $ cannot also contain a single quote or a line break')
+
+    return `'${value}'`
+}
+
 export const envLiteral = (value: string): string => {
+    if (value.includes('$'))
+        return singleQuotedLiteral(value)
+
     try {
         const parsed = parseEnv(`VALUE = ${value}\nNEXT = sentinel\n`)
 

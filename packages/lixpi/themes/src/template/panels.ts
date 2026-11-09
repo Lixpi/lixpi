@@ -193,6 +193,9 @@ export type PanelTheme = {
         header: {
             base: {
                 padding: string
+                paddingInline: string
+                gap: string
+                itemRadius: string
             }
         }
         list: {

@@ -48,12 +48,11 @@ class Layout implements LayoutInstance {
     constructor(config: LayoutConfig) {
         const contentEl = html`<div className="workspace-main-content"></div>` as HTMLDivElement
         const navigationSidePanelPaneEl = html`<div className="navigation-side-panel-pane"></div>` as HTMLDivElement
+        const mainPaneEl = html`<div className="workspace-main-pane">${contentEl}</div>` as HTMLDivElement
         this.el = html`
             <div className="layout-root">
                 ${navigationSidePanelPaneEl}
-                <div className="workspace-main-pane">
-                    ${contentEl}
-                </div>
+                ${mainPaneEl}
             </div>
         ` as HTMLElement
 
@@ -62,6 +61,7 @@ class Layout implements LayoutInstance {
 
         this.navigationSidePanel = createNavigationSidePanel({
             auth: config.auth,
+            contentEl: mainPaneEl,
             paneEl: navigationSidePanelPaneEl,
             router: config.router,
             userPortalUrl: config.userPortalUrl,

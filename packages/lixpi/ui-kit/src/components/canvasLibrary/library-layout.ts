@@ -44,6 +44,7 @@ const panelLayouts = {
         placementKey: 'navigationPlacement',
         width: navigation.geometry.defaultWidth,
         minimumWidth: navigation.geometry.minWidth,
+        resizeHandleClassName: 'navigation-side-panel-resize-handle',
         toggle: {
             iconSvg: navigationSidePanelToggleIcon,
             motion: 'fixed' as const,
@@ -60,6 +61,7 @@ const panelLayouts = {
         placementKey: 'parametersPlacement',
         width: libraryGeometry.parametersDefaultWidth,
         minimumWidth: libraryGeometry.parametersMinWidth,
+        resizeHandleClassName: undefined,
         toggle: {
             iconSvg: aiChatPanelCollapseIcon,
             motion: 'fixed' as const,
@@ -77,6 +79,7 @@ const panelLayouts = {
         placementKey: 'themePlacement',
         width: libraryGeometry.themeDefaultWidth,
         minimumWidth: libraryGeometry.themeMinWidth,
+        resizeHandleClassName: undefined,
         toggle: {
             iconSvg: aiChatPanelCollapseIcon,
             motion: 'fixed' as const,
@@ -152,6 +155,7 @@ export class CanvasLibraryLayout {
                 onToggle: handlers.onToggle,
             },
             ...sidePanel.resizeHandle,
+            className: layout.resizeHandleClassName,
             minWidth: layout.minimumWidth,
             defaultWidth: layout.width,
             getMaxWidth: handlers.getMaxWidth,

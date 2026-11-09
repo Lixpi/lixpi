@@ -17,7 +17,7 @@ services:
             VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
             VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
-            VITE_ACCOUNT_ONBOARDING_ENABLED: ${VITE_ACCOUNT_ONBOARDING_ENABLED:-false}
+            VITE_ACCOUNT_ONBOARDING_ENABLED: ${VITE_ACCOUNT_ONBOARDING_ENABLED}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
         volumes:
             - ../../../../services/web-ui/Dockerfile:/usr/src/service/Dockerfile:cached

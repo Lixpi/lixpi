@@ -147,6 +147,7 @@ export const createMarianaRoles = (palette: MarianaColors) =>
                 opaqueBackdrop: palette.charcoal,
                 sectionLabel: palette.apricot,
                 separator: `linear-gradient(${palette.midnightGray}, ${palette.midnightGray})`,
+                resizeHandleWidth: '0px',
             },
             topbar: {
                 background: palette.charcoal,
@@ -165,7 +166,7 @@ export const createMarianaRoles = (palette: MarianaColors) =>
                 fontWeight: 400,
             },
             item: {
-                radius: '8px',
+                radius: '0',
                 fontSize: '0.875rem',
                 fontWeight: 500,
                 hover: palette.charcoalBlue,
