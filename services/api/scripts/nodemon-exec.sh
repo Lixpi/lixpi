@@ -44,9 +44,18 @@ fi
 
 touch "$MARKER"
 
+# nodemon watches only the API's own sources and the restart file. Shared
+# packages restart the API only when it actually loaded the edited file:
+# record-loaded-modules.mjs lists every package file the API loads, and
+# watch-loaded-modules.mjs touches the restart file when one of them changes.
+# An edit to a file only the browser uses therefore never takes the API down.
+node ./scripts/watch-loaded-modules.mjs &
+watcher=$!
+trap 'kill "$watcher" 2>/dev/null' EXIT
+
 # Reserve argv space for the full admission consumer name in process.title.
 # Docker inventory uses that immutable title to distinguish watched processes.
-node ./src/server.ts --account-enforcement-process
+node --import ./scripts/record-loaded-modules.mjs ./src/server.ts --account-enforcement-process
 code=$?
 
 if [ "$code" -eq 0 ]; then
@@ -58,5 +67,8 @@ if [ "$boot_run" -eq 1 ]; then
     exit "$code"
 fi
 
+# Keep watching the files the crashed run loaded, so fixing a shared package
+# file reloads the API just like fixing one of its own sources does.
 echo "[nodemon-exec] app exited with $code after a reload; keeping nodemon alive so the next edit reloads it" >&2
+wait "$watcher"
 exit 0

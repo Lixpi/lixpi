@@ -280,6 +280,7 @@ describe('public web UI startup', () => {
             auth,
         } = harness()
         loadWorkspace.mockRejectedValue(new Error('module unavailable'))
+        auth.authStore.setMetaValues({ isAuthenticated: true })
         const started = startup.start()
         pending.resolve(session)
         await started
@@ -287,6 +288,27 @@ describe('public web UI startup', () => {
         expect(document.querySelector('button')?.textContent).toBe('Try again')
         expect(auth.login).not.toHaveBeenCalled()
         expect(log).toHaveBeenCalledWith('Workspace startup failed:', 'module unavailable')
+    })
+
+    it('goes straight to sign-in when startup fails because the session was rejected', async () => {
+        const {
+            startup,
+            pending,
+            application,
+            auth,
+        } = harness()
+        auth.authStore.setMetaValues({ isAuthenticated: true })
+        application.start.mockImplementation(async () => {
+            auth.authStore.resetStore()
+
+            throw new Error('NATS -> authorization denied')
+        })
+        const started = startup.start()
+        pending.resolve(session)
+        await started
+        expect(document.querySelector('h1')?.textContent).toBe('Welcome to Lixpi')
+        expect(document.body.textContent).toContain('Sign-in could not be completed. Please try again.')
+        expect(Array.from(document.querySelectorAll('button'), button => button.textContent)).toEqual(['Sign in'])
     })
 
     it('does not revive a destroyed view when authentication finishes late', async () => {

@@ -401,6 +401,26 @@ describe('NatsService', () => {
             expect(listener).toHaveBeenCalledOnce()
         })
 
+        it('retries rejected connections at most two seconds apart and other failures with the full backoff', async () => {
+            const service = new (NatsService as any)({ onAuthError: vi.fn() })
+            const authorization = new Error('Authorization Violation')
+            authorization.name = 'AuthorizationError'
+            const delays = async (error: Error) => {
+                service['reconnectAttempts'] = 0
+                const result: number[] = []
+
+                for (let attempt = 0; attempt < 7; attempt++) {
+                    await service['reportConnectError'](error)
+                    result.push(service['nextBackoffDelay']())
+                }
+
+                return result
+            }
+
+            await expect(delays(authorization)).resolves.toEqual([500, 1000, 2000, 2000, 2000, 2000, 2000])
+            await expect(delays(new Error('connection refused'))).resolves.toEqual([500, 1000, 2000, 4000, 8000, 16000, 16000])
+        })
+
         it('uses token authenticator flow when token getter is configured', async () => {
             const config = {
                 getToken: vi.fn()

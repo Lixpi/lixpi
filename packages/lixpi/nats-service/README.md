@@ -450,6 +450,8 @@ config = NatsServiceConfig(
 
 Once a connection has been established, every later failure goes through the reconnect path instead, which retries forever on the same backoff and re-registers subscriptions when the connection comes back. A NATS blip after startup never takes the process down.
 
+The broker rejects a connection with the same authorization error whether the credentials are bad or the service that checks them is briefly down, such as an API restarting after a code change. After a rejected attempt the backoff stops growing at 2 seconds, so a client reconnects within a couple of seconds of that service returning. The `onAuthError` callback decides how long rejections may continue before it returns `false` and the client stops.
+
 ### Messaging Patterns
 
 - **Publish**: Fire-and-forget messages

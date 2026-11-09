@@ -41,6 +41,13 @@ const DEFAULT_STREAM_REPLICAS = 3
 // established, reconnects retry forever.
 const DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS = 9
 
+// The server rejects a connection the same way when the service that checks
+// access is briefly down, such as an API restarting after a code change. Those
+// rejections retry at most this far apart, so the client reconnects within a
+// couple of seconds of the service returning. The caller's onAuthError decides
+// how long rejections may last before the session counts as rejected.
+const AUTH_REJECTION_MAX_BACKOFF_MS = 2000
+
 import {
     log,
     info,
@@ -327,6 +334,9 @@ export default class NatsService {
     // Consecutive failed connect attempts, used for exponential backoff so a
     // persistent auth failure does not flood the auth callout / JWKS endpoint.
     private reconnectAttempts = 0
+    // Whether the last connect attempt was rejected by the server. See
+    // AUTH_REJECTION_MAX_BACKOFF_MS.
+    private lastAttemptRejected = false
     // Timeout (ms) applied to each connect attempt; captured from connect().
     private connectTimeout = 2000
 
@@ -371,7 +381,8 @@ export default class NatsService {
     // timer and the first-connect retry loop take their delay from here so the two
     // paths cannot drift apart.
     private nextBackoffDelay(delay?: number): number {
-        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, 16000)
+        const maxBackoff = this.lastAttemptRejected ? AUTH_REJECTION_MAX_BACKOFF_MS : 16000
+        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, maxBackoff)
         this.reconnectAttempts++
 
         return backoff
@@ -682,6 +693,7 @@ export default class NatsService {
         this.nc = await (this.config.webSocket ? wsconnect(options) : connect(options))
         // Connected: reset the reconnect backoff.
         this.reconnectAttempts = 0
+        this.lastAttemptRejected = false
         infoStr([
             c.green('NATS -> listening on: '),
             c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`),
@@ -693,7 +705,9 @@ export default class NatsService {
     }
 
     private async reportConnectError(error: unknown): Promise<void> {
-        if (this.isAuthError(error)) {
+        this.lastAttemptRejected = this.isAuthError(error)
+
+        if (this.lastAttemptRejected) {
             // Server rejected our credentials. Let the caller invalidate its cached
             // token so the next refreshToken() obtains a valid one instead of looping
             // forever on the same rejected token.

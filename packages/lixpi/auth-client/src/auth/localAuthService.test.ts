@@ -11,6 +11,7 @@ import { createAuthStore } from '../stores/authStore.ts'
 import { createAuthClient } from '../authClient.ts'
 import { AuthenticationFailure } from '../authenticationFailure.ts'
 import {
+    SILENT_REFRESH_FRAME_NAME,
     SILENT_REFRESH_TIMEOUT_MS,
     createLocalAuthService,
 } from './localAuthService.ts'
@@ -40,10 +41,12 @@ const makeToken = (expiresInSeconds: number): string => {
 
 beforeEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
     window.history.replaceState({}, '', '/')
 })
 afterEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
     document.body.replaceChildren()
     vi.restoreAllMocks()
 })
@@ -122,6 +125,116 @@ describe('LocalAuth0 web client service', () => {
             expect(document.querySelector('iframe')).toBeNull()
             expect(localStorage.getItem('localauth0_token')).toBeNull()
             expect(store.getMeta('isAuthenticated')).toBe(false)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('returns to the page the user signed in from', async () => {
+        const navigate = vi.spyOn(window.location, 'href', 'set').mockImplementation(() => {})
+        window.history.replaceState({}, '', '/workspace/project-1?panel=assets')
+        await createLocalAuthService(config, createAuthStore()).login()
+        const authorization = new URL(navigate.mock.calls[0][0])
+        const state = authorization.searchParams.get('state')
+        expect(state).toMatch(/^[a-f0-9]{32}$/)
+        const token = makeToken(3600)
+        window.history.replaceState({}, '', `/#access_token=${token}&token_type=Bearer&state=${state}`)
+        const store = createAuthStore()
+
+        await createLocalAuthService(config, store).init()
+
+        expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe('/workspace/project-1?panel=assets')
+        expect(localStorage.getItem('localauth0_token')).toBe(token)
+        expect(store.getMeta('isAuthenticated')).toBe(true)
+    })
+
+    it.each([
+        ['an unknown state', 'unknown'],
+        ['no state', null],
+    ])('stays on the callback page for %s', async (_, state) => {
+        sessionStorage.setItem('localauth0_token.return.other', '/workspace/project-1')
+        const hash = `#access_token=${makeToken(3600)}${state ? `&state=${state}` : ''}`
+        window.history.replaceState({}, '', `/${hash}`)
+
+        await createLocalAuthService(config, createAuthStore()).init()
+
+        expect(`${window.location.pathname}${window.location.hash}`).toBe('/')
+    })
+
+    it('never restores a return path on another origin', async () => {
+        sessionStorage.setItem('localauth0_token.return.abc', '//evil.test/workspace')
+        window.history.replaceState({}, '', `/#access_token=${makeToken(3600)}&state=abc`)
+
+        await createLocalAuthService(config, createAuthStore()).init()
+
+        expect(window.location.href).toBe(`${window.location.origin}/`)
+        expect(sessionStorage.getItem('localauth0_token.return.abc')).toBeNull()
+    })
+
+    it('leaves a refreshed token for the parent page inside the silent refresh frame', async () => {
+        const token = makeToken(3600)
+        window.history.replaceState({}, '', `/#access_token=${token}`)
+        vi.spyOn(window, 'name', 'get').mockReturnValue(SILENT_REFRESH_FRAME_NAME)
+        vi.spyOn(window, 'parent', 'get').mockReturnValue({} as Window)
+        const store = createAuthStore()
+        const initialized = createLocalAuthService(config, store).init()
+        const pending = Symbol('pending')
+        const result = await Promise.race([
+            initialized,
+            new Promise(resolve => setTimeout(() => resolve(pending), 0)),
+        ])
+
+        expect(result).toBe(pending)
+        expect(window.location.hash).toBe(`#access_token=${token}`)
+        expect(localStorage.getItem('localauth0_token')).toBeNull()
+        expect(store.getMeta('isAuthenticated')).toBe(false)
+    })
+
+    it('waits through the blank page and the LocalAuth0 page until the frame reaches the callback', async () => {
+        const listeners = new Map<string, () => void>()
+        vi.spyOn(HTMLIFrameElement.prototype, 'addEventListener').mockImplementation((type: string, listener: unknown) => void listeners.set(type, listener as () => void))
+        const append = vi.spyOn(document.body, 'appendChild')
+        const service = createLocalAuthService(config, createAuthStore())
+        localStorage.setItem('localauth0_token', makeToken(3600))
+        const refreshed = service.getTokenSilently(true)
+        const frame = append.mock.calls[0][0] as HTMLIFrameElement
+        let location: unknown = new URL('about:blank')
+        Object.defineProperty(frame, 'contentWindow', {
+            get: () => ({
+                get location() {
+                    if (!location)
+                        throw new DOMException('Blocked a frame with a different origin', 'SecurityError')
+
+                    return location
+                },
+            }),
+        })
+        const load = listeners.get('load')!
+
+        load()
+        location = undefined
+        load()
+        expect(frame.isConnected).toBe(true)
+        location = new URL(`${config.redirectUri}/#access_token=fresh-token&token_type=Bearer`)
+        load()
+
+        await expect(refreshed).resolves.toBe('fresh-token')
+        expect(localStorage.getItem('localauth0_token')).toBe('fresh-token')
+        expect(frame.isConnected).toBe(false)
+    })
+
+    it('names the silent refresh frame so the application inside it stays idle', async () => {
+        vi.useFakeTimers()
+
+        try {
+            const service = createLocalAuthService(config, createAuthStore())
+            localStorage.setItem('localauth0_token', makeToken(3600))
+            const append = vi.spyOn(document.body, 'appendChild')
+            const refreshed = service.getTokenSilently(true)
+
+            expect((append.mock.calls[0]?.[0] as HTMLIFrameElement | undefined)?.name).toBe(SILENT_REFRESH_FRAME_NAME)
+            await vi.advanceTimersByTimeAsync(SILENT_REFRESH_TIMEOUT_MS)
+            await refreshed
         } finally {
             vi.useRealTimers()
         }
