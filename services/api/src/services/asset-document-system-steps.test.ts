@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type TransactOperation } from '@lixpi/dynamodb-service'
 import { type Asset } from '@lixpi/constants'
-import { DOCUMENT_TYPE, HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
+import { createCoreDocumentKindRegistry, DOCUMENT_TYPE, HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
 import NatsService from '@lixpi/nats-service'
 import AssetDocumentService from './asset-document-service.ts'
 
@@ -81,7 +81,8 @@ afterEach(() => vi.restoreAllMocks())
 describe('system document step authority', () => {
     it('persists actual step-count versions through the caller transaction with the Asset revision fence', async () => {
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: initial,
             version: 7,
         })
@@ -123,7 +124,8 @@ describe('system document step authority', () => {
 
     it('does not publish a snapshot after the owner transaction rejects its fence', async () => {
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: initial,
             version: 7,
         })

@@ -1,0 +1,278 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@import "@lixpi/ui-primitives/styles/transitions";
+@import "@lixpi/ui-kit/styles/tokens";
+
+// Selection highlight color (same as bubble menu active state)
+$imageSelectionColor: #{themeScope.token("components-editor-image-image-selection-color", themePalette.$roles)};
+
+// =============================================================================
+// IMAGE WRAPPER (FIGURE)
+// =============================================================================
+
+.pm-image-wrapper {
+    display: block;
+    position: relative;
+    margin: 1rem 0;
+    max-width: 100%;
+
+    // Default centered alignment
+    margin-left: auto;
+    margin-right: auto;
+
+    img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+    }
+
+    // Resizing state
+    &.is-resizing {
+        user-select: none;
+
+        img {
+            pointer-events: none;
+        }
+    }
+
+    &.is-partial {
+        .pm-image-generating-placeholder {
+            display: flex;
+        }
+    }
+}
+
+.pm-image-media-frame {
+    position: relative;
+    max-width: 100%;
+}
+
+.pm-image-generating-placeholder {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-height: 84px;
+    aspect-ratio: 1;
+    border: #{themeScope.token("components-editor-image-generating-placeholder-base-border", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-editor-image-generating-placeholder-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-editor-image-generating-placeholder-base-background", themePalette.$roles)};
+    box-shadow: #{themeScope.token("components-editor-image-generating-placeholder-base-shadow", themePalette.$roles)};
+}
+
+.pm-image-generating-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: #{themeScope.token("components-editor-image-generating-dot-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-editor-image-generating-dot-base-background", themePalette.$roles)};
+    animation: pm-image-generating-bounce 1s ease-in-out infinite;
+
+    &:nth-child(2) {
+        animation-delay: 0.12s;
+    }
+
+    &:nth-child(3) {
+        animation-delay: 0.24s;
+    }
+}
+
+@keyframes pm-image-generating-bounce {
+    0%, 80%, 100% {
+        transform: translateY(0);
+        opacity: 0.45;
+    }
+
+    40% {
+        transform: translateY(-3px);
+        opacity: 1;
+    }
+}
+
+// =============================================================================
+// ALIGNMENT
+// =============================================================================
+
+.pm-image-align-left {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+.pm-image-align-center {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.pm-image-align-right {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+// =============================================================================
+// TEXT WRAP (using shape-outside for modern text flow)
+// =============================================================================
+
+.pm-image-wrap-none {
+    // No wrapping - default block behavior
+    clear: both;
+}
+
+.pm-image-wrap-left {
+    float: left;
+    margin-right: 1.5rem;
+    margin-bottom: 0.5rem;
+    margin-left: 0;
+    clear: left;
+    position: relative;
+    z-index: 1;
+
+    // Use shape-outside for smoother text flow
+    shape-outside: margin-box;
+    shape-margin: 0.5rem;
+}
+
+.pm-image-wrap-right {
+    float: right;
+    margin-left: 1.5rem;
+    margin-bottom: 0.5rem;
+    margin-right: 0;
+    clear: right;
+    position: relative;
+    z-index: 1;
+
+    // Use shape-outside for smoother text flow
+    shape-outside: margin-box;
+    shape-margin: 0.5rem;
+}
+
+// Clear floats after wrapped images
+.ProseMirror {
+    &::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+
+    // Clear float after non-wrapped block elements
+    > p:not(:first-child),
+    > h1,
+    > h2,
+    > h3,
+    > h4,
+    > h5,
+    > h6,
+    > blockquote,
+    > pre,
+    > .pm-image-wrap-none {
+        clear: both;
+    }
+}
+
+// =============================================================================
+// RESIZE HANDLES
+// =============================================================================
+
+.pm-image-resize-handle {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    opacity: 0;
+    transition:
+        hoverTransition(opacity, 0.2s),
+        hoverTransition(transform, 0.15s);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    background: transparent;
+
+    svg {
+        width: 20px;
+        height: 20px;
+        fill: $steelBlue !important;
+        transition: hoverTransition(transform, 0.15s);
+    }
+
+    &:hover,
+    &.is-dragging {
+        opacity: 1;
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: scale(1.2);
+    }
+}
+
+// Corner positions - outside image boundaries
+.pm-image-resize-top-left {
+    top: -6px;
+    left: -6px;
+    cursor: nwse-resize;
+
+    svg {
+        transform: rotate(180deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(180deg) scale(1.2);
+    }
+}
+
+.pm-image-resize-top-right {
+    top: -6px;
+    right: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(-90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(-90deg) scale(1.2);
+    }
+}
+
+.pm-image-resize-bottom-left {
+    bottom: -6px;
+    left: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(90deg) scale(1.2);
+    }
+}
+
+.pm-image-resize-bottom-right {
+    bottom: -6px;
+    right: -6px;
+    cursor: nwse-resize;
+}
+.image-error-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 60px;
+    color: #888;
+    font-size: 12px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+
+    svg {
+        width: 48px;
+        height: 48px;
+    }
+}

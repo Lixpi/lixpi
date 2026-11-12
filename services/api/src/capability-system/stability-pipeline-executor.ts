@@ -44,6 +44,7 @@ import {
     StabilityBedrockCall,
     type StabilityBedrockOutput,
 } from '../llm/providers/stability-bedrock-call.ts'
+import { apiDocumentKinds } from '../prosemirror/document-kinds.ts'
 
 export class StabilityPipelineExecutor {
     constructor(
@@ -460,7 +461,8 @@ export class StabilityPipelineExecutor {
             },
         )
         new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_PROVENANCE,
+            registry: apiDocumentKinds(),
+            kindId: DOCUMENT_TYPE.ASSET_PROVENANCE,
             doc: document,
             version: 1,
         })

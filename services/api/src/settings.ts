@@ -9,7 +9,12 @@ import {
     type WorkspacePersistenceSettings,
 } from '@lixpi/constants'
 
+import {
+    type NavigationPersistenceSettings,
+} from './services/workspace-navigation/workspace-navigation-limits.ts'
+
 export type ApiSettings = {
+    navigationPersistence: NavigationPersistenceSettings
     aiModels: {
         defaultReasoningModelId: AiModelId
         defaultImageModelId: AiModelId
@@ -35,11 +40,19 @@ export type ApiSettings = {
     mediaGenerationCanvasProjection: MediaGenerationLayoutSettings
     // Shared collision settings used by API-owned generated-media geometry.
     workspaceCollision: WorkspaceCollisionSettings
-    // Universal debounce for settled workspace persistence authored by the API.
+    // Shared persistence cadence; individual transports choose when to use it.
     workspacePersistence: WorkspacePersistenceSettings
 }
 
 export const settings: ApiSettings = {
+    navigationPersistence: {
+        requestIntervalMs: workspacePersistenceSettings.debounceMs,
+        requestBurst: 6,
+        maxDocumentBytes: 512 * 1024,
+        maxNodes: 4096,
+        maxDepth: 64,
+        maxWorkspaceChanges: 128,
+    },
     aiModels: {
         defaultReasoningModelId: 'Anthropic:claude-haiku-4-5',
         defaultImageModelId: 'Stability:sd3.5-large',

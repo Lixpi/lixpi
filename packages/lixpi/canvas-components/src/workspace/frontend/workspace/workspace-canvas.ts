@@ -2357,6 +2357,7 @@ export class LixpiWorkspaceCanvas {
                         contextPreview: this.context.getAiUserMessagePreviewRenderer(),
                     }),
                 },
+                this.host.workspace.openConversation,
             )
 
             if (composer)

@@ -7,9 +7,11 @@ import { EditorState } from 'prosemirror-state'
 
 import { applyStreamingBlockContentToTransaction, applyStreamingInlineContentToTransaction, buildStreamingSegmentSteps, buildStreamingSegmentTransaction, createStreamingMarks } from './stream-assembly.ts'
 import {
-    createProseMirrorSchema,
+    createCoreDocumentKindRegistry,
     DOCUMENT_TYPE,
-} from './schema-builder.ts'
+} from './document-kinds.ts'
+
+const coreRegistry = createCoreDocumentKindRegistry()
 
 type SegmentTargetInfo = {
     endOfNodePos: number
@@ -18,9 +20,9 @@ type SegmentTargetInfo = {
 
 const createDocumentState = (): {
     state: import('prosemirror-state').EditorState
-    schema: ReturnType<typeof createProseMirrorSchema>
+    schema: ReturnType<typeof coreRegistry.schema>
 } => {
-    const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONTENT)
+    const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONTENT)
     const doc = schema.nodes.doc.create(null, [
         schema.nodes.documentTitle.create(null, schema.text('Document Title')),
         schema.nodes.paragraph.create(null, schema.text('seed')),

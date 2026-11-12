@@ -50,6 +50,38 @@ There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partiti
 
 Capability-package storage uses `Capabilities`, `Capabilities-Meta`, `Capabilities-Access-List`, and `Capability-Runs` alongside the Asset/Blob tables. Source-registered top-level Capability modules remain authoritative in the module registry; their contained packages carry `parentModuleId` plus `catalogExposure: 'module-internal'`. Workspaces include `organizationId`; every Asset or organization-owned Capability package created from a workspace uses that organization rather than selecting an arbitrary organization from the user account.
 
+## Workspace tree
+
+Each organization retains a canonical ProseMirror navigation document. Workspace parentage is derived from the nearest enclosing workspace item; ordinary groups remain visual content. [Workspace Tree](../canvas/WORKSPACE-TREE.md) describes editing, authorization and projection rules.
+
+| Table | Partition key | Sort key | Indexes |
+|---|---|---|---|
+| `Workspace-Tree` | `pk`, layouts below | `sk`, layouts below | none |
+| `Workspace-Tree-Locks` | `organizationId` | none | none |
+| `Workspaces-Access-List` | `userId` | `workspaceId` | LSI `createdAt`, LSI `updatedAt`, GSI `workspaceId-userId` (projection ALL) |
+
+`Workspace-Tree` holds five record shapes:
+
+| Record | Partition | Sort key | Value |
+|---|---|---|---|
+| Actual-child index | `ORG#<org>#PARENT#<parent or ROOT>` | `<position>#<entryId>` | Workspace or heading projection |
+| Canonical head | `ORG#<org>#NAVIGATION` | `HEAD` | `revision`, `revisionId`, `schemaVersion: 1` |
+| Mutation receipt | `ORG#<org>#NAVIGATION` | `MUTATION#<mutationId>` | Published revision reference, user id and SHA-256 request hash |
+| Authenticated navigation write admission | `USER#<userId>#NAVIGATION` | `WRITE_ADMISSION` | Next-admission timestamp, shared across organizations and API replicas |
+| Immutable document chunk | `ORG#<org>#NAVIGATION#REVISION#<revisionId>` | Eight-digit chunk ordinal | Total chunk count and text |
+
+Document JSON is split into 32,000 UTF-16-character chunks, keeping even a worst-case UTF-8 chunk below the DynamoDB item limit. The repository writes chunks in batches of sixteen. A head points only to a complete revision. Historical revisions and unreferenced staged chunks are retained; automatic garbage collection is not implemented.
+
+Each workspace's `Workspaces-Meta` row stores `parentWorkspaceId`, `ancestorIds`, `position`, `note`, `tagIds` and, during deletion, `deletingAt`. These are materialized domain records used for hierarchy queries, access resolution and agent write conditions. `Workspaces-Access-List` is the only grant store. Its reverse index finds users with a grant on a workspace or an ancestor for conversation event delivery.
+
+The first authorized navigation read or domain mutation initializes an empty revision zero under the organization lock. The `initializeNavigation` operation records an identified empty paragraph before a new domain mutation writes workspace rows. A missing head with existing root hierarchy rows raises `WORKSPACE_NAVIGATION_REVISION_MISSING`; it does not convert or backfill data. This implementation has no existing-data migration path.
+
+The organization lock records document saves, domain mutations, initialization, moves, heading-section moves, rebalances and deletes. A save records its base and target revision references, request hash and exact created/deleted workspace ids. It stages immutable chunks before applying hierarchy changes, then publishes the head and idempotency receipt last. Existing domain APIs update the canonical document through the same locked path. An unchanged document without identity actions records only its mutation receipt, atomically checking the head and absence of an organization lock; it does not create another revision. Receipt retries reauthorize current access and return the current authorized projection, rather than replaying a historical document.
+
+Readers check the head before and after reading domain records and refuse a held organization lock. This prevents a partially applied move from becoming an authorized mixed ancestor chain. The lock holder renews while working; an expired operation is resumed by the next request or startup sweep. Cleanup remains idempotent so a resumed explicit deletion can finish after an interruption.
+
+Navigation write admission reuses one bounded record per authenticated user. Conditional account-fenced writes apply the API-configured burst and replenishment interval across replicas, with bounded contention retries. The record refills after inactivity without TTL cleanup. This uses the existing table and requires no schema migration. Request bounds and admission defaults are documented in the [API README](../../services/api/README.md).
+
 ## Conversation and media execution state
 
 `Agent-Conversations` uses organization-scoped conversation, workspace, Artifact, render, and source-probe partitions. Conversation membership lists do not scan the table. Accepted messages, idempotency receipts, event sequence allocation, and dispatch intent commit together. The conversation Asset holds the projected rich transcript; execution rows remain authoritative for accepted commands and recovery.

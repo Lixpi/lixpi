@@ -13,6 +13,7 @@ $bubbleMenuShadow: theme-color("shadow-control");
 .bubble-menu {
     position: absolute;
     z-index: 100;
+    color: $bubbleMenuFg;
     visibility: hidden;
     opacity: 0;
     --bubble-menu-visual-scale: 1;

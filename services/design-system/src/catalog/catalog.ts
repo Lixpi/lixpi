@@ -22,6 +22,13 @@ export type CanvasExample = {
 
 const coreExamples: readonly CanvasExample[] = [
     {
+        id: 'nested-list',
+        title: 'Nested list navigation',
+        group: 'Reference',
+        summary: 'The shared ProseMirror nested-list editor with plain and custom items, tags, protected content, drag movement, and Save and Cancel in an in-memory fixture.',
+        source: '@lixpi/prosemirror/frontend/nested-list',
+    },
+    {
         id: "icons",
         title: "Icons",
         group: "Reference",
@@ -179,6 +186,14 @@ export const mountCanvasExample = async (
     host: HTMLElement,
     id: string,
 ): Promise<CanvasExampleInstance> => {
+    if (id === 'nested-list') {
+        const { NestedListExample } = await import('../examples/nested-list-example.ts')
+
+        return ownExample(
+            new NestedListExample(host),
+        )
+    }
+
     if (id === 'icons') {
         const { IconsExample } = await import('../examples/icons-example.ts')
 

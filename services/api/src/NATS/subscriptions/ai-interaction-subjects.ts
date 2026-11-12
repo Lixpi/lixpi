@@ -46,6 +46,7 @@ import {
     type WorkspaceContextSnapshot,
     type WorkspaceEdge,
 } from '@lixpi/constants'
+import { canEditWorkspace } from '../../services/workspace-navigation/access.ts'
 import {
     ACTION_TIMELINE_ARTIFACT_TYPE_ID,
     ACTION_TIMELINE_TOOL_ID,
@@ -1062,7 +1063,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                 if (workspace.deletingAt)
                     return rejectSend('WORKSPACE_DELETING')
 
-                if (!workspace.accessList.some(entry => entry.userId === userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor')))
+                if (!canEditWorkspace(workspace.accessLevel))
                     return rejectSend('PERMISSION_DENIED')
 
                 const organization = await Organization.getOrganization({
@@ -2426,9 +2427,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
             if ('error' in workspace)
                 return workspace
 
-            if (!workspace.accessList.some(
-                entry => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'),
-            ))
+            if (!canEditWorkspace(workspace.accessLevel))
                 return { error: 'PERMISSION_DENIED' }
 
             const organization = await Organization.getOrganization({

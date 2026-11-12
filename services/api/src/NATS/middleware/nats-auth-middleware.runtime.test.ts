@@ -126,11 +126,11 @@ describe.runIf(process.env.LIXPI_NATS_RUNTIME_TEST === 'true')('local NATS authe
             expect(Array.isArray(user.organizations)).toBe(true)
             expect(user.organizations.length).toBeGreaterThan(0)
 
-            const workspaces = await service.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_USER_WORKSPACES, { token })
-            expect(Array.isArray(workspaces)).toBe(true)
+            const trees = await service.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_USER_WORKSPACE_TREE, { token })
+            expect(Array.isArray(trees.organizations)).toBe(true)
 
             const name = `Local startup verification ${randomUUID()}`
-            const workspace = await service.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.CREATE_WORKSPACE, {
+            const { workspace } = await service.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.CREATE_WORKSPACE, {
                 token,
                 name,
             })
@@ -149,7 +149,7 @@ describe.runIf(process.env.LIXPI_NATS_RUNTIME_TEST === 'true')('local NATS authe
                     workspaceId: workspace.workspaceId,
                     name: `${name} updated`,
                 })
-                expect(updated.success).toBe(true)
+                expect(updated.tree.organizationId).toBe(user.organizations[0])
                 const reloaded = await service.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE, {
                     token,
                     workspaceId: workspace.workspaceId,
@@ -160,7 +160,7 @@ describe.runIf(process.env.LIXPI_NATS_RUNTIME_TEST === 'true')('local NATS authe
                     token,
                     workspaceId: workspace.workspaceId,
                 })
-                expect(deleted.success).toBe(true)
+                expect(deleted.deletedWorkspaceIds).toEqual([workspace.workspaceId])
             }
         } finally {
             await service.disconnect()

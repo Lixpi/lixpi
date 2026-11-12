@@ -1,0 +1,1015 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+// AI Chat Thread Styles
+@import "./message-bubbles";
+@import "./chat-animations";
+@import "../prompt-reference/prompt-reference-colors";
+@import "@lixpi/ui-primitives/styles/transitions";
+
+$aiChatThreadMinHeight: 50px;
+$aiChatThreadMediaMaxWidth: 500px;
+
+@mixin ai-generation-prompt-surface {
+    margin: 0;
+    padding: 0.45rem 0.65rem;
+    border-left: #{themeScope.token("components-chat-thread-generation-prompt-base-border-left", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-chat-thread-generation-prompt-base-border-radius", themePalette.$roles)};
+    background: #{themeScope.token("components-chat-thread-generation-prompt-base-background", themePalette.$roles)};
+    color: color-mix(in srgb, var(--canvas-lixpi-chat-strong-text, #{themeScope.token("components-chat-thread-strong-foreground", themePalette.$roles)}) 82%, transparent);
+    font-family: inherit;
+    font-size: #{themeScope.token("components-chat-thread-generation-prompt-base-font-size", themePalette.$roles)};
+    font-style: #{themeScope.token("components-chat-thread-generation-prompt-base-font-style", themePalette.$roles)};
+    line-height: #{themeScope.token("components-chat-thread-generation-prompt-base-line-height", themePalette.$roles)};
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    opacity: 1;
+}
+
+// User message bubble colors
+$userMessageBubbleColor: var(--canvas-lixpi-chat-user-background, #{themeScope.token("components-chat-thread-user-message-bubble-color", themePalette.$roles)});
+$userMessageBubbleSolidColor: var(--canvas-lixpi-chat-user-tail, #{themeScope.token("components-chat-thread-user-message-bubble-solid-color", themePalette.$roles)}); // Solid fallback for the tail
+$userMessageTextColor: var(--canvas-lixpi-chat-user-text, #{themeScope.token("components-chat-thread-user-message-text-color", themePalette.$roles)});
+
+// Names the workspace agent that wrote a delegated instruction.
+.ai-user-message-author {
+    margin-left: auto;
+    margin-right: 1rem;
+    margin-bottom: 4px;
+    max-width: 85%;
+    text-align: right;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.ai-user-message-author[hidden] {
+    display: none;
+}
+
+.ai-user-message-reference-previews {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: 85%;
+    margin-left: auto;
+    margin-right: 1rem;
+    margin-bottom: 8px;
+}
+
+.ai-user-message-reference-previews[hidden] {
+    display: none;
+}
+
+.ai-user-message-reference-previews .context-preview-main {
+    flex: 0 0 58px;
+    width: 58px;
+    height: 42px;
+}
+
+.ai-generated-video-controls-host {
+    border-radius: var(--video-controls-host-border-radius, #{themeScope.token("components-chat-thread-generated-video-controls-host-base-border-radius", themePalette.$roles)});
+    filter: var(--video-controls-host-drop-shadow, drop-shadow(0 12px 30px color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 30%, transparent)));
+    backdrop-filter: var(--video-controls-host-backdrop-filter, #{themeScope.token("components-chat-thread-generated-video-controls-host-base-backdrop-filter", themePalette.$roles)});
+    -webkit-backdrop-filter: var(--video-controls-host-backdrop-filter, #{themeScope.token("components-chat-thread-generated-video-controls-host-base-webkit-backdrop-filter", themePalette.$roles)});
+}
+
+.ai-generated-video-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+}
+
+.ai-generated-video-container {
+    position: relative;
+    width: 100%;
+    background: transparent;
+    border-radius: #{themeScope.token("components-chat-thread-generated-video-container-base-border-radius", themePalette.$roles)};
+    overflow: hidden;
+}
+
+.ai-generated-video-content {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: transparent;
+    transform: scale(1.01);
+}
+
+.ai-generated-video-placeholder,
+.video-error-placeholder {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.75rem;
+    background: #{themeScope.token("components-chat-thread-generated-video-placeholder-base-background", themePalette.$roles)};
+    color: color-mix(in srgb, var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)}) 62%, transparent);
+    font-size: #{themeScope.token("components-chat-thread-generated-video-placeholder-base-font-size", themePalette.$roles)};
+    line-height: #{themeScope.token("components-chat-thread-generated-video-placeholder-base-line-height", themePalette.$roles)};
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.ai-generated-video-placeholder.is-active,
+.video-error-placeholder {
+    display: flex;
+}
+
+.video-error-placeholder svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    fill: currentColor;
+}
+
+.ai-generated-video-controls-svg {
+    display: block;
+    overflow: visible;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .ai-generated-video-controls-host {
+        background: var(--video-controls-host-reduced-transparency-background, #{themeScope.token("components-chat-thread-generated-video-controls-host-opaque-background", themePalette.$roles)});
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}
+
+// ========== AI CHAT THREAD WRAPPER ==========
+.ai-chat-thread-wrapper {
+    position: relative;
+    margin-top: 2rem;
+    min-height: $aiChatThreadMinHeight;
+
+    // ===== THREAD CONTENT =====
+    .ai-chat-thread-content {
+        position: relative;
+    }
+
+    .ai-chat-thread-content .ai-generated-media-node {
+        width: 100% !important;
+        max-width: $aiChatThreadMediaMaxWidth;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .ai-chat-thread-content .ai-generated-media-node .pm-image-media-frame,
+    .ai-chat-thread-content .ai-generated-media-node img,
+    .ai-chat-thread-content .ai-generated-video-container {
+        width: 100%;
+    }
+
+    // ===== USER MESSAGE (SENT) =====
+    .ai-user-message-wrapper {
+        display: block;
+        margin: 0.6rem 0;
+    }
+
+    .ai-user-message {
+        @include prompt-reference-chip-on-dark-surface;
+
+        display: table;
+        max-width: 85%;
+        margin-left: auto;
+        margin-right: 1rem;
+        padding: 0.6rem 1rem;
+        background: $userMessageBubbleColor;
+        color: $userMessageTextColor;
+        border-radius: #{themeScope.token("components-chat-thread-user-message-base-border-radius", themePalette.$roles)};
+        box-shadow: 0 1px 2px color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 10%, transparent);
+        line-height: #{themeScope.token("components-chat-thread-user-message-base-line-height", themePalette.$roles)};
+        word-wrap: break-word;
+
+        @include speechBubbleTail(
+            (
+                position: "right",
+                bubbleColor: $userMessageBubbleSolidColor
+            )
+        );
+    }
+
+    .ai-user-message-content {
+        > *:first-child {
+            margin-top: 0;
+        }
+        > *:last-child {
+            margin-bottom: 0;
+        }
+    }
+
+    // ===== SUBMIT BUTTON =====
+    .ai-submit-button {
+        position: relative; // ensure absolutely positioned state layers anchor here
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px; // prevent flex shrink causing horizontal shift
+        border-radius: #{themeScope.token("components-chat-thread-submit-button-base-border-radius", themePalette.$roles)};
+        opacity: 0.8;
+        transition: hoverTransition(all, 400ms);
+        cursor: pointer;
+        box-sizing: border-box;
+
+        // Button state containers
+        .button-default,
+        .button-hover {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            transition: hoverTransition(all, 250ms);
+        }
+
+        // Default state (always visible)
+        .button-default {
+            opacity: 1;
+            position: relative;
+            z-index: 1;
+        }
+
+        // Hover state overlay
+        .button-hover {
+            position: absolute;
+            z-index: 2;
+            inset: 0; // shorthand for top/left/right/bottom 0
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        // Icon styles
+        .send-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+
+            svg {
+                width: 20px;
+                height: 20px;
+                fill: #{themeScope.token("components-chat-thread-send-icon-base-fill", themePalette.$roles)};
+                transition: hoverTransition(fill, 150ms);
+            }
+        }
+    }
+
+    // ===== IMAGE MODEL CONTROLS =====
+    .image-model-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    // ===== INTERACTION STATES =====
+
+    // Submit button hover
+    .ai-submit-button:hover {
+        opacity: 1;
+        // Removed border-color to satisfy requirement: no visible border on hover
+        // Keep transition for opacity only to avoid layout shift
+        transition: hoverTransition(opacity, 250ms);
+
+        .button-default {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .button-hover {
+            opacity: 1;
+            pointer-events: auto;
+        }
+    }
+
+    // Thread focus state
+    &:focus-within .ai-submit-button {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+
+$aiResponseMessageEmptyNodeMinHeight: 1.5rem;
+
+// ========== AI RESPONSE MESSAGE WRAPPER ==========
+.ai-response-message-wrapper {
+    margin: 0;
+    padding: 0.8rem 0 0.7rem;
+    position: relative;
+
+    .ai-generated-media-run-pill {
+        display: inline-flex;
+        align-items: center;
+        max-width: 12rem;
+        min-height: 1.25rem;
+        padding: 0.15rem 0.45rem;
+        border: 1px solid color-mix(in srgb, var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)}) 12%, transparent);
+        border-radius: #{themeScope.token("components-chat-thread-generated-media-run-pill-base-border-radius", themePalette.$roles)};
+        background: #{themeScope.token("components-chat-thread-generated-media-run-pill-base-background", themePalette.$roles)};
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)}) 62%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-generated-media-run-pill-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-generated-media-run-pill-base-font-weight", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-generated-media-run-pill-base-line-height", themePalette.$roles)};
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-sizing: border-box;
+    }
+
+    // ===== AI RESPONSE MESSAGE =====
+    .ai-response-message {
+        position: relative;
+        z-index: 2;
+        margin: 0;
+        display: block;
+        padding: 0;
+        width: 100%;
+
+        &.is-empty {
+            min-height: $aiResponseMessageEmptyNodeMinHeight;
+            padding-top: 0rem;
+        }
+
+        .ai-response-loading-spinner {
+            display: none;
+            margin: 0.75rem 1rem 0.25rem 1rem;
+        }
+
+        &.is-waiting .ai-response-loading-spinner {
+            display: block;
+        }
+
+        &.is-waiting .ai-response-message-content {
+            padding-top: 0;
+            padding-bottom: 0.35rem;
+        }
+
+        // Message content
+        .ai-response-message-content {
+            // padding: 0.5rem 1rem;
+            color: var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)});
+            word-wrap: break-word;
+            position: relative;
+
+            &.node-render-animation {
+                animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
+            }
+
+            h1, h2, h3, h4, h5, h6 {
+                &:first-child {
+                    margin-top: 0;
+                }
+            }
+
+            .ai-lineage-event {
+                display: flex;
+                align-items: center;
+                gap: 0.38rem;
+                max-width: 100%;
+                margin: 0 0 0.35rem;
+                color: var(--canvas-lixpi-badge-provider, #{themeScope.token("components-chat-thread-lineage-event-base-foreground", themePalette.$roles)});
+                font-size: #{themeScope.token("components-chat-thread-lineage-event-base-font-size", themePalette.$roles)};
+                font-weight: #{themeScope.token("components-chat-thread-lineage-event-base-font-weight", themePalette.$roles)};
+                line-height: #{themeScope.token("components-chat-thread-lineage-event-base-line-height", themePalette.$roles)};
+            }
+
+            .ai-lineage-event-icon {
+                --ai-lineage-event-icon-size: 1.25rem;
+                --ai-lineage-event-glyph-size: calc(var(--ai-lineage-event-icon-size) * 0.4875);
+
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: var(--ai-lineage-event-icon-size);
+                height: var(--ai-lineage-event-icon-size);
+                flex: 0 0 var(--ai-lineage-event-icon-size);
+                border: 1px solid var(--workspace-branch-origin-border-color, #{themeScope.token("components-chat-thread-lineage-event-icon-base-border", themePalette.$roles)});
+                border-radius: #{themeScope.token("components-chat-thread-lineage-event-icon-base-border-radius", themePalette.$roles)};
+                background: var(--workspace-branch-origin-background-color, #{themeScope.token("components-chat-thread-lineage-event-icon-base-background", themePalette.$roles)});
+                color: var(--workspace-branch-origin-icon-color, #{themeScope.token("components-chat-thread-lineage-event-icon-base-foreground", themePalette.$roles)});
+                box-shadow: none;
+            }
+
+            // Match the canvas branch marker compensation: the branch SVG paths
+            // are not optically centered in their 24px viewBox, so each shape
+            // needs its own small right/down offset after scaling.
+            .ai-lineage-event-branch-origin .ai-lineage-event-icon svg {
+                transform: translate(
+                    calc(var(--ai-lineage-event-icon-size) * 0.0208),
+                    calc(var(--ai-lineage-event-icon-size) * 0.0208)
+                );
+            }
+
+            .ai-lineage-event-branch-fork .ai-lineage-event-icon svg {
+                transform: translate(
+                    calc(var(--ai-lineage-event-icon-size) * 0.03125),
+                    calc(var(--ai-lineage-event-icon-size) * 0.0208)
+                );
+            }
+
+            .ai-lineage-event-label {
+                min-width: 0;
+                overflow-wrap: anywhere;
+            }
+
+            // Per-reasoning-model slice of a multi-model response. Consecutive
+            // sections are separated by a hairline so each model's reply + its
+            // generation trace + its media read as one grouped block.
+            .ai-reasoning-section {
+                position: relative;
+            }
+        }
+    }
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-lineage-event[hidden] {
+    display: none;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-lineage-event-icon svg {
+    display: block;
+    width: var(--ai-lineage-event-glyph-size);
+    height: var(--ai-lineage-event-glyph-size);
+    fill: currentColor;
+    transform-origin: center;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section + .ai-reasoning-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid color-mix(in srgb, var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)}) 8%, transparent);
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section-lineage-markers {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    margin: 0 0 0.55rem;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section-lineage-markers[hidden] {
+    display: none;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section .ai-lineage-event {
+    margin: 0;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section-spinner {
+    display: none;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section.is-empty .ai-reasoning-section-spinner.is-active {
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0.25rem 0;
+    border: 2px solid color-mix(in srgb, var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)}) 15%, transparent);
+    border-top-color: color-mix(in srgb, var(--canvas-lixpi-chat-response-text, #{themeScope.token("components-chat-thread-response-foreground", themePalette.$roles)}) 55.00000000000001%, transparent);
+    border-radius: #{themeScope.token("components-chat-thread-reasoning-section-spinner-selected-border-radius", themePalette.$roles)};
+    animation: spin 0.8s linear infinite;
+}
+
+// ========== AI GENERATED IMAGE ==========
+.ai-generated-image-wrapper {
+    margin: 1rem 0;
+
+    .ai-generated-image-container {
+        position: relative;
+        // background: color-mix(in srgb, var(--canvas-text, #42494f) 3%, transparent);
+        border-radius: #{themeScope.token("components-chat-thread-generated-image-container-base-border-radius", themePalette.$roles)};
+        overflow: hidden;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+
+        &.is-partial {
+            .ai-generated-image-content {
+                filter: #{themeScope.token("components-chat-thread-generated-image-content-base-filter", themePalette.$roles)};
+                opacity: 0.7;
+            }
+        }
+    }
+
+    .ai-generated-image-spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        z-index: 2;
+
+        &.is-active {
+            display: flex;
+        }
+
+        .spinner-ring {
+            width: 48px;
+            height: 48px;
+            border: 3px solid color-mix(in srgb, #{themeScope.token("components-chat-thread-spinner-ring-base-border", themePalette.$roles)} 10%, transparent);
+            border-top-color: #{themeScope.token("components-chat-thread-spinner-ring-base-border-top-color", themePalette.$roles)};
+            border-radius: #{themeScope.token("components-chat-thread-spinner-ring-base-border-radius", themePalette.$roles)};
+            animation: spin 1s linear infinite;
+        }
+
+        .spinner-text {
+            font-size: #{themeScope.token("components-chat-thread-spinner-text-base-font-size", themePalette.$roles)};
+            color: color-mix(in srgb, #{themeScope.token("components-chat-thread-spinner-text-base-foreground", themePalette.$roles)} 60%, transparent);
+        }
+    }
+
+    .ai-generated-image-content {
+        max-width: 100%;
+        max-height: 512px;
+        object-fit: contain;
+        display: none;
+        transition:
+            standardTransition(filter, 0.3s),
+            standardTransition(opacity, 0.3s);
+
+        &.is-visible {
+            display: block;
+        }
+    }
+
+    .ai-generated-image-actions {
+        display: none;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: linear-gradient(transparent, color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 50%, transparent));
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        justify-content: center;
+
+        &.is-visible {
+            display: flex;
+        }
+
+        button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: #{themeScope.token("components-chat-thread-generated-image-actions-button-base-border-radius", themePalette.$roles)};
+            font-size: #{themeScope.token("components-chat-thread-generated-image-actions-button-base-font-size", themePalette.$roles)};
+            font-weight: #{themeScope.token("components-chat-thread-generated-image-actions-button-base-font-weight", themePalette.$roles)};
+            cursor: pointer;
+            transition: hoverTransition(all, 0.2s);
+
+            svg {
+                flex-shrink: 0;
+            }
+        }
+
+        .add-to-canvas-btn {
+            background: #{themeScope.token("components-chat-thread-add-to-canvas-btn-base-background", themePalette.$roles)};
+            color: #{themeScope.token("components-chat-thread-add-to-canvas-btn-base-foreground", themePalette.$roles)};
+
+            &:hover {
+                background: #{themeScope.token("components-chat-thread-add-to-canvas-btn-hover-background", themePalette.$roles)};
+                transform: translateY(-1px);
+            }
+        }
+
+        .edit-in-thread-btn {
+            background: #{themeScope.token("components-chat-thread-edit-in-thread-btn-base-background", themePalette.$roles)};
+            color: #{themeScope.token("components-chat-thread-edit-in-thread-btn-base-foreground", themePalette.$roles)};
+            backdrop-filter: #{themeScope.token("components-chat-thread-edit-in-thread-btn-base-backdrop-filter", themePalette.$roles)};
+
+            &:hover {
+                background: #{themeScope.token("components-chat-thread-edit-in-thread-btn-hover-background", themePalette.$roles)};
+                transform: translateY(-1px);
+            }
+        }
+    }
+
+    .ai-generated-image-prompt {
+        display: none;
+        padding: 0.75rem 1rem;
+        font-size: #{themeScope.token("components-chat-thread-generated-image-prompt-base-font-size", themePalette.$roles)};
+        color: color-mix(in srgb, #{themeScope.token("components-chat-thread-generated-image-prompt-base-foreground", themePalette.$roles)} 60%, transparent);
+        background: color-mix(in srgb, #{themeScope.token("components-chat-thread-generated-image-prompt-base-background", themePalette.$roles)} 3%, transparent);
+        border-top: 1px solid color-mix(in srgb, #{themeScope.token("components-chat-thread-generated-image-prompt-base-border-top", themePalette.$roles)} 10%, transparent);
+        font-style: #{themeScope.token("components-chat-thread-generated-image-prompt-base-font-style", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-generated-image-prompt-base-line-height", themePalette.$roles)};
+
+        &.is-visible {
+            display: block;
+        }
+    }
+}
+
+.ai-generated-media-run-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+    min-height: 1.25rem;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.ai-generated-media-model-chrome.ai-generated-media-run-meta {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
+    margin-top: var(--workspace-generated-media-chrome-top-gap, 8px);
+    min-height: var(--canvas-node-footer-icon-size, 34px);
+}
+
+.ai-generated-media-section-title {
+    margin: 0 0 0.45rem;
+    color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 45%, transparent);
+    font-size: #{themeScope.token("components-chat-thread-generated-media-section-title-base-font-size", themePalette.$roles)};
+    font-style: #{themeScope.token("components-chat-thread-generated-media-section-title-base-font-style", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-chat-thread-generated-media-section-title-base-font-weight", themePalette.$roles)};
+    letter-spacing: 0;
+    line-height: #{themeScope.token("components-chat-thread-generated-media-section-title-base-line-height", themePalette.$roles)};
+    text-transform: uppercase;
+}
+
+// ========== AI GENERATION TRACE BLOCK ==========
+.ai-generation-trace-block {
+    margin: 0.75rem 0;
+    font-size: #{themeScope.token("components-chat-thread-generation-trace-block-base-font-size", themePalette.$roles)};
+
+    .ai-generation-trace-body {
+        padding: 0;
+    }
+
+    .ai-generation-trace-content {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 50%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-generation-trace-content-base-font-size", themePalette.$roles)};
+        font-style: #{themeScope.token("components-chat-thread-generation-trace-content-base-font-style", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-generation-trace-content-base-line-height", themePalette.$roles)};
+
+        > *:first-child {
+            margin-top: 0;
+        }
+        > *:last-child {
+            margin-bottom: 0;
+        }
+
+        p, h1, h2, h3, h4, h5, h6, span, div {
+            font-size: #{themeScope.token("components-chat-thread-generation-trace-content-paragraph-base-font-size", themePalette.$roles)} !important;
+            font-style: #{themeScope.token("components-chat-thread-generation-trace-content-paragraph-base-font-style", themePalette.$roles)};
+        }
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content:not(:empty),
+    .ai-image-generation-tool-prompt-fallback,
+    .ai-image-generation-final-prompt {
+        @include ai-generation-prompt-surface;
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content:empty {
+        display: none;
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content p,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h1,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h2,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h3,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h4,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h5,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h6,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content span,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content div {
+        color: inherit;
+        font-size: #{themeScope.token("components-chat-thread-tool-prompt-text-paragraph-base-font-size", themePalette.$roles)} !important;
+        font-style: #{themeScope.token("components-chat-thread-tool-prompt-text-paragraph-base-font-style", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-tool-prompt-text-paragraph-base-line-height", themePalette.$roles)};
+    }
+
+    .ai-image-generation-section-label {
+        display: none;
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 45%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-section-label-base-font-size", themePalette.$roles)};
+        font-style: #{themeScope.token("components-chat-thread-image-generation-section-label-base-font-style", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-image-generation-section-label-base-font-weight", themePalette.$roles)};
+        letter-spacing: 0;
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+    }
+
+    .ai-image-generation-tool-prompt-section,
+    .ai-image-generation-final-prompt-section,
+    .ai-image-generation-reference-section,
+    .ai-image-generation-resolver-section,
+    .ai-capability-generation-details-section,
+    .ai-capability-media-review-section {
+        margin: 0;
+
+        // Fading gradient separator between sections — mirrors the branch lineage
+        // node marker separator, tuned dark for the light info-panel background.
+        + section {
+            position: relative;
+            margin-top: 0.85rem;
+            padding-top: 0.85rem;
+
+            &::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                border-radius: #{themeScope.token("components-chat-thread-image-generation-tool-prompt-section-underlay-base-border-radius", themePalette.$roles)};
+                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 4%, transparent) 10%, color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 8%, transparent) 26%, color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 14.000000000000002%, transparent) 50%, color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 8%, transparent) 74%, color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 4%, transparent) 90%, rgba(0, 0, 0, 0) 100%);
+            }
+        }
+
+        // The reference section follows the prompt box, which is already a visually
+        // bounded block — a divider between them reads as clutter, so drop it and
+        // tighten the gap since the box edge already provides separation.
+        + .ai-image-generation-reference-section {
+            margin-top: 0.95rem;
+            padding-top: 0;
+
+            &::before {
+                content: none;
+            }
+        }
+    }
+
+    .ai-image-generation-tool-prompt-section.has-content .ai-image-generation-section-label,
+    .ai-image-generation-final-prompt-section .ai-image-generation-section-label,
+    .ai-image-generation-reference-section .ai-image-generation-section-label,
+    .ai-image-generation-resolver-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-capability-generation-details-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-capability-media-review-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-capability-media-review-summary,
+    .ai-capability-media-review-recommendation {
+        margin: 0 0 0.65rem;
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 62%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-capability-media-review-summary-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-capability-media-review-summary-base-line-height", themePalette.$roles)};
+    }
+
+    .ai-capability-media-review-recommendation {
+        margin: 0.65rem 0 0;
+    }
+
+    .ai-capability-media-review-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-capability-media-review-step {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        gap: 0.15rem 0.75rem;
+        padding: 0.48rem 0.56rem;
+        border-radius: #{themeScope.token("components-chat-thread-capability-media-review-step-base-border-radius", themePalette.$roles)};
+        background: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 3.5000000000000004%, transparent);
+    }
+
+    .ai-capability-media-review-step-title {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 68%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-capability-media-review-step-title-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-capability-media-review-step-title-base-font-weight", themePalette.$roles)};
+    }
+
+    .ai-capability-media-review-step-status {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 48%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-capability-media-review-step-status-base-font-size", themePalette.$roles)};
+    }
+
+    .ai-capability-media-review-step-issues {
+        grid-column: 1 / -1;
+        color: #{themeScope.token("components-chat-thread-capability-media-review-step-issues-base-foreground", themePalette.$roles)};
+        font-size: #{themeScope.token("components-chat-thread-capability-media-review-step-issues-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-capability-media-review-step-issues-base-line-height", themePalette.$roles)};
+        overflow-wrap: anywhere;
+    }
+
+    .ai-capability-generation-metadata {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 0.35rem 0.75rem;
+        margin: 0 0 0.85rem;
+    }
+
+    .ai-capability-generation-metadata dt,
+    .ai-capability-generation-metadata dd {
+        margin: 0;
+        font-size: #{themeScope.token("components-chat-thread-capability-generation-metadata-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-capability-generation-metadata-base-line-height", themePalette.$roles)};
+        overflow-wrap: anywhere;
+    }
+
+    .ai-capability-generation-metadata dt {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 48%, transparent);
+        font-weight: #{themeScope.token("components-chat-thread-capability-generation-metadata-base-font-weight", themePalette.$roles)};
+    }
+
+    .ai-capability-generation-metadata dd {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 72%, transparent);
+    }
+
+    .ai-capability-generation-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-capability-generation-step {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        gap: 0.15rem 0.75rem;
+        padding: 0.48rem 0.56rem;
+        border-radius: #{themeScope.token("components-chat-thread-capability-generation-step-base-border-radius", themePalette.$roles)};
+        background: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 3.5000000000000004%, transparent);
+    }
+
+    .ai-capability-generation-step-title {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 68%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-capability-generation-step-title-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-capability-generation-step-title-base-font-weight", themePalette.$roles)};
+    }
+
+    .ai-capability-generation-step-status {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 48%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-capability-generation-step-status-base-font-size", themePalette.$roles)};
+    }
+
+    .ai-capability-generation-step-summary,
+    .ai-capability-generation-step-error {
+        grid-column: 1 / -1;
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 52%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-capability-generation-step-summary-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-capability-generation-step-summary-base-line-height", themePalette.$roles)};
+        overflow-wrap: anywhere;
+    }
+
+    .ai-capability-generation-step-error {
+        color: #{themeScope.token("components-chat-thread-capability-generation-step-error-base-foreground", themePalette.$roles)};
+    }
+
+    .ai-image-generation-reference-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+        gap: 0.55rem;
+    }
+
+    .ai-image-generation-reference {
+        margin: 0;
+        min-width: 0;
+    }
+
+    .ai-image-generation-reference-thumb {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1;
+        overflow: hidden;
+        border: 1px solid color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 8%, transparent);
+        border-radius: #{themeScope.token("components-chat-thread-image-generation-reference-thumb-base-border-radius", themePalette.$roles)};
+        background: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 3.5000000000000004%, transparent);
+    }
+
+    .ai-image-generation-reference-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .ai-image-generation-reference-image[hidden],
+    .ai-image-generation-reference-unavailable[hidden] {
+        display: none;
+    }
+
+    .ai-image-generation-reference-unavailable,
+    .ai-image-generation-empty-references {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3.8rem;
+        padding: 0.4rem;
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 42%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-reference-unavailable-base-font-size", themePalette.$roles)};
+        font-style: #{themeScope.token("components-chat-thread-image-generation-reference-unavailable-base-font-style", themePalette.$roles)};
+        text-align: center;
+    }
+
+    .ai-image-generation-reference figcaption {
+        display: flex;
+        flex-direction: column;
+        gap: 0.08rem;
+        margin-top: 0.25rem;
+        min-width: 0;
+    }
+
+    .ai-image-generation-reference-label,
+    .ai-image-generation-reference-role,
+    .ai-image-generation-excluded-label,
+    .ai-image-generation-excluded-node,
+    .ai-image-generation-excluded-reason,
+    .ai-image-generation-resolver-summary,
+    .ai-image-generation-resolver-rationale {
+        font-style: #{themeScope.token("components-chat-thread-image-generation-reference-label-base-font-style", themePalette.$roles)};
+        overflow-wrap: anywhere;
+    }
+
+    .ai-image-generation-reference-label {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 62%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-reference-label-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-image-generation-reference-label-base-font-weight", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-image-generation-reference-label-base-line-height", themePalette.$roles)};
+    }
+
+    .ai-image-generation-reference-role {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 42%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-reference-role-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-image-generation-reference-role-base-line-height", themePalette.$roles)};
+    }
+
+    .ai-image-generation-resolver-summary {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 57.99999999999999%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-resolver-summary-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-image-generation-resolver-summary-base-font-weight", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-image-generation-resolver-summary-base-line-height", themePalette.$roles)};
+    }
+
+    .ai-image-generation-resolver-rationale {
+        margin-top: 0.25rem;
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 52%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-resolver-rationale-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-image-generation-resolver-rationale-base-line-height", themePalette.$roles)};
+    }
+
+    .ai-image-generation-excluded-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0.55rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-image-generation-excluded-reference {
+        display: grid;
+        gap: 0.1rem;
+        padding: 0.45rem 0.5rem;
+        border-radius: #{themeScope.token("components-chat-thread-image-generation-excluded-reference-base-border-radius", themePalette.$roles)};
+        background: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 3.5000000000000004%, transparent);
+    }
+
+    .ai-image-generation-excluded-label {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 62%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-excluded-label-base-font-size", themePalette.$roles)};
+        font-weight: #{themeScope.token("components-chat-thread-image-generation-excluded-label-base-font-weight", themePalette.$roles)};
+    }
+
+    .ai-image-generation-excluded-node {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 42%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-excluded-node-base-font-size", themePalette.$roles)};
+    }
+
+    .ai-image-generation-excluded-reason {
+        color: color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 52%, transparent);
+        font-size: #{themeScope.token("components-chat-thread-image-generation-excluded-reason-base-font-size", themePalette.$roles)};
+        line-height: #{themeScope.token("components-chat-thread-image-generation-excluded-reason-base-line-height", themePalette.$roles)};
+    }
+}
+
+.workspace-media-generation-progress .progress-timeline-item[data-item-id="lineage:media-generation-prompt"] > .progress-timeline-content > .progress-timeline-details > .progress-timeline-summary {
+    @include ai-generation-prompt-surface;
+}

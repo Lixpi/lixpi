@@ -1,6 +1,7 @@
 import { createUser, fromPublic } from '@nats-io/nkeys'
 import { describe, expect, it } from 'vitest'
-import { authPolicy } from './policy.ts'
+import { NATS_SUBJECTS } from '@lixpi/constants'
+import { authPolicy, createPolicyArtifact } from './policy.ts'
 import { applicationManifest, registrationEnvironment } from './registration.ts'
 
 const fixture = () => ({
@@ -52,6 +53,25 @@ describe('deployment registration signing', () => {
         })
         expect(JSON.parse(Buffer.from(JSON.parse(changed.NATS_APPLICATION_REGISTRATION).payload, 'base64').toString()).version).toBe(2)
         expect(changed.NATS_REGISTRATION_AUTHORITY_SEED).toBe(generated.NATS_REGISTRATION_AUTHORITY_SEED)
+    })
+
+    it('keeps signed permissions and their version stable when only queue routing changes', () => {
+        const env = fixture()
+        const generated = registrationEnvironment(env)
+        const contract = authPolicy.contracts.find(entry => entry.subject === NATS_SUBJECTS.WORKSPACE_SUBJECTS.SAVE_WORKSPACE_NAVIGATION)!
+        const queue = contract.queue
+        const digest = createPolicyArtifact().digest
+
+        try {
+            contract.queue = 'anotherNavigationQueue'
+            expect(createPolicyArtifact().digest).not.toBe(digest)
+            expect(registrationEnvironment({
+                ...env,
+                ...generated,
+            })).toEqual(generated)
+        } finally {
+            contract.queue = queue
+        }
     })
 
     it('rejects tampered previous declarations and missing required identities', () => {

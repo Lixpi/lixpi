@@ -142,6 +142,50 @@ describe('endpoint permissions', () => {
         })
     })
 
+    it('routes navigation writes to one API queue without changing user grants', () => {
+        const workspace = NATS_SUBJECTS.WORKSPACE_SUBJECTS
+        expect(endpoint(workspace.SAVE_WORKSPACE_NAVIGATION)).toMatchObject({
+            type: 'reply',
+            queue: 'workspaceNavigationWrites',
+            permissions: {
+                pub: { allow: [workspace.SAVE_WORKSPACE_NAVIGATION] },
+                sub: { allow: [] },
+            },
+        })
+        expect(endpoint(workspace.GET_USER_WORKSPACE_NAVIGATION).queue).toBeUndefined()
+    })
+
+    it('grants each workspace tree request its own subject and nothing to subscribe to', () => {
+        const workspace = NATS_SUBJECTS.WORKSPACE_SUBJECTS
+        const treeSubjects = [
+            workspace.GET_USER_WORKSPACE_NAVIGATION,
+            workspace.SAVE_WORKSPACE_NAVIGATION,
+            workspace.GET_USER_WORKSPACE_TREE,
+            workspace.CREATE_WORKSPACE,
+            workspace.UPDATE_WORKSPACE,
+            workspace.DELETE_WORKSPACE,
+            workspace.MOVE_WORKSPACE,
+            workspace.CREATE_WORKSPACE_HEADING,
+            workspace.UPDATE_WORKSPACE_HEADING,
+            workspace.MOVE_WORKSPACE_HEADING,
+            workspace.DELETE_WORKSPACE_HEADING,
+        ]
+
+        for (const subject of treeSubjects) {
+            expect(endpoint(subject)).toMatchObject({
+                type: 'reply',
+                payloadType: 'json',
+                permissions: {
+                    pub: { allow: [subject] },
+                    sub: { allow: [] },
+                },
+            })
+            expect(publications).toContain(subject)
+        }
+
+        expect(activeContracts.some(contract => contract.subject === 'workspace.getUserWorkspaces')).toBe(false)
+    })
+
     it('includes portal permissions without inventing an API handler or inbox grant', () => {
         expect(portalPermissions).toEqual({
             pub: { allow: [PORTAL_MODULE_SUBJECTS.USER_REQUESTS] },

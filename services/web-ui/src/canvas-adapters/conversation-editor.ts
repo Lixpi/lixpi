@@ -12,25 +12,32 @@ import {
 import {
     type ConversationOperationSummary,
 } from '@lixpi/constants'
-import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     type AuthClientInstance,
 } from '@lixpi/auth-client'
-import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
-import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import {
+    CapabilityChatRunProgressController,
+    editorDocumentViews,
+    mountEditorDocument,
+    USE_AI_CHAT_META,
+    type AiChatThreadRenderContext,
+} from '@lixpi/prosemirror/frontend/editor'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components/workspace/context'
+import {
+    type DocumentEditorHandle,
+} from '@lixpi/prosemirror/frontend/document-editor'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { CapabilityChatRunProgressController } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/capabilityChatRunProgress.ts'
+import {
+    type WebUiEditorEnvironment,
+} from '$src/editor/web-ui-editor.ts'
+import { toEditorPromptReferencePreview } from '$src/editor/editor-services.ts'
 
-type EditorOptions = ConstructorParameters<typeof ProseMirrorEditor>[0]
-
-export type CanvasConversationEditorIntegration = Pick<
-    EditorOptions,
-    | 'aiChatThreadRenderContext'
-    | 'assetService'
-    | 'auth'
-    | 'promptControlFactories'
-    | 'promptReferencePreviewRenderer'
-> & {
+export type CanvasConversationEditorIntegration = {
+    environment: WebUiEditorEnvironment
+    aiChatThreadRenderContext?: AiChatThreadRenderContext
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
     register?: (
         threadId: string,
         view: EditorView,
@@ -38,7 +45,7 @@ export type CanvasConversationEditorIntegration = Pick<
 }
 
 class CanvasConversationEditorAdapter implements CanvasConversationEditor {
-    private readonly editor: ProseMirrorEditor
+    private readonly editor: DocumentEditorHandle
     private readonly progress: CapabilityChatRunProgressController
     private unregister: (() => void) | null = null
     private destroyed = false
@@ -47,19 +54,20 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
         private readonly request: CanvasConversationEditorMount,
         private readonly integration: CanvasConversationEditorIntegration,
     ) {
-        const html = createDocumentHtml(request.container.ownerDocument)
         const version = request.thread.proseMirrorVersion
-        this.progress = new CapabilityChatRunProgressController(integration.promptReferencePreviewRenderer)
-        this.editor = new ProseMirrorEditor({
-            ...integration,
-            editorMountElement: request.container,
-            content: html`<div></div>` as HTMLDivElement,
-            initialVal: request.thread.content,
-            isDisabled: false,
+        const { environment } = integration
+        this.progress = new CapabilityChatRunProgressController(
+            environment.services.createCapabilityRunProgress,
+            toEditorPromptReferencePreview(integration.promptReferencePreviewRenderer),
+        )
+        this.editor = mountEditorDocument({
+            registry: environment.registry,
+            definition: editorDocumentViews.assetConversation!,
+            container: request.container,
+            document: request.thread.content,
             readOnly: request.readOnly,
-            documentType: 'assetConversation',
-            threadId: request.thread.threadId,
-            proseMirrorAuthority: {
+            authority: {
+                transport: environment.authorityTransport,
                 organizationId: request.thread.organizationId,
                 workspaceId: request.workspaceId,
                 assetId: request.thread.threadId,
@@ -71,18 +79,31 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
                     : 0,
                 receiveOnly: true,
             },
-            onEditorChange: request.onChange,
-            onStreamingUpdate: content => {
-                if (this.editor?.editorView)
-                    this.progress.sync(this.editor.editorView)
+            onChange: request.onChange,
+            onLiveChange: content => {
+                if (this.editor)
+                    this.progress.sync(this.editor.view)
 
                 request.onStreaming(content)
             },
-            onStreamEvent: request.onSegment,
-            onAiChatSubmit: request.onSubmit,
-            onAiChatStop: request.onStop,
-            onPromptSubmit: () => {},
-            onReceivingStateChange: request.onReceiving,
+            onInvalidDocument: error => console.warn('Invalid conversation content; showing an empty thread:', error),
+            context: {
+                services: environment.services,
+                promptReferences: { previewRenderer: toEditorPromptReferencePreview(integration.promptReferencePreviewRenderer) },
+                chat: {
+                    threadId: request.thread.threadId,
+                    // The chat thread's submission is the canvas run's request
+                    // under the thread plugin's own type.
+                    onSubmit: data => request.onSubmit(data as unknown as Parameters<typeof request.onSubmit>[0]),
+                    onStop: request.onStop,
+                    onStreamEvent: request.onSegment,
+                    onReceivingStateChange: request.onReceiving,
+                    renderContext: {
+                        ...integration.aiChatThreadRenderContext,
+                        readOnly: request.readOnly,
+                    },
+                },
+            },
         })
     }
 
@@ -95,7 +116,7 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
             return
 
         try {
-            const unregister = this.integration.register(this.request.thread.threadId, this.editor.editorView)
+            const unregister = this.integration.register(this.request.thread.threadId, this.editor.view)
 
             if (this.destroyed)
                 unregister()
@@ -113,7 +134,7 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     }
 
     readContent(): object | undefined {
-        return this.destroyed ? undefined : this.editor.editorView?.state.doc.toJSON()
+        return this.destroyed ? undefined : this.editor.view.state.doc.toJSON()
     }
 
     submitPersisted(): void {
@@ -123,7 +144,7 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
         )
             return
 
-        const view = this.editor.editorView
+        const view = this.editor.view
 
         if (!view)
             return
@@ -161,7 +182,7 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     ): void {
         if (!this.destroyed)
             this.progress.renderOperations(
-                this.editor.editorView,
+                this.editor.view,
                 operations,
                 outputPorts,
             )

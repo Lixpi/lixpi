@@ -13,6 +13,7 @@ COPY ./packages/lixpi/canvas-components ./packages/lixpi/canvas-components
 COPY ./packages/lixpi/canvas-engine ./packages/lixpi/canvas-engine
 COPY ./packages/lixpi/capability-system ./packages/lixpi/capability-system
 COPY ./packages/lixpi/prosemirror ./packages/lixpi/prosemirror
+COPY ./packages/lixpi/prosemirror-themes ./packages/lixpi/prosemirror-themes
 COPY ./packages/lixpi/constants ./packages/lixpi/constants
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools
 COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service

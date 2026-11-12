@@ -1,6 +1,6 @@
 import {
-    type EditorView,
-} from 'prosemirror-view'
+    type PromptComposerHandle,
+} from '@lixpi/prosemirror/frontend/editor'
 import {
     type AiPromptComposerSubmitData,
 } from '../../shared/composer/canvas-conversation-content.ts'
@@ -9,11 +9,7 @@ import { createShiftingGradientBackground } from '@lixpi/ui-primitives/gradients
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 
-export type PromptComposerEditor = {
-    readonly editorView: EditorView | null
-    restoreContent: (content: object) => void
-    destroy: () => void
-}
+export type PromptComposerEditor = PromptComposerHandle
 
 export type PromptComposerEditorRequest = {
     host: HTMLElement
@@ -43,7 +39,10 @@ export type AiPromptComposerConfig = {
 export type AiPromptComposerInstance = {
     readonly element: HTMLElement
     readonly editorContainer: HTMLElement
-    readonly editorView: EditorView | null
+    readContent: () => object | null
+    emptyContent: () => object | null
+    applyModelPreferences: PromptComposerHandle['applyModelPreferences']
+    insertCapabilityReference: PromptComposerHandle['insertCapabilityReference']
     triggerGradientAnimation: () => void
     focus: () => void
     restoreContent: (content: object) => void
@@ -110,15 +109,17 @@ class AiPromptComposer implements AiPromptComposerInstance {
         }
     }
 
-    get editorView(): EditorView | null {
-        return this.editor?.editorView ?? null
-    }
-
+    readContent = (): object | null => this.editor?.readContent() ?? null
+    emptyContent = (): object | null => this.editor?.emptyContent() ?? null
+    applyModelPreferences = (models: Parameters<PromptComposerHandle['applyModelPreferences']>[0]): void =>
+        void this.editor?.applyModelPreferences(models)
+    insertCapabilityReference = (reference: Parameters<PromptComposerHandle['insertCapabilityReference']>[0]): void =>
+        void this.editor?.insertCapabilityReference(reference)
     triggerGradientAnimation = (): void => void this.gradient?.triggerAnimation()
-    focus = (): void => void this.editor?.editorView?.focus()
+    focus = (): void => void this.editor?.focus()
 
     restoreContent = (content: object): void => {
-        if (!this.editor?.editorView)
+        if (!this.editor)
             throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
 
         this.editor.restoreContent(content)

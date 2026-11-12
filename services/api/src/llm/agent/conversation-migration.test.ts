@@ -141,6 +141,7 @@ describe('historical conversation migration', () => {
             migrated: 1,
             pending: 0,
             skipped: 0,
+            complete: true,
         })
         expect(database.rows.get(`${pk}|META`)).toMatchObject({
             activated: true,
@@ -164,6 +165,7 @@ describe('historical conversation migration', () => {
             migrated: 0,
             pending: 0,
             skipped: 1,
+            complete: true,
         })
     })
 

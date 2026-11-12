@@ -22,10 +22,13 @@ import {
 } from '../../../frontend/capability-artifact-registry.ts'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
+    type DocumentViewDefinition,
+} from '@lixpi/prosemirror/frontend/document-view'
+import { capabilityArtifactKindId } from '../../../shared/capability-artifact.ts'
+import {
     ACTION_TIMELINE_ARTIFACT_TYPE_ID,
     ACTION_TIMELINE_TOOL_ID,
     collectActionTimelineReferencedAssetIds,
-    createActionTimelineDocumentSchema,
     formatTimelineTime,
 } from '../shared/action-timeline.ts'
 import { actionTimelineSettings } from '../settings.ts'
@@ -304,6 +307,16 @@ export const createActionTimelineEditorPlugins = (): Plugin[] => {
     ]
 }
 
+// Segment node views for the artifact's editor. The host supplies the
+// remaining editing features.
+export const actionTimelineDocumentView: DocumentViewDefinition<unknown> = {
+    kindId: capabilityArtifactKindId(ACTION_TIMELINE_ARTIFACT_TYPE_ID),
+    features: [{
+        id: 'action-timeline-segments',
+        create: () => ({ plugins: createActionTimelineEditorPlugins() }),
+    }],
+}
+
 class ActionTimelineSegmentNodeView implements NodeView {
     readonly dom: HTMLElement
     readonly contentDOM: HTMLElement
@@ -400,8 +413,7 @@ const createActionTimelineCanvasView = (host: CapabilityArtifactCanvasHost): Cap
                 editor = host.mountEditor({
                     container: editorContainer,
                     document,
-                    schema: createActionTimelineDocumentSchema(),
-                    plugins: createActionTimelineEditorPlugins(),
+                    documentView: actionTimelineDocumentView,
                 })
             }
         } else
@@ -569,7 +581,7 @@ export const actionTimelineFrontendDefinition: CapabilityArtifactFrontendDefinit
     artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
     iconId: 'ordered-list',
     initialCanvasDimensions: actionTimelineSettings.canvas.initialDimensions,
-    createEditorPlugins: createActionTimelineEditorPlugins,
+    documentView: actionTimelineDocumentView,
     createCanvasNodeView: createActionTimelineCanvasView,
     createGeneratedOutputInfoView: createActionTimelineInfoView,
     buildReplaySubmitData: host => {

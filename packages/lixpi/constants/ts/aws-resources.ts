@@ -6,6 +6,8 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     WORKSPACES: 'Workspaces',
     WORKSPACES_META: 'Workspaces-Meta',
     WORKSPACES_ACCESS_LIST: 'Workspaces-Access-List',
+    WORKSPACE_TREE: 'Workspace-Tree',
+    WORKSPACE_TREE_LOCKS: 'Workspace-Tree-Locks',
     AI_TOKENS_USAGE_TRANSACTIONS: 'AI-Tokens-Usage-Transactions',
     FINANCIAL_TRANSACTIONS: 'Financial-Transactions',
     AI_TOKENS_USAGE_REPORTS: 'AI-Tokens-Usage-Reports',
@@ -44,3 +46,57 @@ export const getDynamoDbTableStageName = (
     orgName,
     stageName,
 )
+
+export type DynamoDbAttributeDefinition = {
+    name: string
+    type: 'S' | 'N' | 'B'
+}
+
+export type DynamoDbGlobalSecondaryIndex = {
+    name: string
+    hashKey: string
+    rangeKey?: string
+    projectionType: 'ALL'
+}
+
+export type DynamoDbKeySchema = {
+    attributes: DynamoDbAttributeDefinition[]
+    hashKey: string
+    rangeKey?: string
+    globalSecondaryIndexes?: DynamoDbGlobalSecondaryIndex[]
+}
+
+// Each parent's ordered children. `pk` is `ORG#<organizationId>#PARENT#<parentWorkspaceId|ROOT>`
+// and `sk` is `<position>#<entryId>`, so one query on a partition lists a level in order.
+export const WORKSPACE_TREE_TABLE_SCHEMA: DynamoDbKeySchema = {
+    attributes: [
+        {
+            name: 'pk',
+            type: 'S',
+        },
+        {
+            name: 'sk',
+            type: 'S',
+        },
+    ],
+    hashKey: 'pk',
+    rangeKey: 'sk',
+}
+
+// At most one structure operation per organization holds a row here.
+export const WORKSPACE_TREE_LOCKS_TABLE_SCHEMA: DynamoDbKeySchema = {
+    attributes: [{
+        name: 'organizationId',
+        type: 'S',
+    }],
+    hashKey: 'organizationId',
+}
+
+// Lists every grant on one workspace, used to deliver conversation events to
+// everyone with inherited access.
+export const WORKSPACE_ACCESS_BY_WORKSPACE_INDEX: DynamoDbGlobalSecondaryIndex = {
+    name: 'workspaceId-userId',
+    hashKey: 'workspaceId',
+    rangeKey: 'userId',
+    projectionType: 'ALL',
+}

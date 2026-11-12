@@ -12,13 +12,28 @@ export type SettingsOverrides = {
     [Section in keyof Settings]?: Settings[Section]
 }
 
-// Web UI's own changes to the shared package defaults. It is empty on purpose,
-// so web-ui looks and behaves exactly like every other service. Name a section
-// here only when web-ui must deliberately differ.
-const settingsOverrides: SettingsOverrides = {}
+const sharedSettings = createLixpiUiSettings()
+
+// Web UI's own changes to the shared package defaults. Name a section here
+// only when web-ui must deliberately differ, and spread the shared section so
+// only the named fields change.
+const settingsOverrides: SettingsOverrides = {
+    navigationSidePanel: {
+        ...sharedSettings.navigationSidePanel,
+        // The workspace list takes its own space and the canvas shrinks beside
+        // it. Set `overlay` to float the list over the canvas instead.
+        placement: 'push',
+        overlay: {
+            ...sharedSettings.navigationSidePanel.overlay,
+            // The list stays open when the user clicks the canvas. Set `true`
+            // to close it on any click outside the panel.
+            closeOnPointerDown: false,
+        },
+    },
+}
 
 export const settings: Settings = {
-    ...createLixpiUiSettings(),
+    ...sharedSettings,
     ...settingsOverrides,
 }
 

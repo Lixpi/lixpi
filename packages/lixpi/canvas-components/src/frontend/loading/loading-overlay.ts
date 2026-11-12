@@ -156,6 +156,20 @@ export class LoadingOverlay {
         this.renderState()
     }
 
+    // Starts the visible spinner over from its first fast cycle, for loading
+    // that begins again from the start.
+    restartSpin(): void {
+        if (
+            this.destroyed
+            || !this.visible
+            || this.message.textContent
+        )
+            return
+
+        this.stopSpin()
+        this.startSpin()
+    }
+
     setErrorMessage(message: string | null): void {
         if (this.destroyed)
             return

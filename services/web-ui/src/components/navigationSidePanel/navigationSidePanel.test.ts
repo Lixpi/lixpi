@@ -6,10 +6,7 @@ import {
     it,
     vi,
 } from 'vitest'
-import {
-    LoadingStatus,
-    type WorkspaceMeta,
-} from '@lixpi/constants'
+import { LoadingStatus } from '@lixpi/constants'
 import { readFileSync } from 'fs'
 import { createRequire } from 'node:module'
 import { withoutLayout } from '@lixpi/test-utils'
@@ -31,8 +28,14 @@ import {
 
 const mocks = vi.hoisted(() => ({
     navigateTo: vi.fn(),
-    createWorkspace: vi.fn().mockResolvedValue(undefined),
-    deleteWorkspace: vi.fn().mockResolvedValue(undefined),
+    navigationOptions: undefined as any,
+    navigation: {
+        setActive: vi.fn(),
+        createWorkspace: vi.fn().mockResolvedValue(undefined),
+        hasPendingChanges: vi.fn(() => false),
+        flushPendingChanges: vi.fn(async () => true),
+        destroy: vi.fn(),
+    },
     getWorkspace: vi.fn().mockResolvedValue(undefined),
     getTokenSilently: vi.fn(),
     logout: vi.fn().mockResolvedValue(undefined),
@@ -81,11 +84,23 @@ vi.mock('@lixpi/ui-kit/components/dropdown', async importOriginal => {
     }
 })
 
+// The workspace adapter has its own
+// tests. The panel's responsibility is the ports it supplies, so the tests
+// capture them.
+vi.mock('./workspace-navigation/create-workspace-navigation.ts', async importOriginal => ({
+    ...await importOriginal<typeof import('./workspace-navigation/create-workspace-navigation.ts')>(),
+    createWorkspaceNavigation: vi.fn((options: any) => {
+        mocks.navigationOptions = options
+
+        return mocks.navigation
+    }),
+}))
+
 import {
     createNavigationSidePanel,
     type NavigationSidePanelInstance,
 } from '$src/components/navigationSidePanel/navigationSidePanel.ts'
-import { workspacesStore } from '$src/stores/workspacesStore.ts'
+import { workspaceTreeStore } from '$src/stores/workspaceTreeStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { createAuthStore } from '@lixpi/auth-client'
 import { servicesStore } from '$src/stores/servicesStore.ts'
@@ -93,16 +108,7 @@ import { navigationSidePanelStore } from '$src/stores/navigationSidePanelStore.t
 import { settings } from '$src/settings.ts'
 
 const USER_PORTAL_URL = 'https://user-portal.example.test'
-
-const makeWorkspace = (overrides: Partial<WorkspaceMeta> & { tags?: string[] } = {}): WorkspaceMeta => {
-    return {
-        workspaceId: 'workspace-1',
-        name: 'Workspace One',
-        createdAt: 0,
-        updatedAt: 0,
-        ...overrides,
-    } as WorkspaceMeta
-}
+const isPush = settings.navigationSidePanel.placement === 'push'
 
 const setCurrentWorkspaceId = (workspaceId: string | undefined): void => {
     router.navigateTo('/workspace/:workspaceId', {
@@ -119,6 +125,8 @@ const auth = {
     logout: mocks.logout,
 }
 
+const mountedPanels = new Set<NavigationSidePanelInstance>()
+
 const mount = (): {
     contentEl: HTMLDivElement
     paneEl: HTMLDivElement
@@ -130,7 +138,7 @@ const mount = (): {
         paneEl,
         contentEl,
     )
-    const instance = createNavigationSidePanel({
+    const panel = createNavigationSidePanel({
         auth,
         contentEl,
         paneEl,
@@ -138,6 +146,13 @@ const mount = (): {
         userPortalUrl: USER_PORTAL_URL,
         workspaceService,
     })
+    const instance: NavigationSidePanelInstance = {
+        destroy: () => {
+            if (mountedPanels.delete(instance))
+                panel.destroy()
+        },
+    }
+    mountedPanels.add(instance)
 
     return {
         contentEl,
@@ -146,40 +161,30 @@ const mount = (): {
     }
 }
 
-// A row is rebuilt whenever its name or tags change, so the live dropdown for
-// a workspace is the *last* one captured for it.
-const liveDropdownFor = (workspaceId: string) => {
-    const matches = mocks.dropdownInstances.filter((entry) => entry.config.id === `navigation-side-panel-workspace-menu-${workspaceId}`)
-    const instance = matches.at(-1)
-
-    if (!instance)
-        throw new Error(`no dropdown captured for ${workspaceId}`)
-
-    return instance
-}
-
-const dropdownConfigFor = (workspaceId: string) => liveDropdownFor(workspaceId).config
+const ports = () => mocks.navigationOptions.ports
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
 let router: WebClientRouterService
 
 const workspaceService = {
-    createWorkspace: mocks.createWorkspace,
-    deleteWorkspace: mocks.deleteWorkspace,
     getWorkspace: mocks.getWorkspace,
 }
 
 beforeEach(() => {
     mocks.dropdownInstances.length = 0
     mocks.navigateTo.mockClear()
-    mocks.createWorkspace.mockClear()
-    mocks.deleteWorkspace.mockClear()
+    mocks.navigationOptions = undefined
+    mocks.navigation.setActive.mockClear()
+    mocks.navigation.createWorkspace.mockClear()
+    mocks.navigation.hasPendingChanges.mockReset().mockReturnValue(false)
+    mocks.navigation.flushPendingChanges.mockReset().mockResolvedValue(true)
+    mocks.navigation.destroy.mockClear()
     mocks.getWorkspace.mockClear()
     mocks.getTokenSilently.mockReset()
     mocks.logout.mockReset().mockResolvedValue(undefined)
     mocks.loadWorkspaceAssets.mockClear()
 
-    workspacesStore.resetStore()
+    workspaceTreeStore.replaceAll({ organizations: [] })
     workspaceStore.resetStore()
     servicesStore.resetStore()
     authStore.resetStore()
@@ -205,6 +210,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+    for (const instance of mountedPanels)
+        instance.destroy()
+
     document.body.innerHTML = ''
     router.destroy()
     consoleErrorSpy?.mockRestore()
@@ -390,7 +398,7 @@ describe('NavigationSidePanel — avatar', () => {
         open.mockRestore()
     })
 
-    it('signs out through Auth0 when the menu item is activated with the keyboard', () => {
+    it('signs out through Auth0 when the menu item is activated with the keyboard', async () => {
         const {
             paneEl,
             instance,
@@ -406,7 +414,7 @@ describe('NavigationSidePanel — avatar', () => {
             key: 'Enter',
             bubbles: true,
         }))
-        expect(mocks.logout).toHaveBeenCalledOnce()
+        await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
         expect(trigger.getAttribute('aria-expanded')).toBe('false')
         instance.destroy()
         expect(document.querySelector('#dropdown-menu-navigation-side-panel-account-menu')).toBeNull()
@@ -425,15 +433,76 @@ describe('NavigationSidePanel — avatar', () => {
         signOut.click()
         trigger.click()
         signOut.click()
-        expect(mocks.logout).toHaveBeenCalledOnce()
+        await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
         pending.reject(new Error('logout unavailable'))
         await pending.promise.catch(() => undefined)
         expect(paneEl.querySelector('[role="status"]')?.textContent).toBe('Sign out failed. Try again.')
         trigger.click()
         signOut.click()
-        expect(mocks.logout).toHaveBeenCalledTimes(2)
+        await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(2))
         expect(paneEl.querySelector('[role="status"]')?.textContent).toBe('')
         instance.destroy()
+    })
+
+    it('waits for navigation acknowledgement before signing out', async () => {
+        const pending = Promise.withResolvers<boolean>()
+        mocks.navigation.hasPendingChanges.mockReturnValue(true)
+        mocks.navigation.flushPendingChanges.mockReturnValueOnce(pending.promise)
+        const { instance } = mount()
+        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
+        menu.config.onSelect({ action: 'logout' })
+        expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledOnce()
+        expect(mocks.logout).not.toHaveBeenCalled()
+        mocks.navigation.hasPendingChanges.mockReturnValue(false)
+        pending.resolve(true)
+        await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
+        instance.destroy()
+    })
+
+    it('keeps the session when navigation cannot be saved', async () => {
+        mocks.navigation.hasPendingChanges.mockReturnValue(true)
+        mocks.navigation.flushPendingChanges.mockResolvedValue(false)
+        const { instance } = mount()
+        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
+        menu.config.onSelect({ action: 'logout' })
+        await vi.waitFor(() => expect(menu.setErrorState).toHaveBeenCalledWith({
+            title: 'Navigation changes were not saved. Resolve them and try signing out again.',
+        }))
+        expect(mocks.logout).not.toHaveBeenCalled()
+        instance.destroy()
+    })
+
+    it('flushes and warns only while navigation changes remain unacknowledged', () => {
+        mocks.navigation.hasPendingChanges.mockReturnValue(true)
+        const { instance } = mount()
+        const leaving = new Event('beforeunload', { cancelable: true })
+        window.dispatchEvent(leaving)
+        expect(leaving.defaultPrevented).toBe(true)
+        expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledOnce()
+
+        mocks.navigation.hasPendingChanges.mockReturnValue(false)
+        const clean = new Event('beforeunload', { cancelable: true })
+        window.dispatchEvent(clean)
+        expect(clean.defaultPrevented).toBe(false)
+        expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledOnce()
+        instance.destroy()
+    })
+
+    it('flushes on pagehide and hidden visibility, then removes leave listeners', () => {
+        mocks.navigation.hasPendingChanges.mockReturnValue(true)
+        const { instance } = mount()
+        window.dispatchEvent(new Event('pagehide'))
+        expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledOnce()
+
+        const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+        document.dispatchEvent(new Event('visibilitychange'))
+        expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledTimes(2)
+        instance.destroy()
+        window.dispatchEvent(new Event('pagehide'))
+        window.dispatchEvent(new Event('beforeunload', { cancelable: true }))
+        document.dispatchEvent(new Event('visibilitychange'))
+        expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledTimes(2)
+        visibility.mockRestore()
     })
 
     it('does not update a disposed account menu after logout fails', async () => {
@@ -442,6 +511,7 @@ describe('NavigationSidePanel — avatar', () => {
         const { instance } = mount()
         const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
         menu.config.onSelect({ action: 'logout' })
+        await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
         instance.destroy()
         menu.setErrorState.mockClear()
         pending.reject(new Error('logout unavailable'))
@@ -452,191 +522,100 @@ describe('NavigationSidePanel — avatar', () => {
 })
 
 // =============================================================================
-// WORKSPACE LIST RENDERING
+// WORKSPACE TREE NAVIGATION
 // =============================================================================
 
-describe('NavigationSidePanel — workspace list', () => {
-    it('renders one row per workspace with its name and tags', () => {
-        workspacesStore.setWorkspaces([
-            makeWorkspace({
-                workspaceId: 'ws-1',
-                name: 'Alpha',
-                tags: ['a', 'b'],
-            }),
-            makeWorkspace({
-                workspaceId: 'ws-2',
-                name: 'Beta',
-            }),
-        ])
+describe('NavigationSidePanel — workspace tree navigation', () => {
+    it('mounts the workspace navigation into the list with the shared tree store', () => {
         const {
             paneEl,
             instance,
         } = mount()
 
-        const rows = paneEl.querySelectorAll('.navigation-side-panel-row')
-        expect(rows.length).toBe(2)
-        expect(rows[0].querySelector('.navigation-side-panel-row-title')?.textContent).toBe('Alpha')
-        expect(Array.from(rows[0].querySelectorAll('.navigation-side-panel-row-tag')).map((el) => el.textContent)).toEqual(['a', 'b'])
-        expect(rows[1].querySelector('.navigation-side-panel-row-tags')).toBeNull()
+        expect(mocks.navigationOptions.container).toBe(paneEl.querySelector('.navigation-side-panel-list'))
+        expect(mocks.navigationOptions.store).toBe(workspaceTreeStore)
+        expect(ports().buildHref('ws-1')).toBe('/workspace/ws-1')
 
         instance.destroy()
     })
 
-    it('marks the row for the workspace that matches the current route as active', () => {
-        workspacesStore.setWorkspaces([
-            makeWorkspace({
-                workspaceId: 'ws-1',
-                name: 'Alpha',
-            }),
-            makeWorkspace({
-                workspaceId: 'ws-2',
-                name: 'Beta',
-            }),
-        ])
-        setCurrentWorkspaceId('ws-2')
-        const {
-            paneEl,
-            instance,
-        } = mount()
-
-        const rows = paneEl.querySelectorAll('.navigation-side-panel-row')
-        expect(rows[0].classList.contains('navigation-side-panel-row-active')).toBe(false)
-        expect(rows[1].classList.contains('navigation-side-panel-row-active')).toBe(true)
-
-        instance.destroy()
-    })
-
-    it('re-renders the list when the workspaces store changes after mount', () => {
-        const {
-            paneEl,
-            instance,
-        } = mount()
-        expect(paneEl.querySelectorAll('.navigation-side-panel-row').length).toBe(0)
-
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
-
-        expect(paneEl.querySelectorAll('.navigation-side-panel-row').length).toBe(1)
-
-        instance.destroy()
-    })
-
-    it('moves the active row in place when the router workspace changes, keeping every row element and menu', () => {
-        workspacesStore.setWorkspaces([
-            makeWorkspace({
-                workspaceId: 'ws-1',
-                name: 'Alpha',
-            }),
-            makeWorkspace({
-                workspaceId: 'ws-2',
-                name: 'Beta',
-            }),
-        ])
-        setCurrentWorkspaceId('ws-1')
-        const {
-            paneEl,
-            instance,
-        } = mount()
-        const rowsBefore = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
-        const dropdownCount = mocks.dropdownInstances.length
-        expect(rowsBefore[0].classList.contains('navigation-side-panel-row-active')).toBe(true)
-
-        paneEl.querySelectorAll<HTMLButtonElement>('.navigation-side-panel-row')[1].click()
-
-        const rowsAfter = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
-        expect(rowsAfter).toHaveLength(2)
-        expect(rowsAfter.every((row, index) => row === rowsBefore[index])).toBe(true)
-        expect(rowsAfter[0].classList.contains('navigation-side-panel-row-active')).toBe(false)
-        expect(rowsAfter[1].classList.contains('navigation-side-panel-row-active')).toBe(true)
-        expect(mocks.dropdownInstances).toHaveLength(dropdownCount)
-        expect(liveDropdownFor('ws-1').destroy).not.toHaveBeenCalled()
-        expect(liveDropdownFor('ws-2').destroy).not.toHaveBeenCalled()
-
-        instance.destroy()
-    })
-
-    it('keeps unchanged rows when the workspaces store publishes a new snapshot and rebuilds only the changed one', () => {
-        workspacesStore.setWorkspaces([
-            makeWorkspace({
-                workspaceId: 'ws-1',
-                name: 'Alpha',
-            }),
-            makeWorkspace({
-                workspaceId: 'ws-2',
-                name: 'Beta',
-            }),
-        ])
-        const {
-            paneEl,
-            instance,
-        } = mount()
-        const [alphaRow, betaRow] = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
-
-        workspacesStore.updateWorkspace('ws-2', { name: 'Beta (renamed)' })
-
-        const rows = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
-        expect(rows[0]).toBe(alphaRow)
-        expect(rows[1]).not.toBe(betaRow)
-        expect(rows[1].querySelector('.navigation-side-panel-row-title')?.textContent).toBe('Beta (renamed)')
-
-        workspacesStore.addWorkspaces([makeWorkspace({
-            workspaceId: 'ws-0',
-            name: 'Zero',
-        })])
-
-        const reordered = Array.from(paneEl.querySelectorAll('.navigation-side-panel-row'))
-        expect(reordered.map(row => row.querySelector('.navigation-side-panel-row-title')?.textContent)).toEqual([
-            'Zero',
-            'Alpha',
-            'Beta (renamed)',
-        ])
-        expect(reordered[1]).toBe(alphaRow)
-
-        workspacesStore.deleteWorkspace('ws-1')
-
-        expect(paneEl.querySelectorAll('.navigation-side-panel-row')).toHaveLength(2)
-        expect(alphaRow.isConnected).toBe(false)
-        expect(liveDropdownFor('ws-1').destroy).toHaveBeenCalledOnce()
-
-        instance.destroy()
-    })
-
-    it('destroys every previous row dropdown before rendering the next list snapshot', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
+    it('sends tree requests over NATS with a fresh token', async () => {
+        mocks.getTokenSilently.mockResolvedValue('token-1')
+        const request = vi.fn().mockResolvedValue({ organizations: [] })
+        servicesStore.setDataValues({ nats: { request } } as never)
         const { instance } = mount()
-        const liveDropdown = liveDropdownFor('ws-1')
-        expect(liveDropdown.destroy).not.toHaveBeenCalled()
 
-        workspacesStore.setWorkspaces([makeWorkspace({
+        await ports().request('workspace.move', { workspaceId: 'ws-1' })
+
+        expect(request).toHaveBeenCalledWith('workspace.move', {
+            token: 'token-1',
             workspaceId: 'ws-1',
-            name: 'Alpha (renamed)',
-        })])
-
-        expect(liveDropdown.destroy).toHaveBeenCalledTimes(1)
-        expect(liveDropdownFor('ws-1')).not.toBe(liveDropdown)
+        })
 
         instance.destroy()
     })
 
-    it('stops row-menu clicks from bubbling into the row navigation handler', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
-        const {
-            paneEl,
-            instance,
-        } = mount()
+    it('marks the routed workspace as active and follows route changes', () => {
+        setCurrentWorkspaceId('ws-1')
+        const { instance } = mount()
 
-        const menuAnchor = paneEl.querySelector<HTMLElement>('.navigation-side-panel-row-menu')
-        menuAnchor?.click()
+        expect(mocks.navigation.setActive).toHaveBeenLastCalledWith('ws-1')
 
+        setCurrentWorkspaceId('ws-2')
+        expect(mocks.navigation.setActive).toHaveBeenLastCalledWith('ws-2')
+
+        instance.destroy()
+    })
+
+    it('keeps collapsed workspaces in the panel store', () => {
+        navigationSidePanelStore.setValues({ collapsedWorkspaceIds: ['ws-1'] })
+        const { instance } = mount()
+
+        expect(ports().collapsed.load()).toEqual(['ws-1'])
+        ports().collapsed.save(['ws-2', 'ws-3'])
+        expect(navigationSidePanelStore.getData().collapsedWorkspaceIds).toEqual(['ws-2', 'ws-3'])
+
+        instance.destroy()
+    })
+
+    it('opens the next workspace when the open one is deleted and the start page when none remains', () => {
+        setCurrentWorkspaceId('ws-1')
+        const { instance } = mount()
+        workspaceTreeStore.replaceAll({ organizations: [{
+            organizationId: 'org-1',
+            organizationName: 'Studio',
+            tags: {},
+            roots: [{
+                entryType: 'workspace',
+                workspace: {
+                    workspaceId: 'ws-2',
+                    organizationId: 'org-1',
+                    name: 'Beta',
+                    tagIds: [],
+                    ancestorIds: [],
+                    position: 'V',
+                    createdAt: 0,
+                    updatedAt: 0,
+                },
+                accessLevel: 'owner',
+                children: [],
+            }],
+        }] })
+        mocks.navigateTo.mockClear()
+
+        ports().onWorkspacesDeleted(['ws-3'])
         expect(mocks.navigateTo).not.toHaveBeenCalled()
+
+        ports().onWorkspacesDeleted(['ws-1'])
+        expect(mocks.navigateTo).toHaveBeenLastCalledWith('/workspace/:workspaceId', {
+            params: { workspaceId: 'ws-2' },
+            shouldFetchData: true,
+        })
+
+        workspaceTreeStore.replaceAll({ organizations: [] })
+        setCurrentWorkspaceId('ws-2')
+        ports().onWorkspacesDeleted(['ws-2'])
+        expect(mocks.navigateTo).toHaveBeenLastCalledWith('/', { params: {} })
 
         instance.destroy()
     })
@@ -647,11 +626,18 @@ describe('NavigationSidePanel — workspace list', () => {
 // =============================================================================
 
 describe('NavigationSidePanel — navigation and creation', () => {
-    it('begins loading the clicked workspace in the click handler so stale canvas content clears immediately', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
+    it('shows the clicked row and the spinner at once, then switches after the browser paints', () => {
+        vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'setTimeout', 'clearTimeout'] })
+        const lease = {
+            setVisible: vi.fn(),
+            setErrorMessage: vi.fn(),
+            destroy: vi.fn(),
+        }
+        const acquire = vi.fn(() => lease)
+        servicesStore.setDataValues({ loadingLayer: {
+            acquire,
+            restartSpin: vi.fn(),
+        } as any })
         workspaceStore.setDataValues({
             workspaceId: 'old-workspace',
             canvasState: {
@@ -668,13 +654,19 @@ describe('NavigationSidePanel — navigation and creation', () => {
             },
         })
         workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
-        const {
-            paneEl,
-            instance,
-        } = mount()
+        const { instance } = mount()
+        mocks.navigation.setActive.mockClear()
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-row')?.click()
+        ports().navigate('ws-1')
 
+        expect(mocks.navigation.setActive).toHaveBeenLastCalledWith('ws-1')
+        expect(acquire).toHaveBeenCalledExactlyOnceWith({ visible: true })
+        expect(mocks.navigateTo).not.toHaveBeenCalled()
+        expect(workspaceStore.getData('workspaceId')).toBe('old-workspace')
+
+        vi.runAllTimers()
+
+        expect(lease.destroy).toHaveBeenCalledOnce()
         expect(workspaceStore.getData('workspaceId')).toBe('ws-1')
         expect(workspaceStore.getData('canvasState')).toEqual({
             viewport: {
@@ -692,9 +684,44 @@ describe('NavigationSidePanel — navigation and creation', () => {
         })
 
         instance.destroy()
+        vi.useRealTimers()
     })
 
-    it('creates a new workspace when the header button is clicked', async () => {
+    it('opens only the last workspace clicked before the switch runs', () => {
+        vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'setTimeout', 'clearTimeout'] })
+        const leases = [vi.fn(), vi.fn()]
+        const acquire = vi.fn(() => ({
+            setVisible: vi.fn(),
+            setErrorMessage: vi.fn(),
+            destroy: leases[acquire.mock.calls.length - 1],
+        }))
+        const restartSpin = vi.fn()
+        servicesStore.setDataValues({ loadingLayer: {
+            acquire,
+            restartSpin,
+        } as any })
+        const { instance } = mount()
+        const cancelRouteLoad = vi.spyOn(router, 'cancelRouteLoad')
+
+        ports().navigate('ws-1')
+        ports().navigate('ws-2')
+        expect(leases[0]).toHaveBeenCalledOnce()
+        expect(cancelRouteLoad).toHaveBeenCalledTimes(2)
+        expect(restartSpin).toHaveBeenCalledTimes(2)
+
+        vi.runAllTimers()
+
+        expect(mocks.navigateTo).toHaveBeenCalledExactlyOnceWith('/workspace/:workspaceId', {
+            params: { workspaceId: 'ws-2' },
+            shouldFetchData: true,
+        })
+        expect(leases[1]).toHaveBeenCalledOnce()
+
+        instance.destroy()
+        vi.useRealTimers()
+    })
+
+    it('creates a root workspace from the header button and opens a created workspace', async () => {
         const {
             paneEl,
             instance,
@@ -702,38 +729,24 @@ describe('NavigationSidePanel — navigation and creation', () => {
 
         paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-new-workspace-button')?.click()
         await Promise.resolve()
+        ports().onWorkspaceCreated({ workspaceId: 'ws-new' })
 
-        expect(mocks.createWorkspace).toHaveBeenCalledExactlyOnceWith({ name: 'New Workspace' })
+        expect(mocks.navigation.createWorkspace).toHaveBeenCalledExactlyOnceWith({})
+        expect(mocks.navigateTo).toHaveBeenLastCalledWith('/workspace/:workspaceId', {
+            params: { workspaceId: 'ws-new' },
+            shouldFetchData: true,
+        })
 
         instance.destroy()
     })
 })
 
 // =============================================================================
-// ROW MENU ACTIONS — import / export / delete
+// ROW ACTIONS — import / export
 // =============================================================================
 
-describe('NavigationSidePanel — row menu actions', () => {
-    it('routes the Delete option to WorkspaceService.deleteWorkspace for that row', async () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
-        const { instance } = mount()
-
-        dropdownConfigFor('ws-1').onSelect({ title: 'Delete' })
-        await Promise.resolve()
-
-        expect(mocks.deleteWorkspace).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'ws-1' })
-
-        instance.destroy()
-    })
-
-    it('routes the Import option to arming the hidden file input for that row, not to a service call', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
+describe('NavigationSidePanel — row import and export', () => {
+    it('arms the hidden file input for an import, not a service call', () => {
         const {
             paneEl,
             instance,
@@ -741,25 +754,20 @@ describe('NavigationSidePanel — row menu actions', () => {
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
         const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => undefined)
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
 
         expect(clickSpy).toHaveBeenCalledTimes(1)
-        expect(mocks.deleteWorkspace).not.toHaveBeenCalled()
         expect(mocks.getWorkspace).not.toHaveBeenCalled()
 
         instance.destroy()
     })
 
-    it('opens the export URL with a fresh auth token when Export is selected', async () => {
+    it('opens the export URL with a fresh auth token', async () => {
         mocks.getTokenSilently.mockResolvedValue('token-123')
         const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const { instance } = mount()
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Export' })
+        ports().exportWorkspace('ws-1')
         await Promise.resolve()
         await Promise.resolve()
 
@@ -775,13 +783,9 @@ describe('NavigationSidePanel — row menu actions', () => {
     it('does not open the export URL when no auth token is available', async () => {
         mocks.getTokenSilently.mockResolvedValue(null)
         const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const { instance } = mount()
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Export' })
+        ports().exportWorkspace('ws-1')
         await Promise.resolve()
         await Promise.resolve()
 
@@ -835,17 +839,13 @@ describe('NavigationSidePanel — workspace import flow', () => {
             ok: true,
             json: async () => ({}),
         } as Response)
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const {
             paneEl,
             instance,
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
         selectFile(input, new File(['zip'], 'workspace.zip'))
         await Promise.resolve()
         await Promise.resolve()
@@ -869,17 +869,13 @@ describe('NavigationSidePanel — workspace import flow', () => {
 
     it('does not upload when no auth token is available', async () => {
         mocks.getTokenSilently.mockResolvedValue(null)
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const {
             paneEl,
             instance,
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
         selectFile(input, new File(['zip'], 'workspace.zip'))
         await Promise.resolve()
         await Promise.resolve()
@@ -895,10 +891,6 @@ describe('NavigationSidePanel — workspace import flow', () => {
             ok: true,
             json: async () => ({}),
         } as Response)
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         setCurrentWorkspaceId('ws-1')
         const {
             paneEl,
@@ -906,7 +898,7 @@ describe('NavigationSidePanel — workspace import flow', () => {
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
         selectFile(input, new File(['zip'], 'workspace.zip'))
         await Promise.resolve()
         await Promise.resolve()
@@ -925,16 +917,6 @@ describe('NavigationSidePanel — workspace import flow', () => {
             ok: true,
             json: async () => ({}),
         } as Response)
-        workspacesStore.setWorkspaces([
-            makeWorkspace({
-                workspaceId: 'ws-1',
-                name: 'Alpha',
-            }),
-            makeWorkspace({
-                workspaceId: 'ws-2',
-                name: 'Beta',
-            }),
-        ])
         setCurrentWorkspaceId('ws-2')
         const {
             paneEl,
@@ -942,7 +924,7 @@ describe('NavigationSidePanel — workspace import flow', () => {
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
         selectFile(input, new File(['zip'], 'workspace.zip'))
         await Promise.resolve()
         await Promise.resolve()
@@ -961,10 +943,6 @@ describe('NavigationSidePanel — workspace import flow', () => {
             ok: false,
             json: async () => ({ error: 'bad zip' }),
         } as Response)
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         setCurrentWorkspaceId('ws-1')
         const {
             paneEl,
@@ -972,7 +950,7 @@ describe('NavigationSidePanel — workspace import flow', () => {
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
         selectFile(input, new File(['zip'], 'workspace.zip'))
         await Promise.resolve()
         await Promise.resolve()
@@ -988,17 +966,13 @@ describe('NavigationSidePanel — workspace import flow', () => {
     it('logs and swallows a network failure during upload instead of throwing', async () => {
         mocks.getTokenSilently.mockResolvedValue('token-abc')
         fetchSpy?.mockRejectedValue(new Error('network down'))
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const {
             paneEl,
             instance,
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
         selectFile(input, new File(['zip'], 'workspace.zip'))
         await Promise.resolve()
         await Promise.resolve()
@@ -1010,17 +984,13 @@ describe('NavigationSidePanel — workspace import flow', () => {
     })
 
     it('clears the file input value and the import target before reading the next selection', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const {
             paneEl,
             instance,
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
 
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
 
         expect(input.value).toBe('')
 
@@ -1051,7 +1021,65 @@ describe('NavigationSidePanel — open/close toggle', () => {
         instance.destroy()
     })
 
-    it('tells the content area how much of it the open panel covers', () => {
+    it.runIf(isPush)('pushes the content aside while open and releases the space only after the close slide', async () => {
+        vi.useFakeTimers()
+
+        try {
+            const {
+                contentEl,
+                paneEl,
+                instance,
+            } = mount()
+            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')
+            const openWidth = `${settings.navigationSidePanel.defaultDimensions.width}px`
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+
+            toggle?.click()
+
+            expect(navigationSidePanelStore.getData('isOpen')).toBe(false)
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
+
+            await vi.runAllTimersAsync()
+
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
+
+            toggle?.click()
+
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+
+            instance.destroy()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it.runIf(isPush)('keeps the content docked when the panel reopens before its close slide settles', async () => {
+        vi.useFakeTimers()
+
+        try {
+            const {
+                contentEl,
+                paneEl,
+                instance,
+            } = mount()
+            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')
+
+            toggle?.click()
+            toggle?.click()
+            await vi.runAllTimersAsync()
+
+            expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
+            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(`${settings.navigationSidePanel.defaultDimensions.width}px`)
+
+            instance.destroy()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it.runIf(!isPush)('tells the content area how much of it the open overlay panel covers', () => {
         const {
             contentEl,
             paneEl,
@@ -1059,26 +1087,50 @@ describe('NavigationSidePanel — open/close toggle', () => {
         } = mount()
         const openInset = `${settings.navigationSidePanel.defaultDimensions.width}px`
         expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe(openInset)
+        expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
 
         paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
 
         expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
-
-        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe(openInset)
-
         instance.destroy()
     })
 
-    it('starts with no inset when the persisted state says closed', () => {
+    it('starts undocked when the persisted state says closed', () => {
         navigationSidePanelStore.setValues({ isOpen: false })
         const {
             contentEl,
             instance,
         } = mount()
 
+        expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
         expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+
+        instance.destroy()
+    })
+
+    it('closes on a click beside the panel only when outside close is configured', () => {
+        const {
+            contentEl,
+            instance,
+        } = mount()
+        const pointerDown = new PointerEvent('pointerdown', {
+            clientX: 600,
+            clientY: 300,
+            bubbles: true,
+            cancelable: true,
+        })
+        Object.defineProperty(pointerDown, 'isPrimary', { value: true })
+
+        contentEl.dispatchEvent(pointerDown)
+        contentEl.dispatchEvent(new MouseEvent('click', {
+            clientX: 600,
+            clientY: 300,
+            bubbles: true,
+            cancelable: true,
+        }))
+
+        expect(navigationSidePanelStore.getData('isOpen')).toBe(!settings.navigationSidePanel.overlay.closeOnPointerDown)
 
         instance.destroy()
     })
@@ -1103,40 +1155,21 @@ describe('NavigationSidePanel — destroy', () => {
         expect(paneEl.querySelector('.side-panel-backdrop')).toBeNull()
     })
 
-    it('destroys every live row dropdown and stops reacting to store changes', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
-        const {
-            paneEl,
-            instance,
-        } = mount()
-        const dropdown = liveDropdownFor('ws-1')
+    it('destroys the workspace navigation', () => {
+        const { instance } = mount()
 
         instance.destroy()
 
-        expect(dropdown.destroy).toHaveBeenCalledTimes(1)
-
-        // Store churn after destroy must not touch a torn-down DOM tree.
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-2',
-            name: 'Beta',
-        })])
-        expect(paneEl.querySelector('.navigation-side-panel-row')).toBeNull()
+        expect(mocks.navigation.destroy).toHaveBeenCalledTimes(1)
     })
 
     it('stops listening for the import input change event after destroy', () => {
-        workspacesStore.setWorkspaces([makeWorkspace({
-            workspaceId: 'ws-1',
-            name: 'Alpha',
-        })])
         const {
             paneEl,
             instance,
         } = mount()
         const input = paneEl.querySelector<HTMLInputElement>('.navigation-side-panel-import-input') as HTMLInputElement
-        dropdownConfigFor('ws-1').onSelect({ title: 'Import' })
+        ports().importWorkspace('ws-1')
 
         instance.destroy()
         Object.defineProperty(input, 'files', {

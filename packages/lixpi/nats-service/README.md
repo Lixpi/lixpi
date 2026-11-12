@@ -129,6 +129,12 @@ await natsService.subscribe(
 // Request/reply
 const response = await natsService.request('subject.name', { query: 'data' })
 
+// Aborting the signal rejects at once and discards the late reply. The
+// responder still receives the request.
+const controller = new AbortController()
+const pending = natsService.request('subject.name', { query: 'data' }, 3000, controller.signal)
+controller.abort()
+
 // Reply handler
 await natsService.reply(
     'subject.name',
@@ -141,6 +147,8 @@ await natsService.reply(
 // Disconnect
 await natsService.disconnect()
 ```
+
+A reply subscription handles its requests concurrently, as a queue group spread over several instances would, up to `maxConcurrentReplies` at once (64 by default). Handlers must not rely on the order requests arrive in. Plain subscriptions still handle messages one at a time, in order. A reply that takes `slowReplyMs` or longer (250 ms by default) from arrival to response is logged with its subject, its wait before the handler started and the handler time.
 
 Thrown request/reply handler failures are transported as `{ error: message }` for JSON payloads and as the message string for buffer payloads. Callers must treat an `error` response as a failed operation; the reply layer never serializes a native `Error` object directly.
 

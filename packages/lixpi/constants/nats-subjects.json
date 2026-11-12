@@ -133,8 +133,15 @@
 		"GET_WORKSPACE": "workspace.get",
 		"UPDATE_WORKSPACE": "workspace.update",
 		"DELETE_WORKSPACE": "workspace.delete",
-		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
-		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState"
+		"GET_USER_WORKSPACE_TREE": "workspace.getUserWorkspaceTree",
+		"GET_USER_WORKSPACE_NAVIGATION": "workspace.getUserWorkspaceNavigation",
+		"SAVE_WORKSPACE_NAVIGATION": "workspace.saveWorkspaceNavigation",
+		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
+		"MOVE_WORKSPACE": "workspace.move",
+		"CREATE_WORKSPACE_HEADING": "workspace.heading.create",
+		"UPDATE_WORKSPACE_HEADING": "workspace.heading.update",
+		"MOVE_WORKSPACE_HEADING": "workspace.heading.move",
+		"DELETE_WORKSPACE_HEADING": "workspace.heading.delete"
 	},
 	"ORGANIZATION_SUBJECTS": {
 		"GET_MEMBERSHIP": "organization.membership.get",

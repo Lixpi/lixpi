@@ -56,7 +56,9 @@
     // The shadow marks the panel boundary. The resize-handle line stays
     // available, but the theme sets its navigation width to zero.
     box-shadow: #{themeScope.token("shadow-sidebar", themePalette.$roles)};
-    overflow: hidden;
+    // No overflow clipping here: the resize handle straddles the panel's right
+    // edge, and clipping would cut off its outer half. The list scrolls and
+    // clips its own content.
 }
 
 .side-panel-resize-handle.navigation-side-panel-resize-handle {

@@ -240,6 +240,9 @@ export const aiUserMessageNodeSpec = {
         id: { default: '' },
         createdAt: { default: 0 },
         referenceNodeIds: { default: [] },
+        // Names who wrote a message a person did not write, such as another
+        // workspace's agent that delegated the turn. Empty for a person.
+        authorLabel: { default: '' },
     },
     content: '(paragraph | block)+',
     group: 'block',
@@ -252,6 +255,7 @@ export const aiUserMessageNodeSpec = {
                     id: dom.getAttribute('data-id') || '',
                     createdAt: Number(dom.getAttribute('data-created-at') || 0),
                     referenceNodeIds: normalizeReferenceNodeIds(dom.getAttribute('data-reference-node-ids') || ''),
+                    authorLabel: dom.getAttribute('data-author-label') || '',
                 }
             },
         },
@@ -266,6 +270,7 @@ export const aiUserMessageNodeSpec = {
                 'data-reference-node-ids': JSON.stringify(
                     normalizeReferenceNodeIds(node.attrs.referenceNodeIds),
                 ),
+                ...(node.attrs.authorLabel ? { 'data-author-label': node.attrs.authorLabel } : {}),
             },
             0,
         ]

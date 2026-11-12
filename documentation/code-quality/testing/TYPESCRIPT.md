@@ -254,7 +254,7 @@ Creating DOM elements directly is allowed in tests. Production UI code remains g
 
 ## Testing ProseMirror Code
 
-Use `prosemirror-test-builder` for ProseMirror documents and position tracking. Shared builders and helpers live under `services/web-ui/src/components/proseMirror/plugins/testUtils/`; extend those helpers instead of calculating node positions by hand in each test.
+Use `prosemirror-test-builder` for ProseMirror documents and position tracking. Shared builders, the test schema and a mock editor view come from `@lixpi/prosemirror/test-helpers`; extend those helpers instead of calculating node positions by hand in each test. Editor feature tests in `@lixpi/prosemirror` get fake application services from `createTestEditorServices` in that package's `src/test-helpers/test-editor-services.ts`.
 
 ```typescript
 import {
@@ -267,7 +267,7 @@ import {
     doc,
     img,
     p,
-} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+} from '@lixpi/prosemirror/test-helpers'
 
 const testDocument = doc(p('Hello world'), img({ src: 'cat.jpg' }))
 const state = createEditorState(testDocument)

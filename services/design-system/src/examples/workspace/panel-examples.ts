@@ -32,7 +32,7 @@ import {
     type MediaGenerationRunStatus,
     type ConversationSettings,
 } from '@lixpi/constants'
-import { createProseMirrorSchema } from '@lixpi/prosemirror/shared/schema-builder'
+import { designSystemDocumentKinds } from './document-kinds.ts'
 import { html } from '@lixpi/ui-primitives/dom'
 import { ExampleFrame } from '../example-frame.ts'
 import { FixtureWorkspaceHost } from './fixture-host.ts'
@@ -107,7 +107,7 @@ class PanelExample {
         return new FixtureEditor(
             host,
             content,
-            createProseMirrorSchema('assetConversation'),
+            designSystemDocumentKinds.schema('assetConversation'),
             [],
             () => {},
             true,

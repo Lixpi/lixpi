@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EditorState, TextSelection } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
-import { createProseMirrorSchema, getAssetDocumentEventSubject, type LoggedAssetStepStreamEvent } from '@lixpi/prosemirror'
-import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
-import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
+import { createCoreDocumentKindRegistry, getAssetDocumentEventSubject, type LoggedAssetStepStreamEvent } from '@lixpi/prosemirror'
+import { DocumentAuthority } from '@lixpi/prosemirror/frontend/document-authority'
+import { createAiChatThreadPlugin } from '@lixpi/prosemirror/frontend/editor'
+import { createDocumentAuthorityTransport } from '$src/editor/document-authority-transport.ts'
+import { createWebUiEditorServices } from '$src/editor/editor-services.ts'
 
 const stores = vi.hoisted(() => ({ getData: vi.fn() }))
 vi.mock('$src/stores/servicesStore.ts', () => ({ servicesStore: { getData: stores.getData } }))
@@ -15,7 +17,7 @@ afterEach(() => {
 
 describe('native chat document authority', () => {
     it.each([false, true])('applies replay and live steps through real chat NodeViews while preserving rich content and selection (backward: %s)', async backward => {
-        const schema = createProseMirrorSchema('assetConversation')
+        const schema = createCoreDocumentKindRegistry().schema('assetConversation')
         const coordinate = {
             organizationId: 'org',
             assetId: 'conversation',
@@ -59,6 +61,7 @@ describe('native chat document authority', () => {
             state: EditorState.create({
                 doc: initial,
                 plugins: [createAiChatThreadPlugin({
+                    services: createWebUiEditorServices({ getTokenSilently: async () => 'test-token' }),
                     sendAiRequestHandler: vi.fn(),
                     stopAiRequestHandler: vi.fn(),
                     renderContext: { readOnly: true },
@@ -115,20 +118,21 @@ describe('native chat document authority', () => {
             return { unsubscribe } },
             request,
         })
-        const options = {
+        const assetService = {
+            acquireLease: vi.fn(),
+            fetchDocumentSnapshot: vi.fn(),
+        }
+        const authority = new DocumentAuthority({
             ...coordinate,
             workspaceId: 'workspace',
             receiveOnly: true,
             baseVersion: 0,
             getView: () => view,
-            assetService: {
-                acquireLease: vi.fn(),
-                fetchDocumentSnapshot: vi.fn(),
-            },
-            auth: { getTokenSilently: async () => 'test-token' },
-            userStore: { getData: () => 'user' },
-        }
-        const authority = new ProseMirrorAuthorityService(options as unknown as ConstructorParameters<typeof ProseMirrorAuthorityService>[0])
+            transport: createDocumentAuthorityTransport(assetService as never, {
+                getTokenSilently: async () => 'test-token',
+                userStore: { getData: () => 'user' },
+            } as never),
+        })
 
         try {
             await vi.waitFor(() => expect(view.state.doc.textContent).toBe('Rich requestHello world'))
@@ -144,7 +148,7 @@ describe('native chat document authority', () => {
             expect(view.state.doc.textBetween(view.state.selection.from, view.state.selection.to)).toBe('Hello')
             view.dispatch(view.state.tr.insertText('Unauthorized local edit', textStart))
             expect(view.state.doc.textContent).toBe('Rich requestHello world! Again.')
-            expect(options.assetService.acquireLease).not.toHaveBeenCalled()
+            expect(assetService.acquireLease).not.toHaveBeenCalled()
             expect(request).toHaveBeenCalledTimes(2)
         } finally {
             authority.disconnect()

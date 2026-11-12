@@ -1,0 +1,510 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+
+.nested-list {
+    --nested-list-indent: #{themeScope.token("components-navigation-row-base-indent", themePalette.$roles)};
+
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 100%;
+    color: #{themeScope.token("text-secondary", themePalette.$roles)};
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.nested-list-editor {
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
+    position: relative;
+}
+
+.nested-list-document {
+    flex: 1 0 auto;
+    outline: none;
+    white-space: pre-wrap;
+}
+
+// The canvas editor stylesheet is also loaded in the app. Navigation keeps
+// its own surface and proportions without changing canvas documents.
+.nested-list .ProseMirror.nested-list-document {
+    width: 100%;
+    min-height: 0;
+    font-size: inherit;
+    line-height: 1.65;
+    background: transparent;
+
+    p {
+        min-height: 0;
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.65;
+    }
+
+    ul {
+        margin: 0;
+        padding-inline-start: 0;
+    }
+
+    h1, h2, h3 {
+        margin: 0;
+        margin-block-start: 0.8em;
+        padding-block: 0;
+        padding-inline-start: 18px;
+        padding-inline-end: calc(1.1rem + 26px);
+        color: #{themeScope.token("heading", themePalette.$roles)};
+        font-weight: #{themeScope.token("heading-font-weight", themePalette.$roles)};
+        line-height: #{themeScope.token("heading-line-height", themePalette.$roles)};
+        letter-spacing: #{themeScope.token("heading-letter-spacing", themePalette.$roles)};
+        text-transform: none;
+        opacity: 1;
+    }
+}
+
+.nested-list .ProseMirror.nested-list-document h1 {
+    font-size: #{themeScope.token("h4-size", themePalette.$roles)};
+}
+
+.nested-list .ProseMirror.nested-list-document h2 {
+    font-size: #{themeScope.token("h5-size", themePalette.$roles)};
+}
+
+.nested-list .ProseMirror.nested-list-document h3 {
+    font-size: #{themeScope.token("h6-size", themePalette.$roles)};
+}
+
+.nested-list .ProseMirror.nested-list-document > p,
+.nested-list .ProseMirror.nested-list-document .nested-list-item-content > p:not(:first-child),
+.nested-list .ProseMirror.nested-list-document h1,
+.nested-list .ProseMirror.nested-list-document h2,
+.nested-list .ProseMirror.nested-list-document h3 {
+    margin-block-end: 0.2em;
+}
+
+.nested-list .ProseMirror.nested-list-document > :is(h1, h2, h3):first-child {
+    margin-block-start: 0;
+}
+
+.nested-list-document > ul {
+    --nested-list-depth-indent: 0px;
+}
+
+.nested-list-item-content > ul {
+    --nested-list-depth-indent: calc(var(--nested-list-row-indent) + 16px);
+}
+
+.nested-list[data-mode] .nested-list-document [data-nested-list-bold="true"] {
+    font-weight: bold;
+}
+
+.nested-list[data-mode="edit"] .nested-list-document {
+    user-select: text;
+    cursor: text;
+}
+
+.nested-list-item {
+    --nested-list-row-indent: var(--nested-list-depth-indent, 0px);
+
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0;
+    margin-block: 1px;
+    background: transparent;
+    color: inherit;
+    list-style: none;
+}
+
+.nested-list[data-mode="view"] .nested-list-document {
+    cursor: default;
+}
+
+.nested-list-item-content {
+    display: contents;
+}
+
+.nested-list-item-content > :not(:first-child) {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+
+.nested-list-item-row-underlay {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.nested-list-block-drag-handle {
+    position: absolute;
+    z-index: 120;
+    inset-inline-start: 3px;
+    display: grid;
+    place-items: center;
+    width: 8px;
+    height: 18px;
+    color: #{themeScope.token("components-composer-mode-switch-selected-option-color", themePalette.$roles)};
+    fill: currentColor;
+    cursor: grab;
+}
+
+.nested-list-block-drag-handle svg {
+    width: 10px;
+    height: 10px;
+    fill: currentColor;
+}
+
+.nested-list-block-drag-handle[hidden] {
+    display: none;
+}
+
+.nested-list-collapse svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    pointer-events: none;
+    transform: translateY(0.75px);
+    transition: hoverTransition(transform, $defaultHoverTransitionDuration);
+}
+
+.nested-list-item-chrome {
+    grid-row: 1;
+    grid-column: 2;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 10rem;
+    padding-inline-end: calc(1.1rem + 26px);
+}
+
+.nested-list .ProseMirror.nested-list-document > p {
+    padding-inline-start: 18px;
+    padding-inline-end: calc(1.1rem + 26px);
+}
+
+.nested-list .ProseMirror.nested-list-document .nested-list-item-content > p:not(:first-child),
+.nested-list .ProseMirror.nested-list-document .nested-list-item-content > h1,
+.nested-list .ProseMirror.nested-list-document .nested-list-item-content > h2,
+.nested-list .ProseMirror.nested-list-document .nested-list-item-content > h3 {
+    padding-inline-start: calc(var(--nested-list-row-indent) + 18px);
+    padding-inline-end: calc(1.1rem + 26px);
+}
+
+.nested-list .nested-list-document .nested-list-item-content > p:first-child {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: stretch;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 32px;
+    position: relative;
+    z-index: 1;
+    padding-block: 6px;
+    padding-inline-end: 0;
+    padding-inline-start: calc(var(--nested-list-row-indent) + 18px);
+    border-radius: 0;
+    color: #{themeScope.token("text-secondary", themePalette.$roles)};
+}
+
+.nested-list:not([data-mode="view"][data-navigation="true"]) .nested-list-item[data-item-type="text"] > .nested-list-item-content > p:first-child::before {
+    position: absolute;
+    inset-inline-start: calc(var(--nested-list-row-indent) + 2px);
+    content: "•";
+}
+
+.nested-list-item:not(.nested-list-active)[data-nested-list-hover="true"] > .nested-list-item-row-underlay,
+.nested-list-item:not(.nested-list-active):has(> .nested-list-item-content > p:first-child:hover) > .nested-list-item-row-underlay,
+.nested-list-item:not(.nested-list-active):focus-visible > .nested-list-item-row-underlay {
+    background: #{themeScope.token("components-composer-mode-switch-track-background-color", themePalette.$roles)};
+    margin-inline: 14px 8px;
+    border-radius: #{themeScope.token("components-navigation-header-base-item-radius", themePalette.$roles)};
+}
+
+.nested-list-item:not(.nested-list-active)[data-nested-list-hover="true"] > .nested-list-item-content > p:first-child,
+.nested-list-item:not(.nested-list-active):has(> .nested-list-item-content > p:first-child:hover) > .nested-list-item-content > p:first-child,
+.nested-list-item:not(.nested-list-active):focus-visible > .nested-list-item-content > p:first-child {
+    color: #{themeScope.token("components-composer-mode-switch-unselected-option-color", themePalette.$roles)};
+}
+
+.nested-list-item:not(.nested-list-active)[data-nested-list-hover="true"] > .nested-list-item-chrome,
+.nested-list-item:not(.nested-list-active):has(> .nested-list-item-content > p:first-child:hover) > .nested-list-item-chrome,
+.nested-list-item:not(.nested-list-active):focus-visible > .nested-list-item-chrome {
+    color: #{themeScope.token("components-composer-mode-switch-unselected-option-color", themePalette.$roles)};
+    fill: currentColor;
+}
+
+.nested-list-item.nested-list-active > .nested-list-item-chrome {
+    color: #{themeScope.token("components-composer-mode-switch-selected-option-color", themePalette.$roles)};
+    fill: currentColor;
+}
+
+.nested-list:not([data-read-only="true"]):not([data-mode="view"][data-navigation="true"]) .nested-list-item[data-item-type="text"][data-nested-list-hover="true"] > .nested-list-item-content > p:first-child::before {
+    visibility: hidden;
+}
+
+.nested-list-collapse {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin-inline-start: 6px;
+    border-radius: 50%;
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
+    vertical-align: middle;
+    line-height: 0;
+    width: 20px;
+    height: 20px;
+    pointer-events: auto;
+}
+
+.nested-list-collapse:hover,
+.nested-list-collapse:focus-visible {
+    background: #{themeScope.token("components-composer-mode-switch-indicator-background-color", themePalette.$roles)};
+}
+
+.nested-list-collapse[hidden] {
+    display: none;
+}
+
+.nested-list-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: #{themeScope.token("components-navigation-row-tags-base-gap", themePalette.$roles)};
+    margin-bottom: 0;
+}
+
+.nested-list-tags[hidden] {
+    display: none;
+}
+
+.nested-list-tag {
+    border-radius: #{themeScope.token("navigation-tag-radius", themePalette.$roles)};
+    padding: 1px 6px;
+    background: var(--nested-list-tag-color, #{themeScope.token("navigation-tag-background", themePalette.$roles)});
+    color: #{themeScope.token("navigation-tag-foreground", themePalette.$roles)};
+    font-size: #{themeScope.token("navigation-tag-font-size", themePalette.$roles)};
+    font-weight: #{themeScope.token("navigation-tag-font-weight", themePalette.$roles)};
+}
+
+.nested-list-controls {
+    display: inline-flex;
+    gap: 0.25rem;
+}
+
+.nested-list-controls:empty {
+    display: none;
+}
+
+.nested-list-collapsed > .nested-list-item-content > ul {
+    display: none;
+}
+
+.nested-list-section.nested-list-collapsed > .nested-list-item-content > :not(:first-child) {
+    display: none;
+}
+
+.nested-list-collapsed > .nested-list-item-content > p:first-child > .nested-list-collapse svg {
+    transform: rotate(-90deg) translateY(0.75px);
+}
+
+.nested-list-item.nested-list-active > .nested-list-item-row-underlay {
+    background: #{themeScope.token("components-composer-mode-switch-indicator-background-color", themePalette.$roles)};
+    margin-inline: 14px 8px;
+    border-radius: #{themeScope.token("components-navigation-header-base-item-radius", themePalette.$roles)};
+}
+
+.nested-list-item.nested-list-active > .nested-list-item-content > p:first-child {
+    color: #{themeScope.token("components-composer-mode-switch-selected-option-color", themePalette.$roles)};
+}
+
+.nested-list-document :is(.nested-list-item, p, h1, h2, h3)[data-nested-list-drop] {
+    position: relative;
+}
+
+.nested-list-document :is(.nested-list-item, p, h1, h2, h3)[data-nested-list-drop]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block: auto;
+    height: 2px;
+    background: #{themeScope.token("accent", themePalette.$roles)};
+    pointer-events: none;
+    z-index: 3;
+}
+
+.nested-list-document :is(.nested-list-item, p, h1, h2, h3)[data-nested-list-drop="before"]::after {
+    inset-block-start: 0;
+}
+
+.nested-list-document :is(.nested-list-item, p, h1, h2, h3)[data-nested-list-drop="after"]::after,
+.nested-list-document :is(.nested-list-item, p, h1, h2, h3)[data-nested-list-drop="inside"]::after {
+    inset-block-end: 0;
+}
+
+.nested-list-document .nested-list-item[data-nested-list-drop="inside"]::after {
+    inset-inline-start: calc(var(--nested-list-row-indent) + 16px);
+}
+
+.nested-list-document [data-nested-list-drag-source="true"] {
+    visibility: hidden;
+}
+
+.nested-list-drag-preview {
+    position: fixed;
+    left: 0;
+    top: 0;
+    flex: none;
+    height: auto;
+    min-height: 0;
+    z-index: 10050;
+    background: #{themeScope.token("navigation-backdrop-opaque", themePalette.$roles)};
+    box-shadow: #{themeScope.token("shadow-control", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-navigation-header-base-item-radius", themePalette.$roles)};
+}
+
+.nested-list-drag-preview,
+.nested-list-drag-preview * {
+    pointer-events: none;
+}
+
+.nested-list[data-nested-list-dragging="true"] .nested-list-document,
+.nested-list[data-nested-list-dragging="true"] .nested-list-document * {
+    cursor: grabbing !important;
+    user-select: none;
+}
+
+.nested-list[data-nested-list-dragging="true"] .nested-list-block-trigger {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.nested-list-status {
+    padding: 0.5rem;
+    white-space: normal;
+}
+
+.nested-list-status:empty {
+    display: none;
+}
+
+.bubble-menu.nested-list-block-bubble {
+    z-index: 10050;
+}
+
+.nested-list-block-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.nested-list[data-nested-list-dragging="true"] .nested-list-block-drag-handle {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.nested-list-block-trigger {
+    position: absolute;
+    z-index: 120;
+    inset-inline-end: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: calc(1.1rem + 18px);
+    height: #{themeScope.token("components-dropdown-menu-trigger-height", themePalette.$roles)};
+    padding: 4px 8px;
+    border-radius: #{themeScope.token("components-dropdown-menu-trigger-radius", themePalette.$roles)};
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.nested-list-block-trigger svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-inline-start: 2px;
+    fill: currentColor;
+}
+
+.nested-list-block-trigger[hidden] {
+    display: none;
+}
+
+.nested-list-block-panel {
+    position: absolute;
+    inset-block-start: calc(100% + 4px);
+    inset-inline-start: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: max-content;
+    max-width: 18rem;
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.nested-list-block-panel-above {
+    inset-block-start: auto;
+    inset-block-end: calc(100% + 4px);
+}
+
+.nested-list-block-panel-text {
+    align-items: stretch;
+    border-radius: 8px;
+}
+
+.nested-list-block-panel-text .nested-list-block-icon-item {
+    align-self: center;
+}
+
+.nested-list-block-panel[hidden] {
+    display: none;
+}
+
+.nested-list-block-style-menu {
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.nested-list-block-style-menu.nested-list-block-panel-above {
+    top: auto;
+    bottom: calc(100% + 4px);
+    margin-top: 0;
+    margin-bottom: 4px;
+}
+
+.nested-list-block-menu-item {
+    border: 0;
+    border-radius: #{themeScope.token("navigation-item-radius", themePalette.$roles)};
+    padding: 7px 12px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12.5px;
+    text-align: start;
+    cursor: pointer;
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
+}
+
+.nested-list-block-menu-item:hover,
+.nested-list-block-menu-item:focus-visible {
+    background: #{themeScope.token("navigation-hover", themePalette.$roles)};
+}
+
+.nested-list-block-menu-item:disabled,
+.nested-list-block-icon-item:disabled {
+    opacity: 0.5;
+    cursor: default;
+}

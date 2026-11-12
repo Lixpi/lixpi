@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DOCUMENT_TYPE, HeadlessProseMirrorEngine, type AssetStepEnvelope } from '@lixpi/prosemirror'
+import { createCoreDocumentKindRegistry, DOCUMENT_TYPE, HeadlessProseMirrorEngine, type AssetStepEnvelope } from '@lixpi/prosemirror'
 import { type Asset } from '@lixpi/constants'
 import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import { ConversationProjector, type ConversationProjectionPorts } from './conversation-projector.ts'
@@ -72,7 +72,8 @@ const projectionFixture = async () => {
             const snapshot = await document()
             expect(input.baseVersion).toBe(snapshot?.version ?? 0)
             const engine = new HeadlessProseMirrorEngine({
-                documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+                registry: createCoreDocumentKindRegistry(),
+                kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
                 doc: snapshot?.doc,
                 version: snapshot?.version ?? 0,
             })
@@ -128,7 +129,8 @@ describe('conversation transcript projection', () => {
         await new ConversationProjector(fixture.repository, fixture.ports).project(fixture.owner)
         const saved = await fixture.document()
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: saved!.doc,
         })
         const configuration = engine.doc.firstChild!.lastChild!
@@ -136,7 +138,10 @@ describe('conversation transcript projection', () => {
         expect(configuration.attrs.id).toBe('0001-2-settings-2')
         expect(configuration.textContent).toBe('Context: Explicit. During a run: Queue.')
         expect(configuration.firstChild!.firstChild!.marks.map(mark => mark.type.name)).toEqual(['em'])
-        const replay = new HeadlessProseMirrorEngine({ documentType: DOCUMENT_TYPE.ASSET_CONVERSATION })
+        const replay = new HeadlessProseMirrorEngine({
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
+        })
 
         for (const event of fixture.events)
             replay.applyStepJson(event.step)
@@ -178,7 +183,10 @@ describe('conversation transcript projection', () => {
         })
         await projector.project(owner)
         const final = await document()
-        const replay = new HeadlessProseMirrorEngine({ documentType: DOCUMENT_TYPE.ASSET_CONVERSATION })
+        const replay = new HeadlessProseMirrorEngine({
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
+        })
 
         for (const event of events) {
             expect(event.version).toBe(replay.version + 1)
@@ -234,7 +242,10 @@ describe('conversation transcript projection', () => {
 
     it('starts new steps at a migrated snapshot version ahead of the retained stream', async () => {
         const fixture = await projectionFixture()
-        const engine = new HeadlessProseMirrorEngine({ documentType: DOCUMENT_TYPE.ASSET_CONVERSATION })
+        const engine = new HeadlessProseMirrorEngine({
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
+        })
         await fixture.repository.commit([fixture.repository.replace(fixture.partition, 'TEST_DOCUMENT', {
             doc: engine.snapshot(),
             version: 18,

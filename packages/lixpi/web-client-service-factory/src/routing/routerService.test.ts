@@ -101,6 +101,23 @@ describe('web client router', () => {
         router.destroy()
     })
 
+    it('updates the address bar before route subscribers react', async () => {
+        const router = createRouterService({ routes: [{ path: '/' }, { path: '/users/:userId' }] })
+        const seenPaths: string[] = []
+        const unsubscribe = router.subscribe(() => seenPaths.push(window.location.pathname))
+        await router.init()
+        seenPaths.length = 0
+
+        router.navigateTo('/users/:userId', {
+            params: { userId: 'user-3' },
+            shouldFetchData: false,
+        })
+
+        expect(seenPaths).toEqual(['/users/user-3'])
+        unsubscribe()
+        router.destroy()
+    })
+
     it('uses an explicit fallback route for unknown browser paths', async () => {
         const store = createRouterStore()
         const onRouteChange = vi.fn()
@@ -161,6 +178,35 @@ describe('web client router', () => {
         loads.get('active')?.resolve()
         await flushMicrotasks()
         expect(store.getData('currentRoute').shouldFetchData).toBe(false)
+        router.destroy()
+    })
+
+    it('aborts the load a newer navigation or an explicit cancel supersedes', async () => {
+        const signals = new Map<string, AbortSignal>()
+        const router = createRouterService({
+            routes: [{
+                path: '/users/:userId',
+                load: async (
+                    { userId },
+                    _query,
+                    signal,
+                ) => {
+                    signals.set(String(userId), signal)
+
+                    await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)))
+                },
+            }],
+        })
+
+        router.navigateTo('/users/:userId', { params: { userId: 'first' } })
+        router.navigateTo('/users/:userId', { params: { userId: 'second' } })
+        expect(signals.get('first')?.aborted).toBe(true)
+        expect(signals.get('second')?.aborted).toBe(false)
+
+        router.cancelRouteLoad()
+        await flushMicrotasks()
+        expect(signals.get('second')?.aborted).toBe(true)
+        expect(router.getCurrentRoute().shouldFetchData).toBe(true)
         router.destroy()
     })
 })

@@ -4,7 +4,7 @@ import {
     getAiModelIcon,
     getAiProviderColorIcon,
     getAiProviderIcon,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
+} from '@lixpi/prosemirror/frontend/editor'
 import {
     applyMediaModelBadgeStyleProperties as applySharedMediaModelBadgeStyleProperties,
     type MediaModelBadgeConfig as SharedMediaModelBadgeConfig,

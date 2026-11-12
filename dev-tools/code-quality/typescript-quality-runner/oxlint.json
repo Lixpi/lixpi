@@ -221,6 +221,7 @@
                 "packages/lixpi/canvas-components/examples/**/*.ts",
                 "packages/lixpi/debug-tools/**/*.ts",
                 "packages/lixpi/prosemirror/**/*.ts",
+                "packages/lixpi/canvas-components/src/editor/**/*.ts",
                 "packages/lixpi/ui-kit/**/*.ts",
                 "packages/lixpi/ui-primitives/**/*.ts",
                 "packages/lixpi/auth-client/**/*.ts",

@@ -25,7 +25,7 @@ import {
     type DocumentCanvasNode,
     type CapabilityArtifactCanvasNode,
 } from '@lixpi/constants'
-import { createProseMirrorSchema } from '@lixpi/prosemirror/shared/schema-builder'
+import { designSystemDocumentKinds } from './document-kinds.ts'
 import {
     applyStyle,
     html,
@@ -826,7 +826,7 @@ export class DocumentNodesExample extends NodeExample {
                     return new FixtureEditor(
                         request.container,
                         request.document.content ?? {},
-                        createProseMirrorSchema('assetContent'),
+                        designSystemDocumentKinds.schema('assetContent'),
                         [],
                         content => this.fixtures.setDocument(
                             node.assetId,

@@ -17,7 +17,7 @@ import {
 import {
     type WorkspaceAssetDetailsPorts,
 } from '@lixpi/canvas-components/workspace/review'
-import { createProseMirrorSchema } from '@lixpi/prosemirror/shared/schema-builder'
+import { designSystemDocumentKinds } from './document-kinds.ts'
 import {
     collectProseMirrorText,
     parseProseMirrorJsonContent,
@@ -109,7 +109,7 @@ export class FixtureWorkspaceHost {
         const mountAsset: WorkspaceAssetDetailsPorts['mountEditor'] = request => new FixtureEditor(
             request.host,
             request.content,
-            createProseMirrorSchema(request.documentType),
+            designSystemDocumentKinds.schema(request.documentType),
             [],
             request.onChange,
         )
@@ -181,7 +181,7 @@ export class FixtureWorkspaceHost {
                     return new FixtureEditor(
                         request.container,
                         request.document.content ?? {},
-                        createProseMirrorSchema('assetContent'),
+                        designSystemDocumentKinds.schema('assetContent'),
                         [],
                         content => {
                             fixtures.setDocument(
@@ -193,12 +193,17 @@ export class FixtureWorkspaceHost {
                         },
                     )
                 },
-                mountCapability: request =>
-                    new FixtureEditor(
+                mountCapability: request => {
+                    const schema = designSystemDocumentKinds.schema(request.documentView.kindId)
+
+                    return new FixtureEditor(
                         request.container,
                         request.document,
-                        request.schema,
-                        request.plugins,
+                        schema,
+                        request.documentView.features.flatMap(feature => feature.create({
+                            schema,
+                            context: {},
+                        }).plugins ?? []),
                         content => {
                             fixtures.setDocument(
                                 request.node.assetId,
@@ -207,12 +212,13 @@ export class FixtureWorkspaceHost {
                             )
                             request.onContentChange()
                         },
-                    ),
+                    )
+                },
                 mountHistory: request =>
                     new FixtureEditor(
                         request.mount,
                         request.content,
-                        createProseMirrorSchema(request.documentType ?? 'assetConversation'),
+                        designSystemDocumentKinds.schema(request.documentType ?? 'assetConversation'),
                         [],
                         () => {},
                         true,

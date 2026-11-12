@@ -14,16 +14,19 @@ The core `BubbleMenu` class handles:
 - **Prevent-hide pattern**: `mousedown` + `preventDefault` prevents focus loss when clicking menu buttons
 - **Scroll/resize tracking**: Repositions on scroll and mobile viewport resize
 
+The stylesheet owns the menu's default stacking level and foreground color. Consumers can raise the menu through CSS when a host overlay needs a higher layer. Custom buttons and submenu content that use `color: inherit` receive the same foreground as the menu.
 
 ## Consumers
 
-### ProseMirror Plugin (`proseMirror/plugins/bubbleMenuPlugin/`)
+### ProseMirror plugins
 
-The `BubbleMenuView` class adapts the core `BubbleMenu` for ProseMirror:
+The rich-editing `BubbleMenuView` adapts this component for text and image selections:
 - Detects selection context (`'text'` or `'image'`) from `EditorView` state
 - Computes position requests from ProseMirror coordinates (`coordsAtPos`) or image element rects
 - Manages ProseMirror-specific interactions (link input panel, mark toggling, image attribute changes)
 - Drives show/hide on every ProseMirror transaction
+
+The shared nested-list editor displays a bare pencil over the hovered block. Clicking it opens a separate `BubbleMenu` with insert and block-style dropdowns plus options supplied by the host. Read-only lists do not mount the pencil.
 
 ### Workspace Canvas
 
@@ -125,11 +128,13 @@ type BubbleMenuItem = {
 ```typescript
 type BubbleMenuPositionRequest = {
     targetRect: DOMRect
-    placement: 'above' | 'below'
+    placement: 'above' | 'below' | 'left' | 'right'
     clampToParent?: boolean
     animateOnShow?: boolean
 }
 ```
+
+`placement: 'left'` places the menu to the left of the target, vertically centered. `placement: 'right'` places the menu beside the target, vertically centered on it, as for a menu that belongs to one line of text. With `horizontalAlignment: 'end'` it sits inside the target against its right edge instead.
 
 `clampToParent` defaults to `true`. Canvas-attached or compact-control menus can set it to `false` when the menu should move with the target instead of staying inside the visible parent bounds. For `placement: 'above'`, disabling clamping also disables the automatic below-target flip.
 

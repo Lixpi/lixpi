@@ -26,6 +26,7 @@ import {
     type ConsoleConfig,
 } from './console-config.ts'
 import { PRUNE_TREE } from './docker-prune-tree.ts'
+import { type TreeNode } from '@lixpi/cli-ui/tree-selection'
 import {
     addUsageToTree,
     parseDockerUsage,
@@ -50,10 +51,15 @@ vi.mock('@lixpi/cli-ui/select-menu', async () => {
 })
 
 const treePrompt = vi.hoisted(() => vi.fn())
+const treeOptions = vi.hoisted(() => vi.fn())
 
 vi.mock('@lixpi/cli-ui/tree-multiselect-prompt', () => ({
     TreeMultiSelectPrompt: class {
         prompt = treePrompt
+
+        constructor(options: unknown) {
+            treeOptions(options)
+        }
     },
 }))
 
@@ -145,6 +151,43 @@ const CONFIG: ConsoleConfig = {
             label: 'Plain',
             script: 'local:plain',
             params: { greeting: 'hello' },
+        },
+        {
+            id: 'certificates',
+            label: 'Certificates',
+            script: 'local:certificates',
+            steps: [
+                { type: 'env-file' },
+                {
+                    type: 'choices',
+                    message: 'Certificates?',
+                    options: [
+                        {
+                            name: 'regenerate',
+                            label: 'Regenerate',
+                            reported: true,
+                            choices: [
+                                {
+                                    value: 'keep',
+                                    label: 'Keep',
+                                },
+                                {
+                                    value: 'regenerate',
+                                    label: 'Regenerate',
+                                },
+                            ],
+                        },
+                        {
+                            name: 'trust',
+                            label: 'Trust',
+                            choices: [{
+                                value: 'skip',
+                                label: 'Skip',
+                            }],
+                        },
+                    ],
+                },
+            ],
         },
     ],
 }
@@ -390,7 +433,7 @@ describe('dev console', () => {
                 new ComposeCatalog(workspace, ROOT_COMPOSE_PATH),
                 DockerLayout.read(workspace),
             )
-        const groupsOf = (tree: ServiceTree) => tree.roots.filter(node => !node.selection)
+        const groupsOf = (tree: ServiceTree) => tree.roots.filter(node => !node.choices)
 
         it('draws one group per directory, nested like the directories', () => {
             const [application, messaging] = groupsOf(buildTree())
@@ -403,12 +446,13 @@ describe('dev console', () => {
 
         it('leaves utilities out of the tree', () => void expect(JSON.stringify(buildTree().roots)).not.toContain('test-runner'))
 
-        it('offers Base and All as preset rows at the top of the tree', () => {
+        it('offers Base, an empty Custom and All as one preset row above the tree', () => {
             const tree = buildTree()
-            const [base, all] = tree.roots
+            const [base, custom, all] = tree.roots[0].choices ?? []
 
             expect(base.selection).toEqual(tree.baseServices)
             expect(all.selection).toEqual(tree.allServices)
+            expect(custom.selection).toEqual([])
         })
 
         it('takes the base stack from the base profile, so a dev service stays out of it', () => {
@@ -542,6 +586,8 @@ describe('dev console', () => {
 
         it('rejects a script that names neither shared nor local', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"../evil"}]}')).toThrow('shared:<name> or local:<name>'))
 
+        it('rejects a reported option that isn\'t set to true', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"local:a","steps":[{"type":"choices","message":"m","options":[{"name":"n","label":"N","reported":"yes","choices":[]}]}]}]}')).toThrow('"reported": true'))
+
         it('rejects a hand-written service list', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"shared:start-services","steps":[{"type":"choices","message":"m","services":{"groups":[]}}]}]}')).toThrow('"services": true'))
     })
 
@@ -579,7 +625,7 @@ describe('dev console', () => {
             const options = vi.mocked(prompts.select).mock.calls[0][0]
             const values = (options.options as { value: string }[]).map(option => option.value)
 
-            expect(values).toEqual(['login', 'start', 'mode', 'deploy', 'fixed', 'prune', 'deploy-service', 'plain', 'exit'])
+            expect(values).toEqual(['login', 'start', 'mode', 'deploy', 'fixed', 'prune', 'deploy-service', 'plain', 'certificates', 'exit'])
             expect(options.initialValue).toBeUndefined()
         })
 
@@ -857,6 +903,59 @@ describe('dev console', () => {
                     selected: ['repair'],
                     arguments: ['org-1'],
                 })).toBe('ACTION=run\nSCRIPT=local:pulumi\nSELECTED=repair\nARGUMENT=org-1\n')
+            })
+        })
+
+        describe('options the host reports', () => {
+            const reopen = (catalog: string) => new DevConsoleWizard(
+                workspace,
+                CONFIG,
+                {
+                    entry: 'certificates',
+                    entryEnvFile: '.env.alice-local',
+                    catalog,
+                },
+            ).run()
+            const regenerateRow = () => (treeOptions.mock.lastCall![0] as { roots: TreeNode[] }).roots.find(root => root.value === 'choice:regenerate')
+
+            it('asks the host before the step with a reported option', async () => {
+                answer('certificates', '.env.alice-local')
+
+                expect(await run()).toEqual({
+                    action: 'query',
+                    entry: 'certificates',
+                    script: 'local:certificates',
+                    envFile: '.env.alice-local',
+                })
+            })
+
+            it('locks a row the script reports as unavailable, showing its reason', async () => {
+                treePrompt.mockResolvedValueOnce(['option:regenerate=keep', 'option:trust=skip'])
+
+                expect(await reopen('{"options":[{"name":"regenerate","available":false,"blockedReason":"Nothing exists yet"}]}')).toMatchObject({
+                    action: 'run',
+                    envFile: '.env.alice-local',
+                    options: {
+                        regenerate: 'keep',
+                        trust: 'skip',
+                    },
+                })
+                expect(regenerateRow()?.locked).toBe('Nothing exists yet')
+            })
+
+            it('leaves a row the script reports as available free to switch', async () => {
+                treePrompt.mockResolvedValueOnce(['option:regenerate=regenerate', 'option:trust=skip'])
+
+                expect(await reopen('{"options":[{"name":"regenerate","available":true}]}')).toMatchObject({ options: { regenerate: 'regenerate' } })
+                expect(regenerateRow()?.locked).toBeUndefined()
+            })
+
+            it('warns and returns to the menu when the script reports nothing for the row', async () => {
+                vi.mocked(prompts.log.warn).mockClear()
+
+                expect(await reopen('')).toEqual({ action: 'menu' })
+                expect(await reopen('{"options":[]}')).toEqual({ action: 'menu' })
+                expect(prompts.log.warn).toHaveBeenCalledTimes(2)
             })
         })
 

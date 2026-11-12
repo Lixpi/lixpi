@@ -23,6 +23,7 @@ COPY ./packages/lixpi/constants ./packages/lixpi/constants
 COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools
 COPY ./packages/lixpi/prosemirror ./packages/lixpi/prosemirror
+COPY ./packages/lixpi/prosemirror-themes ./packages/lixpi/prosemirror-themes
 COPY ./packages/lixpi/test-utils ./packages/lixpi/test-utils
 COPY ./packages/lixpi/ui-kit ./packages/lixpi/ui-kit
 COPY ./packages/lixpi/themes ./packages/lixpi/themes

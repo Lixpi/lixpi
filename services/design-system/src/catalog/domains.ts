@@ -69,6 +69,12 @@ export const canvasDomains: readonly CanvasDomain[] = [
         examples: ["workspace-conversation", "workspace-history", "workspace-right-panel"],
     },
     {
+        id: 'nested-list',
+        title: 'Nested list',
+        group: 'Reference',
+        examples: ['nested-list'],
+    },
+    {
         id: 'icons',
         title: 'Icons',
         group: 'Reference',

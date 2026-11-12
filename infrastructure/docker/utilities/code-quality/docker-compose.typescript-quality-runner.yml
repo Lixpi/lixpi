@@ -67,6 +67,7 @@ services:
             - ../../../../packages/lixpi/nats-service/ts/registration.ts:/usr/src/repository/packages/lixpi/nats-service/ts/registration.ts:cached
             - ../../../../packages/lixpi/nats-service/ts/registration.test.ts:/usr/src/repository/packages/lixpi/nats-service/ts/registration.test.ts:cached
             - ../../../../packages/lixpi/prosemirror/src:/usr/src/repository/packages/lixpi/prosemirror/src:cached
+            - ../../../../packages/lixpi/prosemirror-themes/src:/usr/src/repository/packages/lixpi/prosemirror-themes/src:cached
             - ../../../../packages/lixpi/cli-ui/src:/usr/src/repository/packages/lixpi/cli-ui/src:cached
             - ../../../../packages/lixpi/cli-ui/vitest.config.ts:/usr/src/repository/packages/lixpi/cli-ui/vitest.config.ts:cached
             - ../../../../packages/lixpi/test-utils/src:/usr/src/repository/packages/lixpi/test-utils/src:cached

@@ -94,7 +94,26 @@ const expectFiniteNumber = (value: unknown, path: string): void => {
 // =============================================================================
 
 describe('settings - grouped configuration', () => {
-    it('uses the shared package defaults while web-ui has no overrides', () => expect(settings).toEqual(createLixpiUiSettings()))
+    it('uses the shared package defaults outside the sections web-ui overrides', () => {
+        const sharedSettings = createLixpiUiSettings()
+        const {
+            navigationSidePanel,
+            ...rest
+        } = settings
+        const {
+            navigationSidePanel: sharedNavigationSidePanel,
+            ...sharedRest
+        } = sharedSettings
+
+        expect(rest).toEqual(sharedRest)
+        expect(Object.keys(navigationSidePanel).sort()).toEqual(Object.keys(sharedNavigationSidePanel).sort())
+        expect(Object.keys(navigationSidePanel.overlay).sort()).toEqual(Object.keys(sharedNavigationSidePanel.overlay).sort())
+    })
+
+    it('exposes the navigation side panel placement and outside-close switch', () => {
+        expect(['overlay', 'push']).toContain(settings.navigationSidePanel.placement)
+        expect(typeof settings.navigationSidePanel.overlay.closeOnPointerDown).toBe('boolean')
+    })
 
     it('exports expected sections and avoids getter-based static config', () => {
         const topLevelSettingsSections = [

@@ -13,10 +13,7 @@ import {
 
 import NATS_Service from '@lixpi/nats-service'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
-import {
-    DOCUMENT_TYPE,
-    HeadlessProseMirrorEngine,
-} from '@lixpi/prosemirror'
+import { HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
 import {
     ASSET_REQUIRED_RENDITIONS,
     getDynamoDbTableStageName,
@@ -47,6 +44,10 @@ import {
     enqueueRenditionRetry,
     enqueueWorkspaceReferenceCleanup,
 } from '../services/asset-maintenance-queue.ts'
+import {
+    apiDocumentKinds,
+    documentKindForAsset,
+} from '../prosemirror/document-kinds.ts'
 
 const {
     ORG_NAME,
@@ -362,14 +363,6 @@ const getAssetBlobHashes = (asset: Asset): string[] => {
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
 const isSha256 = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
-const getDocumentType = (role: AssetDocumentRole): string => role === 'content'
-    ? DOCUMENT_TYPE.ASSET_CONTENT
-    : role === 'conversation'
-        ? DOCUMENT_TYPE.ASSET_CONVERSATION
-        : role === 'provenance'
-            ? DOCUMENT_TYPE.ASSET_PROVENANCE
-            : 'capabilityArtifact'
-
 const buildPortableAssets = async (
     assets: Asset[],
     exportedAt: number,
@@ -728,10 +721,8 @@ const validateRevision2Manifest = (
                 throw new Error(`INVALID_ASSET_ARTIFACT:${asset.assetId}`)
 
             new HeadlessProseMirrorEngine({
-                documentType: getDocumentType(role),
-                ...(role === 'capabilityArtifact'
-                    ? { schema: artifactDefinition.shared.createDocumentSchema() }
-                    : {}),
+                registry: apiDocumentKinds(),
+                kindId: documentKindForAsset(asset, role),
                 doc,
                 version: pointer.version,
             })

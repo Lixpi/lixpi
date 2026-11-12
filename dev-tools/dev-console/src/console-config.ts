@@ -13,6 +13,11 @@ export type ConsoleOption = {
     name: string
     label: string
     choices: ConsoleChoice[]
+
+    // Whether the row can change depends on the host, such as what a Docker volume
+    // holds, which the console can't see. Before the step, the console asks the action's
+    // script, and a row the script reports as unavailable stays on its first choice.
+    reported?: true
 }
 
 export type ConsoleStep =
@@ -90,6 +95,12 @@ export const parseConsoleConfig = (text: string): ConsoleConfig => {
                 && step.services !== true
             )
                 throw new Error(`Console action ${action.id} must set "services": true. The service tree comes from infrastructure/docker.`)
+
+            if (
+                step.type === 'choices'
+                && step.options?.some(option => option.reported !== undefined && option.reported !== true)
+            )
+                throw new Error(`Console action ${action.id} must set "reported": true on an option the script reports.`)
         }
     }
 

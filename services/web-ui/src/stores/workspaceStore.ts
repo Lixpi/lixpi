@@ -67,6 +67,38 @@ export const workspaceStore = createStore({
                     },
                 }
             }),
+        // Publishes a loaded workspace and its success status in one change,
+        // so subscribers such as the canvas render it once instead of first
+        // seeing the data while the status still says loading.
+        completeWorkspaceLoad: (workspace: Partial<WorkspaceData>): void =>
+            void store.update(
+                state => ({
+                    ...state,
+                    meta: {
+                        ...state.meta,
+                        loadingStatus: LoadingStatus.success,
+                    },
+                    data: {
+                        ...state.data,
+                        ...workspace,
+                    },
+                }),
+            ),
+        // Publishes a failed load in one change.
+        failWorkspaceLoad: (error: unknown): void =>
+            void store.update(
+                state => ({
+                    ...state,
+                    meta: {
+                        ...state.meta,
+                        loadingStatus: LoadingStatus.error,
+                    },
+                    data: {
+                        ...state.data,
+                        error,
+                    },
+                }),
+            ),
         updateCanvasState: (canvasState: CanvasState): void =>
             void store.update(state => {
                 const canvas = workspaceCanvasStatePatch(canvasState, 'local-intent')

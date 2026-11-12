@@ -16,6 +16,7 @@ import {
 } from '$src/services/asset-service.ts'
 import { createNavigationSidePanel } from '$src/components/navigationSidePanel/index.ts'
 import '@lixpi/ui-kit/styles/navigation-side-panel'
+import '$src/components/navigationSidePanel/workspace-navigation/workspace-navigation.scss'
 
 import { routes } from '$src/routes.ts'
 import { settings } from '$src/settings.ts'

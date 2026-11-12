@@ -3,11 +3,8 @@ import {
     type CapabilityJsonValue,
 } from '@lixpi/constants'
 import {
-    type Schema,
-} from 'prosemirror-model'
-import {
-    type Plugin,
-} from 'prosemirror-state'
+    type DocumentViewDefinition,
+} from '@lixpi/prosemirror/frontend/document-view'
 
 export type CapabilityPromptControlHost = {
     container: HTMLElement
@@ -30,11 +27,13 @@ export type CapabilityArtifactCanvasHost = {
     document: object
     createAssetReferenceView: (request: CapabilityArtifactAssetReferenceRequest) => CapabilityArtifactAssetReferenceView | undefined
     onHeightChange: (height: number) => void
+    // Mounts an editable view of the artifact. The host adds its own editing
+    // features, such as document sync and prompt references, around the
+    // artifact's view definition.
     mountEditor?: (request: {
         container: HTMLElement
         document: object
-        schema: Schema
-        plugins: Plugin[]
+        documentView: DocumentViewDefinition<unknown>
     }) => {
         destroy: () => void
         updateDocument: (document: object) => void
@@ -104,7 +103,8 @@ export type CapabilityArtifactFrontendDefinition = {
         width: number
         height: number
     }
-    createEditorPlugins?: () => Plugin[]
+    // The artifact's own editor features for its document kind.
+    documentView?: DocumentViewDefinition<unknown>
     createPromptControls?: (host: CapabilityPromptControlHost) => CapabilityPromptControls
     createCanvasNodeView: (host: CapabilityArtifactCanvasHost) => CapabilityArtifactCanvasView
     createGeneratedOutputInfoView: (host: CapabilityArtifactInfoHost) => CapabilityArtifactInfoView

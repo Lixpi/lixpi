@@ -16,6 +16,7 @@ import {
     type ConversationSnapshot,
 } from '@lixpi/constants'
 import { createPromptComposerEditorPort } from './prompt-composer-editor.ts'
+import { createWebUiEditorEnvironment } from '$src/editor/web-ui-editor.ts'
 
 const composers: WorkspacePromptComposer[] = []
 
@@ -53,8 +54,10 @@ describe('conversation drafts through the native prompt editor', () => {
                 destroy: () => {},
             }),
             mountEditor: createPromptComposerEditorPort({
-                assetService: {} as never,
-                auth: { userStore: { getData: () => 'user' } } as never,
+                environment: createWebUiEditorEnvironment({} as never, {
+                    getTokenSilently: async () => 'token-1',
+                    userStore: { getData: () => 'user' },
+                } as never),
             }),
             onSubmit: data => controller.submit({
                 type: 'aiUserMessage',
@@ -63,7 +66,66 @@ describe('conversation drafts through the native prompt editor', () => {
         })
         composers.push(composer)
         document.body.append(composer.element)
-        const view = composer.input.editorView!
+        const editorDom = composer.input.editorContainer.querySelector<HTMLElement>('.ProseMirror')!
+        const readText = (): string => {
+            const visit = (value: unknown): string => {
+                if (
+                    !value
+                    || typeof value !== 'object'
+                )
+                    return ''
+
+                const node = value as {
+                    text?: string
+                    content?: unknown[]
+                }
+
+                return node.text ?? (node.content ?? []).map(visit).join('')
+            }
+
+            return visit(composer.input.readContent())
+        }
+        const setParagraph = (text: string, strong = false): void => {
+            const content = structuredClone(composer.input.readContent()) as {
+                type: string
+                content?: Array<{
+                    type: string
+                    content?: unknown[]
+                }>
+            }
+            const visit = (node: {
+                type: string
+                content?: unknown[]
+            }): boolean => {
+                if (node.type === 'paragraph') {
+                    node.content = strong
+                        ? [
+                            {
+                                type: 'text',
+                                text: text.slice(0, 6),
+                                marks: [{ type: 'strong' }],
+                            },
+                            {
+                                type: 'text',
+                                text: text.slice(6),
+                            },
+                        ]
+                        : [{
+                            type: 'text',
+                            text,
+                        }]
+
+                    return true
+                }
+
+                return (node.content ?? []).some(child => visit(child as {
+                    type: string
+                    content?: unknown[]
+                }))
+            }
+            visit(content)
+            composer.input.restoreContent(content)
+        }
         const snapshot = (id: string): ConversationSnapshot => ({
             protocolVersion: 1,
             workspaceId: 'workspace',
@@ -117,7 +179,7 @@ describe('conversation drafts through the native prompt editor', () => {
             await controller.initialize('hi')
             await vi.waitFor(() => expect(selected).toHaveBeenLastCalledWith('hi'))
             await new Promise(resolve => setTimeout(resolve, 10))
-            expect(view.state.doc.textContent).toBe('')
+            expect(readText()).toBe('')
             const picker = panel.element.querySelector<HTMLSelectElement>('[aria-label="Conversation"]')!
             const create = [...panel.element.querySelectorAll('button')].find(button => button.textContent === 'New conversation')!
             create.click()
@@ -126,8 +188,8 @@ describe('conversation drafts through the native prompt editor', () => {
             const expanded = document.createElement('section')
             document.body.append(expanded)
             expanded.append(composer.element)
-            view.dispatch(view.state.tr.insertText('Make a blue hold', 2))
-            view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+            setParagraph('Make a blue hold')
+            editorDom.dispatchEvent(new KeyboardEvent('keydown', {
                 key: 'Enter',
                 ctrlKey: true,
                 bubbles: true,
@@ -141,20 +203,20 @@ describe('conversation drafts through the native prompt editor', () => {
                 inputType: 'insertText',
                 data: 'Unsent pipeline draft',
             }))
-            await vi.waitFor(() => expect(view.state.doc.textContent).toBe('Unsent pipeline draft'))
-            view.dispatch(view.state.tr.addMark(2, 8, view.state.schema.marks.strong.create()))
-            const blueDraft = view.state.doc.toJSON()
+            await vi.waitFor(() => expect(readText()).toBe('Unsent pipeline draft'))
+            setParagraph('Unsent pipeline draft', true)
+            const blueDraft = composer.input.readContent()
             expect(expanded.querySelector('.ai-prompt-input-content')?.textContent).toBe('Unsent pipeline draft')
             picker.value = 'hi'
             picker.dispatchEvent(new Event('change'))
             await vi.waitFor(() => expect(selected).toHaveBeenLastCalledWith('hi'))
             await new Promise(resolve => setTimeout(resolve, 10))
-            expect(composer.input.editorView).toBe(view)
-            expect(view.state.doc.textContent).toBe('')
+            expect(composer.input.editorContainer.querySelector('.ProseMirror')).toBe(editorDom)
+            expect(readText()).toBe('')
             expect(expanded.querySelector('.ai-prompt-input-content')?.textContent).toBe('')
             await new Promise(resolve => setTimeout(resolve, 10))
             composer.selectConversation('blue-hold')
-            expect(view.state.doc.toJSON()).toEqual(blueDraft)
+            expect(composer.input.readContent()).toEqual(blueDraft)
             expect(expanded.querySelector('.ai-prompt-input-content strong')?.textContent).toBe('Unsent')
         } finally {
             panel.destroy()

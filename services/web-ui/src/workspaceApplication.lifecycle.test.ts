@@ -33,7 +33,7 @@ vi.mock('$src/services/organization-service.ts', () => ({ default: class { getOr
 vi.mock('$src/services/ai-model-service.ts', () => ({ default: class { getAvailableAiModels() {} } }))
 vi.mock('$src/services/workspace-service.ts', () => ({ default: class {
     canvasSessions = { close: async () => {} }
-    getUserWorkspaces() {}
+    getUserWorkspaceTree() {}
 } }))
 vi.mock('$src/services/asset-service.ts', () => ({ default: class {} }))
 

@@ -92,10 +92,12 @@ beforeEach(() => {
     mocks.getWorkspace.mockResolvedValue({
         workspaceId: 'workspace-1',
         organizationId: 'organization-1',
-        accessList: [{
-            userId: 'user-1',
+        accessLevel: 'owner',
+        accessGrant: {
+            grantWorkspaceId: 'workspace-1',
             accessLevel: 'owner',
-        }],
+            ancestorIds: [],
+        },
         updatedAt: 5,
         canvasStateUpdatedAt: 5,
         canvasState: {
@@ -179,10 +181,12 @@ describe('Action Timeline Artifact publication', () => {
         mocks.getWorkspace.mockResolvedValue({
             workspaceId: 'workspace-1',
             organizationId: 'organization-1',
-            accessList: [{
-                userId: 'user-1',
+            accessLevel: 'owner',
+            accessGrant: {
+                grantWorkspaceId: 'workspace-1',
                 accessLevel: 'owner',
-            }],
+                ancestorIds: [],
+            },
             updatedAt: 5,
             canvasStateUpdatedAt: 5,
             canvasState: {

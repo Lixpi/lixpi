@@ -24,7 +24,7 @@ import {
 import {
     getAiModelIcon,
     getAiProviderIcon,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
+} from '@lixpi/prosemirror/frontend/editor'
 import {
     capabilityArtifactFrontendRegistry,
     capabilityArtifactSharedRegistry,
@@ -57,12 +57,16 @@ export type WorkspaceCanvasHostConfig = {
     assetService: AssetService
     auth: AuthClientInstance
     theme?: CanvasThemeSource
+    // Opens a workspace route; the canvas uses it to follow a delegated
+    // conversation back to its parent.
+    openWorkspace?: (workspaceId: string) => void
 }
 
 export const createWorkspaceCanvasHost = ({
     assetService,
     auth,
     theme = canvasThemeStore,
+    openWorkspace,
 }: WorkspaceCanvasHostConfig): WorkspaceCanvasHost => {
     const apiBaseUrl = import.meta.env.VITE_API_URL || ''
 
@@ -157,6 +161,21 @@ export const createWorkspaceCanvasHost = ({
                 }),
             ),
             reload: loadWorkspaceRouteData,
+            ...(openWorkspace
+                ? {
+                    // The conversation controller restores the active
+                    // conversation from this key when the workspace opens.
+                    openConversation: (workspaceId: string, conversationAssetId: string) => {
+                        try {
+                            localStorage.setItem(`lixpi:conversation-active:${auth.userStore.getData('userId')}:${workspaceId}`, conversationAssetId)
+                        } catch {
+                            // The workspace still opens; it selects its usual conversation.
+                        }
+
+                        openWorkspace(workspaceId)
+                    },
+                }
+                : {}),
         },
         models: {
             read: () => aiModelsStore.getData() ?? [],

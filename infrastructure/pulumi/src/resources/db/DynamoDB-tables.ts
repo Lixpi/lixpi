@@ -5,6 +5,11 @@ import type * as pulumi from '@pulumi/pulumi'
 import {
     formatStageResourceName,
     getDynamoDbTableStageName,
+    WORKSPACE_ACCESS_BY_WORKSPACE_INDEX,
+    WORKSPACE_TREE_LOCKS_TABLE_SCHEMA,
+    WORKSPACE_TREE_TABLE_SCHEMA,
+    type DynamoDbGlobalSecondaryIndex,
+    type DynamoDbKeySchema,
 } from '@lixpi/constants'
 
 const {
@@ -28,6 +33,7 @@ type TableDefinition = {
     hashKey: string
     rangeKey?: string
     localSecondaryIndexes?: SecondaryIndex[]
+    globalSecondaryIndexes?: DynamoDbGlobalSecondaryIndex[]
     ttl?: {
         attributeName: string
         enabled: boolean
@@ -52,6 +58,21 @@ const table = (
     hashKey,
     ...(rangeKey ? { rangeKey } : {}),
     ...(localSecondaryIndexes ? { localSecondaryIndexes } : {}),
+})
+
+const tableFromSchema = (
+    resource: Parameters<typeof getDynamoDbTableStageName>[0],
+    schema: DynamoDbKeySchema,
+): TableDefinition => ({
+    name: getDynamoDbTableStageName(
+        resource,
+        ORG_NAME,
+        STAGE,
+    ),
+    attributes: schema.attributes,
+    hashKey: schema.hashKey,
+    ...(schema.rangeKey ? { rangeKey: schema.rangeKey } : {}),
+    ...(schema.globalSecondaryIndexes ? { globalSecondaryIndexes: schema.globalSecondaryIndexes } : {}),
 })
 
 export const getTableDefinitions = () => ({
@@ -118,41 +139,46 @@ export const getTableDefinitions = () => ({
         }],
         'workspaceId',
     ),
-    workspacesAccessListTable: table(
-        'WORKSPACES_ACCESS_LIST',
-        [
-            {
-                name: 'userId',
-                type: 'S',
-            },
-            {
-                name: 'workspaceId',
-                type: 'S',
-            },
-            {
-                name: 'createdAt',
-                type: 'N',
-            },
-            {
-                name: 'updatedAt',
-                type: 'N',
-            },
-        ],
-        'userId',
-        'workspaceId',
-        [
-            {
-                name: 'createdAt',
-                rangeKey: 'createdAt',
-                projectionType: 'ALL',
-            },
-            {
-                name: 'updatedAt',
-                rangeKey: 'updatedAt',
-                projectionType: 'ALL',
-            },
-        ],
-    ),
+    workspacesAccessListTable: {
+        ...table(
+            'WORKSPACES_ACCESS_LIST',
+            [
+                {
+                    name: 'userId',
+                    type: 'S',
+                },
+                {
+                    name: 'workspaceId',
+                    type: 'S',
+                },
+                {
+                    name: 'createdAt',
+                    type: 'N',
+                },
+                {
+                    name: 'updatedAt',
+                    type: 'N',
+                },
+            ],
+            'userId',
+            'workspaceId',
+            [
+                {
+                    name: 'createdAt',
+                    rangeKey: 'createdAt',
+                    projectionType: 'ALL',
+                },
+                {
+                    name: 'updatedAt',
+                    rangeKey: 'updatedAt',
+                    projectionType: 'ALL',
+                },
+            ],
+        ),
+        globalSecondaryIndexes: [WORKSPACE_ACCESS_BY_WORKSPACE_INDEX],
+    },
+    workspaceTreeTable: tableFromSchema('WORKSPACE_TREE', WORKSPACE_TREE_TABLE_SCHEMA),
+    workspaceTreeLocksTable: tableFromSchema('WORKSPACE_TREE_LOCKS', WORKSPACE_TREE_LOCKS_TABLE_SCHEMA),
     aiTokensUsageTransactionsTable: table(
         'AI_TOKENS_USAGE_TRANSACTIONS',
         [

@@ -30,7 +30,6 @@ import {
     type WorkspaceCanvasHost,
 } from './workspace-canvas-host.ts'
 import { createLixpiCanvasSettings } from '../settings/index.ts'
-import { createProseMirrorSchema } from '@lixpi/prosemirror'
 
 const renderers = vi.hoisted(() => [] as any[])
 vi.mock('@lixpi/canvas-engine/frontend/rendering', async importOriginal => {
@@ -251,7 +250,11 @@ const fixture = (overrides: Partial<WorkspaceCanvasHost> = {}, optionOverrides: 
         },
         editors: {
             createPrompt: () => () => ({
-                editorView: null,
+                readContent: vi.fn(() => null),
+                emptyContent: vi.fn(() => null),
+                applyModelPreferences: vi.fn(),
+                insertCapabilityReference: vi.fn(),
+                focus: vi.fn(),
                 restoreContent: vi.fn(),
                 destroy: editorDispose,
             }),
@@ -457,9 +460,18 @@ describe('LixpiWorkspaceCanvas composition', () => {
             createdAt: 1,
             updatedAt: 1,
         })
-        const schema = createProseMirrorSchema('aiPromptInput')
-        let promptDocument = schema.topNodeType.createAndFill()!
-        const restoreContent = vi.fn(content => void (promptDocument = schema.nodeFromJSON(content)))
+        const emptyPromptDocument = {
+            type: 'doc',
+            content: [{
+                type: 'aiPromptInput',
+                content: [{ type: 'paragraph' }],
+            }],
+        }
+        let promptDocument: object = structuredClone(emptyPromptDocument)
+        const promptText = (): string => JSON.stringify(promptDocument).includes('Unsent pipeline draft')
+            ? 'Unsent pipeline draft'
+            : ''
+        const restoreContent = vi.fn(content => void (promptDocument = content))
         const f = fixture({}, {}, host => {
             host.storage = {
                 getItem: key => stored.get(key) ?? null,
@@ -467,10 +479,11 @@ describe('LixpiWorkspaceCanvas composition', () => {
             }
             host.editors.createPrompt = () => request => {
                 return {
-                    editorView: { state: {
-                        get doc() { return promptDocument },
-                        schema,
-                    } } as never,
+                    readContent: () => promptDocument,
+                    emptyContent: () => structuredClone(emptyPromptDocument),
+                    applyModelPreferences: vi.fn(),
+                    insertCapabilityReference: vi.fn(),
+                    focus: vi.fn(),
                     restoreContent,
                     destroy: vi.fn(),
                 }
@@ -498,17 +511,29 @@ describe('LixpiWorkspaceCanvas composition', () => {
         const create = [...panel.querySelectorAll('button')].find(button => button.textContent === 'New conversation')!
         create.click()
         await vi.advanceTimersByTimeAsync(1)
-        promptDocument = schema.topNodeType.create(null, schema.nodes.aiPromptInput.create(null, schema.nodes.paragraph.create(null, schema.text('Unsent pipeline draft'))))
+        promptDocument = {
+            type: 'doc',
+            content: [{
+                type: 'aiPromptInput',
+                content: [{
+                    type: 'paragraph',
+                    content: [{
+                        type: 'text',
+                        text: 'Unsent pipeline draft',
+                    }],
+                }],
+            }],
+        }
         const picker = panel.querySelector<HTMLSelectElement>('[aria-label="Conversation"]')!
         picker.value = 'hi'
         picker.dispatchEvent(new Event('change'))
         await vi.advanceTimersByTimeAsync(1)
         expect(picker.disabled).toBe(false)
-        expect(promptDocument.textContent).toBe('')
+        expect(promptText()).toBe('')
         picker.value = 'blue-hold'
         picker.dispatchEvent(new Event('change'))
         await vi.advanceTimersByTimeAsync(1)
-        expect(promptDocument.textContent).toBe('Unsent pipeline draft')
+        expect(promptText()).toBe('Unsent pipeline draft')
     })
 
     it('sends a greeting with media preferences through the conversation protocol without media preflight', async () => {
@@ -585,7 +610,11 @@ describe('LixpiWorkspaceCanvas composition', () => {
             host.editors.createPrompt = () => request => { send = request.onSubmit
 
             return {
-                editorView: null,
+                readContent: vi.fn(() => null),
+                emptyContent: vi.fn(() => null),
+                applyModelPreferences: vi.fn(),
+                insertCapabilityReference: vi.fn(),
+                focus: vi.fn(),
                 restoreContent: vi.fn(),
                 destroy: vi.fn(),
             } }
@@ -824,7 +853,11 @@ describe('LixpiWorkspaceCanvas composition', () => {
 describe('workspace presentation flags', () => {
     it('keeps composer, conversation panel and side panel enabled by default', () => {
         const createPrompt = vi.fn(() => () => ({
-            editorView: null,
+            readContent: vi.fn(() => null),
+            emptyContent: vi.fn(() => null),
+            applyModelPreferences: vi.fn(),
+            insertCapabilityReference: vi.fn(),
+            focus: vi.fn(),
             restoreContent: vi.fn(),
             destroy: vi.fn(),
         }))
@@ -866,7 +899,11 @@ describe('workspace presentation flags', () => {
 
     it('mounts composer and conversation presentation independently', () => {
         const createPrompt = vi.fn(() => () => ({
-            editorView: null,
+            readContent: vi.fn(() => null),
+            emptyContent: vi.fn(() => null),
+            applyModelPreferences: vi.fn(),
+            insertCapabilityReference: vi.fn(),
+            focus: vi.fn(),
             restoreContent: vi.fn(),
             destroy: vi.fn(),
         }))

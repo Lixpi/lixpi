@@ -15,6 +15,14 @@ describe('contract handler bindings', () => {
         expect(await subscription.handler({}, {} as never)).toBe('result')
     })
 
+    it('forwards the navigation write queue to the runtime subscription', () => {
+        const handlers = Object.fromEntries(activeContractGroups.workspace.map(contract => [contract.id, () => null]))
+        const subscriptions = createNatsSubscriptions('workspace', handlers as never)
+        const id = getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.SAVE_WORKSPACE_NAVIGATION)
+        const contract = activeContractGroups.workspace.find(entry => entry.id === id)!
+        expect(subscriptions.find(subscription => subscription.subject === contract.subject)?.queue).toBe('workspaceNavigationWrites')
+    })
+
     it('rejects missing and extra handlers at runtime', () => {
         expect(() => createNatsSubscriptions('user', {} as never)).toThrow('bindings')
         expect(() => createNatsSubscriptions('user', { wrong: () => null } as never)).toThrow('bindings')

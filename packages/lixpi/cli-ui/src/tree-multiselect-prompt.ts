@@ -1,9 +1,14 @@
-import { styleText } from 'node:util'
+import {
+    stripVTControlCharacters,
+    styleText,
+} from 'node:util'
 import {
     type Readable,
     type Writable,
 } from 'node:stream'
 import {
+    getColumns,
+    getRows,
     Prompt,
     wrapTextWithPrefix,
 } from '@clack/core'
@@ -52,6 +57,15 @@ const SECTION_LINE = unicodeOr('─', '-').repeat(40)
 // tree too tall for the terminal.
 const RESERVED_ROWS = 8
 
+const HIDE_CURSOR = '\x1b[?25l'
+const ERASE_TO_LINE_END = '\x1b[K'
+const ERASE_BELOW = '\x1b[J'
+
+// Terminals that support synchronized output show the whole update at once, and
+// others ignore the mode.
+const BEGIN_UPDATE = '\x1b[?2026h'
+const END_UPDATE = '\x1b[?2026l'
+
 // Clack's grouped multiselect stops at one level of groups, and the service tree
 // nests deeper. This renders the same way as Clack's multiselect on Clack's base
 // prompt, so it behaves like the prompts before and after it.
@@ -60,6 +74,9 @@ export class TreeMultiSelectPrompt extends Prompt<string[]> {
     private readonly instructions: string
     private readonly selection: TreeSelection
     private activeValue: string
+
+    // The lines on screen, ending with the empty line the cursor rests on.
+    private painted: string[] = []
 
     constructor(options: TreeMultiSelectOptions) {
         super(
@@ -83,7 +100,69 @@ export class TreeMultiSelectPrompt extends Prompt<string[]> {
         this.activeValue = options.roots[0].value
         this.value = this.currentValue()
 
+        // Clack binds its redraw onto the instance and calls it after every key, so
+        // replacing it here routes every redraw through paint().
+        ;(this as unknown as { render: () => void }).render = () => this.paint()
+
         this.on('cursor', action => this.handleAction(action))
+    }
+
+    // Clack redraws by clearing everything below the first changed line and writing
+    // the rest back in several writes. Moving the focus changes two lines, so most of
+    // the tree blanks for a moment on every key, and the gap is longer when the output
+    // passes through Docker. This writes over the old lines instead, without clearing
+    // them first, and sends the update as one write.
+    private paint(): void {
+        const frame = this.frame()
+        const lines = frame.split('\n')
+
+        if (this.state === 'initial') {
+            this.output.write(`${HIDE_CURSOR}${frame}`)
+            this.state = 'active'
+            this.painted = lines
+
+            return
+        }
+
+        const previous = this.painted
+        const columns = getColumns(this.output)
+        const rowsOf = (line: string): number => Math.max(
+            1,
+            Math.ceil(stripVTControlCharacters(line).length / columns),
+        )
+        const rowsBelow = (index: number): number => previous.slice(index, -1).reduce((sum, line) => sum + rowsOf(line), 0)
+        let first = 0
+
+        while (
+            first < Math.max(lines.length, previous.length)
+            && lines[first] === previous[first]
+        )
+            first++
+
+        if (first === Math.max(lines.length, previous.length))
+            return
+
+        // Lines that scrolled above the screen can't be reached, so drawing starts at
+        // the first one still on it.
+        while (
+            first < previous.length - 1
+            && rowsBelow(first) > getRows(this.output) - 1
+        )
+            first++
+
+        const up = rowsBelow(first)
+
+        // A line that fills its last row exactly leaves the cursor on that row's final
+        // character, where erasing would remove it.
+        const body = lines.slice(first, -1).map(line => {
+            const width = stripVTControlCharacters(line).length
+            const fillsRow = width > 0 && width % columns === 0
+
+            return `${line}${fillsRow ? '' : ERASE_TO_LINE_END}\n`
+        }).join('')
+
+        this.output.write(`${BEGIN_UPDATE}\r${up ? `\x1b[${up}A` : ''}${body}${ERASE_BELOW}${END_UPDATE}`)
+        this.painted = lines
     }
 
     private currentValue(): string[] {
@@ -253,13 +332,21 @@ export class TreeMultiSelectPrompt extends Prompt<string[]> {
             if (choice !== current)
                 return `${styleText('dim', S_RADIO_INACTIVE)} ${styleText('dim', choice.label)}`
 
+            // A locked row is drawn muted throughout, so it doesn't read as a choice
+            // that can be switched.
+            if (node.locked)
+                return styleText('dim', `${S_RADIO_ACTIVE} ${choice.label}`)
+
             return `${styleText('green', S_RADIO_ACTIVE)} ${active ? styleFocused(choice.label) : choice.label}`
         }).join(
             styleText('dim', ' / '),
         )
-        const hint = current.hint ?? node.hint
+        const hint = node.locked
+            ?? current.hint
+            ?? node.hint
+        const styledLabel = node.locked ? styleText('dim', label) : label
 
-        return `${renderPointer(active)}${label}  ${choices}${hint ? ` ${styleText('dim', `(${hint})`)}` : ''}`
+        return `${renderPointer(active)}${styledLabel}  ${choices}${hint ? ` ${styleText('dim', `(${hint})`)}` : ''}`
     }
 
     // Only an unselected row is muted, so what will run stands out at a glance.
@@ -278,13 +365,6 @@ export class TreeMultiSelectPrompt extends Prompt<string[]> {
         active: boolean,
     ): string {
         const state = this.selection.stateOf(node)
-
-        if (node.selection) {
-            if (state === 'all')
-                return styleText('green', S_RADIO_ACTIVE)
-
-            return active ? styleFocused(S_RADIO_INACTIVE) : styleText('dim', S_RADIO_INACTIVE)
-        }
 
         if (state === 'all')
             return styleText('green', S_CHECKBOX_SELECTED)

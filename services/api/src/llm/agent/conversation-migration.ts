@@ -36,6 +36,7 @@ import {
 import {
     type ConversationAccess,
 } from './conversation-service.ts'
+import { apiDocumentKinds } from '../../prosemirror/document-kinds.ts'
 
 type ImportRecord = {
     revision: number
@@ -149,10 +150,14 @@ export class ConversationMigration {
         private readonly ports: ConversationMigrationPorts = defaultPorts(),
     ) {}
 
+    // Migrates one page of the workspace's legacy conversations. `complete`
+    // is true when the page was the last and nothing on it is pending, so a
+    // full pass over the workspace has finished.
     async migrateWorkspace(access: ConversationAccess): Promise<{
         migrated: number
         skipped: number
         pending: number
+        complete: boolean
     }> {
         const workspace = conversationWorkspacePartition(access.organizationId, access.workspaceId)
         const scan = await this.repository.read<{ cursor?: string }>(workspace, 'LEGACY_IMPORT_CURSOR')
@@ -161,6 +166,7 @@ export class ConversationMigration {
             migrated: 0,
             skipped: 0,
             pending: 0,
+            complete: false,
         }
 
         for (const item of page.items) {
@@ -175,14 +181,25 @@ export class ConversationMigration {
             }
         }
 
-        if (!result.pending)
+        if (result.pending)
+            return result
+
+        // The cursor is written only when it moves, so a workspace with
+        // nothing left to migrate is scanned without a write.
+        if (
+            (scan?.cursor ?? undefined) !== (page.cursor ?? undefined)
+            || !scan
+        )
             await this.repository.commit([...access.fences, this.repository.replace(
                 workspace,
                 'LEGACY_IMPORT_CURSOR',
                 page.cursor ? { cursor: page.cursor } : {},
             )])
 
-        return result
+        return {
+            ...result,
+            complete: !page.cursor,
+        }
     }
 
     async migrateAsset(
@@ -393,7 +410,8 @@ export class ConversationMigration {
             return undefined
 
         new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            registry: apiDocumentKinds(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc,
             version: asset.documents.conversation!.version,
         })

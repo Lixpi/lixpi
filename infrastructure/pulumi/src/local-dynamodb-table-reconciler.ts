@@ -18,6 +18,7 @@ import {
     DeleteTableCommand,
     DescribeTableCommand,
     DescribeTimeToLiveCommand,
+    UpdateTableCommand,
     UpdateTimeToLiveCommand,
     type CreateTableCommandInput,
     type DynamoDBClient,
@@ -35,6 +36,12 @@ export type TableDefinition = {
     localSecondaryIndexes?: Array<{
         name: string
         rangeKey: string
+        projectionType: 'ALL'
+    }>
+    globalSecondaryIndexes?: Array<{
+        name: string
+        hashKey: string
+        rangeKey?: string
         projectionType: 'ALL'
     }>
     ttl?: {
@@ -88,6 +95,7 @@ export class LocalDynamoDbTableReconciler {
 
         if (live) {
             if (!this.forceRecreate) {
+                await this.ensureGlobalSecondaryIndexes(table, live)
                 await this.ensureTimeToLive(table)
                 debugLog(`  ✓ ${table.name} (exists — kept as is)`)
 
@@ -112,6 +120,62 @@ export class LocalDynamoDbTableReconciler {
             debugError(`  ✗ ${table.name}: ${(error as Error).message}`)
 
             throw error
+        }
+    }
+
+    // Adds an index the definition gained since the table was created. Adding
+    // an index keeps the table's items, so a preserved table never needs a
+    // recreate for it. Removing or changing an index needs an explicit migration.
+    private async ensureGlobalSecondaryIndexes(
+        table: TableDefinition,
+        live: TableDescription,
+    ): Promise<void> {
+        const existing = new Set(
+            (live.GlobalSecondaryIndexes ?? []).map(index => index.IndexName),
+        )
+
+        for (const index of table.globalSecondaryIndexes ?? []) {
+            if (existing.has(index.name))
+                continue
+
+            await this.client.send(
+                new UpdateTableCommand({
+                    TableName: table.name,
+                    AttributeDefinitions: this.buildAttributeDefinitions(table).filter(
+                        attribute => attribute.AttributeName === index.hashKey || attribute.AttributeName === index.rangeKey,
+                    ),
+                    GlobalSecondaryIndexUpdates: [{
+                        Create: this.buildGlobalSecondaryIndex(index),
+                    }],
+                }),
+            )
+            debugLog(`  + ${table.name} (added index ${index.name})`)
+        }
+    }
+
+    private buildAttributeDefinitions(table: TableDefinition): NonNullable<CreateTableCommandInput['AttributeDefinitions']> {
+        return table.attributes.map(
+            attr => ({
+                AttributeName: attr.name,
+                AttributeType: attr.type,
+            }),
+        )
+    }
+
+    private buildGlobalSecondaryIndex(index: NonNullable<TableDefinition['globalSecondaryIndexes']>[number]): NonNullable<CreateTableCommandInput['GlobalSecondaryIndexes']>[number] {
+        return {
+            IndexName: index.name,
+            KeySchema: [
+                {
+                    AttributeName: index.hashKey,
+                    KeyType: 'HASH' as const,
+                },
+                ...(index.rangeKey ? [{
+                    AttributeName: index.rangeKey,
+                    KeyType: 'RANGE' as const,
+                }] : []),
+            ],
+            Projection: { ProjectionType: index.projectionType },
         }
     }
 
@@ -161,13 +225,11 @@ export class LocalDynamoDbTableReconciler {
                     KeyType: 'RANGE' as const,
                 }] : []),
             ],
-            AttributeDefinitions: table.attributes.map(
-                attr => ({
-                    AttributeName: attr.name,
-                    AttributeType: attr.type,
-                }),
-            ),
+            AttributeDefinitions: this.buildAttributeDefinitions(table),
             BillingMode: 'PAY_PER_REQUEST',
+            ...(table.globalSecondaryIndexes && {
+                GlobalSecondaryIndexes: table.globalSecondaryIndexes.map(index => this.buildGlobalSecondaryIndex(index)),
+            }),
             ...(table.localSecondaryIndexes && {
                 LocalSecondaryIndexes: table.localSecondaryIndexes.map(
                     lsi => ({

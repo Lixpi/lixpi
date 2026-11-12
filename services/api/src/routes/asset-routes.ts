@@ -8,6 +8,7 @@ import {
     isAssetDocumentRole,
     type AssetRenditionName,
 } from '@lixpi/constants'
+import { canEditWorkspace } from '../services/workspace-navigation/access.ts'
 
 import { jwtVerifier } from '../helpers/auth.ts'
 import { AccountRequestContext } from '../services/account-request-context.ts'
@@ -85,7 +86,7 @@ router.post(
         if (workspace.deletingAt)
             return res.status(409).json({ error: 'WORKSPACE_DELETING' })
 
-        if (!workspace.accessList.some(entry => entry.userId === userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor')))
+        if (!canEditWorkspace(workspace.accessLevel))
             return res.status(403).json({ error: 'PERMISSION_DENIED' })
 
         const organizationId = workspace.organizationId
@@ -140,7 +141,7 @@ router.post(
         if (workspace.deletingAt)
             return res.status(409).json({ error: 'WORKSPACE_DELETING' })
 
-        if (!workspace.accessList.some(entry => entry.userId === userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor')))
+        if (!canEditWorkspace(workspace.accessLevel))
             return res.status(403).json({ error: 'PERMISSION_DENIED' })
 
         const organizationId = workspace.organizationId

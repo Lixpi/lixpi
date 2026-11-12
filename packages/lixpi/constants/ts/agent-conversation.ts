@@ -175,15 +175,45 @@ export type ConversationTurn = {
     state: ConversationRunState
     createdAt: number
     interruptId?: string
+    // Set on a turn another workspace's agent submitted.
+    delegation?: ConversationTurnDelegation
+}
+
+// The limits and authority a delegated turn runs under. The caller's
+// remaining allowance caps every budget kind, a read delegation gets no
+// action scope, and an act delegation is narrowed to the caller's families.
+export type ConversationTurnDelegation = {
+    access: WorkspaceDelegationAccess
+    parentWorkspaceId: string
+    parentWorkspaceName: string
+    parentConversationAssetId: string
+    parentTurnId: string
+    operationId: string
+    allowedOperationFamilies: string[]
+    budgetLimits: Pick<AgentTurnBudget, 'maxModelCalls' | 'maxToolCalls' | 'maxSpecialistCalls' | 'maxDelegationCalls'>
 }
 
 export type AgentTurnBudget = {
     modelCalls: number
     toolCalls: number
     specialistCalls: number
+    delegationCalls: number
     maxModelCalls: number
     maxToolCalls: number
     maxSpecialistCalls: number
+    maxDelegationCalls: number
+}
+
+export type WorkspaceDelegationAccess = 'read' | 'act'
+
+// Links a conversation that a parent workspace's agent started in a child
+// workspace back to the parent turn and operation that started it.
+export type ConversationDelegation = {
+    workspaceId: string
+    workspaceName: string
+    conversationAssetId: string
+    turnId: string
+    operationId: string
 }
 
 export type ConversationRun = {
@@ -224,6 +254,10 @@ export type AgentOperation = {
     providerRequestId?: string
     providerJobId?: string
     outputAssetIds: Record<string, string>
+    childWorkspaceId?: string
+    childConversationAssetId?: string
+    childRunId?: string
+    delegationAccess?: WorkspaceDelegationAccess
     error?: ConversationFailure
     createdAt: number
     updatedAt: number
@@ -235,6 +269,8 @@ export type ConversationMessage = {
     role: 'user' | 'assistant' | 'configuration'
     text: string
     clientMessageId?: string
+    // Set when a workspace agent, not a person, wrote a user-side message.
+    authorLabel?: string
     complete: boolean
     createdAt: number
     orderKey?: string
@@ -261,6 +297,7 @@ export type ConversationSnapshot = ConversationCommandBase & {
     messageCursor?: string
     documentRevision: number
     eventSeq: number
+    delegatedBy?: ConversationDelegation
     createdAt: number
     updatedAt: number
     acknowledgement?: ConversationAcknowledgement

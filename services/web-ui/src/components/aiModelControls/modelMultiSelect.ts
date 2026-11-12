@@ -9,10 +9,10 @@ import {
 import { html } from '@lixpi/ui-primitives/dom'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { settings } from '$src/settings.ts'
+import { transformModelsToOptions } from '$src/components/aiModelControls/aiModelControls.ts'
 import {
-    transformModelsToOptions,
     type AiModelDropdownOption,
-} from '$src/components/aiModelControls/aiModelControls.ts'
+} from '@lixpi/prosemirror/frontend/editor'
 
 import {
     type DefaultAiModelCapability,

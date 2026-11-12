@@ -74,6 +74,12 @@ export class LoadingLayer {
         this.overlay?.setAppearance(appearance)
     }
 
+    // Restarts the spinner when loading starts over while it is on screen.
+    restartSpin(): void {
+        if (!this.destroyed)
+            this.overlay?.restartSpin()
+    }
+
     acquire(options: LoadingRequest = {}): LoadingLease {
         if (this.destroyed)
             throw new Error('Loading layer is disposed')

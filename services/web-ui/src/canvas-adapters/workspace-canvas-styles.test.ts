@@ -71,4 +71,31 @@ describe('workspace canvas styles', () => {
 
         expect(result.css).toContain('.execution-trace')
     })
+
+    it('gives prompt references on the workspace the shared dark chip palette', () => {
+        const workspaceScss = readFileSync(resolve(import.meta.dirname, 'workspace-theme.scss'), 'utf-8')
+
+        expect(workspaceScss).toContain('@include prompt-reference-chip-on-dark-surface;')
+    })
+
+    // The sidebar tree renders without any layout when its stylesheet is not
+    // loaded, so the layout must import it and it must compile.
+    it('loads and compiles the workspace sidebar styles', async () => {
+        const layoutSource = readFileSync(resolve(webUiSourceDirectory, 'views/layouts/layout.ts'), 'utf-8')
+        const result = await compileAsync(
+            resolve(webUiSourceDirectory, 'components/navigationSidePanel/workspace-navigation/workspace-navigation.scss'),
+            {
+                importers: [packageStylesheetImporter],
+                silenceDeprecations: [
+                    'color-4-api',
+                    'import',
+                ],
+            },
+        )
+
+        expect(layoutSource.includes("import '$src/components/navigationSidePanel/workspace-navigation/workspace-navigation.scss'")).toBe(true)
+        expect(result.css).toContain('.nested-list-item')
+        expect(result.css).toContain('.nested-list-pencil')
+        expect(result.css).toContain('.nested-list-block-panel')
+    })
 })

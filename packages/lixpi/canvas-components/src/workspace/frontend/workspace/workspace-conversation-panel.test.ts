@@ -179,3 +179,56 @@ describe('WorkspaceConversationPanel native conversation editor', () => {
         } finally { f.panel.destroy() }
     })
 })
+
+describe('WorkspaceConversationPanel delegated conversations', () => {
+    it('names the agent that started a delegated conversation and links back to its parent', async () => {
+        const f = fixture()
+        f.panel.destroy()
+        const delegatedBy = {
+            workspaceId: 'parent-workspace',
+            workspaceName: 'Campaign',
+            conversationAssetId: 'parent-conversation',
+            turnId: 'parent-turn',
+            operationId: 'delegation:abc',
+        }
+        const controller = new WorkspaceConversationController('workspace', 'user', f.ports, {
+            getItem: () => null,
+            setItem: vi.fn(),
+        }, () => 'id')
+        controller.current = {
+            ...f.current,
+            delegatedBy,
+        }
+        controller.conversations = [controller.current]
+        const openConversation = vi.fn()
+        const panel = new WorkspaceConversationPanel(
+            controller,
+            document,
+            vi.fn(),
+            undefined,
+            {
+                load: f.load,
+                mount: f.mount,
+            },
+            openConversation,
+        )
+
+        try {
+            const origin = panel.element.querySelector('.workspace-conversation-origin') as HTMLElement
+            expect(origin.hidden).toBe(false)
+            expect(origin.textContent).toContain('Started by Campaign agent')
+            expect(panel.element.querySelector('option')!.textContent).toContain('Started by Campaign agent')
+
+            ;(origin.querySelector('button') as HTMLButtonElement).click()
+            expect(openConversation).toHaveBeenCalledWith('parent-workspace', 'parent-conversation')
+        } finally { panel.destroy() }
+    })
+
+    it('hides the origin for a conversation a person started', () => {
+        const f = fixture()
+
+        try {
+            expect((f.panel.element.querySelector('.workspace-conversation-origin') as HTMLElement).hidden).toBe(true)
+        } finally { f.panel.destroy() }
+    })
+})

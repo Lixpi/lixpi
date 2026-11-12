@@ -5,9 +5,9 @@ import {
 } from 'vitest'
 
 import {
-    createProseMirrorSchema,
+    createCoreDocumentKindRegistry,
     DOCUMENT_TYPE,
-} from './schema-builder.ts'
+} from './document-kinds.ts'
 import {
     getPromptReferenceStableId,
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
@@ -16,6 +16,8 @@ import {
     PROMPT_REFERENCE_NODE_TYPE,
     toPromptReference,
 } from './prompt-reference.ts'
+
+const coreRegistry = createCoreDocumentKindRegistry()
 
 describe('prompt_reference', () => {
     it.each(
@@ -97,7 +99,7 @@ describe('prompt_reference', () => {
             capabilityId: 'skill-legacy',
             displayName: 'Legacy Skill',
         })
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const nodeType = schema.nodes[LEGACY_CAPABILITY_REFERENCE_NODE_TYPE]
         const node = schema.nodeFromJSON({
             type: LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
@@ -118,7 +120,7 @@ describe('prompt_reference', () => {
     })
 
     it('is an inline atom that round-trips stable identity through DOM attributes', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const nodeType = schema.nodes[PROMPT_REFERENCE_NODE_TYPE]
         const node = nodeType.create({
             referenceType: 'media',
@@ -161,7 +163,7 @@ describe('prompt_reference', () => {
             },
         ] as const,
     )('renders only the cosmetic name in fallback DOM', (attrs) => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const nodeType = schema.nodes[PROMPT_REFERENCE_NODE_TYPE]
         const node = nodeType.create(attrs)
         const dom = nodeType.spec.toDOM!(node) as [string, Record<string, string>, ...unknown[]]

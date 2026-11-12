@@ -63,6 +63,8 @@ export type MainApiServiceArgs = {
         AGENT_MAX_MODEL_CALLS: string
         AGENT_MAX_TOOL_CALLS: string
         AGENT_MAX_SPECIALIST_CALLS: string
+        AGENT_MAX_DELEGATION_CALLS: string
+        AGENT_DELEGATION_WAIT_MS: string
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
         ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: string

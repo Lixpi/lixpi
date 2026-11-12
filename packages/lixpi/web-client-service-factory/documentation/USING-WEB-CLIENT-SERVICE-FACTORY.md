@@ -81,7 +81,7 @@ createRouteViewOutlet({
 
 The outlet's optional `onRouteChange` callback keeps application navigation chrome synchronized without a second store subscription. The outlet does not choose a UI kit or build navigation.
 
-The router supports route parameters, query strings, hashes, loaders, history, an optional fallback route, and an `onRouteChange` callback. A fallback route handles browser URLs that do not match the route table. The callback can update application-owned state such as the document title. Application services and components receive the router through the runtime context instead of importing a singleton.
+The router supports route parameters, query strings, hashes, loaders, history, an optional fallback route, and an `onRouteChange` callback. `navigateTo()` writes the browser URL before it notifies subscribers, so a view that reacts slowly never holds back the address bar. A loader receives an `AbortSignal` as its third argument. Navigating to another path or other parameters aborts the load in flight, as does `cancelRouteLoad()`; an aborted load's result never marks the route as fetched. A fallback route handles browser URLs that do not match the route table. The callback can update application-owned state such as the document title. Application services and components receive the router through the runtime context instead of importing a singleton.
 
 ## Vite and Sass foundations
 

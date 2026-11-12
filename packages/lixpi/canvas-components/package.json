@@ -171,72 +171,6 @@
             "style": "./src/workspace/frontend/settings/canvas-theme.scss",
             "default": "./src/workspace/frontend/settings/canvas-theme.scss"
         },
-        "./styles/workspace/native-prompt-controls": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/composer/native-prompt-controls.scss",
-            "style": "./src/workspace/frontend/composer/native-prompt-controls.scss",
-            "default": "./src/workspace/frontend/composer/native-prompt-controls.scss"
-        },
-        "./styles/workspace/chat-thread": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/composer/chat-thread.scss",
-            "style": "./src/workspace/frontend/composer/chat-thread.scss",
-            "default": "./src/workspace/frontend/composer/chat-thread.scss"
-        },
-        "./styles/workspace/message-bubbles": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/composer/message-bubbles.scss",
-            "style": "./src/workspace/frontend/composer/message-bubbles.scss",
-            "default": "./src/workspace/frontend/composer/message-bubbles.scss"
-        },
-        "./styles/workspace/prompt-reference-colors": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/composer/prompt-reference-colors.scss",
-            "style": "./src/workspace/frontend/composer/prompt-reference-colors.scss",
-            "default": "./src/workspace/frontend/composer/prompt-reference-colors.scss"
-        },
-        "./styles/workspace/execution-trace": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/progress/execution-trace.scss",
-            "style": "./src/workspace/frontend/progress/execution-trace.scss",
-            "default": "./src/workspace/frontend/progress/execution-trace.scss"
-        },
-        "./styles/workspace/capability-run": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/progress/capability-run.scss",
-            "style": "./src/workspace/frontend/progress/capability-run.scss",
-            "default": "./src/workspace/frontend/progress/capability-run.scss"
-        },
-        "./styles/workspace/chat-animations": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/composer/chat-animations.scss",
-            "style": "./src/workspace/frontend/composer/chat-animations.scss",
-            "default": "./src/workspace/frontend/composer/chat-animations.scss"
-        },
-        "./styles/workspace/editor": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/nodes/editor.scss",
-            "style": "./src/workspace/frontend/nodes/editor.scss",
-            "default": "./src/workspace/frontend/nodes/editor.scss"
-        },
-        "./styles/workspace/editor-link-tooltip": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/nodes/editor-link-tooltip.scss",
-            "style": "./src/workspace/frontend/nodes/editor-link-tooltip.scss",
-            "default": "./src/workspace/frontend/nodes/editor-link-tooltip.scss"
-        },
-        "./styles/workspace/editor-image": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/nodes/editor-image.scss",
-            "style": "./src/workspace/frontend/nodes/editor-image.scss",
-            "default": "./src/workspace/frontend/nodes/editor-image.scss"
-        },
-        "./styles/workspace/prompt-reference-picker": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/composer/prompt-reference-picker.scss",
-            "style": "./src/workspace/frontend/composer/prompt-reference-picker.scss",
-            "default": "./src/workspace/frontend/composer/prompt-reference-picker.scss"
-        },
         "./styles/playback-controls": {
             "types": "./src/styles.d.ts",
             "sass": "./src/frontend/media/playback-chrome.scss",
@@ -249,14 +183,13 @@
     },
     "dependencies": {
         "@lixpi/canvas-engine": "workspace:*",
-        "@lixpi/ui-primitives": "workspace:*",
-        "d3-selection": "3.0.0",
-        "prosemirror-view": "1.42.8",
-        "@lixpi/prosemirror": "workspace:*",
         "@lixpi/capability-system": "workspace:*",
-        "@lixpi/ui-kit": "workspace:*",
         "@lixpi/constants": "workspace:*",
-        "@lixpi/themes": "workspace:*"
+        "@lixpi/prosemirror": "workspace:*",
+        "@lixpi/themes": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
+        "@lixpi/ui-primitives": "workspace:*",
+        "d3-selection": "3.0.0"
     },
     "devDependencies": {
         "vitest": "5.0.5",

@@ -7,9 +7,6 @@ import {
     vi,
 } from 'vitest'
 import {
-    type EditorView,
-} from 'prosemirror-view'
-import {
     createAiPromptComposer,
     type AiPromptComposerConfig,
     type PromptComposerEditorRequest,
@@ -28,7 +25,11 @@ afterEach(() => {
 
 const fixture = (overrides: Partial<AiPromptComposerConfig> = {}) => {
     const editor = {
-        editorView: { focus: vi.fn() } as unknown as EditorView,
+        readContent: vi.fn(() => null),
+        emptyContent: vi.fn(() => null),
+        applyModelPreferences: vi.fn(),
+        insertCapabilityReference: vi.fn(),
+        focus: vi.fn(),
         restoreContent: vi.fn(),
         destroy: vi.fn(),
     }
@@ -102,7 +103,7 @@ describe('AI prompt composer lifetime', () => {
         expect(f.config.onContentChange).toHaveBeenCalledOnce()
         expect(f.editor.destroy).toHaveBeenCalledOnce()
         expect(f.gradient.destroy).toHaveBeenCalledOnce()
-        expect(f.composer.editorView).toBeNull()
+        expect(f.composer.readContent()).toBeNull()
     })
 
     it('restores content through the editor port and preserves independent instances', () => {
@@ -114,7 +115,7 @@ describe('AI prompt composer lifetime', () => {
         expect(() => first.composer.restoreContent({})).toThrow('AI_PROMPT_COMPOSER_NOT_READY')
         second.composer.focus()
         second.composer.triggerGradientAnimation()
-        expect(second.editor.editorView.focus).toHaveBeenCalledOnce()
+        expect(second.editor.focus).toHaveBeenCalledOnce()
         expect(second.gradient.triggerAnimation).toHaveBeenCalledOnce()
         expect(second.composer.element.isConnected).toBe(true)
     })

@@ -557,6 +557,40 @@ describe('NatsService', () => {
             expect(msg.respond).toHaveBeenCalledWith(JSON.stringify({ pong: 'ok' }))
         })
 
+        it('handles requests on one subject concurrently up to the configured limit', async () => {
+            const messages = ['a', 'b', 'c'].map(id => ({
+                string: vi.fn().mockReturnValue(JSON.stringify({ id })),
+                respond: vi.fn(),
+            }))
+            connectionMock.subscribe = vi.fn().mockReturnValue(createAsyncIterable(messages))
+            const service = new (NatsService as any)({ maxConcurrentReplies: 2 })
+            service['nc'] = connectionMock
+            const started: string[] = []
+            const releases = new Map<string, () => void>()
+
+            service.reply('inbox', async ({ id }: { id: string }) => {
+                started.push(id)
+                await new Promise<void>(resolve => releases.set(id, resolve))
+
+                return { id }
+            })
+            await flushPending()
+
+            // The first two run together; the third waits for a free slot.
+            expect(started).toEqual(['a', 'b'])
+            releases.get('b')!()
+            await flushPending()
+            expect(messages[1].respond).toHaveBeenCalledWith('{"id":"b"}')
+            expect(started).toEqual(['a', 'b', 'c'])
+            expect(messages[0].respond).not.toHaveBeenCalled()
+
+            releases.get('a')!()
+            releases.get('c')!()
+            await flushPending()
+            expect(messages[0].respond).toHaveBeenCalledWith('{"id":"a"}')
+            expect(messages[2].respond).toHaveBeenCalledWith('{"id":"c"}')
+        })
+
         it('replies with a JSON error payload when a reply handler throws', async () => {
             const msg = {
                 string: vi.fn().mockReturnValue('{"ping":"ok"}'),

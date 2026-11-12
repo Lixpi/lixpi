@@ -7,7 +7,7 @@ The developer tools under `dev-tools/` ask their questions in a terminal, inside
 | `@lixpi/cli-ui/prompt-session` | `showWizardIntro` for the title bar, `renderInstructionFooter` for the guide below every menu, and `unwrapPrompt` with `PromptCancelled` so a wizard handles cancellation once around all its questions |
 | `@lixpi/cli-ui/environment-files` | `listEnvironmentFiles` for the repository's `.env.*` files |
 | `@lixpi/cli-ui/select-menu` | `selectMenu`, a single-choice menu that opens on its first option unless given an initial value. Like the tree, it marks the focused row with a chevron |
-| `@lixpi/cli-ui/tree-multiselect-prompt` | `TreeMultiSelectPrompt`, a Clack-styled multiselect for trees of any depth, with optional horizontal radio rows above the tree and preset rows inside it that apply a fixed selection |
+| `@lixpi/cli-ui/tree-multiselect-prompt` | `TreeMultiSelectPrompt`, a Clack-styled multiselect for trees of any depth, with optional horizontal radio rows above the tree. A radio row whose choices carry a `selection` is a preset row: switching it replaces the tree's selection, and it marks whichever choice the tree matches, falling back to its choice with an empty selection. A radio row with `locked` set stays on its first choice and shows that text as the reason. The prompt redraws by overwriting only what changed in a single write, so moving through a long tree doesn't flicker |
 | `@lixpi/cli-ui/tree-selection` | `TreeSelection`, the prompt's selection model. It stores selection on leaves and derives each group's state from them |
 | `@lixpi/cli-ui/secret-input` | `SecretInputPrompt`, a chunk-based input for long credentials |
 

@@ -201,9 +201,7 @@ const loadContextPreview = (): string => readSourceFile('../../packages/lixpi/ca
 
 const loadAiInteractionService = (): string => readSourceFile('../services/ai-interaction-service.ts', 'services/ai-interaction-service.ts')
 
-const loadAiChatThreadPlugin = (): string => readSourceFile('../components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts')
-
-const loadAiGeneratedImageNode = (): string => readSourceFile('../components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts')
+const loadAiChatThreadPlugin = (): string => readSourceFile('../../packages/lixpi/prosemirror/src/frontend/plugins/ai-chat-thread/ai-chat-thread-plugin.ts')
 
 const loadAiGeneratedMediaCanvasRouter = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/generation/canvas-generation-events.ts')
 
@@ -1662,7 +1660,7 @@ describe('Workspace right panel — single generated-output details renderer', (
         const content = extractFunctionBody(ts, 'mountContent')
         expectExcerptToContain(content, 'this.renderContent(body, node)', 'right panel content')
         expectExcerptToContain(content, 'workspace-generated-output-details-empty', 'right panel content')
-        expectExcerptNotToContain(content, 'new ProseMirrorEditor', 'right panel content')
+        expectExcerptNotToContain(content, 'mountEditorDocument', 'right panel content')
         expectExcerptToContain(extractFunctionBody(detailsSource, 'render'), 'this.ports.renderPanel(options)', 'right panel mounting')
     })
     it('removes every session-list, chat-tab, and transcript renderer entry point', () => {
@@ -2020,7 +2018,6 @@ describe('Right side panel — TS infrastructure', () => {
     it('routes workspace context relevance events around markdown parsing', () => {
         const aiInteractionService = loadAiInteractionService()
         const aiChatThreadPlugin = loadAiChatThreadPlugin()
-        const aiGeneratedImageNode = loadAiGeneratedImageNode()
 
         expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED')
         expectSourceToContain(aiInteractionService, "type: 'context_relevance_resolved'")

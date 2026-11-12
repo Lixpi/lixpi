@@ -20,6 +20,8 @@ Two user actions add context:
 - **Prompt reference atoms** are typed references embedded in the authoritative latest user message. They can reference media, documents, Capability Artifacts, Tools, Skills, or Capability modules.
 - **Composer context chips** are canvas nodes explicitly added to the context tray before submit. They can reference images, videos, documents, or Capability Artifacts.
 
+A conversation can also reach into the workspaces below its own. The agent sees an outline of its subtree, names only, and can ask a descendant workspace's agent to answer from that workspace's own Assets or act there; the child's answer returns as a tool result, not as attached content. [Delegated conversations](CHAT-PANEL-AND-SESSIONS.md#delegated-conversations) describes how that runs.
+
 Plain canvas proximity, connector edges, branch membership, recency, and descriptor similarity do not add context. Direct-generation follow-ups must carry the intended media as a prompt reference or context chip. Conversational follow-ups may also target an authorized output created by that conversation.
 
 ## Request Path

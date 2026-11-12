@@ -7,6 +7,7 @@ import {
     type ConversationRun,
     type ConversationTurn,
     type AgentOperation,
+    type AgentTurnBudget,
     type ConversationOperationSummary,
 } from '@lixpi/constants'
 import {
@@ -52,6 +53,26 @@ type AdmissionLease = {
 
 const admissionPartition = (job: ConversationDispatch): string =>
     `ORG#${encodeURIComponent(job.organizationId)}#AGENT_ADMISSION#${encodeURIComponent(job.userId)}`
+
+// A fresh allowance for a turn. A delegated turn never gets more than the
+// caller had left when it delegated, for every kind.
+export const createTurnBudget = (
+    configuration: AgentConfiguration,
+    turn: Pick<ConversationTurn, 'delegation'>,
+): AgentTurnBudget => {
+    const limits = turn.delegation?.budgetLimits
+
+    return {
+        modelCalls: 0,
+        toolCalls: 0,
+        specialistCalls: 0,
+        delegationCalls: 0,
+        maxModelCalls: Math.min(configuration.maxModelCalls, limits?.maxModelCalls ?? Infinity),
+        maxToolCalls: Math.min(configuration.maxToolCalls, limits?.maxToolCalls ?? Infinity),
+        maxSpecialistCalls: Math.min(configuration.maxSpecialistCalls, limits?.maxSpecialistCalls ?? Infinity),
+        maxDelegationCalls: Math.min(configuration.maxDelegationCalls, limits?.maxDelegationCalls ?? Infinity),
+    }
+}
 
 export class ConversationOwner {
     readonly partition: string
@@ -314,14 +335,7 @@ export class ConversationOwner {
                         epoch: this.epoch,
                         instructionRevision: turn.commandSeq,
                         continuationEpoch: 0,
-                        budget: {
-                            modelCalls: 0,
-                            toolCalls: 0,
-                            specialistCalls: 0,
-                            maxModelCalls: configuration.maxModelCalls,
-                            maxToolCalls: configuration.maxToolCalls,
-                            maxSpecialistCalls: configuration.maxSpecialistCalls,
-                        },
+                        budget: createTurnBudget(configuration, turn),
                         operationIds: [],
                         updatedAt: this.ports.now(),
                     },
@@ -456,14 +470,7 @@ export class ConversationOwner {
                     ...meta.run,
                     budgetAllocationId: allocationId,
                     continuedFromBudgetAllocationId: meta.run.budgetAllocationId ?? `budget-${meta.run.runId}`,
-                    budget: {
-                        modelCalls: 0,
-                        toolCalls: 0,
-                        specialistCalls: 0,
-                        maxModelCalls: configuration.maxModelCalls,
-                        maxToolCalls: configuration.maxToolCalls,
-                        maxSpecialistCalls: configuration.maxSpecialistCalls,
-                    },
+                    budget: createTurnBudget(configuration, answer),
                     updatedAt: this.ports.now(),
                 }
                 delete run.interruptId
@@ -553,13 +560,14 @@ export class ConversationOwner {
     }
 
     async consumeBudget(
-        kind: 'modelCalls' | 'toolCalls' | 'specialistCalls',
+        kind: 'modelCalls' | 'toolCalls' | 'specialistCalls' | 'delegationCalls',
         continuation: number,
     ): Promise<void> {
         const maximum = {
             modelCalls: 'maxModelCalls',
             toolCalls: 'maxToolCalls',
             specialistCalls: 'maxSpecialistCalls',
+            delegationCalls: 'maxDelegationCalls',
         } as const
         await this.mutate(meta => {
             const run = meta.run

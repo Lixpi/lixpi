@@ -168,6 +168,34 @@ describe('durable conversation acceptance', () => {
         }, 'user-1')).conversations).toHaveLength(1)
     })
 
+    it('waits for legacy migration only until a full pass completes, then lists without waiting', async () => {
+        let finishMigration: (complete: boolean) => void = () => undefined
+        const migrate = vi.fn(async () => await new Promise<boolean>(resolve => void (finishMigration = resolve)))
+        const migrating = new ConversationService(repository, {
+            ...ports,
+            migrate,
+        })
+        const request = {
+            protocolVersion: 1 as const,
+            workspaceId: 'workspace-migration-wait',
+        }
+
+        let listed = false
+        const first = (async () => {
+            await migrating.list(request, 'user-1')
+            listed = true
+        })()
+        await vi.waitFor(() => expect(migrate).toHaveBeenCalledTimes(1))
+        await Promise.resolve()
+        expect(listed).toBe(false)
+        finishMigration(true)
+        await first
+
+        await migrating.list(request, 'user-1')
+        expect(migrate).toHaveBeenCalledTimes(2)
+        finishMigration(true)
+    })
+
     it('returns the original identity on create retry and rejects changed initial settings', async () => {
         const request = {
             protocolVersion: 1 as const,
@@ -588,5 +616,105 @@ describe('durable conversation acceptance', () => {
             snapshotRequired: true,
             events: [],
         })
+    })
+
+    it('stops every unfinished turn in a deleting workspace without the user access check', async () => {
+        await service.submit(submit(), 'user-1')
+        const pk = conversationPartition('org-1', conversationAssetId)
+        const meta = (await repository.read<ConversationMeta>(pk, 'META'))!
+        await repository.commit([repository.put(
+            pk,
+            'META',
+            {
+                ...meta,
+                run: {
+                    runId: 'run-1',
+                    turnId: 'turn-1',
+                    state: 'running',
+                    epoch: 1,
+                    instructionRevision: 1,
+                    continuationEpoch: 3,
+                    budget: {
+                        modelCalls: 0,
+                        toolCalls: 0,
+                        specialistCalls: 0,
+                        delegationCalls: 0,
+                        maxModelCalls: 24,
+                        maxToolCalls: 64,
+                        maxSpecialistCalls: 4,
+                        maxDelegationCalls: 8,
+                    },
+                    operationIds: [],
+                    updatedAt: 1,
+                },
+            },
+            meta.revision,
+        )])
+        vi.mocked(ports.authorize).mockClear()
+
+        expect(await service.stopWorkspace('org-1', 'workspace-1')).toBe(1)
+
+        const stopped = (await repository.read<ConversationMeta>(pk, 'META'))!
+        expect(stopped.queuePaused).toBe(true)
+        expect(stopped.run).toMatchObject({
+            state: 'stopping',
+            continuationEpoch: 4,
+        })
+        expect(ports.authorize).not.toHaveBeenCalled()
+        expect(await service.stopWorkspace('org-1', 'workspace-1')).toBe(0)
+    })
+
+    it('links a delegated conversation to its parent and marks the delegated instruction with the parent agent', async () => {
+        const delegatedBy = {
+            workspaceId: 'parent-workspace',
+            workspaceName: 'Campaign',
+            conversationAssetId: 'parent-conversation',
+            turnId: 'parent-turn',
+            operationId: 'delegation:abc',
+        }
+        const child = await service.create({
+            protocolVersion: 1,
+            workspaceId: 'workspace-1',
+            clientConversationId: 'delegation:parent-conversation:workspace-1',
+        }, 'user-1', { delegatedBy })
+        const acknowledgement = await service.submit({
+            ...submit('delegated-1'),
+            conversationAssetId: child.conversationAssetId,
+            midRunPolicy: 'queue',
+        }, 'user-1', { delegation: {
+            access: 'read',
+            parentWorkspaceId: 'parent-workspace',
+            parentWorkspaceName: 'Campaign',
+            parentConversationAssetId: 'parent-conversation',
+            parentTurnId: 'parent-turn',
+            operationId: 'delegation:abc',
+            allowedOperationFamilies: [],
+            budgetLimits: {
+                maxModelCalls: 10,
+                maxToolCalls: 20,
+                maxSpecialistCalls: 1,
+                maxDelegationCalls: 2,
+            },
+        } })
+
+        expect(child.delegatedBy).toEqual(delegatedBy)
+        expect((await service.get({
+            protocolVersion: 1,
+            workspaceId: 'workspace-1',
+            conversationAssetId: child.conversationAssetId,
+        }, 'user-1')).delegatedBy).toEqual(delegatedBy)
+        expect((await service.list({
+            protocolVersion: 1,
+            workspaceId: 'workspace-1',
+        }, 'user-1')).conversations.find(item => item.conversationAssetId === child.conversationAssetId)?.delegatedBy).toEqual(delegatedBy)
+
+        const pk = conversationPartition('org-1', child.conversationAssetId)
+        const turnId = acknowledgement.status === 'rejected' ? '' : acknowledgement.turnId
+        expect(await repository.read(pk, `TURN#${turnId}`)).toMatchObject({
+            midRunPolicy: 'queue',
+            delegation: { access: 'read' },
+        })
+        const userMessage = [...database.rows.values()].find(row => row.pk === pk && String(row.sk).startsWith('MESSAGE#') && row.role === 'user')
+        expect(userMessage).toMatchObject({ authorLabel: 'Campaign agent' })
     })
 })

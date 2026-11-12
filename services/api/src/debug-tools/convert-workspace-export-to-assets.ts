@@ -8,10 +8,7 @@ import {
 
 import AdmZip from 'adm-zip'
 import { v4 as uuid } from 'uuid'
-import {
-    DOCUMENT_TYPE,
-    HeadlessProseMirrorEngine,
-} from '@lixpi/prosemirror'
+import { HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
 
 import {
     ASSET_REQUIRED_RENDITIONS,
@@ -24,6 +21,10 @@ import {
 } from '@lixpi/constants'
 
 import { collectEmbeddedAssetIds } from '../services/prosemirror-asset-references.ts'
+import {
+    apiDocumentKinds,
+    documentKindForAsset,
+} from '../prosemirror/document-kinds.ts'
 
 type LegacyFile = {
     id: string
@@ -792,11 +793,8 @@ for (const asset of assets) {
                 throw new Error(`Converter produced missing document bytes ${pointer.blobHash}`)
 
             new HeadlessProseMirrorEngine({
-                documentType: role === 'content'
-                    ? DOCUMENT_TYPE.ASSET_CONTENT
-                    : role === 'conversation'
-                        ? DOCUMENT_TYPE.ASSET_CONVERSATION
-                        : DOCUMENT_TYPE.ASSET_PROVENANCE,
+                registry: apiDocumentKinds(),
+                kindId: documentKindForAsset({}, role),
                 doc: JSON.parse(
                     bytes.toString('utf8'),
                 ),

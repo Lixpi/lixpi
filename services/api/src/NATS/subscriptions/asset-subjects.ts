@@ -29,6 +29,7 @@ import Workspace from '../../models/workspace.ts'
 import GeneratedOutputReviewService from '../../services/generated-output-review-service.ts'
 import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
 import AssetSubjectIdentityService from '../../services/asset-subject-identity-service.ts'
+import { apiDocumentKinds } from '../../prosemirror/document-kinds.ts'
 
 const generatedOutputReviewService = new GeneratedOutputReviewService()
 const assetSubjectIdentityService = new AssetSubjectIdentityService()
@@ -244,7 +245,8 @@ export const assetSubjects = createNatsSubscriptions(
                 return { error: 'INITIAL_EMBEDDED_ASSETS_REQUIRE_ATTACH' }
 
             const snapshot = new HeadlessProseMirrorEngine({
-                documentType: primaryCategory === 'conversation' ? DOCUMENT_TYPE.ASSET_CONVERSATION : DOCUMENT_TYPE.ASSET_CONTENT,
+                registry: apiDocumentKinds(),
+                kindId: primaryCategory === 'conversation' ? DOCUMENT_TYPE.ASSET_CONVERSATION : DOCUMENT_TYPE.ASSET_CONTENT,
                 doc: initialDoc,
                 version: 0,
             }).snapshot()

@@ -18,7 +18,6 @@ import {
 import { WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS } from '$src/services/requestTimeouts.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
-import { workspacesStore } from '$src/stores/workspacesStore.ts'
 
 type CanvasStateUpdateResponse = {
     success?: boolean
@@ -129,9 +128,6 @@ export const createWorkspacePersistencePorts = ({
             } satisfies WorkspaceCanvasSnapshot
         },
         publish: publication => {
-            if (typeof publication.version?.updatedAt === 'number')
-                workspacesStore.updateWorkspace(publication.workspaceId, { updatedAt: publication.version.updatedAt })
-
             if (!ownsActiveStore(publication.workspaceId, router))
                 return
 
