@@ -19,6 +19,7 @@ services:
             VITE_USER_PORTAL_URL: ${VITE_USER_PORTAL_URL}
             VITE_ACCOUNT_ONBOARDING_ENABLED: ${VITE_ACCOUNT_ONBOARDING_ENABLED}
             VITE_NATS_SERVER: ${VITE_NATS_SERVER}
+            VITE_CLIENT_PERFORMANCE_DEBUG: ${VITE_CLIENT_PERFORMANCE_DEBUG}
         volumes:
             - ../../../../services/web-ui/Dockerfile:/usr/src/service/Dockerfile:cached
             - ../../../../services/web-ui/index.html:/usr/src/service/index.html:cached

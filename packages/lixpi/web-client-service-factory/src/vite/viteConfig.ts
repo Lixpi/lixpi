@@ -3,9 +3,12 @@ import { pathToFileURL } from 'node:url'
 import {
     defineConfig,
     mergeConfig,
+    type Plugin,
     type UserConfig,
 } from 'vite'
 import { defineConfig as defineVitestConfig } from 'vitest/config'
+
+import { CLIENT_PERFORMANCE_EVENT } from '../application/clientPerformanceReport.ts'
 
 export type WebClientViteConfig = {
     overrides?: UserConfig
@@ -13,10 +16,30 @@ export type WebClientViteConfig = {
     workspacePackages?: string[]
 }
 
+// The environment flag that turns development client profiling on, for both
+// the page and this log.
+export const CLIENT_PERFORMANCE_DEBUG_VARIABLE = 'VITE_CLIENT_PERFORMANCE_DEBUG'
+
+// Writes the performance entries a development page reports over the dev
+// server's own socket to the server log, where they can be read without
+// opening the page's developer tools. Only the dev server includes it, and
+// only while client profiling is on.
+const clientPerformanceLog = (): Plugin => ({
+    name: 'lixpi-client-performance-log',
+    apply: 'serve',
+    configureServer(server) {
+        server.ws.on(
+            CLIENT_PERFORMANCE_EVENT,
+            (entries: unknown) => void server.config.logger.info(`[client-performance] ${JSON.stringify(entries)}`),
+        )
+    },
+})
+
 export const createWebClientViteConfig = (config: WebClientViteConfig = {}) => {
     const sourceRoot = config.sourceRoot ?? './src'
 
     const baseConfig = defineConfig({
+        plugins: process.env[CLIENT_PERFORMANCE_DEBUG_VARIABLE] === 'true' ? [clientPerformanceLog()] : [],
         server: {
             host: true,
             strictPort: true,
