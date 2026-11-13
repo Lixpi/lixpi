@@ -416,10 +416,14 @@ class WorkspaceNavigation implements WorkspaceNavigationHandle {
                 this.refreshQueued = false
 
                 try {
+                    performance.mark('navigation:request')
                     const response = await this.client.getNavigation()
+                    performance.mark('navigation:response')
 
                     if (!this.destroyed)
                         this.acceptSnapshots(response.organizations)
+
+                    performance.measure('navigation:render', 'navigation:response')
                 } catch (error) {
                     if (!this.destroyed)
                         this.ports.reportError('Workspaces could not be loaded.', error)

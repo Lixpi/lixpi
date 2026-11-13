@@ -15,6 +15,11 @@ import {
 import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 import { chevronDownIcon } from '../../svg/svgIcons.ts'
 import {
+    inheritedScopeClass,
+    isInheritedScopeClass,
+    readInheritedCustomProperties,
+} from './inherited-scope-style.ts'
+import {
     type SlidingSwitchIndicatorInsetShadow,
     type SlidingSwitchOption,
     type SlidingSwitchOptionRenderInstance,
@@ -495,26 +500,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         )
             return false
 
-        const properties = new Map<string, string>()
-
-        for (let index = 0; index < computed.length; index++) {
-            const name = computed.item(index)
-
-            if (name.startsWith('--'))
-                properties.set(
-                    name,
-                    computed.getPropertyValue(name),
-                )
-        }
+        const custom = readInheritedCustomProperties(source, computed)
+        // Typography is set inline; custom properties travel through a
+        // shared class, except where a target sets the same one inline,
+        // which the source's value must still override.
+        const typography = new Map<string, string>()
 
         for (const name of ['font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'color'])
-            properties.set(
+            typography.set(
                 name,
                 computed.getPropertyValue(name),
             )
 
         const attributes = typeof this.portalScopeAttributes === 'function' ? this.portalScopeAttributes() : (this.portalScopeAttributes ?? {})
-        const signature = JSON.stringify([[...properties], attributes])
+        const signature = `${custom.signature}|${JSON.stringify([[...typography], attributes])}`
 
         if (
             !force
@@ -523,16 +522,35 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             return false
 
         this.inheritedStyleSignature = signature
+        const scopeClass = inheritedScopeClass(source.ownerDocument, custom)
         const targets = [this.svgNode, this.scrollPortalNode, this.chevronPortalSvg?.node?.() as SVGSVGElement | undefined].filter(
             (element): element is SVGSVGElement | HTMLDivElement => Boolean(element),
         )
 
         for (const target of targets) {
+            for (const className of [...target.classList])
+                if (
+                    className !== scopeClass
+                    && isInheritedScopeClass(className)
+                )
+                    target.classList.remove(className)
+
+            target.classList.add(scopeClass)
+
             for (const name of this.inheritedCustomProperties)
-                if (!properties.has(name))
+                if (!custom.properties.has(name))
                     target.style.removeProperty(name)
 
-            for (const [name, value] of properties) {
+            const inline = new Map(typography)
+
+            for (let index = 0; index < target.style.length; index++) {
+                const name = target.style.item(index)
+
+                if (custom.properties.has(name))
+                    inline.set(name, custom.properties.get(name)!)
+            }
+
+            for (const [name, value] of inline) {
                 if (
                     target === this.svgNode
                     && !this.inheritedSvgStyleSnapshot.has(name)
@@ -566,11 +584,16 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             }
         }
 
+        // Only custom properties set inline here need removing later.
         this.inheritedCustomProperties.clear()
 
-        for (const name of properties.keys())
-            if (name.startsWith('--'))
-                this.inheritedCustomProperties.add(name)
+        for (const target of targets)
+            for (let index = 0; index < target.style.length; index++) {
+                const name = target.style.item(index)
+
+                if (custom.properties.has(name))
+                    this.inheritedCustomProperties.add(name)
+            }
 
         this.inheritedScopeAttributes.clear()
 
@@ -2660,6 +2683,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.restoreOwnedLayout()
 
         if (this.svgNode) {
+            for (const className of [...this.svgNode.classList])
+                if (isInheritedScopeClass(className))
+                    this.svgNode.classList.remove(className)
+
             for (const [name, snapshot] of this.inheritedSvgStyleSnapshot)
                 if (snapshot.value)
                     this.svgNode.style.setProperty(

@@ -114,6 +114,27 @@ The portal is served at `http://localhost:3002`. `VITE_USER_PORTAL_URL` is requi
 Some dependencies are baked into a service's image at build time (for example, the `ffmpeg` binary in the `api` image used for video poster extraction) rather than bind-mounted. After changing a service's `Dockerfile` or its system/package dependencies, rebuild that container by running `./run.sh`, switching **Containers** to **Rebuild** and selecting only it — a plain `up` will keep running the stale image.
 {% /callout %}
 
+## Profiling the Web UI
+
+When the Web UI feels slow, the browser can report where its time goes to the web-ui dev server log, so the cause can be found from the log instead of the browser's developer tools. It is off by default and exists only in development: the reporter needs the dev server's socket, so production builds never include it.
+
+Set `VITE_CLIENT_PERFORMANCE_DEBUG = true` in your `.env.<stage>` file, then recreate `lixpi-web-ui` so the container picks up the new value: run `./run.sh` and restart or rebuild only that container. Reload the page and use it normally; each batch of entries then appears in the container log about a second after it happens:
+
+```shell
+docker logs --since 5m lixpi-web-ui 2>&1 | grep client-performance
+```
+
+Each line holds a JSON array of entries with a `type`, a `name`, a `start` in milliseconds since the page loaded, and a `duration`:
+
+- `longtask` and `long-animation-frame` are stretches of 50 ms or more when the main thread could not respond. A long animation frame also lists the scripts that ran longest in it, with their source file and function, which names the code to fix.
+- `event` is input the page handled slowly, such as a click that took more than 40 ms to process.
+- `mark` and `measure` are the application's own phases. Startup marks are `startup:session`, `startup:workspace-created`, `startup:nats-connected`, `startup:user-loaded`, `startup:view`, `startup:services` and `startup:application-started`. Opening a workspace records `workspace-open:fetch`, `workspace-open:assets` and `workspace-open:render`, and the side panel records `navigation:request`, `navigation:response` and `navigation:render`.
+- `navigation` and `resource-summary` give the page load and how long its modules took to arrive.
+
+A phase measure that is long while a long task overlaps it was waiting on the main thread, not on the network. The API logs the server side of the same request: any NATS reply that takes 250 ms or more appears in `docker logs lixpi-api` as `slow reply on <subject>` with its queue wait and handler time.
+
+Agents never open the page themselves. Ask the developer to turn the flag on and reproduce the slow action, read the log, and ask them to turn it off again afterwards.
+
 ## Deploying to production (Web UI build)
 
 To build the Web UI bundle inside its container:
