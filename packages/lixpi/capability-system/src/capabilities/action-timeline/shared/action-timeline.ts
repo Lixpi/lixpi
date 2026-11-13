@@ -2,11 +2,19 @@ import {
     type CapabilityJsonValue,
 } from '@lixpi/constants'
 import {
-    Schema,
-    type NodeSpec,
+    type Schema,
 } from 'prosemirror-model'
+import {
+    buildDocumentKindSchema,
+    createFilledDocument,
+    type DocumentKindDefinition,
+    type SchemaBundle,
+} from '@lixpi/prosemirror/shared/document-kind'
+import { promptReferenceBundle } from '@lixpi/prosemirror/shared/document-kinds'
 
 import {
+    capabilityArtifactKindId,
+    defineCapabilityArtifactDocumentKind,
     type CapabilityArtifactSharedRegistry,
     type CapabilityArtifactSharedDefinition,
 } from '../../../shared/capability-artifact.ts'
@@ -333,95 +341,75 @@ export const buildActionTimelineDocument = (
     }
 }
 
-export const createActionTimelineDocumentSchema = (): Schema => {
-    const promptReferenceSpec: NodeSpec = {
-        inline: true,
-        atom: true,
-        selectable: false,
-        group: 'inline',
-        attrs: {
-            referenceType: { default: 'media' },
-            assetId: { default: '' },
-            nodeId: { default: '' },
-            mediaKind: { default: '' },
-            moduleId: { default: '' },
-            capabilityId: { default: '' },
-            artifactTypeId: { default: '' },
-            displayName: { default: '' },
+// The segments and paragraphs of an Action Timeline. Prompt references come
+// from the shared bundle, so they match the editor's other documents.
+export const actionTimelineBundle: SchemaBundle = {
+    id: 'action-timeline',
+    nodes: {
+        actionTimelineSegment: {
+            group: 'block',
+            content: 'paragraph+',
+            defining: true,
+            isolating: true,
+            attrs: {
+                startMs: { default: 0 },
+                endMs: { default: 0 },
+            },
+            parseDOM: [{
+                tag: 'section[data-action-timeline-segment]',
+                getAttrs: (dom: HTMLElement) => ({
+                    startMs: Number(
+                        dom.getAttribute('data-start-ms'),
+                    ),
+                    endMs: Number(
+                        dom.getAttribute('data-end-ms'),
+                    ),
+                }),
+            }],
+            toDOM: node => ['section', {
+                'data-action-timeline-segment': '',
+                'data-start-ms': node.attrs.startMs,
+                'data-end-ms': node.attrs.endMs,
+                class: 'action-timeline-segment',
+            }, 0],
         },
-        parseDOM: [{
-            tag: 'span[data-prompt-reference-type]',
-            getAttrs: (dom: HTMLElement) => ({
-                referenceType: dom.getAttribute('data-prompt-reference-type') ?? 'media',
-                assetId: dom.getAttribute('data-asset-id') ?? '',
-                nodeId: dom.getAttribute('data-node-id') ?? '',
-                mediaKind: dom.getAttribute('data-media-kind') ?? '',
-                moduleId: dom.getAttribute('data-module-id') ?? '',
-                capabilityId: dom.getAttribute('data-capability-id') ?? '',
-                artifactTypeId: dom.getAttribute('data-artifact-type-id') ?? '',
-                displayName: dom.getAttribute('data-prompt-reference-display-name') ?? '',
-            }),
-        }],
-        toDOM: node => ['span', {
-            'data-prompt-reference-type': node.attrs.referenceType,
-            'data-asset-id': node.attrs.assetId,
-            'data-node-id': node.attrs.nodeId,
-            'data-media-kind': node.attrs.mediaKind,
-            'data-module-id': node.attrs.moduleId,
-            'data-capability-id': node.attrs.capabilityId,
-            'data-artifact-type-id': node.attrs.artifactTypeId,
-            'data-prompt-reference-display-name': node.attrs.displayName,
-            class: 'prompt-reference-chip prompt-reference-chip-media',
-        }, node.attrs.displayName || node.attrs.assetId],
-    }
+        paragraph: {
+            content: 'inline*',
+            group: 'block',
+            parseDOM: [{ tag: 'p' }],
+            toDOM: () => ['p', 0],
+        },
+        text: { group: 'inline' },
+    },
+}
 
-    return new Schema({
-        nodes: {
-            doc: {
-                content: 'actionTimelineSegment+',
-                attrs: {
-                    schemaVersion: { default: ACTION_TIMELINE_SCHEMA_VERSION },
-                    durationMs: { default: 0 },
-                    precisionMs: { default: 0 },
-                },
-            },
-            actionTimelineSegment: {
-                group: 'block',
-                content: 'paragraph+',
-                defining: true,
-                isolating: true,
-                attrs: {
-                    startMs: { default: 0 },
-                    endMs: { default: 0 },
-                },
-                parseDOM: [{
-                    tag: 'section[data-action-timeline-segment]',
-                    getAttrs: (dom: HTMLElement) => ({
-                        startMs: Number(
-                            dom.getAttribute('data-start-ms'),
-                        ),
-                        endMs: Number(
-                            dom.getAttribute('data-end-ms'),
-                        ),
-                    }),
-                }],
-                toDOM: node => ['section', {
-                    'data-action-timeline-segment': '',
-                    'data-start-ms': node.attrs.startMs,
-                    'data-end-ms': node.attrs.endMs,
-                    class: 'action-timeline-segment',
-                }, 0],
-            },
-            paragraph: {
-                content: 'inline*',
-                group: 'block',
-                parseDOM: [{ tag: 'p' }],
-                toDOM: () => ['p', 0],
-            },
-            prompt_reference: promptReferenceSpec,
-            text: { group: 'inline' },
-        },
+const actionTimelineTopNode: DocumentKindDefinition['topNode'] = {
+    content: 'actionTimelineSegment+',
+    attrs: {
+        schemaVersion: { default: ACTION_TIMELINE_SCHEMA_VERSION },
+        durationMs: { default: 0 },
+        precisionMs: { default: 0 },
+    },
+}
+
+const actionTimelineBundles = [
+    actionTimelineBundle,
+    promptReferenceBundle,
+]
+
+let actionTimelineSchema: Schema | undefined
+
+// The schema the document assertions check against, built once.
+const getActionTimelineSchema = (): Schema => {
+    actionTimelineSchema ??= buildDocumentKindSchema({
+        id: capabilityArtifactKindId(ACTION_TIMELINE_ARTIFACT_TYPE_ID),
+        schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+        bundles: actionTimelineBundles,
+        topNode: actionTimelineTopNode,
+        createEmptyDocument: createFilledDocument,
     })
+
+    return actionTimelineSchema
 }
 
 export const assertActionTimelineDocument = (input: object): void => {
@@ -467,7 +455,7 @@ export const assertActionTimelineDocument = (input: object): void => {
         })
     }
 
-    createActionTimelineDocumentSchema().nodeFromJSON(input).check()
+    getActionTimelineSchema().nodeFromJSON(input).check()
 }
 
 export const assertActionTimelineEditableMutation = (
@@ -693,7 +681,14 @@ export const actionTimelineArtifactDefinition: CapabilityArtifactSharedDefinitio
     displayName: 'Action Timeline',
     schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
     allowedEmbeddedReferenceTypes: ['media'],
-    createDocumentSchema: createActionTimelineDocumentSchema,
+    documentKind: defineCapabilityArtifactDocumentKind({
+        artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+        schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+        bundles: actionTimelineBundles,
+        topNode: actionTimelineTopNode,
+        assertInitialDocument: assertActionTimelineDocument,
+        assertEditableMutation: assertActionTimelineEditableMutation,
+    }),
     assertInitialDocument: assertActionTimelineDocument,
     assertEditableMutation: assertActionTimelineEditableMutation,
     collectReferencedAssetIds: collectActionTimelineReferencedAssetIds,

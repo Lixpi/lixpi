@@ -283,23 +283,7 @@ export class WorkspaceCanvasLibraries {
                         return
 
                     const composer = this.ports.getComposer()
-                    const view = composer?.input.editorView
-                    const nodeType = view?.state.schema.nodes.prompt_reference
-
-                    if (
-                        !view
-                        || !nodeType
-                    )
-                        return
-
-                    const atom = nodeType.create({
-                        referenceType: reference.kind,
-                        capabilityId: reference.capabilityId,
-                        displayName: reference.displayName,
-                    })
-                    const transaction = view.state.tr.replaceSelectionWith(atom).insertText(' ').scrollIntoView()
-                    view.dispatch(transaction)
-                    view.focus()
+                    composer?.input.insertCapabilityReference(reference)
                     composer?.input.triggerGradientAnimation()
                 },
             })

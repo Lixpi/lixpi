@@ -97,7 +97,7 @@ asset.document.steps.<organizationId>.<conversationAssetId>.conversation
 
 The organization stream is `ASSET_STEPS_<organizationId>`. The current immutable snapshot remains the recovery baseline; the stream holds unsettled steps and control events.
 
-The browser’s `ProseMirrorAuthorityService`:
+The browser's `DocumentAuthority` from `@lixpi/prosemirror` does this through the host's `DocumentAuthorityTransport`, which in web-ui signs the NATS requests and calls the asset service for leases and snapshots:
 
 1. acquires the Asset lease for the current workspace;
 2. subscribes to the role subject;
@@ -108,6 +108,14 @@ The browser’s `ProseMirrorAuthorityService`:
 7. releases it on disconnect.
 
 A mount without the lease is read-only and receives holder/expiry information. There is no force takeover; another workspace waits for the 30-second expiry.
+
+## Delegated conversations
+
+A workspace's agent knows the workspaces under it. Its system prompt carries a compact outline of the subtree, capped at 200 entries and without any content, and it has two tools: `list_workspace_tree` returns the full subtree's names, ids, headings and structure, and `delegate_to_workspace` hands an instruction to a descendant workspace's own agent with `read` or `act` access. The agent delegates when the user asks for context or action in a sub-workspace, or when the request clearly needs one, and works locally otherwise.
+
+Each delegation runs as an ordinary conversation in the child workspace, authorized as the same user and billed to the same account, so the user can open it and follow what the child agent did. Repeated delegations from one parent conversation to the same child continue that child's conversation instead of starting new ones. The child's conversation list labels it "Started by <parent workspace> agent", the panel shows the same line with an "Open parent conversation" button, and the instruction appears as a user-side message authored by the parent workspace's agent. Because a delegation creates or continues a conversation, it needs editor access to the child. A `read` delegation gives the child no action scope; an `act` delegation is allowed only when the caller's turn can act, and the child's scope is narrowed to what the caller's allows. The child queues behind a person's running turn rather than steering it, and a turn a person starts in that conversation is their own and doesn't report back.
+
+The whole chain shares one budget. A delegation uses one of the caller's delegation calls, capped by `AGENT_MAX_DELEGATION_CALLS`, and the child's limits for every kind of work are the smaller of the configured caps and what the caller has left; the child's use is added back to the caller when it finishes. A delegated turn that runs out of budget has no person to ask for more, so it fails with `AGENT_BUDGET_EXHAUSTED:<kind>` and the caller receives that as the delegation's error. A child that finishes within `AGENT_DELEGATION_WAIT_MS` returns its answer as the tool result; otherwise the caller gets a pending receipt and picks up the answer when the child's turn ends. Stopping the parent run stops the child runs it started, and theirs in turn; a child result that arrives after the parent stopped is recorded but doesn't restart it.
 
 ## AI streaming
 
@@ -167,7 +175,9 @@ Panel width, open state, top-level mode and the selected generated-output detail
 - [`services/api/src/services/asset-document-service.ts`](../../services/api/src/services/asset-document-service.ts)
 - [`services/api/src/prosemirror/asset-prosemirror-step-transport.ts`](../../services/api/src/prosemirror/asset-prosemirror-step-transport.ts)
 - [`services/api/src/prosemirror/ai-chat-stream-assembler.ts`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts)
-- [`services/web-ui/src/services/prosemirror-authority-service.ts`](../../services/web-ui/src/services/prosemirror-authority-service.ts)
+- [`packages/lixpi/prosemirror/src/frontend/document-authority.ts`](../../packages/lixpi/prosemirror/src/frontend/document-authority.ts)
+- [`services/web-ui/src/editor/document-authority-transport.ts`](../../services/web-ui/src/editor/document-authority-transport.ts)
+- [`services/api/src/llm/agent/agent-delegation.ts`](../../services/api/src/llm/agent/agent-delegation.ts)
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
 - [`packages/lixpi/canvas-components/src/workspace/shared/scene/workspace-panel-state.ts`](../../packages/lixpi/canvas-components/src/workspace/shared/scene/workspace-panel-state.ts)
 - [`packages/lixpi/canvas-components/src/workspace/frontend/review/generated-output-details-sidebar.ts`](../../packages/lixpi/canvas-components/src/workspace/frontend/review/generated-output-details-sidebar.ts)

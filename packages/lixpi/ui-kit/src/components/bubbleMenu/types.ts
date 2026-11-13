@@ -12,7 +12,9 @@ export type BubbleMenuItem = {
     update?: () => void
 }
 
-export type BubbleMenuPlacement = 'above' | 'below'
+// 'right' sits beside the target, vertically centered on it; with the 'end'
+// alignment it sits inside the target against its right edge.
+export type BubbleMenuPlacement = 'above' | 'below' | 'left' | 'right'
 export type BubbleMenuHorizontalAlignment = 'center' | 'end'
 
 export type BubbleMenuPositionRequest = {

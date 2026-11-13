@@ -56,6 +56,18 @@ vi.mock('../providers/bedrock-inference.ts', () => ({ bedrockInference: {
     isEnabledFor: () => true,
     resolveModelId: async () => 'test-version',
 } }))
+// These workspaces have no sub-workspaces, so the delegation outline is empty.
+vi.mock('../../services/workspace-tree.ts', () => ({
+    workspaceTreeRepository: () => ({
+        readNavigationFences: async (organizationIds: string[]) => new Map(organizationIds.map(organizationId => [organizationId, {
+            locked: false,
+            revisionId: 'navigation-1',
+        }])),
+        listChildRows: async () => [],
+        getWorkspaceMetas: async () => [],
+    }),
+    workspaceAccessResolver: () => ({}),
+}))
 vi.mock('./conversation-adapters.ts', () => ({ ConversationAdapters: class {
     authorize = fixture.authorize
     publish = async () => {}

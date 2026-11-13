@@ -184,6 +184,16 @@ class WorkspaceCanvasView implements WorkspaceCanvasViewInstance {
                         assetService,
                         auth,
                         theme,
+                        openWorkspace: workspaceId => {
+                            router.navigateTo(
+                                '/workspace/:workspaceId',
+                                {
+                                    params: { workspaceId },
+                                    shouldFetchData: true,
+                                },
+                            )
+                            workspaceStore.beginWorkspaceLoad(workspaceId)
+                        },
                     }),
                 ),
                 reportError: (message, error) => console.error(message, error),

@@ -91,6 +91,7 @@ services:
             - typescript-test-runner-node-modules-shared-nats-subject-registry:/usr/src/service/shared/nats-subject-registry/node_modules
             - ../../../../packages/lixpi/prosemirror/package.json:/usr/src/service/api/packages/lixpi/prosemirror/package.json:ro,cached
             - ../../../../packages/lixpi/prosemirror/src:/usr/src/service/api/packages/lixpi/prosemirror/src:ro,cached
+            - ../../../../packages/lixpi/prosemirror-themes:/usr/src/service/api/packages/lixpi/prosemirror-themes:ro,cached
             - ../../../../packages/lixpi/test-utils/package.json:/usr/src/service/api/packages/lixpi/test-utils/package.json:ro,cached
             - ../../../../packages/lixpi/test-utils/src:/usr/src/service/api/packages/lixpi/test-utils/src:ro,cached
             - ../../../../packages/lixpi/usage-reporter/package.json:/usr/src/service/api/packages/lixpi/usage-reporter/package.json:ro,cached
@@ -111,6 +112,7 @@ services:
             - typescript-test-runner-node-modules-api-dynamodb-service:/usr/src/service/api/packages/lixpi/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-api-nats-service-ts:/usr/src/service/api/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-api-prosemirror:/usr/src/service/api/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-api-prosemirror-themes:/usr/src/service/api/packages/lixpi/prosemirror-themes/node_modules
             - typescript-test-runner-node-modules-api-test-utils:/usr/src/service/api/packages/lixpi/test-utils/node_modules
             - typescript-test-runner-node-modules-api-usage-reporter:/usr/src/service/api/packages/lixpi/usage-reporter/node_modules
 
@@ -150,6 +152,7 @@ services:
             - ../../../../packages/lixpi/nats-service/patches:/usr/src/service/web-ui/packages/lixpi/nats-service/patches:ro,cached
             - ../../../../packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui/packages/lixpi/prosemirror/package.json:ro,cached
             - ../../../../packages/lixpi/prosemirror/src:/usr/src/service/web-ui/packages/lixpi/prosemirror/src:ro,cached
+            - ../../../../packages/lixpi/prosemirror-themes:/usr/src/service/web-ui/packages/lixpi/prosemirror-themes:ro,cached
             - ../../../../packages/lixpi/test-utils/package.json:/usr/src/service/web-ui/packages/lixpi/test-utils/package.json:ro,cached
             - ../../../../packages/lixpi/test-utils/src:/usr/src/service/web-ui/packages/lixpi/test-utils/src:ro,cached
             - ../../../../packages/lixpi/ui-kit/package.json:/usr/src/service/web-ui/packages/lixpi/ui-kit/package.json:ro,cached
@@ -178,6 +181,7 @@ services:
             - typescript-test-runner-node-modules-web-ui-debug-tools-ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-nats-service-ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-prosemirror:/usr/src/service/web-ui/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-web-ui-prosemirror-themes:/usr/src/service/web-ui/packages/lixpi/prosemirror-themes/node_modules
             - typescript-test-runner-node-modules-web-ui-test-utils:/usr/src/service/web-ui/packages/lixpi/test-utils/node_modules
             - typescript-test-runner-node-modules-web-ui-ui-kit:/usr/src/service/web-ui/packages/lixpi/ui-kit/node_modules
             - typescript-test-runner-node-modules-web-ui-themes:/usr/src/service/web-ui/packages/lixpi/themes/node_modules
@@ -202,7 +206,9 @@ services:
             - typescript-test-runner-node-modules-web-ui-user-portal-capability-system:/usr/src/service/web-ui-user-portal/packages/lixpi/capability-system/node_modules
             - ../../../../packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror/package.json:ro,cached
             - ../../../../packages/lixpi/prosemirror/src:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror/src:ro,cached
+            - ../../../../packages/lixpi/prosemirror-themes:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror-themes:ro,cached
             - typescript-test-runner-node-modules-web-ui-user-portal-prosemirror:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-web-ui-user-portal-prosemirror-themes:/usr/src/service/web-ui-user-portal/packages/lixpi/prosemirror-themes/node_modules
             - ../../../../packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ../../../../packages/lixpi/constants/nats-subjects.json:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ../../../../packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/web-ui-user-portal/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
@@ -346,6 +352,18 @@ services:
             - ../../../../packages/lixpi/nats-service/patches:/usr/src/service/nex/packages/lixpi/nats-service/patches:ro,cached
             - ../../../../packages/lixpi/test-utils/package.json:/usr/src/service/nex/packages/lixpi/test-utils/package.json:ro,cached
             - ../../../../packages/lixpi/test-utils/src:/usr/src/service/nex/packages/lixpi/test-utils/src:ro,cached
+            # capability-system reads document kinds from @lixpi/prosemirror,
+            # which brings its themes and UI kit dependencies.
+            - ../../../../packages/lixpi/prosemirror/package.json:/usr/src/service/nex/packages/lixpi/prosemirror/package.json:ro,cached
+            - ../../../../packages/lixpi/prosemirror/src:/usr/src/service/nex/packages/lixpi/prosemirror/src:ro,cached
+            - ../../../../packages/lixpi/prosemirror-themes:/usr/src/service/nex/packages/lixpi/prosemirror-themes:ro,cached
+            - ../../../../packages/lixpi/themes/package.json:/usr/src/service/nex/packages/lixpi/themes/package.json:ro,cached
+            - ../../../../packages/lixpi/themes/src:/usr/src/service/nex/packages/lixpi/themes/src:ro,cached
+            - ../../../../packages/lixpi/themes/dist/scss:/usr/src/service/nex/packages/lixpi/themes/dist/scss:ro,cached
+            - ../../../../packages/lixpi/themes/tooling:/usr/src/service/nex/packages/lixpi/themes/tooling:ro,cached
+            - ../../../../packages/lixpi/ui-kit/package.json:/usr/src/service/nex/packages/lixpi/ui-kit/package.json:ro,cached
+            - ../../../../packages/lixpi/ui-kit/src:/usr/src/service/nex/packages/lixpi/ui-kit/src:ro,cached
+            - ../../../../packages/lixpi/ui-kit/styles:/usr/src/service/nex/packages/lixpi/ui-kit/styles:ro,cached
 
             # --- nex domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
@@ -358,6 +376,10 @@ services:
             - typescript-test-runner-node-modules-nex-dynamodb-service:/usr/src/service/nex/packages/lixpi/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-nex-nats-service-ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-nex-test-utils:/usr/src/service/nex/packages/lixpi/test-utils/node_modules
+            - typescript-test-runner-node-modules-nex-prosemirror:/usr/src/service/nex/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-nex-prosemirror-themes:/usr/src/service/nex/packages/lixpi/prosemirror-themes/node_modules
+            - typescript-test-runner-node-modules-nex-themes:/usr/src/service/nex/packages/lixpi/themes/node_modules
+            - typescript-test-runner-node-modules-nex-ui-kit:/usr/src/service/nex/packages/lixpi/ui-kit/node_modules
 
             # --- shared domain: this IS the source under test (read-write),
             #     but mounted file-by-file like the domains above rather than
@@ -417,6 +439,7 @@ services:
             - ../../../../packages/lixpi/nats-service/ts/registration.test.ts:/usr/src/service/shared/nats-service/ts/registration.test.ts:ro,cached
             - ../../../../packages/lixpi/prosemirror/package.json:/usr/src/service/shared/prosemirror/package.json:cached
             - ../../../../packages/lixpi/prosemirror/src:/usr/src/service/shared/prosemirror/src:cached
+            - ../../../../packages/lixpi/prosemirror-themes:/usr/src/service/shared/prosemirror-themes:cached
             - ../../../../packages/lixpi/ui-kit/package.json:/usr/src/service/shared/ui-kit/package.json:cached
             - ../../../../packages/lixpi/themes/package.json:/usr/src/service/shared/themes/package.json:cached
             - ../../../../packages/lixpi/themes/src:/usr/src/service/shared/themes/src:cached
@@ -456,6 +479,7 @@ services:
             - typescript-test-runner-node-modules-shared-dynamodb-service:/usr/src/service/shared/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-shared-nats-service-ts:/usr/src/service/shared/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-shared-prosemirror:/usr/src/service/shared/prosemirror/node_modules
+            - typescript-test-runner-node-modules-shared-prosemirror-themes:/usr/src/service/shared/prosemirror-themes/node_modules
             - typescript-test-runner-node-modules-shared-cli-ui:/usr/src/service/shared/cli-ui/node_modules
             - typescript-test-runner-node-modules-shared-test-utils:/usr/src/service/shared/test-utils/node_modules
             - typescript-test-runner-node-modules-shared-ui-kit:/usr/src/service/shared/ui-kit/node_modules
@@ -474,6 +498,7 @@ volumes:
     typescript-test-runner-node-modules-web-ui-user-portal-canvas-engine:
     typescript-test-runner-node-modules-web-ui-user-portal-capability-system:
     typescript-test-runner-node-modules-web-ui-user-portal-prosemirror:
+    typescript-test-runner-node-modules-web-ui-user-portal-prosemirror-themes:
     typescript-test-runner-node-modules-api-nats-subject-registry:
     typescript-test-runner-node-modules-shared-nats-subject-registry:
     typescript-test-runner-pnpm-store: # Shared pnpm content store for ephemeral test-runner containers
@@ -497,6 +522,7 @@ volumes:
     typescript-test-runner-node-modules-api-dynamodb-service:
     typescript-test-runner-node-modules-api-nats-service-ts:
     typescript-test-runner-node-modules-api-prosemirror:
+    typescript-test-runner-node-modules-api-prosemirror-themes:
     typescript-test-runner-node-modules-api-test-utils:
     typescript-test-runner-node-modules-web-ui:
     typescript-test-runner-node-modules-web-ui-capability-system:
@@ -507,6 +533,7 @@ volumes:
     typescript-test-runner-node-modules-web-ui-debug-tools-ts:
     typescript-test-runner-node-modules-web-ui-nats-service-ts:
     typescript-test-runner-node-modules-web-ui-prosemirror:
+    typescript-test-runner-node-modules-web-ui-prosemirror-themes:
     typescript-test-runner-node-modules-web-ui-test-utils:
     typescript-test-runner-node-modules-web-ui-ui-kit:
     typescript-test-runner-node-modules-web-ui-themes:
@@ -543,6 +570,10 @@ volumes:
     typescript-test-runner-node-modules-nex-dynamodb-service:
     typescript-test-runner-node-modules-nex-nats-service-ts:
     typescript-test-runner-node-modules-nex-test-utils:
+    typescript-test-runner-node-modules-nex-prosemirror:
+    typescript-test-runner-node-modules-nex-prosemirror-themes:
+    typescript-test-runner-node-modules-nex-themes:
+    typescript-test-runner-node-modules-nex-ui-kit:
     typescript-test-runner-node-modules-shared-auth-service:
     typescript-test-runner-node-modules-shared-usage-reporter:
     typescript-test-runner-node-modules-shared-capability-system:
@@ -554,6 +585,7 @@ volumes:
     typescript-test-runner-node-modules-shared-dynamodb-service:
     typescript-test-runner-node-modules-shared-nats-service-ts:
     typescript-test-runner-node-modules-shared-prosemirror:
+    typescript-test-runner-node-modules-shared-prosemirror-themes:
     typescript-test-runner-node-modules-shared-cli-ui:
     typescript-test-runner-node-modules-shared-test-utils:
     typescript-test-runner-node-modules-shared-ui-kit:

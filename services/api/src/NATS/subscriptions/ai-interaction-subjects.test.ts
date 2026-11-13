@@ -175,10 +175,12 @@ const conversationAsset = {
 const workspace = {
     workspaceId: 'workspace-1',
     organizationId: 'org-1',
-    accessList: [{
-        userId: 'user-1',
+    accessLevel: 'owner',
+    accessGrant: {
+        grantWorkspaceId: 'workspace-1',
         accessLevel: 'owner',
-    }],
+        ancestorIds: [],
+    },
     canvasState: { nodes: [] },
 }
 

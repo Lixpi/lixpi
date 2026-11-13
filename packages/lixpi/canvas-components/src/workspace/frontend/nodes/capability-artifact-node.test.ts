@@ -149,8 +149,10 @@ const mountEditor = (host: CapabilityArtifactCanvasHost) => {
     return host.mountEditor!({
         container: host.container,
         document: host.document,
-        schema: {} as never,
-        plugins: [],
+        documentView: {
+            kindId: 'capabilityArtifact:test',
+            features: [],
+        },
     })
 }
 

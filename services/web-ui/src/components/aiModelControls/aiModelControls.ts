@@ -1,4 +1,9 @@
 import {
+    type AiModelDropdownOption,
+    type MediaGenerationConfigMatrixControls,
+    type MediaGenerationConfigMatrixViewInstance,
+} from '@lixpi/prosemirror/frontend/editor'
+import {
     PromptModelDropdownOptionView as ModelSlidingDropdownOptionView,
     PromptControlPortalScope as CanvasDropdownPortalScope,
     createPromptSubmitButton,
@@ -43,17 +48,6 @@ import {
     type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
-export type AiModelDropdownOption = {
-    title: string
-    icon: string
-    color: string
-    aiModel: string
-    provider: string
-    providerTitle: string
-    model: string
-    tags: string[]
-}
-
 type AiModelControls = {
     getCurrentAiModel: () => string
     setAiModel: (aiModel: string) => void
@@ -91,27 +85,6 @@ type VideoOptionControls = {
     setValue: (value: string) => void
     getProvider?: () => string
     getCurrentVideoModel?: () => string
-}
-
-export type MediaGenerationConfigMatrixControls = {
-    mediaType: 'reasoning' | 'image' | 'video'
-    getSelectedModelIds: () => string[]
-    setSelectedModelIds: (modelIds: string[]) => void
-    getConfigGroups: () => MediaGenerationConfigSelectionGroup[]
-    setConfigGroups: (groups: MediaGenerationConfigSelectionGroup[]) => void
-    createModelDropdown: (modelIndex: number) => {
-        dom: HTMLElement
-        update: () => void
-        destroy?: () => void
-        closeMenus?: () => void
-    }
-}
-
-export type MediaGenerationConfigMatrixViewInstance = {
-    dom: HTMLElement
-    update: () => void
-    closeMenus: () => void
-    destroy: () => void
 }
 
 type RenderedMediaConfigGroup = MediaGenerationConfigGroup & {

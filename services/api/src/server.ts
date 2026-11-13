@@ -30,6 +30,7 @@ import {
 } from './NATS/subscriptions/ai-interaction-subjects.ts'
 import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
+import { workspaceTreeService } from './services/workspace-tree-service.ts'
 import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
 import { mediaGenerationRequestSubjects } from './NATS/subscriptions/media-generation-request-subjects.ts'
 import { conversationSubjects } from './NATS/subscriptions/conversation-subjects.ts'
@@ -282,6 +283,20 @@ const conversationDispatcher = new ConversationDispatcher(
 
 await conversationDispatcher.start()
 await mediaWorkspace?.start()
+
+// Workspace tree moves, rebalances and subtree deletes left unfinished by a
+// stopped process are finished in the background; the API serves requests
+// meanwhile, and a request that meets an expired lock finishes it too.
+void (async () => {
+    try {
+        const resumed = await workspaceTreeService().resumeExpiredOperations()
+
+        if (resumed)
+            log(`Resumed ${resumed} interrupted workspace tree operations`)
+    } catch (error) {
+        err('Workspace tree sweep failed:', error)
+    }
+})()
 
 const app = express()
 const httpServer = createServer(app)

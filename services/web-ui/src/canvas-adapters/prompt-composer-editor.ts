@@ -4,90 +4,90 @@ import {
     type PromptComposerEditor,
 } from '@lixpi/canvas-components/workspace/composer'
 import {
-    type PromptReferenceCatalogClient,
-} from '$src/services/prompt-reference-catalog-client.ts'
-import {
     type PromptReferencePreviewRenderer,
 } from '@lixpi/canvas-components/workspace/context'
 import {
+    editorDocumentViews,
+    mountEditorDocument,
+    createPromptComposerHandle,
+    type PromptComposerHandle,
+    type WorkspacePromptCatalog,
+} from '@lixpi/prosemirror/frontend/editor'
+import {
     createDefaultPromptControlFactories,
     type PromptControlFactories,
-} from '$src/components/proseMirror/promptControlFactories.ts'
-import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
-import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+} from '$src/editor/prompt-control-factories.ts'
 import {
-    type AuthClientInstance,
-} from '@lixpi/auth-client'
-import {
-    type AssetService,
-} from '$src/services/asset-service.ts'
+    type WebUiEditorEnvironment,
+} from '$src/editor/web-ui-editor.ts'
+import { toEditorPromptReferencePreview } from '$src/editor/editor-services.ts'
 
 export type PromptComposerEditorOptions = {
+    environment: WebUiEditorEnvironment
     submitOnEnter?: boolean
-    assetService: AssetService
-    auth: AuthClientInstance
     controlFactories?: PromptControlFactories
-    promptReferenceCatalog?: PromptReferenceCatalogClient
+    promptReferenceCatalog?: WorkspacePromptCatalog
     promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
 }
 
 class PromptComposerEditorAdapter implements PromptComposerEditor {
-    private readonly editor: ProseMirrorEditor
-    private destroyed = false
+    private readonly handle: PromptComposerHandle
 
     constructor(
         request: PromptComposerEditorRequest,
         options: PromptComposerEditorOptions,
     ) {
-        const html = createDocumentHtml(request.host.ownerDocument)
-        this.editor = new ProseMirrorEditor({
-            assetService: options.assetService,
-            auth: options.auth,
-            editorMountElement: request.host,
-            content: html`<div></div>` as HTMLDivElement,
-            initialVal: request.initialContent,
-            isDisabled: false,
-            documentType: 'aiPromptInput',
-            threadId: request.threadId,
-            onEditorChange: request.onContentChange,
-            onAiChatSubmit: () => {},
-            onAiChatStop: () => {},
-            onPromptSubmit: request.onSubmit,
-            promptSubmitOnEnter: options.submitOnEnter,
-            promptControlFactories: options.controlFactories ?? createDefaultPromptControlFactories(),
-            promptReferenceCatalog: options.promptReferenceCatalog,
-            promptReferencePreviewRenderer: options.promptReferencePreviewRenderer,
-        })
+        const { environment } = options
+        this.handle = createPromptComposerHandle(
+            mountEditorDocument({
+                registry: environment.registry,
+                definition: editorDocumentViews.aiPromptInput!,
+                container: request.host,
+                document: request.initialContent,
+                onChange: request.onContentChange,
+                onInvalidDocument: error => console.warn('Invalid AI prompt draft; starting a fresh input:', error),
+                context: {
+                    services: environment.services,
+                    promptReferences: {
+                        catalog: options.promptReferenceCatalog,
+                        previewRenderer: toEditorPromptReferencePreview(options.promptReferencePreviewRenderer),
+                    },
+                    prompt: {
+                        onSubmit: request.onSubmit,
+                        submitOnEnter: options.submitOnEnter,
+                        controls: options.controlFactories ?? createDefaultPromptControlFactories(),
+                    },
+                },
+            }),
+        )
     }
 
-    get editorView() {
-        return this.destroyed ? null : (this.editor.editorView ?? null)
+    readContent(): object | null {
+        return this.handle.readContent()
+    }
+
+    emptyContent(): object | null {
+        return this.handle.emptyContent()
     }
 
     restoreContent(content: object): void {
-        const view = this.editorView
+        this.handle.restoreContent(content)
+    }
 
-        if (!view)
-            throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
+    applyModelPreferences(models: Parameters<PromptComposerHandle['applyModelPreferences']>[0]): void {
+        this.handle.applyModelPreferences(models)
+    }
 
-        const restored = view.state.schema.nodeFromJSON(content)
-        restored.check()
-        view.dispatch(
-            view.state.tr.replaceWith(
-                0,
-                view.state.doc.content.size,
-                restored.content,
-            ),
-        )
-        view.focus()
+    insertCapabilityReference(reference: Parameters<PromptComposerHandle['insertCapabilityReference']>[0]): void {
+        this.handle.insertCapabilityReference(reference)
+    }
+
+    focus(): void {
+        this.handle.focus()
     }
 
     destroy(): void {
-        if (this.destroyed)
-            return
-
-        this.destroyed = true
-        this.editor.destroy()
+        this.handle.destroy()
     }
 }
 

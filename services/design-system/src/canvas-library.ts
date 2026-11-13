@@ -1,9 +1,10 @@
 import { select } from 'd3-selection'
-import { bindCanvasTheme } from '@lixpi/canvas-components/theme'
 import {
-    chevronDownIcon,
-    chevronUpIcon,
-} from '@lixpi/ui-kit/svg'
+    mountNestedList,
+    type NestedListActivation,
+    type NestedListHandle,
+} from '@lixpi/prosemirror/frontend/nested-list'
+import { bindCanvasTheme } from '@lixpi/canvas-components/theme'
 import { createLixpiCanvasThemeFromPreset } from '@lixpi/canvas-components/workspace/settings'
 import {
     lixpiLightTheme,
@@ -46,6 +47,7 @@ import {
     type CanvasDomain,
 } from './catalog/domains.ts'
 import { canvasNodeExamples } from './catalog/nodes.ts'
+import { buildCanvasLibraryNavigationDocument } from './catalog/navigation-document.ts'
 
 type MountedExample = Awaited<ReturnType<typeof mountCanvasExample>>
 type ExampleOption = DropdownOption & { value: string }
@@ -53,6 +55,7 @@ type InspectorView = 'parameters' | 'code'
 export class CanvasLibrary {
     readonly el: HTMLElement
     private readonly navigation: HTMLElement
+    private navigationList: NestedListHandle | null = null
     private readonly search: HTMLInputElement
     private readonly title: HTMLElement
     private readonly stage: HTMLElement
@@ -281,7 +284,6 @@ export class CanvasLibrary {
             pane.dataset.sidePanelNoDrag = ''
 
         this.resizeObserver = new ResizeObserver(this.resizePanels)
-        this.renderNavigation()
     }
 
     mount = (): void => {
@@ -307,6 +309,22 @@ export class CanvasLibrary {
             this.inspector,
             this.paramsPanel,
         )
+        this.navigationList = mountNestedList({
+            container: this.navigation,
+            document: buildCanvasLibraryNavigationDocument(this.search.value),
+            readOnly: true,
+            collapsed: ['domain:nodes'],
+            onActivate: this.activateNavigationEntry,
+            onCollapseChange: (entryId, collapsed) => {
+                if (entryId !== 'domain:nodes')
+                    return
+
+                if (collapsed)
+                    this.expandedDomains.delete('nodes')
+                else
+                    this.expandedDomains.add('nodes')
+            },
+        })
         this.resizeObserver.observe(this.el)
         this.resizeObserver.observe(this.inspector)
         this.resizePanels()
@@ -429,160 +447,82 @@ export class CanvasLibrary {
         this.router.navigateTo('/domains/:domainId', { params: { domainId: domain.id } })
     }
 
-    private renderNavigation = (): void => {
-        const query = this.search.value.trim().toLocaleLowerCase()
-        const groups = new Map<string, CanvasDomain[]>()
+    private activateNavigationEntry = ({
+        entryId,
+        event,
+    }: NestedListActivation): void => {
+        if (entryId.startsWith('domain:')) {
+            const domain = canvasDomains.find(candidate => candidate.id === entryId.slice('domain:'.length))
 
-        for (const domain of canvasDomains) {
-            const examples = canvasExamples.filter(example => domain.examples.includes(example.id))
-            const text = [domain.title, domain.group, ...examples.flatMap(
-                example => [example.title, example.summary, example.source, ...(example.components ?? []), ...(example.nodes ?? [])],
-            )].join(' ')
+            if (!domain)
+                return
 
-            if (!text.toLocaleLowerCase().includes(query))
-                continue
+            if (
+                event instanceof MouseEvent
+                && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+            ) {
+                const exampleId = this.selectedExamples.get(domain.id)
+                const href = exampleId ? `/domains/${domain.id}/${exampleId}` : `/domains/${domain.id}`
+                window.open(
+                    href,
+                    '_blank',
+                    'noopener,noreferrer',
+                )
 
-            const entries = groups.get(domain.group) ?? []
-            entries.push(domain)
-            groups.set(domain.group, entries)
+                return
+            }
+
+            this.navigateDomain(domain)
+
+            return
         }
 
-        this.navigation.replaceChildren(
-            ...Array.from(groups).map(
-                ([group, domains]) => html`
-                    <section className="navigation-side-panel-section">
-                        <h2 className="navigation-side-panel-section-heading">${group}</h2>
-                        <div className="canvas-library-section-items">
-                            ${domains.map(domain => this.renderDomainNavigation(domain, query))}
-                        </div>
-                    </section>
-                ` as HTMLElement,
-            ),
-        )
+        if (!entryId.startsWith('example:'))
+            return
 
-        if (!groups.size)
-            this.navigation.append(html`<p className="canvas-library-empty">No matching components.</p>` as HTMLElement)
+        const exampleId = entryId.slice('example:'.length)
+
+        if (!canvasNodeExamples.some(example => example.id === exampleId))
+            return
+
+        if (
+            event instanceof MouseEvent
+            && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        ) {
+            window.open(
+                `/domains/nodes/${exampleId}`,
+                '_blank',
+                'noopener,noreferrer',
+            )
+
+            return
+        }
+
+        this.router.navigateTo(
+            '/domains/:domainId/:exampleId',
+            { params: {
+                domainId: 'nodes',
+                exampleId,
+            } },
+        )
     }
 
-    private renderDomainNavigation(
-        domain: CanvasDomain,
-        query: string,
-    ): HTMLElement {
-        const children = domain.id === 'nodes' ? this.renderNodeNavigation(query) : null
-        const expanded = this.expandedDomains.has(domain.id)
-        const icon = html`
-            <span
-                className="canvas-library-domain-chevron"
-                aria-hidden="true"
-                innerHTML=${expanded ? chevronUpIcon : chevronDownIcon}
-            ></span>
-        ` as HTMLElement
+    private renderNavigation = (): void => {
+        if (!this.navigationList)
+            return
 
-        if (children)
-            children.hidden = !expanded
-
-        return html`
-            <div className="canvas-library-domain-navigation">
-                <div className="canvas-library-domain-row">
-                    <a
-                        className=${`canvas-library-domain-link navigation-side-panel-row no-hover${domain.id === this.activeDomain?.id ? ' navigation-side-panel-row-active' : ''}`}
-                        href=${`/domains/${domain.id}`}
-                        aria-current=${domain.id === this.activeDomain?.id ? 'page' : 'false'}
-                        onclick=${(event: MouseEvent) => {
-                            if (
-                                event.metaKey
-                                || event.ctrlKey
-                                || event.shiftKey
-                                || event.altKey
-                            )
-                                return
-
-                            event.preventDefault()
-                            this.navigateDomain(domain)
-                        }}
-                    >
-                        <span className="navigation-side-panel-row-top">
-                            <span className="navigation-side-panel-row-title">${domain.title}</span>
-                        </span>
-                    </a>
-                    ${
-                        children ? html`
-                            <button
-                                type="button"
-                                className="canvas-library-domain-toggle navigation-side-panel-row"
-                                aria-label=${`${expanded ? 'Collapse' : 'Expand'} ${domain.title}`}
-                                aria-expanded=${String(expanded)}
-                                aria-controls=${children.id}
-                                onclick=${(event: MouseEvent) => {
-                                    const button = event.currentTarget as HTMLButtonElement
-                                    const nextExpanded = !this.expandedDomains.has(domain.id)
-
-                                    if (nextExpanded)
-                                        this.expandedDomains.add(domain.id)
-                                    else
-                                        this.expandedDomains.delete(domain.id)
-
-                                    children.hidden = !nextExpanded
-                                    button.ariaExpanded = String(nextExpanded)
-                                    button.ariaLabel = `${nextExpanded ? 'Collapse' : 'Expand'} ${domain.title}`
-                                    icon.innerHTML = nextExpanded ? chevronUpIcon : chevronDownIcon
-                                }}
-                            >${icon}</button>
-                        ` : null
-                    }
-                </div>
-                ${children}
-            </div>
-        ` as HTMLElement
-    }
-
-    private renderNodeNavigation(query: string): HTMLElement {
-        const nodeLink = (
-            id: string,
-            title: string,
-        ): HTMLElement =>
-            html`
-                <a
-                    className=${`navigation-side-panel-row no-hover${this.activeExample?.id === id ? ' navigation-side-panel-row-active' : ''}`}
-                    href=${`/domains/nodes/${id}`}
-                    aria-current=${this.activeExample?.id === id ? 'page' : 'false'}
-                    onclick=${(event: MouseEvent) => {
-                        if (
-                            event.metaKey
-                            || event.ctrlKey
-                            || event.shiftKey
-                            || event.altKey
-                        )
-                            return
-
-                        event.preventDefault()
-                        this.router.navigateTo(
-                            "/domains/:domainId/:exampleId",
-                            { params: {
-                                domainId: "nodes",
-                                exampleId: id,
-                            } },
-                        )
-                    }}
-                >
-                    <span className="navigation-side-panel-row-top">
-                        <span className="navigation-side-panel-row-title">${title}</span>
-                    </span>
-                </a>
-            ` as HTMLElement
-        const examples = canvasNodeExamples.filter(
-            example => [example.title, example.summary, example.source, ...(example.components ?? []), ...(example.nodes ?? [])]
-                .join(' ').toLocaleLowerCase().includes(query),
+        this.navigationList.setDocument(
+            buildCanvasLibraryNavigationDocument(this.search.value),
         )
-
-        return html`
-            <div
-                id="canvas-library-node-navigation"
-                className="canvas-library-node-navigation"
-            >
-                ${examples.map(example => nodeLink(example.id, example.title))}
-            </div>
-        ` as HTMLElement
+        this.navigationList.setCollapsed(this.expandedDomains.has('nodes') ? [] : ['domain:nodes'])
+        this.navigationList.setActive(
+            this.activeDomain?.id === 'nodes'
+                && this.activeExample
+                ? `example:${this.activeExample.id}`
+                : this.activeDomain
+                    ? `domain:${this.activeDomain.id}`
+                    : undefined,
+        )
     }
 
     private onRouteChange = (route: CurrentRoute): void => {
@@ -832,6 +772,7 @@ export class CanvasLibrary {
         this.unsubscribeRouter?.()
         this.resizeObserver.disconnect()
         this.exampleDropdown?.destroy()
+        this.navigationList?.destroy()
         this.inspectorTabs.destroy()
         this.leftPanel.destroy()
         this.paramsPanel.destroy()

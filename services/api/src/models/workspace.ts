@@ -1,15 +1,17 @@
 import * as process from 'process'
-import { v4 as uuid } from 'uuid'
 
 import {
     getDynamoDbTableStageName,
-    type Workspace,
-    type WorkspaceMeta,
+    type AccessLevel,
     type CanvasNode,
     type CanvasState,
+    type Workspace,
+    type WorkspaceAccessGrant,
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
+
+import { workspaceAccessResolver } from '../services/workspace-tree.ts'
 
 const {
     ORG_NAME,
@@ -37,6 +39,14 @@ type UpdateCanvasStateResult =
         currentUpdatedAt?: number
         currentCanvasStateUpdatedAt?: number
     }
+
+// A workspace read on behalf of a user, with the user's effective access. The
+// grant is what agent writes fence on. `deletingAt` is set when the workspace
+// or any ancestor is being deleted.
+export type AuthorizedWorkspace = Workspace & {
+    accessLevel: AccessLevel
+    accessGrant: WorkspaceAccessGrant
+}
 
 type WorkspaceWithCanvasToken = Partial<Workspace> & {
     canvasStateUpdatedAt?: number
@@ -310,17 +320,31 @@ export default {
     }: {
         workspaceId: string
         userId: string
-    }): Promise<Workspace | { error: string }> => {
-        const workspace = await dynamoDBService.getItem({
-            tableName: getDynamoDbTableStageName(
-                'WORKSPACES',
-                ORG_NAME,
-                STAGE,
-            ),
-            key: { workspaceId },
-            consistentRead: true,
-            origin: `model::Workspace->get(${workspaceId})`,
-        })
+    }): Promise<AuthorizedWorkspace | { error: string }> => {
+        // The row is read alongside the access check and returned only when
+        // the check grants access, so the two reads cost one round trip.
+        const [access, workspace] = await Promise.all([
+            workspaceAccessResolver().resolve({
+                userId,
+                workspaceId,
+            }),
+            dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName(
+                    'WORKSPACES',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                key: { workspaceId },
+                consistentRead: true,
+                origin: `model::Workspace->get(${workspaceId})`,
+            }),
+        ])
+
+        if (access.status === 'not-found')
+            return { error: 'NOT_FOUND' }
+
+        if (access.status === 'denied')
+            return { error: 'PERMISSION_DENIED' }
 
         if (
             !workspace
@@ -328,253 +352,17 @@ export default {
         )
             return { error: 'NOT_FOUND' }
 
-        const hasAccess = workspace?.accessList?.some((entry: { userId: string }) => entry.userId === userId)
-
-        if (!hasAccess)
-            return { error: 'PERMISSION_DENIED' }
-
         return {
             ...workspace,
+            ...(access.status === 'deleting' ? { deletingAt: workspace.deletingAt ?? access.deletingAt } : {}),
+            accessLevel: access.grant.accessLevel,
+            accessGrant: access.grant,
             canvasStateUpdatedAt: getCanvasStateUpdatedAt(workspace),
             canvasState: {
                 ...workspace.canvasState,
                 edges: workspace.canvasState?.edges ?? [],
             },
-        }
-    },
-
-    getUserWorkspaces: async ({
-        userId,
-    }: { userId: string }): Promise<WorkspaceMeta[]> => {
-        // Some local tables were created without the expected key schema; use a full scan and filter in memory
-        const accessList = await dynamoDBService.scanItems({
-            tableName: getDynamoDbTableStageName(
-                'WORKSPACES_ACCESS_LIST',
-                ORG_NAME,
-                STAGE,
-            ),
-            limit: 1000,
-            fetchAllItems: true,
-            consistentRead: true,
-            origin: 'model::Workspace->getUserWorkspaces()',
-        })
-
-        const userWorkspaces = {
-            items: (accessList?.items ?? []).filter((item: { userId?: string }) => item.userId === userId),
-        }
-
-        if (!userWorkspaces.items.length)
-            return []
-
-        const workspacesMeta = await dynamoDBService.batchReadItems({
-            queries: [{
-                tableName: getDynamoDbTableStageName(
-                    'WORKSPACES_META',
-                    ORG_NAME,
-                    STAGE,
-                ),
-                keys: userWorkspaces.items.map(({ workspaceId }: { workspaceId: string }) => ({ workspaceId })),
-            }],
-            readBatchSize: 100,
-            fetchAllItems: true,
-            scanIndexForward: false,
-            origin: 'model::Workspace->getUserWorkspaces()',
-        })
-
-        const workspacesMetaItems = workspacesMeta.items[getDynamoDbTableStageName(
-            'WORKSPACES_META',
-            ORG_NAME,
-            STAGE,
-        )]
-
-        return userWorkspaces.items.map(
-            (workspace: { workspaceId: string }) => workspacesMetaItems.find((meta: WorkspaceMeta) => meta.workspaceId === workspace.workspaceId),
-        ).filter((workspace: WorkspaceMeta | undefined): workspace is WorkspaceMeta => Boolean(workspace))
-            .sort((a: WorkspaceMeta, b: WorkspaceMeta) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
-    },
-
-    createWorkspace: async ({
-        name,
-        organizationId,
-        permissions,
-    }: {
-        name: string
-        organizationId: string
-        permissions: {
-            userId: string
-            accessLevel: string
-        }
-    }): Promise<Workspace | undefined> => {
-        const currentDate = new Date().getTime()
-
-        const defaultCanvasState: CanvasState = {
-            viewport: {
-                x: 0,
-                y: 0,
-                zoom: 1,
-            },
-            nodes: [],
-            edges: [],
-        }
-
-        const newWorkspaceData: Workspace = {
-            workspaceId: uuid(),
-            organizationId,
-            name,
-            accessType: 'private',
-            accessList: [{
-                userId: permissions.userId,
-                accessLevel: permissions.accessLevel as 'owner' | 'editor' | 'viewer',
-            }],
-            canvasState: defaultCanvasState,
-            createdAt: currentDate,
-            canvasStateUpdatedAt: currentDate,
-            updatedAt: currentDate,
-        }
-
-        try {
-            // Main + Meta + Access-List commit or fail together — a torn triad
-            // (workspace invisible to its owner) is a permanent integrity fault.
-            await dynamoDBService.transactWrite({
-                operations: [
-                    {
-                        type: 'put',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        item: newWorkspaceData,
-                    },
-                    {
-                        type: 'put',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES_META',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        item: {
-                            workspaceId: newWorkspaceData.workspaceId,
-                            organizationId: newWorkspaceData.organizationId,
-                            name: newWorkspaceData.name,
-                            createdAt: newWorkspaceData.createdAt,
-                            updatedAt: newWorkspaceData.updatedAt,
-                        },
-                    },
-                    {
-                        type: 'put',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES_ACCESS_LIST',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        item: {
-                            userId: permissions.userId,
-                            workspaceId: newWorkspaceData.workspaceId,
-                            accessLevel: permissions.accessLevel,
-                            createdAt: newWorkspaceData.createdAt,
-                            updatedAt: newWorkspaceData.updatedAt,
-                        },
-                    },
-                ],
-                origin: 'createWorkspace',
-            })
-
-            return newWorkspaceData
-        } catch (error) {
-            err('Failed to create workspace:', error)
-        }
-    },
-
-    markDeleting: async ({ workspaceId }: { workspaceId: string }): Promise<void> => {
-        const now = Date.now()
-        await updateAccountItem({
-            tableName: getDynamoDbTableStageName(
-                'WORKSPACES',
-                ORG_NAME,
-                STAGE,
-            ),
-            key: { workspaceId },
-            updateExpression: 'SET #deletingAt = if_not_exists(#deletingAt, :deletingAt)',
-            conditionExpression: 'attribute_exists(#workspaceId)',
-            expressionAttributeNames: {
-                '#workspaceId': 'workspaceId',
-                '#deletingAt': 'deletingAt',
-            },
-            expressionAttributeValues: { ':deletingAt': now },
-            origin: 'Workspace.markDeleting',
-        })
-    },
-
-    update: async ({
-        workspaceId,
-        name,
-        userId,
-    }: {
-        workspaceId: string
-        name?: string
-        userId: string
-    }): Promise<void> => {
-        const currentDate = new Date().getTime()
-
-        try {
-            const workspaceExpressionNames: Record<string, string> = {
-                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
-                '#updatedAt': 'updatedAt',
-            }
-            const workspaceExpressionValues: Record<string, unknown> = {
-                ':updatedAt': currentDate,
-            }
-            const workspaceSetExpressions = [
-                '#canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, #updatedAt)',
-                '#updatedAt = :updatedAt',
-            ]
-
-            if (name !== undefined) {
-                workspaceExpressionNames['#name'] = 'name'
-                workspaceExpressionValues[':name'] = name
-                workspaceSetExpressions.push('#name = :name')
-            }
-
-            await dynamoDBService.transactWrite({
-                operations: [
-                    {
-                        type: 'update',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        key: { workspaceId },
-                        updateExpression: `SET ${workspaceSetExpressions.join(', ')}`,
-                        conditionExpression: 'attribute_not_exists(#deletingAt)',
-                        expressionAttributeNames: {
-                            ...workspaceExpressionNames,
-                            '#deletingAt': 'deletingAt',
-                        },
-                        expressionAttributeValues: workspaceExpressionValues,
-                    },
-                    ...(name !== undefined
-                        ? [{
-                            type: 'update' as const,
-                            tableName: getDynamoDbTableStageName(
-                                'WORKSPACES_META',
-                                ORG_NAME,
-                                STAGE,
-                            ),
-                            key: { workspaceId },
-                            updates: {
-                                name,
-                                updatedAt: currentDate,
-                            },
-                        }]
-                        : []),
-                ],
-                origin: 'updateWorkspace',
-            })
-        } catch (error) {
-            err('Failed to update workspace:', error)
-        }
+        } as AuthorizedWorkspace
     },
 
     updateCanvasState: async ({
@@ -852,82 +640,6 @@ export default {
         throw new Error(`Failed to mutate workspace canvas state after concurrent updates: ${workspaceId}`)
     },
 
-    delete: async ({
-        workspaceId,
-        userId,
-    }: {
-        workspaceId: string
-        userId: string
-    }): Promise<{
-        status: string
-        workspaceId: string
-    }> => {
-        try {
-            const workspace = await dynamoDBService.getItem({
-                tableName: getDynamoDbTableStageName(
-                    'WORKSPACES',
-                    ORG_NAME,
-                    STAGE,
-                ),
-                key: { workspaceId },
-                consistentRead: true,
-                origin: 'deleteWorkspace:getAccessList',
-            }) as Workspace | undefined
-            const accessList = workspace?.accessList ?? [{
-                userId,
-                accessLevel: 'owner' as const,
-            }]
-
-            if (accessList.length > 98)
-                throw new Error('WORKSPACE_ACCESS_LIST_TOO_LARGE')
-
-            await dynamoDBService.transactWrite({
-                operations: [
-                    {
-                        type: 'delete',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        key: { workspaceId },
-                    },
-                    {
-                        type: 'delete',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES_META',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        key: { workspaceId },
-                    },
-                    ...accessList.map(
-                        entry => ({
-                            type: 'delete' as const,
-                            tableName: getDynamoDbTableStageName(
-                                'WORKSPACES_ACCESS_LIST',
-                                ORG_NAME,
-                                STAGE,
-                            ),
-                            key: {
-                                userId: entry.userId,
-                                workspaceId,
-                            },
-                        }),
-                    ),
-                ],
-                origin: 'deleteWorkspace',
-            })
-
-            return {
-                status: 'deleted',
-                workspaceId,
-            }
-        } catch (error) {
-            throw error
-        }
-    },
-
     getWorkspaceInternal: async ({
         workspaceId,
     }: { workspaceId: string }): Promise<Workspace | null> => {
@@ -1012,4 +724,3 @@ export default {
         }
     },
 }
-import { updateAccountItem } from '../services/account-model-update.ts'

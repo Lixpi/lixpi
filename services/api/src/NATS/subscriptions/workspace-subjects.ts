@@ -1,19 +1,40 @@
 import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
-import {
-    info,
-    warn,
-} from '@lixpi/debug-tools'
 import { getNatsSubjectPath } from '@lixpi/constants'
+import { createWorkspaceTreeHandlers } from '../../services/workspace-navigation/workspace-tree-handlers.ts'
+import { canEditWorkspace } from '../../services/workspace-navigation/access.ts'
 
-import Workspace from '../../models/workspace.ts'
-import AssetModel from '../../models/asset.ts'
 import Organization from '../../models/organization.ts'
-import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
-import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
+import Workspace from '../../models/workspace.ts'
+import { workspaceTreeService } from '../../services/workspace-tree-service.ts'
 
+const treeHandlers = createWorkspaceTreeHandlers(workspaceTreeService)
+const createWorkspacePath = getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.CREATE_WORKSPACE)
+
+// The workspace tree subjects (the user's tree, create, rename and annotate,
+// move, headings and subtree delete) come from the API workspace domain.
+// The API keeps reading a workspace and saving its canvas, and fills in the
+// user's first organization when a create request names none.
 export const workspaceSubjects = createNatsSubscriptions(
     'workspace',
     {
+        ...treeHandlers,
+        [createWorkspacePath]: async (data: any) => {
+            if (
+                data.organizationId
+                || !data.user?.userId
+            )
+                return await treeHandlers[createWorkspacePath](data)
+
+            const [organization] = await Organization.getUserOrganizations({ userId: data.user.userId })
+
+            if (!organization)
+                return { error: 'ORGANIZATION_ACCESS_DENIED' }
+
+            return await treeHandlers[createWorkspacePath]({
+                ...data,
+                organizationId: organization.organizationId,
+            })
+        },
         [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.GET_WORKSPACE)]: async (data: any) => {
             const workspace = await Workspace.getWorkspace({
                 workspaceId: data.workspaceId,
@@ -21,67 +42,6 @@ export const workspaceSubjects = createNatsSubscriptions(
             })
 
             return workspace
-        },
-        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.CREATE_WORKSPACE)]: async (data: any) => {
-            const organizations = await Organization.getUserOrganizations({ userId: data.user.userId })
-
-            if (
-                data.organizationId
-                && !organizations.some(entry => entry.organizationId === data.organizationId)
-            )
-                return { error: 'ORGANIZATION_ACCESS_DENIED' }
-
-            const organizationId = data.organizationId ?? organizations[0]?.organizationId
-
-            if (!organizationId)
-                return { error: 'ORGANIZATION_ACCESS_DENIED' }
-
-            return await Workspace.createWorkspace({
-                name: data.name,
-                organizationId,
-                permissions: {
-                    userId: data.user.userId,
-                    accessLevel: 'owner',
-                },
-            })
-        },
-        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.GET_USER_WORKSPACES)]: async (data: any) =>
-            data.user.userId
-                ? await Workspace.getUserWorkspaces({ userId: data.user.userId })
-                : { error: 'UNAUTHORIZED' },
-        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_WORKSPACE)]: async (data: any) => {
-            const workspace = await Workspace.getWorkspace({
-                userId: data.user.userId,
-                workspaceId: data.workspaceId,
-            })
-
-            if ('error' in workspace)
-                return workspace
-
-            if (workspace.deletingAt)
-                return { error: 'WORKSPACE_DELETING' }
-
-            if (!workspace.accessList.some(
-                entry => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'),
-            ))
-                return { error: 'PERMISSION_DENIED' }
-
-            if (
-                data.name !== undefined
-                && (typeof data.name !== 'string' || !data.name.trim())
-            )
-                return { error: 'NAME_REQUIRED' }
-
-            await Workspace.update({
-                userId: data.user.userId,
-                workspaceId: data.workspaceId,
-                name: data.name,
-            })
-
-            return {
-                success: true,
-                workspaceId: data.workspaceId,
-            }
         },
         [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE)]: async (data: any) => {
             const workspace = await Workspace.getWorkspace({
@@ -95,9 +55,7 @@ export const workspaceSubjects = createNatsSubscriptions(
             if (workspace.deletingAt)
                 return { error: 'WORKSPACE_DELETING' }
 
-            if (!workspace.accessList.some(
-                entry => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'),
-            ))
+            if (!canEditWorkspace(workspace.accessLevel))
                 return { error: 'PERMISSION_DENIED' }
 
             return await Workspace.updateCanvasState({
@@ -108,47 +66,6 @@ export const workspaceSubjects = createNatsSubscriptions(
                 expectedUpdatedAt: data.expectedUpdatedAt,
                 persistViewport: data.persistViewport === true,
             })
-        },
-        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.DELETE_WORKSPACE)]: async (data: any) => {
-            const userId = data.user.userId as string
-            const workspaceId = data.workspaceId as string
-            const workspace = await Workspace.getWorkspace({
-                userId,
-                workspaceId,
-            })
-
-            if ('error' in workspace)
-                return workspace
-
-            if (!workspace.accessList.some(entry => entry.userId === userId && entry.accessLevel === 'owner'))
-                return { error: 'PERMISSION_DENIED' }
-
-            await Workspace.markDeleting({ workspaceId })
-
-            try {
-                const removedMediaRequests = await new MediaGenerationRequestService().cleanupWorkspace(workspaceId)
-                info(`Removed ${removedMediaRequests} media generation requests for ${workspaceId}`)
-                const requester = await getAssetRequesterContext(userId)
-                const removedAssetReferences = await AssetModel.removeAllWorkspaceReferences({
-                    workspaceId,
-                    requester,
-                })
-                info(`Removed ${removedAssetReferences} Asset references for ${workspaceId}`)
-            } catch (error) {
-                warn(`Workspace dependency cleanup failed for ${workspaceId}:`, error)
-
-                return { error: 'WORKSPACE_DEPENDENCY_CLEANUP_FAILED' }
-            }
-
-            await Workspace.delete({
-                userId,
-                workspaceId,
-            })
-
-            return {
-                success: true,
-                workspaceId,
-            }
         },
     },
 )

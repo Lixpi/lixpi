@@ -370,6 +370,99 @@ describe('BubbleMenu — reposition', () => {
         expect(menu.isVisible).toBe(true)
     })
 
+    it('places the menu to the right of the target, centered on it', () => {
+        parentEl.getBoundingClientRect = vi.fn(() => ({
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 800,
+            width: 1000,
+            height: 800,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        } as DOMRect))
+        Object.defineProperty(menu.element, 'offsetWidth', {
+            configurable: true,
+            value: 100,
+        })
+        Object.defineProperty(menu.element, 'offsetHeight', {
+            configurable: true,
+            value: 40,
+        })
+
+        menu.show('text', {
+            targetRect: new DOMRect(50, 100, 60, 20),
+            placement: 'right',
+        })
+
+        expect(menu.element.style.left).toBe('118px')
+        expect(menu.element.style.top).toBe('90px')
+    })
+
+    it('places the menu to the left of the target', () => {
+        parentEl.getBoundingClientRect = vi.fn(() => new DOMRect(0, 0, 1000, 800))
+        Object.defineProperty(menu.element, 'offsetWidth', {
+            configurable: true,
+            value: 100,
+        })
+        Object.defineProperty(menu.element, 'offsetHeight', {
+            configurable: true,
+            value: 40,
+        })
+
+        menu.show('text', {
+            targetRect: new DOMRect(200, 100, 60, 20),
+            placement: 'left',
+            clampToParent: false,
+        })
+
+        expect(menu.element.style.left).toBe('92px')
+        expect(menu.element.style.top).toBe('90px')
+    })
+
+    it('places the menu inside the target against its right edge with the end alignment', () => {
+        parentEl.getBoundingClientRect = vi.fn(() => ({
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 800,
+            width: 1000,
+            height: 800,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        } as DOMRect))
+        Object.defineProperty(menu.element, 'offsetWidth', {
+            configurable: true,
+            value: 100,
+        })
+        Object.defineProperty(menu.element, 'offsetHeight', {
+            configurable: true,
+            value: 40,
+        })
+
+        menu.show('text', {
+            targetRect: new DOMRect(0, 100, 440, 40),
+            placement: 'right',
+            horizontalAlignment: 'end',
+        })
+
+        expect(menu.element.style.left).toBe('336px')
+        expect(menu.element.style.top).toBe('100px')
+    })
+
+    it('never makes a hidden menu visible again through reposition or a context update', () => {
+        menu.show('text', createMockPosition())
+        menu.hide()
+
+        menu.reposition(createMockPosition({ left: 400 }))
+        menu.updateContext('text', createMockPosition({ left: 500 }))
+
+        expect(menu.isVisible).toBe(false)
+        expect(menu.element.style.visibility).toBe('hidden')
+    })
+
     it('reposition() is no-op when no position was ever set', () => {
         // Never called show(), no lastPosition
         menu.reposition()
@@ -410,6 +503,51 @@ describe('BubbleMenu — reposition', () => {
 
         expect(menu.element.style.left).toBe('150px')
         expect(menu.element.style.top).toBe('108px')
+    })
+
+    it('places the menu from the element it is positioned against, including that element\'s scroll', () => {
+        // The host's parent is a static list, so the menu is positioned
+        // against the panel around it, which sits 120px higher and is
+        // scrolled by 30px.
+        const rect = (top: number) => ({
+            left: 0,
+            top,
+            right: 400,
+            bottom: top + 600,
+            width: 400,
+            height: 600,
+            x: 0,
+            y: top,
+            toJSON: () => ({}),
+        } as DOMRect)
+        const panel = document.createElement('div')
+        panel.getBoundingClientRect = vi.fn(() => rect(0))
+        Object.defineProperty(panel, 'scrollTop', {
+            configurable: true,
+            value: 30,
+        })
+        parentEl.getBoundingClientRect = vi.fn(() => rect(120))
+        Object.defineProperty(menu.element, 'offsetParent', {
+            configurable: true,
+            get: () => panel,
+        })
+        Object.defineProperty(menu.element, 'offsetWidth', {
+            configurable: true,
+            value: 200,
+        })
+        Object.defineProperty(menu.element, 'offsetHeight', {
+            configurable: true,
+            value: 40,
+        })
+
+        menu.show('text', {
+            targetRect: new DOMRect(40, 150, 60, 20),
+            placement: 'below',
+        })
+
+        // 20px under the target's bottom (170) plus the gap (8), measured
+        // from the panel's top and shifted by its scroll.
+        expect(menu.element.style.top).toBe(`${170 + 8 + 30}px`)
     })
 
     it('can follow a target beyond the parent edge without clamping', () => {

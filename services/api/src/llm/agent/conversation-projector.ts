@@ -25,6 +25,8 @@ import {
     conversationSequenceKey,
     type ConversationRepository,
 } from './conversation-repository.ts'
+import { apiDocumentKinds } from '../../prosemirror/document-kinds.ts'
+import { delegatedAuthorLabel } from './agent-delegation.ts'
 
 type ProjectionBatch = {
     baseVersion: number
@@ -141,6 +143,7 @@ export class ConversationProjector {
                             id: message.messageId,
                             createdAt: message.createdAt,
                             referenceNodeIds: [],
+                            ...(turn.delegation ? { authorLabel: delegatedAuthorLabel(turn.delegation.parentWorkspaceName) } : {}),
                         },
                     })
                 } else {
@@ -174,7 +177,8 @@ export class ConversationProjector {
         } while (after)
 
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            registry: apiDocumentKinds(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: snapshot?.doc,
             version: snapshot?.version ?? 0,
         })

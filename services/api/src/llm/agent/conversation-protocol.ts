@@ -13,10 +13,8 @@ import {
     type ConversationStopRequest,
     type ConversationSubmitRequest,
 } from '@lixpi/constants'
-import {
-    createProseMirrorSchema,
-    DOCUMENT_TYPE,
-} from '@lixpi/prosemirror'
+import { DOCUMENT_TYPE } from '@lixpi/prosemirror'
+import { apiDocumentKinds } from '../../prosemirror/document-kinds.ts'
 
 export type ConversationRequests = {
     create: ConversationCreateRequest
@@ -190,7 +188,7 @@ export const resolveConversationSettings = (patch: unknown = {}): ConversationSe
 })
 
 export class ConversationProtocol {
-    private readonly schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+    private readonly schema = apiDocumentKinds().schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
 
     parse<Kind extends keyof ConversationRequests>(
         kind: Kind,

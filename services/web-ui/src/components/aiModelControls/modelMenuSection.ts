@@ -1,4 +1,9 @@
 import {
+    type AiModelMenuContentView,
+    type AiModelMenuControlItem,
+    type AiModelMenuSectionConfig,
+} from '@lixpi/prosemirror/frontend/editor'
+import {
     createHelpTooltip,
     type HelpTooltipInstance,
 } from '@lixpi/ui-kit/components/help-tooltip'
@@ -9,28 +14,7 @@ import {
     type AiPromptInputModelMenuSettings,
 } from '$src/settings.ts'
 
-export type AiModelMenuControlItem = {
-    label: string | HTMLElement
-    control: HTMLElement
-    getVisible?: () => boolean
-}
-
-export type AiModelMenuSectionConfig = {
-    title: string
-    helpText: string
-    getVisible?: () => boolean
-    headingControl?: HTMLElement
-    selectedModelTags?: HTMLElement
-    controls: AiModelMenuControlItem[]
-}
-
 export type AiModelMenuSectionView = {
-    dom: HTMLElement
-    update: () => void
-    destroy: () => void
-}
-
-export type AiModelMenuContentView = {
     dom: HTMLElement
     update: () => void
     destroy: () => void

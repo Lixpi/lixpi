@@ -32,4 +32,5 @@ export const componentCoverage: Record<string, readonly string[]> = {
     'effects-outline': ['TravelingOutline', 'TravelingSnakeGlassMaterial'],
     'loading-overlay': ['LoadingOverlay'],
     'loading-layer': ['LoadingLayer', 'LoadingOverlay'],
+    'nested-list': ['mountNestedList', 'createNestedListItemView', 'NestedListItemView'],
 }

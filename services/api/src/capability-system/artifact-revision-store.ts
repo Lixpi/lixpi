@@ -209,7 +209,8 @@ export class ArtifactRevisionStore {
                 true,
             )
             // The Asset preparation includes a workspace touch, while this
-            // transaction checks the exact access list and deletion state.
+            // transaction fences the authorizing grant, the workspace's
+            // ancestors and its deletion state.
             const operations = assetOperations.filter(operation => !authorized.fences.some(fence => fence.tableName === operation.tableName))
             const transaction = [
                 ...(input.fences ? await input.fences() : authorized.fences),

@@ -74,6 +74,20 @@ const OrganizationModel = {
         }
     },
 
+    // The name and tag definitions the workspace tree shows. Callers have
+    // already decided the user may see something in this organization.
+    getOrganizationSummary: async (organizationId: string): Promise<Pick<Organization, 'organizationId' | 'name' | 'tags'> | undefined> => {
+        const org = await getOrganizationRecord(organizationId)
+
+        return org
+            ? {
+                organizationId: org.organizationId,
+                name: org.name,
+                tags: org.tags ?? {},
+            }
+            : undefined
+    },
+
     getOrganization: async ({
         organizationId,
         userId,

@@ -1,8 +1,15 @@
-// One option of a horizontal radio row. The row is independent of the tree.
+// One option of a horizontal radio row. A row whose choices carry no selection is
+// independent of the tree.
 export type TreeChoice = {
     value: string
     label: string
     hint?: string
+
+    // Makes this a preset choice. Choosing it replaces the tree's selection with these
+    // services, and the row shows the choice whose services the tree holds, so its
+    // mark follows changes made in the tree. When none matches, the row shows its
+    // choice with an empty selection, which stands for a custom pick.
+    selection?: string[]
 }
 
 export type TreeNode = {
@@ -15,9 +22,9 @@ export type TreeNode = {
     // selectable item itself.
     choices?: TreeChoice[]
 
-    // Makes this a preset row inside the tree, drawn with a radio mark. Space applies
-    // this exact selection, and the mark is filled while the tree matches it.
-    selection?: string[]
+    // Holds a radio row on its first choice and is shown in place of the choice's
+    // hint, saying why the row can't change.
+    locked?: string
 }
 
 export type SelectionState = 'all' | 'some' | 'none'
@@ -91,9 +98,6 @@ export class TreeSelection {
     }
 
     stateOf(node: TreeNode): SelectionState {
-        if (node.selection)
-            return this.matches(node.selection) ? 'all' : 'none'
-
         const leaves = this.leavesOf(node)
         const selectedCount = leaves.filter(leaf => this.selected.has(leaf)).length
 
@@ -108,15 +112,6 @@ export class TreeSelection {
     toggle(node: TreeNode): void {
         if (node.choices) {
             this.switchChoice(node, 1)
-
-            return
-        }
-
-        if (node.selection) {
-            this.selected.clear()
-
-            for (const value of node.selection)
-                this.selected.add(value)
 
             return
         }
@@ -160,16 +155,22 @@ export class TreeSelection {
             return state === 'all' ? [node.label] : (node.children ?? []).flatMap(summarize)
         }
 
-        const preset = this.roots.find(root => root.selection && this.matches(root.selection))
+        const presets = this.roots.filter(root => this.isPresetRow(root)).map(root => this.activeChoice(root))
+        const preset = presets.find(choice => choice.selection?.length)
 
         return [
-            ...this.roots.filter(root => root.choices).map(root => `${root.label}: ${this.activeChoice(root).label}`),
+            ...this.independentRows().map(root => `${root.label}: ${this.activeChoice(root).label}`),
             ...(preset ? [preset.label] : this.serviceRoots().flatMap(summarize)),
         ]
     }
 
     activeChoice(node: TreeNode): TreeChoice {
         const choices = node.choices ?? []
+
+        if (this.isPresetRow(node))
+            return choices.find(choice => this.matches(choice.selection ?? []))
+                ?? choices.find(choice => !choice.selection?.length)
+                ?? choices[0]
 
         return choices.find(choice => choice.value === this.chosen.get(node.value)) ?? choices[0]
     }
@@ -178,21 +179,43 @@ export class TreeSelection {
         node: TreeNode,
         direction: 1 | -1,
     ): void {
+        if (node.locked)
+            return
+
         const choices = node.choices ?? []
         const current = choices.indexOf(
             this.activeChoice(node),
         )
+        const next = choices[(current + direction + choices.length) % choices.length]
 
-        this.chosen.set(node.value, choices[(current + direction + choices.length) % choices.length].value)
+        if (this.isPresetRow(node)) {
+            this.selected.clear()
+
+            for (const value of next.selection ?? [])
+                this.selected.add(value)
+
+            return
+        }
+
+        this.chosen.set(node.value, next.value)
     }
 
-    // The chosen values of rows that are independent of the tree.
+    // The chosen values of rows that are independent of the tree. A preset row only
+    // changes the tree, so its value is the selected services.
     selectedOptions(): string[] {
-        return this.roots.filter(root => root.choices).map(root => this.activeChoice(root).value)
+        return this.independentRows().map(root => this.activeChoice(root).value)
+    }
+
+    private isPresetRow(node: TreeNode): boolean {
+        return Boolean(node.choices?.some(choice => choice.selection))
+    }
+
+    private independentRows(): TreeNode[] {
+        return this.roots.filter(root => root.choices && !this.isPresetRow(root))
     }
 
     private serviceRoots(): TreeNode[] {
-        return this.roots.filter(root => !root.choices && !root.selection)
+        return this.roots.filter(root => !root.choices)
     }
 
     private matches(values: string[]): boolean {

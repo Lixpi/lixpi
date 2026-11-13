@@ -41,6 +41,7 @@ import {
 import { getAssetRecord } from '../models/asset.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'
 import { AssetProseMirrorStepTransport } from './asset-prosemirror-step-transport.ts'
+import { apiDocumentKinds } from './document-kinds.ts'
 
 type AiStreamContent = {
     status: StreamStatus
@@ -395,7 +396,8 @@ export class AiChatProseMirrorStreamAssembler {
             role: 'conversation',
         }
         this.engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            registry: apiDocumentKinds(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: config.initialDoc ?? this.createEmptyThreadDoc(),
             version: config.baseVersion ?? 0,
         })

@@ -4,6 +4,8 @@ TypeScript dependency declarations are generated from [the version registry](../
 
 Shared runtime contracts for TypeScript services and the browser.
 
+`WorkspaceNavigationSnapshot` carries one organization's canonical nested-list document, its revision and schema version, and the authorized workspace tree. `SaveWorkspaceNavigationRequest` submits that document with `baseRevision` and a stable `mutationId`. Its optional `createdWorkspaceIds` and `deletedWorkspaceIds` are the exact identities queued by explicit creation and deletion actions. An unlisted new or omitted workspace binding is invalid; clearing a workspace label saves an empty name. A stale save returns `WORKSPACE_NAVIGATION_STALE` and the authoritative snapshot. These contracts are served by `WORKSPACE_SUBJECTS.GET_USER_WORKSPACE_NAVIGATION` and `WORKSPACE_SUBJECTS.SAVE_WORKSPACE_NAVIGATION`.
+
 `nats-subjects.json` owns subject names, wire values, portal templates, and NATS protocol permission patterns. `getNatsSubjectPath(subjects => subjects.ORGANIZATION_SUBJECTS.GET_MEMBERSHIP)` returns the typed identifier path `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` from that same tree. Contract declarations and handler maps use this helper instead of copying identifier strings. The selector preserves the chosen constant alias even when two names share a wire subject.
 
 `getNatsUserSubjectToken(userId)` encodes UTF-8 bytes as hex for a single NATS subject token. `getNatsUserInboxPrefix(userId)` builds `_INBOX.<token>` and rejects an empty identity. The browser connection and server-issued permissions must use the same prefix. `ORGANIZATION_SUBJECTS.GET_MEMBERSHIP` names the service-only self-membership responder.

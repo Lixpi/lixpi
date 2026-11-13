@@ -14,6 +14,8 @@ It is tailored specifically for complex multi-model setups, excelling at **AI im
 
 By treating all generated text, images, and video iterations as concrete "nodes" that exist statically on the canvas, engineers and creators can physically pipe these individual artifacts into subsequent generation threads. This visual piping ensures that any AI model downstream receives the exact generated output of an upstream model as direct, unambiguous context.
 
+Workspaces nest. A campaign workspace can hold a workspace per channel, and each of those a workspace per asset; outline headings, short notes and organization tags arrange them in the sidebar like an outline of the plan. Access granted on a workspace reaches everything under it, so sharing the campaign shares its children. A workspace's agent can see its subtree and hand a task to a child workspace's agent, which runs as a visible conversation in that child under the parent's budget; [Workspace Tree](canvas/WORKSPACE-TREE.md) and [Chat Panel and Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md#delegated-conversations) cover the details.
+
 ---
 
 ## 2. Canvas Primitives

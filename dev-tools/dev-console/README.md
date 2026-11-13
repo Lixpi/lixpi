@@ -36,6 +36,8 @@ Every repository has the same layout, so a developer finds things in the same pl
 | `docker-prune` | The prune tree with measured disk usage, then a confirmation |
 | `service-commands` | Asks the action's script for its catalog, then offers the commands it reports |
 
+An option with `"reported": true` depends on something only the host can see, such as what a Docker volume holds. Before that step, the console calls the action's script with `LIXPI_CONSOLE_QUERY=catalog`, the same round trip a `service-commands` step makes, and the script answers with one line of JSON such as `{"options":[{"name":"regenerate-certificate","available":false,"blockedReason":"..."}]}`. A row reported as unavailable stays on its first choice and shows the reason in place of its hint. If the script reports nothing for a row, the console warns and returns to the menu instead of guessing.
+
 `"services": true` adds the service tree to a `choices` step. The tree, the stack file and the base profile all come from the repository's `infrastructure/docker` directory, described in [Docker layout](#docker-layout), so a config never lists services. The step passes `compose-file` and `profile` on to the script.
 
 A script runs from the repository root. It receives the selected services or prune targets as arguments, and the rest as environment variables: `LIXPI_CONSOLE_WORKSPACE`, `LIXPI_CONSOLE_ENV_FILE` as an absolute path, and `LIXPI_CONSOLE_OPTION_<NAME>` for each param and radio row. `LIXPI_REPOSITORY_PATH` is set too.
@@ -50,7 +52,7 @@ A script runs from the repository root. It receives the selected services or pru
 | Build the macOS desktop app | Asks for an environment file, the Mac's processor, whether to include hot reload (on by default, off for a release), whether to build in debug mode and whether to rebuild the builder image, then builds `gui/tauri/dist/Lixpi.app` in Docker. See [Desktop App](../../documentation/platform/DESKTOP-APP.md) |
 | Sign in to AWS SSO | Asks for an environment file, then signs in as that file's `AWS_PROFILE` |
 | Create or edit a configuration | Opens the [configuration wizard](../config-utils/README.md) |
-| Initialize infrastructure | Asks for an environment file and whether to trust the local certificate authority (**Skip** by default, **Install** for running web-ui in a browser), then sets up TLS certificates and DynamoDB tables |
+| Initialize infrastructure | Asks for an environment file, whether to regenerate the TLS certificates (**Keep** by default, and locked with the reason when none exist yet, since they're generated anyway) and whether to trust the local certificate authority (**Skip** by default, **Install** for running web-ui in a browser). It then sets up the certificates and, as a separate phase, the DynamoDB tables |
 | Deploy and manage infrastructure | Asks for an environment file, states the deployment target, then offers every command the Pulumi service reports |
 | Prune Docker | Asks what to prune, confirms, then reclaims disk space |
 | Install agent skills | Opens the skill installer |
@@ -64,7 +66,7 @@ Submitting an action ends the console when its script finishes, with that script
 
 ## Starting services
 
-**Start services** asks for an environment file, then shows one page with everything else. Two rows sit at the top, and Left and Right switch them. **Containers** defaults to **Use existing**, in which case Compose builds only images that are missing, or **Rebuild**. **Run** defaults to **Foreground**, which keeps the console attached to the logs, or **Detached**. The tree below starts with two preset rows. **Base services** is selected by default and starts the `main` profile the application needs. **All services** adds the admin and developer tools. Space on a preset applies it to the groups below, and changing any service leaves neither preset marked until the selection matches one again.
+**Start services** asks for an environment file, then shows one page with everything else. Three rows sit at the top, and Left and Right switch them. **Containers** defaults to **Use existing**, in which case Compose builds only images that are missing, or **Rebuild**. **Run** defaults to **Foreground**, which keeps the console attached to the logs, or **Detached**. **Services** sets the tree below. **Base** is the default and selects the `main` profile the application needs, **Custom** clears the tree so you can pick only the services you need, and **All** adds the admin and developer tools. Changing a service in the tree moves the row to **Custom** until the selection matches **Base** or **All** again.
 
 | Key | Action |
 |---|---|

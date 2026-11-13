@@ -14,8 +14,7 @@
         "start": "node ./src/server.ts",
         "dev": "nodemon -L",
         "test:run": "vitest run",
-        "test": "vitest",
-        "migrate:unified-media-reference": "node ./src/debug-tools/migrate-unified-media-reference.ts"
+        "test": "vitest"
     },
     "dependencies": {
         "adm-zip": "0.6.1",

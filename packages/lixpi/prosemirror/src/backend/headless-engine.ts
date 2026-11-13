@@ -8,13 +8,12 @@ import {
 } from 'prosemirror-state'
 import { Step } from 'prosemirror-transform'
 import {
-    createProseMirrorSchema,
-    type ProseMirrorDocumentType,
-} from '../shared/schema-builder.ts'
+    type DocumentKindRegistry,
+} from '../shared/document-kind.ts'
 
 export type HeadlessProseMirrorEngineConfig = {
-    documentType: ProseMirrorDocumentType | string
-    schema?: Schema
+    registry: DocumentKindRegistry
+    kindId: string
     doc?: object
     version?: number
 }
@@ -30,8 +29,8 @@ export class HeadlessProseMirrorEngine {
     private editorState: EditorState
     private currentVersion: number
 
-    constructor(config: HeadlessProseMirrorEngineConfig) {
-        this.schema = config.schema ?? createProseMirrorSchema(config.documentType)
+    constructor(private readonly config: HeadlessProseMirrorEngineConfig) {
+        this.schema = config.registry.schema(config.kindId)
         const doc = this.createDoc(config.doc)
         this.editorState = EditorState.create({ doc })
         this.currentVersion = config.version ?? 0
@@ -72,20 +71,8 @@ export class HeadlessProseMirrorEngine {
     }
 
     private createDoc(docJson: object | undefined): ProseMirrorNode {
-        if (docJson) {
-            const doc = this.schema.nodeFromJSON(docJson)
-            doc.check()
-
-            return doc
-        }
-
-        const doc = this.schema.nodes.doc.createAndFill()
-
-        if (!doc)
-            throw new Error('Unable to create a schema-valid ProseMirror document')
-
-        doc.check()
-
-        return doc
+        return docJson
+            ? this.config.registry.parse(this.config.kindId, docJson)
+            : this.config.registry.createEmptyDocument(this.config.kindId)
     }
 }

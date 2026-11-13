@@ -36,11 +36,24 @@ const flushMicrotasks = async (): Promise<void> => {
 
 describe('web-ui routes', () => {
     const workspaceLoads = new Map<string, Deferred>()
-    const getWorkspace = vi.fn(({ workspaceId }: { workspaceId: string }) => {
+    const fetchedCanvas = {
+        nodes: [],
+        edges: [],
+    }
+    // Like the real service, hands the fetched workspace to beforePublish
+    // when the load resolves.
+    const getWorkspace = vi.fn(({
+        workspaceId,
+        beforePublish,
+    }: {
+        workspaceId: string
+        signal?: AbortSignal
+        beforePublish?: (workspace: { canvasState: typeof fetchedCanvas }) => void
+    }) => {
         const deferred = createDeferred()
         workspaceLoads.set(workspaceId, deferred)
 
-        return deferred.promise
+        return deferred.promise.then(() => beforePublish?.({ canvasState: fetchedCanvas }))
     })
     const loadWorkspaceAssets = vi.fn(async () => undefined)
     let router: WebClientRouterService
@@ -81,7 +94,11 @@ describe('web-ui routes', () => {
         expect(window.location.pathname).toBe('/workspace/existing')
         expect(window.location.search).toBe('?view=canvas')
         expect(window.location.hash).toBe('#selection')
-        expect(getWorkspace).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'existing' })
+        expect(getWorkspace).toHaveBeenCalledExactlyOnceWith({
+            workspaceId: 'existing',
+            signal: expect.any(AbortSignal),
+            beforePublish: expect.any(Function),
+        })
     })
 
     it('does not let a stale workspace load mark the active newer route as fetched', async () => {
@@ -107,18 +124,40 @@ describe('web-ui routes', () => {
         expect(router.getCurrentRoute().shouldFetchData).toBe(false)
     })
 
-    it('loads workspace assets after the workspace itself resolves', async () => {
+    it('starts loading workspace assets from the fetched canvas before the store publishes it', async () => {
         router.navigateTo('/workspace/:workspaceId', {
             params: { workspaceId: 'workspace-slow' },
             shouldFetchData: true,
         })
 
-        expect(getWorkspace).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-slow' })
+        expect(getWorkspace).toHaveBeenCalledExactlyOnceWith({
+            workspaceId: 'workspace-slow',
+            signal: expect.any(AbortSignal),
+            beforePublish: expect.any(Function),
+        })
         expect(loadWorkspaceAssets).not.toHaveBeenCalled()
 
         workspaceLoads.get('workspace-slow')?.resolve()
         await flushMicrotasks()
 
-        expect(loadWorkspaceAssets).toHaveBeenCalledExactlyOnceWith('workspace-slow')
+        expect(loadWorkspaceAssets).toHaveBeenCalledExactlyOnceWith('workspace-slow', expect.any(Function), fetchedCanvas)
+    })
+
+    it('abandons a superseded workspace load before it loads its assets', async () => {
+        router.navigateTo('/workspace/:workspaceId', {
+            params: { workspaceId: 'workspace-slow' },
+            shouldFetchData: true,
+        })
+        const [{ signal }] = getWorkspace.mock.calls[0] as [{ signal: AbortSignal }]
+        router.navigateTo('/workspace/:workspaceId', {
+            params: { workspaceId: 'workspace-active' },
+            shouldFetchData: true,
+        })
+
+        expect(signal.aborted).toBe(true)
+        workspaceLoads.get('workspace-slow')?.resolve()
+        await flushMicrotasks()
+
+        expect(loadWorkspaceAssets).not.toHaveBeenCalledWith('workspace-slow', expect.anything())
     })
 })

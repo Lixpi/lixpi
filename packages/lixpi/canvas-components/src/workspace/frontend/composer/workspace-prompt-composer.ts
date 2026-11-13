@@ -4,11 +4,6 @@ import {
     type ConversationModelPreferences,
 } from '@lixpi/constants'
 import {
-    serializeAiModelSelectionAttr,
-    serializeMediaGenerationConfigSelectionAttr,
-} from '@lixpi/prosemirror/shared/model-selection-attrs'
-import { aiPromptInputNodeType } from '@lixpi/prosemirror/shared/node-specs'
-import {
     createAiPromptComposer,
     type AiPromptComposerConfig,
     type AiPromptComposerInstance,
@@ -136,7 +131,7 @@ export class WorkspacePromptComposer {
         if (!this.options.userId)
             return
 
-        const current = this.input.editorView?.state.doc.toJSON()
+        const current = this.input.readContent()
 
         if (current)
             this.writeDraft(current)
@@ -158,51 +153,18 @@ export class WorkspacePromptComposer {
 
         if (Object.keys(draft).length)
             this.input.restoreContent(draft)
-        else if (this.input.editorView) {
-            const doc = this.input.editorView.state.schema.topNodeType.createAndFill()
+        else {
+            const doc = this.input.emptyContent()
 
             if (doc)
-                this.input.restoreContent(
-                    doc.toJSON(),
-                )
+                this.input.restoreContent(doc)
         }
-
-        const view = this.input.editorView
 
         if (
             !hasSavedDraft
-            && view
             && models?.reasoningModelIds.length
-        ) {
-            let transaction = view.state.tr
-            view.state.doc.descendants((node, position) => {
-                if (node.type.name !== aiPromptInputNodeType)
-                    return
-
-                transaction = transaction.setNodeMarkup(
-                    position,
-                    undefined,
-                    {
-                        ...node.attrs,
-                        aiReasoningModels: serializeAiModelSelectionAttr(models.reasoningModelIds),
-                        aiImageModels: serializeAiModelSelectionAttr(models.imageModelIds),
-                        aiVideoModels: serializeAiModelSelectionAttr(models.videoModelIds),
-                        reasoningGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(models.reasoningOptions?.configGroups ?? []),
-                        imageGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(models.imageOptions?.configGroups ?? []),
-                        videoGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(models.videoOptions?.configGroups ?? []),
-                        imageGenerationSize: models.imageOptions?.imageSize ?? node.attrs.imageGenerationSize,
-                        videoAspectRatio: models.videoOptions?.aspectRatio ?? node.attrs.videoAspectRatio,
-                        videoResolution: models.videoOptions?.resolution ?? node.attrs.videoResolution,
-                        videoDuration: models.videoOptions?.duration ?? node.attrs.videoDuration,
-                    },
-                )
-
-                return false
-            })
-
-            if (transaction.docChanged)
-                view.dispatch(transaction)
-        }
+        )
+            this.input.applyModelPreferences(models)
     }
 
     destroy(): void {

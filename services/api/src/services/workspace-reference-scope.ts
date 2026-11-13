@@ -1,11 +1,16 @@
 import {
+    type AccessLevel,
     type Asset,
     type AssetRequesterContext,
     type Workspace,
 } from '@lixpi/constants'
+import { canEditWorkspace } from './workspace-navigation/access.ts'
 
 type WorkspaceScope = Pick<Workspace, 'workspaceId' | 'organizationId'>
-type AuthorizedWorkspaceScope = Pick<Workspace, 'workspaceId' | 'organizationId' | 'accessList'>
+// A workspace with the requesting user's effective access level.
+type AuthorizedWorkspaceScope = Pick<Workspace, 'workspaceId' | 'organizationId'> & {
+    accessLevel?: AccessLevel
+}
 type WorkspaceScopedAssetIdentity = Pick<Asset, 'organizationId' | 'scope' | 'scopeOwnerId'>
 
 export const scopeAssetRequesterToWorkspace = (
@@ -35,10 +40,8 @@ export const createAssetRequesterForWorkspaceUser = (
     userId: string,
     hasOrganizationAccess: boolean,
 ): AssetRequesterContext => {
-    const access = workspace.accessList.find(entry => entry.userId === userId)
-
     if (
-        !access
+        !workspace.accessLevel
         || !hasOrganizationAccess
     )
         return {
@@ -51,8 +54,7 @@ export const createAssetRequesterForWorkspaceUser = (
     return {
         userId,
         workspaceIds: [workspace.workspaceId],
-        editableWorkspaceIds: access.accessLevel === 'owner'
-            || access.accessLevel === 'editor'
+        editableWorkspaceIds: canEditWorkspace(workspace.accessLevel)
             ? [workspace.workspaceId]
             : [],
         organizationIds: [workspace.organizationId],

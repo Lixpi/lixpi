@@ -28,7 +28,11 @@ import {
 } from './docker-usage.ts'
 import { ServiceTree } from './service-tree.ts'
 import { DockerLayout } from './docker-layout.ts'
-import { parseServiceCatalog } from './service-catalog.ts'
+import {
+    parseOptionCatalog,
+    parseServiceCatalog,
+    type OptionCatalog,
+} from './service-catalog.ts'
 
 // What run-console.sh does next. It validates every field and acts on the host, so
 // the container only ever describes values and never a command line.
@@ -226,7 +230,7 @@ export class DevConsoleWizard {
                 continue
 
             if (
-                step.type === 'service-commands'
+                this.asksHost(step)
                 && !reopened
             )
                 return {
@@ -251,6 +255,16 @@ export class DevConsoleWizard {
                 ? [answers.envFile, ...answers.arguments]
                 : answers.arguments,
         }
+    }
+
+    // A step that needs something only the host knows reopens the action once the
+    // action's script has reported it.
+    private asksHost(step: ConsoleStep): boolean {
+        if (step.type === 'service-commands')
+            return true
+
+        return step.type === 'choices'
+            && Boolean(step.options?.some(option => option.reported))
     }
 
     private async runStep(
@@ -445,7 +459,8 @@ export class DevConsoleWizard {
                 answers.options.profile ??= layout.baseProfile
         }
 
-        const optionRows = (step.options ?? []).map(option => this.optionRow(option))
+        const reported = this.reportedOptions(step.options ?? [])
+        const optionRows = (step.options ?? []).map(option => this.optionRow(option, reported))
         const selected = unwrapPrompt<string[]>(
             await new TreeMultiSelectPrompt({
                 message: step.message,
@@ -484,10 +499,40 @@ export class DevConsoleWizard {
             )
     }
 
-    private optionRow(option: ConsoleOption): TreeNode {
+    // Every reported row needs a state from the script. Without one, offering the row
+    // would mean guessing what the host holds.
+    private reportedOptions(options: ConsoleOption[]): OptionCatalog | undefined {
+        if (!options.some(option => option.reported))
+            return undefined
+
+        const catalog = parseOptionCatalog(this.options.catalog ?? '')
+        const complete = catalog
+            && options.every(option => !option.reported || catalog.options.some(state => state.name === option.name))
+
+        if (!complete) {
+            prompts.log.warn("The action did not report its current state, so its options can't be offered.", { output: this.output })
+
+            throw new PromptCancelled()
+        }
+
+        return catalog
+    }
+
+    private optionRow(
+        option: ConsoleOption,
+        reported: OptionCatalog | undefined,
+    ): TreeNode {
+        const state = option.reported
+            ? reported?.options.find(candidate => candidate.name === option.name)
+            : undefined
+
         return {
             value: `choice:${option.name}`,
             label: option.label,
+            locked: state
+                && !state.available
+                ? state.blockedReason ?? 'Not available right now'
+                : undefined,
             choices: option.choices.map(
                 choice => ({
                     ...choice,

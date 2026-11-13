@@ -25,8 +25,20 @@ export type ServiceCatalog = {
     commands: ServiceCommand[]
 }
 
+// What an action's script reports about the radio rows marked `reported`, which only
+// the host can judge.
+export type OptionState = {
+    name: string
+    available: boolean
+    blockedReason?: string
+}
+
+export type OptionCatalog = {
+    options: OptionState[]
+}
+
 // Build tools can print around the catalog, so it's the last line that holds an object.
-export const parseServiceCatalog = (text: string): ServiceCatalog | undefined => {
+const readCatalogLine = (text: string): unknown => {
     const line = text
         .split('\n').map(candidate => candidate.trim()).findLast(candidate => candidate.startsWith('{'))
 
@@ -34,13 +46,26 @@ export const parseServiceCatalog = (text: string): ServiceCatalog | undefined =>
         return undefined
 
     try {
-        const catalog = JSON.parse(line) as ServiceCatalog
-
-        return Array.isArray(catalog.commands)
-            && Array.isArray(catalog.target?.rows)
-            ? catalog
-            : undefined
+        return JSON.parse(line)
     } catch {
         return undefined
     }
+}
+
+export const parseServiceCatalog = (text: string): ServiceCatalog | undefined => {
+    const catalog = readCatalogLine(text) as ServiceCatalog | undefined
+
+    return Array.isArray(catalog?.commands)
+        && Array.isArray(catalog.target?.rows)
+        ? catalog
+        : undefined
+}
+
+export const parseOptionCatalog = (text: string): OptionCatalog | undefined => {
+    const catalog = readCatalogLine(text) as OptionCatalog | undefined
+
+    return Array.isArray(catalog?.options)
+        && catalog.options.every(option => typeof option?.name === 'string' && typeof option.available === 'boolean')
+        ? catalog
+        : undefined
 }

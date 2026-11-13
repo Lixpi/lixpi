@@ -6,6 +6,7 @@ import {
     type BoundedZoomScalingOptions,
 } from '@lixpi/canvas-engine/shared'
 import {
+    type UiKitSidePanelPlacement,
     type UiKitSlidingDropdownStyles,
 } from '@lixpi/ui-kit'
 import { lixpiLightTheme } from '@lixpi/themes'
@@ -130,7 +131,9 @@ export type RightSidePanelSettings = {
     }
 }
 
-export type NavigationSidePanelSettings = Omit<RightSidePanelSettings, 'layout' | 'typography'>
+export type NavigationSidePanelSettings = Omit<RightSidePanelSettings, 'layout' | 'typography'> & {
+    placement: UiKitSidePanelPlacement
+}
 
 export type RightPanelModeSwitchSettings = {
     height: number
@@ -414,6 +417,9 @@ export const createLixpiUiSettings = (): Settings => {
 
         // Navigation side panel (workspace list) surface, resize, toggle, and slide settings.
         navigationSidePanel: {
+            // `overlay` floats the open panel over the content. `push` gives
+            // the panel its own space, so the content shrinks beside it.
+            placement: 'overlay',
             defaultDimensions: {
                 // Screen-pixel width before the user has resized the panel.
                 width: navigation.defaultWidth,

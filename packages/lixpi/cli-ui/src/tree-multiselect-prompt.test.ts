@@ -20,6 +20,7 @@ class TerminalOutput extends Writable {
     columns = 100
     rows = 60
     text = ''
+    writes: string[] = []
 
     _write(
         chunk: Buffer,
@@ -27,6 +28,7 @@ class TerminalOutput extends Writable {
         callback: () => void,
     ): void {
         this.text += chunk.toString()
+        this.writes.push(chunk.toString())
         callback()
     }
 }
@@ -126,15 +128,26 @@ describe('tree selection radio rows', () => {
             },
         ],
     }
-    const base: TreeNode = {
-        value: 'preset:base',
-        label: 'Base',
-        selection: ['a'],
-    }
-    const all: TreeNode = {
-        value: 'preset:all',
-        label: 'All',
-        selection: ['a', 'b'],
+    const services: TreeNode = {
+        value: 'preset:services',
+        label: 'Services',
+        choices: [
+            {
+                value: 'preset:base',
+                label: 'Base',
+                selection: ['a'],
+            },
+            {
+                value: 'preset:all',
+                label: 'All',
+                selection: ['a', 'b'],
+            },
+            {
+                value: 'preset:custom',
+                label: 'Custom',
+                selection: [],
+            },
+        ],
     }
     const leafA: TreeNode = {
         value: 'a',
@@ -149,7 +162,8 @@ describe('tree selection radio rows', () => {
         label: 'Group',
         children: [leafA, leafB],
     }
-    const roots = [containers, base, all, group]
+    const roots = [containers, services, group]
+    const presetOf = (selection: TreeSelection): string => selection.activeChoice(services).value
 
     it('starts an independent row on its first choice and reports it', () => void expect(new TreeSelection(roots, ['a']).selectedOptions()).toEqual(['existing']))
 
@@ -162,14 +176,22 @@ describe('tree selection radio rows', () => {
         expect(selection.selectedLeaves()).toEqual(['a'])
     })
 
-    it('applies a preset to the tree', () => {
+    it('applies the next preset to the tree', () => {
         const selection = new TreeSelection(roots, ['a'])
 
-        selection.toggle(all)
+        selection.switchChoice(services, 1)
 
         expect(selection.selectedLeaves()).toEqual(['a', 'b'])
-        expect(selection.stateOf(all)).toBe('all')
-        expect(selection.stateOf(base)).toBe('none')
+        expect(presetOf(selection)).toBe('preset:all')
+    })
+
+    it('clears the tree when Custom is chosen', () => {
+        const selection = new TreeSelection(roots, ['a'])
+
+        selection.switchChoice(services, -1)
+
+        expect(selection.selectedLeaves()).toEqual([])
+        expect(presetOf(selection)).toBe('preset:custom')
     })
 
     it('wraps around in both directions', () => {
@@ -180,28 +202,41 @@ describe('tree selection radio rows', () => {
         expect(selection.selectedOptions()).toEqual(['rebuild'])
     })
 
-    it('marks no preset once the tree matches neither', () => {
-        const selection = new TreeSelection(roots, ['b'])
-
-        expect(selection.stateOf(base)).toBe('none')
-        expect(selection.stateOf(all)).toBe('none')
-    })
+    it('marks Custom once the tree matches no preset', () => void expect(presetOf(new TreeSelection(roots, ['b']))).toBe('preset:custom'))
 
     it('marks a preset again when the tree matches it', () => {
         const selection = new TreeSelection(roots, ['b'])
 
         selection.toggle(leafA)
 
-        expect(selection.stateOf(all)).toBe('all')
+        expect(presetOf(selection)).toBe('preset:all')
     })
 
-    it('keeps presets out of the selected services', () => void expect(new TreeSelection(roots, ['a']).selectedLeaves()).toEqual(['a']))
+    it('keeps the preset row out of the options and the selected services', () => {
+        const selection = new TreeSelection(roots, ['a'])
+
+        expect(selection.selectedOptions()).toEqual(['existing'])
+        expect(selection.selectedLeaves()).toEqual(['a'])
+    })
+
+    it('holds a locked row on its first choice', () => {
+        const locked: TreeNode = {
+            ...containers,
+            locked: 'Nothing to rebuild yet',
+        }
+        const selection = new TreeSelection([locked], [])
+
+        selection.switchChoice(locked, 1)
+        selection.toggle(locked)
+
+        expect(selection.selectedOptions()).toEqual(['existing'])
+    })
 
     it('keeps an independent choice when the tree changes', () => {
         const selection = new TreeSelection(roots, ['a'])
 
         selection.switchChoice(containers, 1)
-        selection.toggle(all)
+        selection.switchChoice(services, 1)
 
         expect(selection.selectedOptions()).toEqual(['rebuild'])
     })
@@ -373,15 +408,26 @@ describe('tree multiselect prompt', () => {
                         ],
                     },
                     {
-                        value: 'preset:base',
-                        label: 'Base',
-                        hint: 'What runs the application',
-                        selection: ['a'],
-                    },
-                    {
-                        value: 'preset:all',
-                        label: 'All',
-                        selection: ['a', 'b'],
+                        value: 'preset:services',
+                        label: 'Services',
+                        choices: [
+                            {
+                                value: 'preset:base',
+                                label: 'Base',
+                                hint: 'What runs the application',
+                                selection: ['a'],
+                            },
+                            {
+                                value: 'preset:all',
+                                label: 'All',
+                                selection: ['a', 'b'],
+                            },
+                            {
+                                value: 'preset:custom',
+                                label: 'Custom',
+                                selection: [],
+                            },
+                        ],
                     },
                     {
                         value: 'first',
@@ -426,9 +472,7 @@ describe('tree multiselect prompt', () => {
             const screen = stripVTControlCharacters(prompt.output.text)
 
             expect(screen).toContain('Containers  ● Use existing / ○ Rebuild (Builds what is missing)')
-            expect(screen).toContain('Containers  ● Use existing / ○ Rebuild')
-            expect(screen).toContain('● Base (What runs the application)')
-            expect(screen).toContain('○ All')
+            expect(screen).toContain('Services    ● Base / ○ All / ○ Custom (What runs the application)')
 
             await prompt.press(ENTER)
             await prompt.result
@@ -463,7 +507,7 @@ describe('tree multiselect prompt', () => {
             const screen = stripVTControlCharacters(prompt.output.text)
 
             expect(screen).toContain('❯ Containers')
-            expect(screen).toContain('❯ ● Base')
+            expect(screen).toContain('❯ Services')
 
             await prompt.press(ENTER)
             await prompt.result
@@ -477,23 +521,30 @@ describe('tree multiselect prompt', () => {
             expect(await prompt.result).toEqual(['rebuild', 'a'])
         })
 
-        it('applies a preset row in the tree with Space', async () => {
+        it('applies the next preset to the tree with Right', async () => {
             const prompt = openPrompt(['a'])
 
-            await prompt.press(DOWN, DOWN, SPACE, ENTER)
+            await prompt.press(DOWN, RIGHT, ENTER)
 
             expect(await prompt.result).toEqual(['existing', 'a', 'b'])
         })
 
-        it('marks neither preset for a custom selection', async () => {
+        it('clears the tree with Custom so the services can be picked one by one', async () => {
+            const prompt = openPrompt(['a'])
+
+            await prompt.press(DOWN, LEFT)
+            expect(stripVTControlCharacters(prompt.output.text)).toContain('○ Base / ○ All / ● Custom')
+
+            await prompt.press(DOWN, DOWN, DOWN, SPACE, ENTER)
+            expect(await prompt.result).toEqual(['existing', 'b'])
+        })
+
+        it('marks Custom for a selection that matches no preset', async () => {
             const prompt = openPrompt(['b'])
 
             await delay(70)
 
-            const screen = stripVTControlCharacters(prompt.output.text)
-
-            expect(screen).toContain('○ Base')
-            expect(screen).toContain('○ All')
+            expect(stripVTControlCharacters(prompt.output.text)).toContain('○ Base / ○ All / ● Custom')
 
             await prompt.press(ENTER)
             await prompt.result
@@ -505,24 +556,60 @@ describe('tree multiselect prompt', () => {
             await prompt.press(ENTER)
             expect(stripVTControlCharacters(prompt.output.text)).toContain('Select at least one option.')
 
-            await prompt.press(DOWN, DOWN, SPACE, ENTER)
+            await prompt.press(DOWN, LEFT, ENTER)
             expect(await prompt.result).toEqual(['existing', 'a', 'b'])
         })
 
-        it('separates the radio rows from the tree with a line, and the presets from the groups with a blank line', async () => {
+        it('keeps the preset row with the radio rows and separates them from the tree with a line', async () => {
             const prompt = openPrompt(['a'])
 
             await prompt.press(DOWN)
 
             const screen = stripVTControlCharacters(prompt.output.text)
 
-            expect(screen).toMatch(/Rebuild[^\n]*\n│\s+─+\n│\s*\n│\s+● Base/u)
-            expect(screen).toMatch(/Base[^\n]*\n│\s+○ All\n│\s*\n│\s+◼ ▾ First/u)
+            expect(screen).toMatch(/Rebuild[^\n]*\n│\s+Services[^\n]*\n│\s+─+\n│\s*\n│\s+◼ ▾ First/u)
             expect(screen).toMatch(/service-a\n│\s*\n│\s+◻ ▾ Second/u)
 
             await prompt.press(ENTER)
             await prompt.result
         })
+    })
+
+    it('redraws a focus move in one write that overwrites lines without clearing them first', async () => {
+        const fixture = new PromptFixture()
+
+        await delay(70)
+
+        const before = fixture.output.writes.length
+
+        await fixture.press(DOWN)
+
+        const update = fixture.output.writes.slice(before)
+        const visible = stripVTControlCharacters(update.join(''))
+
+        expect(update).toHaveLength(1)
+        expect(update[0]).not.toContain('\x1b[2K')
+        expect(update[0].indexOf('\x1b[J')).toBeGreaterThan(update[0].lastIndexOf('service-c'))
+        expect(visible).toContain('❯ ├─ ◼ ▾ Group')
+
+        await fixture.press(ENTER)
+        await fixture.result
+    })
+
+    it('writes nothing when a key leaves the frame unchanged', async () => {
+        const fixture = new PromptFixture()
+
+        await delay(70)
+
+        const before = fixture.output.writes.length
+
+        // The first Left folds the root, and the second has nowhere to go.
+        await fixture.press(LEFT, LEFT)
+
+        expect(fixture.output.writes.slice(before)).toHaveLength(1)
+
+        await fixture.press(ENTER)
+        await fixture.result
     })
 
     it('draws a blank line before the guide text', async () => {
@@ -590,6 +677,61 @@ describe('tree multiselect prompt', () => {
 
         input.write(ENTER)
         await result
+    })
+
+    it('shows why a locked radio row can\'t change and keeps its first choice', async () => {
+        const output = new TerminalOutput()
+        const input = new PassThrough()
+        const result = new TreeMultiSelectPrompt({
+            message: 'Certificates',
+            roots: [
+                {
+                    value: 'choice:regenerate',
+                    label: 'Regenerate',
+                    locked: 'Nothing to regenerate yet',
+                    choices: [
+                        {
+                            value: 'keep',
+                            label: 'Keep',
+                            hint: 'Reuses what exists',
+                        },
+                        {
+                            value: 'regenerate',
+                            label: 'Regenerate',
+                        },
+                    ],
+                },
+                {
+                    value: 'choice:install',
+                    label: 'Install',
+                    choices: [
+                        {
+                            value: 'skip',
+                            label: 'Skip',
+                        },
+                        {
+                            value: 'install',
+                            label: 'Install',
+                        },
+                    ],
+                },
+            ],
+            initialValues: [],
+            required: false,
+            input,
+            output,
+        }).prompt()
+
+        input.write(RIGHT)
+        await delay(70)
+
+        const screen = stripVTControlCharacters(output.text)
+
+        expect(screen).toContain('Regenerate  ● Keep / ○ Regenerate (Nothing to regenerate yet)')
+        expect(screen).not.toContain('Reuses what exists')
+
+        input.write(ENTER)
+        expect(await result).toEqual(['keep', 'skip'])
     })
 
     it('draws a chevron beside the focused tree row', async () => {

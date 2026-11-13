@@ -5,13 +5,15 @@ import {
 } from 'vitest'
 
 import {
-    createProseMirrorSchema,
+    createCoreDocumentKindRegistry,
     DOCUMENT_TYPE,
-} from '../shared/schema-builder.ts'
+} from '../shared/document-kinds.ts'
 import { HeadlessProseMirrorEngine } from './headless-engine.ts'
 
+const coreRegistry = createCoreDocumentKindRegistry()
+
 const createDocJson = () => {
-    const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONTENT)
+    const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONTENT)
     const title = schema.nodes.documentTitle.create(null, schema.text('Title'))
     const paragraph = schema.nodes.paragraph.create(null, schema.text('ready'))
     const doc = schema.nodes.doc.create(null, [title, paragraph])
@@ -22,7 +24,8 @@ const createDocJson = () => {
 describe('HeadlessProseMirrorEngine', () => {
     it('creates a valid default document when no doc snapshot is supplied', () => {
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONTENT,
+            registry: coreRegistry,
+            kindId: DOCUMENT_TYPE.ASSET_CONTENT,
         })
 
         expect(engine.version).toBe(0)
@@ -32,7 +35,8 @@ describe('HeadlessProseMirrorEngine', () => {
 
     it('creates a schema-checked document from a provided JSON snapshot', () => {
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONTENT,
+            registry: coreRegistry,
+            kindId: DOCUMENT_TYPE.ASSET_CONTENT,
             doc: createDocJson(),
         })
 
@@ -45,7 +49,8 @@ describe('HeadlessProseMirrorEngine', () => {
 
     it('starts at the provided version and increases with each applied transaction', () => {
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONTENT,
+            registry: coreRegistry,
+            kindId: DOCUMENT_TYPE.ASSET_CONTENT,
             version: 7,
         })
         const transaction = engine.state.tr.insertText('inline')
@@ -57,9 +62,10 @@ describe('HeadlessProseMirrorEngine', () => {
     })
 
     it('applies raw steps from JSON and updates snapshot/version consistently', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONTENT)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONTENT)
         const engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_CONTENT,
+            registry: coreRegistry,
+            kindId: DOCUMENT_TYPE.ASSET_CONTENT,
             doc: createDocJson(),
         })
         const transaction = engine.state.tr.insertText(' plus', 5)
@@ -71,7 +77,10 @@ describe('HeadlessProseMirrorEngine', () => {
     })
 
     it('keeps version unchanged when no steps are applied', () => {
-        const engine = new HeadlessProseMirrorEngine({ documentType: DOCUMENT_TYPE.ASSET_CONTENT })
+        const engine = new HeadlessProseMirrorEngine({
+            registry: coreRegistry,
+            kindId: DOCUMENT_TYPE.ASSET_CONTENT,
+        })
         const result = engine.applyTransaction(engine.state.tr)
 
         expect(result.version).toBe(0)
@@ -79,12 +88,16 @@ describe('HeadlessProseMirrorEngine', () => {
     })
 
     it('throws for invalid step JSON and malformed doc JSON', () => {
-        const engine = new HeadlessProseMirrorEngine({ documentType: DOCUMENT_TYPE.ASSET_CONTENT })
+        const engine = new HeadlessProseMirrorEngine({
+            registry: coreRegistry,
+            kindId: DOCUMENT_TYPE.ASSET_CONTENT,
+        })
         expect(() => void engine.applyStepJson({} as never)).toThrow()
 
         expect(() => {
             new HeadlessProseMirrorEngine({
-                documentType: DOCUMENT_TYPE.ASSET_CONTENT,
+                registry: coreRegistry,
+                kindId: DOCUMENT_TYPE.ASSET_CONTENT,
                 doc: {
                     type: 'nope',
                     content: [],

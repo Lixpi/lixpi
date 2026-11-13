@@ -151,7 +151,7 @@ export const panelValues: PanelTheme = {
     sidePanel: {
         resizeHandle: {
             offset: 0,
-            grabWidth: 20,
+            grabWidth: 18,
         },
         animation: {
             durationMs: 100,
@@ -212,6 +212,7 @@ export const panelValues: PanelTheme = {
         row: {
             base: {
                 padding: '4px 12px 4px 20px',
+                indent: '16px',
             },
         },
         rowTags: {
@@ -240,6 +241,47 @@ export const panelValues: PanelTheme = {
                 paddingInline: '20px',
                 paddingBlock: '16px 4px',
                 margin: '0',
+            },
+        },
+        headingLevels: {
+            level1: {
+                base: {
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    lineHeight: '1.3',
+                    letterSpacing: '-0.01em',
+                    textTransform: 'none',
+                    paddingInline: '20px',
+                    paddingBlock: '8px 2px',
+                    margin: '0',
+                    opacity: '1',
+                },
+            },
+            level2: {
+                base: {
+                    fontSize: '17px',
+                    fontWeight: '600',
+                    lineHeight: '1.35',
+                    letterSpacing: 'normal',
+                    textTransform: 'none',
+                    paddingInline: '20px',
+                    paddingBlock: '6px 1px',
+                    margin: '0',
+                    opacity: '1',
+                },
+            },
+            level3: {
+                base: {
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    lineHeight: '1.4',
+                    letterSpacing: 'normal',
+                    textTransform: 'none',
+                    paddingInline: '20px',
+                    paddingBlock: '4px 1px',
+                    margin: '0',
+                    opacity: '0.9',
+                },
             },
         },
         toggle: {

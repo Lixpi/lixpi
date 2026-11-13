@@ -18,7 +18,7 @@ import {
 import {
     type CapabilityControlsHost,
     type CapabilityControlsView,
-} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+} from '@lixpi/prosemirror/frontend/editor'
 import {
     createDocumentHtml,
     html,

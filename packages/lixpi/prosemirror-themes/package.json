@@ -1,0 +1,25 @@
+{
+    "name": "@lixpi/prosemirror-themes",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./basic-dark": "./cm6-themes/packages/basic-dark/src/index.ts",
+        "./basic-light": "./cm6-themes/packages/basic-light/src/index.ts",
+        "./gruvbox-dark": "./cm6-themes/packages/gruvbox-dark/src/index.ts",
+        "./gruvbox-light": "./cm6-themes/packages/gruvbox-light/src/index.ts",
+        "./material-dark": "./cm6-themes/packages/material-dark/src/index.ts",
+        "./nord": "./cm6-themes/packages/nord/src/index.ts",
+        "./solarized-dark": "./cm6-themes/packages/solarized-dark/src/index.ts",
+        "./solarized-light": "./cm6-themes/packages/solarized-light/src/index.ts",
+        "./lixpi-gruvbox-light": "./src/lixpi-gruvbox-light.ts"
+    },
+    "dependencies": {
+        "@codemirror/view": "6.43.15",
+        "@codemirror/state": "6.7.6",
+        "@codemirror/language": "6.13.1",
+        "@lezer/highlight": "1.2.5"
+    }
+}

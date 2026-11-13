@@ -5,10 +5,12 @@ import {
 } from 'vitest'
 
 import {
-    createProseMirrorSchema,
+    createCoreDocumentKindRegistry,
     DOCUMENT_TYPE,
-} from './schema-builder.ts'
+} from './document-kinds.ts'
 import { aiGeneratedImageNodeSpec, aiGeneratedVideoNodeSpec, aiLineageEventNodeSpec, aiMediaGenerationProgressNodeSpec, aiPromptInputNodeSpec, aiResponseMessageNodeSpec, aiUserMessageNodeSpec, normalizeReferenceNodeIds } from './node-specs.ts'
+
+const coreRegistry = createCoreDocumentKindRegistry()
 
 const fakeDom = (attrs: Record<string, string | null>, querySelector?: (selector: string) => Record<string, any> | null): HTMLElement => {
     return {
@@ -25,7 +27,7 @@ describe('normalizeReferenceNodeIds', () => {
 
 describe('aiPromptInputNodeSpec', () => {
     it('normalizes list attrs and config groups on serialization regardless of multi-model flags', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const promptNode = schema.nodes.aiPromptInput.create({
             aiReasoningModels: '["gpt-4","gpt-4","",""]',
             aiImageModels: '["img","img",""]',
@@ -91,7 +93,7 @@ describe('aiPromptInputNodeSpec', () => {
 
 describe('aiUserMessageNodeSpec', () => {
     it('serializes deduplicated reference ids and defaults in parse', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const userNode = schema.nodes.aiUserMessage.create({
             id: 'msg-1',
             createdAt: 1690000000,
@@ -112,13 +114,24 @@ describe('aiUserMessageNodeSpec', () => {
             id: 'msg-1',
             createdAt: 42,
             referenceNodeIds: ['a', 'b'],
+            authorLabel: '',
         })
+    })
+
+    it('round-trips the author label of a message a workspace agent wrote', () => {
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const userNode = schema.nodes.aiUserMessage.create({ authorLabel: 'Campaign agent' })
+        const dom = aiUserMessageNodeSpec.toDOM(userNode as any)[1] as Record<string, string>
+
+        expect(dom['data-author-label']).toBe('Campaign agent')
+        expect((aiUserMessageNodeSpec.parseDOM![0].getAttrs!(fakeDom({ 'data-author-label': 'Campaign agent' })) as Record<string, unknown>).authorLabel).toBe('Campaign agent')
+        expect(aiUserMessageNodeSpec.toDOM(schema.nodes.aiUserMessage.create() as any)[1]).not.toHaveProperty('data-author-label')
     })
 })
 
 describe('aiGeneratedImageNodeSpec', () => {
     it('round-trips image nodes while handling null and number variant indexes', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const source = schema.nodes.aiGeneratedImage.create({
             imageData: 'data:image/png;base64,abc',
             variantIndex: 3,
@@ -150,7 +163,7 @@ describe('aiGeneratedImageNodeSpec', () => {
 
 describe('aiGeneratedVideoNodeSpec', () => {
     it('round-trips video media fields and boolean flags', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const videoNode = schema.nodes.aiGeneratedVideo.create({
             videoUrl: 'https://example.com/video.mp4',
             isPending: false,
@@ -190,7 +203,7 @@ describe('aiGeneratedVideoNodeSpec', () => {
 
 describe('aiLineageEventNodeSpec', () => {
     it('normalizes kind in parse and toDOM', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const parseRule = aiLineageEventNodeSpec.parseDOM![0]
         const parsed = parseRule.getAttrs!(fakeDom({
             'data-lineage-event-kind': 'branch-line',
@@ -224,7 +237,7 @@ describe('aiLineageEventNodeSpec', () => {
 
 describe('aiMediaGenerationProgressNodeSpec', () => {
     it('keeps the structured progress state in provenance projections', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_PROVENANCE)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_PROVENANCE)
         const state = {
             generationRequestId: 'request-1',
             status: 'completed',
@@ -251,7 +264,7 @@ describe('aiMediaGenerationProgressNodeSpec', () => {
 
 describe('aiResponseMessageNodeSpec', () => {
     it('serialize/deserialize generation fields consistently', () => {
-        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_CONVERSATION)
+        const schema = coreRegistry.schema(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const response = schema.nodes.aiResponseMessage.create({
             id: 'resp-1',
             aiProvider: 'provider-1',

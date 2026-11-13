@@ -1,0 +1,359 @@
+# AI Chat Thread Plugin
+
+`aiChatThreadPlugin` powers `assetConversation` editors in the panel and read-only `assetProvenance` projections. The thread node is a conversation log and streaming target whose `threadId` equals the conversation Asset ID. Composer UI is provided by `aiPromptInputPlugin`.
+
+## Input Flow
+
+1. `aiPromptInputPlugin` owns the composer editor and model controls.
+2. `AiPromptInputController` injects an `aiUserMessage` into the target thread editor.
+3. The controller dispatches `USE_AI_CHAT_META` with `{ threadId, nodePos }`.
+4. `aiChatThreadPlugin` extracts the thread messages and calls `sendAiRequestHandler` with the post-placeholder ProseMirror doc JSON.
+5. The API authors response nodes into the authoritative ProseMirror step stream; the browser applies those steps through `ProseMirrorAuthorityService`.
+
+## What It Does
+
+- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiMediaGenerationProgress`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
+- Handles image, video, context-resolution, branch-resolution, trace, and error side-effect events from the host's segment source (`EditorServices.segments`), which routes streamed segments by conversation.
+- Renders Capability media review details inside the image-generation trace, including per-shot status, match score, comparison issues, the zero-automatic-retry count, and the manual-variant recommendation.
+- Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response and the canvas branch marker's preflight timeline. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
+- Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
+- Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
+- Forwards media/control events through the editor's optional `onStreamEvent` observer. Canvas adapters route those events to their own package-owned subscriptions.
+- Preserves API media-lineage assignments on durable response/media nodes, then projects those ids into reusable lineage-event markers for the live thread, branch-root panels, branch-fork panels, and generated-media provenance.
+- Blocks paste inside thread logs. Users paste into the separate prompt input surface.
+- Supports read-only generated-media provenance projections through the shared AI chat NodeViews without subscribing the preview editor to live stream events.
+
+## Runtime Wiring
+
+`ProseMirrorEditor` adds this plugin for `documentType: 'assetConversation'` and `documentType: 'assetProvenance'`. Provenance passes `readOnly: true` and never publishes client steps. Conversational workspace transcripts also mount read-only, but receive document changes through the existing authority subscription. The plugin accepts those authority transactions and blocks local document edits and legacy submission commands.
+
+```ts
+createAiChatThreadPlugin({
+    sendAiRequestHandler: val => this.onAiChatSubmit(val),
+    stopAiRequestHandler: val => this.onAiChatStop(val),
+    onReceivingStateChange: this.onReceivingStateChange,
+    onStreamEvent: this.onStreamEvent,
+    renderContext: {
+        readOnly: false,
+        traceDetailsOptions: undefined,
+        contextPreview: undefined,
+        mediaGenerationProgress: undefined,
+    },
+})
+```
+
+The optional `onStreamEvent` observer belongs to the plugin instance. It receives the segment and, when the editor has created one, its response-message ID. Canvas adapters forward it only while their workspace, conversation and editor scope remain current. The plugin does not register global image/video callbacks or import a canvas router.
+`renderContext.contextPreview` lets user-message NodeViews resolve stored explicit reference ids into shared context preview tiles; read-only provenance projections pass the same renderer so sent-message references match the live panel input previews.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Prompt as aiPromptInputPlugin
+    participant Controller as AiPromptInputController
+    participant Thread as aiChatThreadPlugin
+    participant Service as AiInteractionService
+    participant Authority as ProseMirrorAuthorityService
+    participant Receiver as Segment source
+
+    User->>Prompt: Cmd/Ctrl+Enter or submit button
+    Prompt->>Controller: onSubmit(contentJSON, model attrs, media opts)
+    Controller->>Thread: insert aiUserMessage + USE_AI_CHAT_META
+    Thread->>Thread: extract thread messages
+    Thread->>Service: sendAiRequestHandler(payload + post-placeholder doc JSON)
+    Authority->>Thread: asset.document.resume + Asset-role step subscription
+    Authority->>Thread: START / STEP / END
+    Authority->>Thread: apply Step.fromJSON(schema, step)
+    Service->>Receiver: replayed/live pipeline side events
+    Receiver->>Thread: branch/media/trace/error events
+```
+
+## Schema Nodes
+
+### `aiChatThread`
+
+Container for the conversation log.
+
+- Spec content: `(aiUserMessage | aiResponseMessage)*`
+- Asset conversation/provenance mode: `doc -> aiChatThread+`
+- Main DOM: `div.ai-chat-thread-wrapper > div.ai-chat-thread-content`
+- The NodeView auto-fills a missing `threadId` by dispatching `setNodeMarkup`.
+- Clicking the thread content resolves the nearest valid text selection inside a message instead of placing a text cursor on the block-only thread container.
+- The NodeView ignores `style` attribute mutations so canvas-driven sizing avoids ProseMirror wrapper recreation.
+
+Attrs declared in `ai-chat-thread-node.ts`:
+
+- `threadId`
+- `status`
+- `mediaGenerationMode` (`image` or `video`; copied from the explicit composer switch)
+- `aiReasoningModels` (JSON-serialized ordered model-id array; length 1 = singular selection)
+- `reasoningGenerationConfigGroups`
+- `useMultipleReasoningModels`
+- `useMultipleImageModels`
+- `useMultipleVideoModels`
+- `aiImageModels` (JSON-serialized ordered model-id array)
+- `imageGenerationEnabled`
+- `imageGenerationSize`
+- `imageGenerationConfigGroups`
+- `previousResponseId`
+- `aiVideoModels` (JSON-serialized ordered model-id array)
+- `videoAspectRatio`
+- `videoResolution`
+- `videoDuration`
+- `videoGenerationConfigGroups`
+- `sourceVideoNodeId`
+
+### `aiUserMessage`
+
+Sent user message bubble inserted by `AiPromptInputController`.
+
+- Content: `(paragraph | block)+`
+- Attrs: `id`, `createdAt`, `referenceNodeIds`
+- DOM parse target: `div.ai-user-message`
+- NodeView shell comes from `createAiUserMessageShell()`.
+- Submitted-message bubbles set the same light media-reference and Capability-reference tokens as canvas branch markers, while the shared prompt-reference atom continues to own icon, typography, and spacing.
+- Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available; those tiles re-resolve the current canvas node on hover so late descriptor self-heal metadata appears without rebuilding the message.
+- Scaled projection surfaces can set `renderContext.contextPreview.inlinePopover` so hover cards stay inside the projection's DOM context; unscaled panels omit it and use the default viewport-clamped tooltip.
+
+### `aiResponseMessage`
+
+Assistant response node created as the request is submitted, then filled by stream events.
+
+- Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
+- Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
+- Request metadata attrs: `generationRequestId`
+- Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting response stays compact without clipping the spinner.
+- The non-editable `.ai-response-capability-progress` mount hosts the shared sequence-deduplicating `CapabilityRunEvent` projection. Durable conversational operation summaries use that same progress timeline, targeted by their response-message ID and retained until the matching NodeView mounts. Output actions resolve current Asset access before opening the installed editor or media preview.
+- Response nodes in the chat thread do not render an assistant avatar.
+
+### `aiReasoningSection`
+
+Per-model section inside one `aiResponseMessage` for media-generation matrix requests.
+
+- Content: `(paragraph | block)*`
+- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`, `lineageProjectionScope`, `isReceivingAnimation`
+- `branchOriginNodeId`, `branchForkNodeId`, and `branchLineNodeId` are persisted from the API lineage assignment. The NodeView asks the shared lineage-event projector which markers belong in the current scope. The live conversation scope can show `Branch started` on the first origin section, `Branch fork created` on forked sections, and `Branch continued` on branch-line sections. Read-only provenance projections materialize those same branch decisions as `aiLineageEvent` content nodes near the resolver audit instead of rendering them as section header markers.
+- Created as local placeholders on submit when the request includes image/video generation, then adopted by streamed `generationRun` metadata.
+- Owns only that reasoning run's prose, generation trace, and generated media thumbnail, so canvas provenance/details can resolve by `reasoningRunId` or `mediaRunId`.
+
+### `aiLineageEvent`
+
+Atom block for a materialized workflow event in chat history or a projected chat transcript.
+
+- Spec and NodeView live in `ai-lineage-event-node.ts`; event labels and icon rendering live in `ai-lineage-events.ts`.
+- Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size. The compact history icon is intentionally shadow-free; the full canvas node shadow becomes a blurred smear when scaled down to this glyph.
+- Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`
+- `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`; `kind: 'branch-line'` renders `Branch continued`.
+- The marker keeps its event label in `aria-label` and opts into the application-level ui-kit help-tooltip provider. It does not create a native `title` tooltip.
+- Materialized events are keyed by their kind-specific lineage id. The live editor removes duplicate materialized events inside each response message on mount, then persists the normalized document through the regular editor change path.
+- Live streamed responses materialize these nodes directly from API `generationRun.lineageAssignment` when the response is not split into `aiReasoningSection` nodes. Matrix responses keep lineage ids on each `aiReasoningSection`; read-only projections materialize scoped copies as standalone events near the resolver audit.
+
+### `aiMediaGenerationProgress`
+
+Projection-only atom block for the pipeline timeline embedded in sealed generated-media provenance.
+
+- Attrs: `id`, structured `state`, and `showSummaryWhenCollapsedItemIds`.
+- The durable state remains owned by the matching `aiGeneratedImage` / `aiGeneratedVideo` node. Generated-media projection clones place this presentation node immediately after the submitted user message.
+- Standalone assistant preamble is absorbed into `Understand request` instead of being rendered twice. The matching trace's reasoning-authored media prompt becomes one top-level pipeline step after shared lineage resolution; its expanded summary reuses the trace prompt's purple surface and left border. Trace rendering suppresses its old standalone prompt section while retaining per-run references, resolver audit, Capability comparison, and output details.
+- Every pipeline step may carry a durable `trace`: the model calls it made, the params each was called with, the References and Capabilities passed to each one, its reasoning, and resulting facts. `$src/components/executionTrace` expands that trace into the timeline's detail block, rendering each Asset, Capability, Tool, and Skill as the same `prompt-reference-chip` and hover card a user message uses. Hosts supply the adapter because only they own the Asset and Capability resolvers those hover cards need.
+- `renderContext.mediaGenerationProgress` mounts the shared recursive pipeline component. Every sealed history projection starts with all levels expanded, whether opened from media info or a branch-lineage node, and it does not reuse focused live-progress disclosure state. Ordinary live conversation editors never synthesize this projection node.
+
+### `aiGeneratedImage`
+
+Atom node for compact generated-image references in the thread log.
+
+- The spec lives in `@lixpi/prosemirror`'s shared node specs, and rendering is owned by the image selection feature in `@lixpi/prosemirror`.
+- `imageSelectionPlugin` owns the active `ImageNodeView` path so regular image selection, bubble-menu alignment, wrap controls, and the shared generated-media provider badge stay on the same visible surface.
+- Complete nodes render a final generated image title, an authenticated image URL, and the provider badge below the image.
+- Nodes keep `branchId`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`, `parentMediaNodeId`, and `lineageParentNodeId` from `generationRun.lineageAssignment`; the provider badge row remains model/provider-only.
+- Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
+- Partial and complete stream events are matched primarily with `mediaRunId` when available, then by file, response, or partial identifiers.
+
+### `aiGeneratedVideo`
+
+Atom node for generated-video status and previews in the thread log.
+
+- Pending/generating/error/complete events update the in-thread video node.
+- Complete nodes render a final generated video title, an authenticated video URL, the shared SVG `videoControls` bar as a scaled external row below the video, and the shared generated-media provider badge below the controls.
+- Nodes keep the same lineage attrs as generated images; the provider badge row remains model/provider-only.
+- Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
+- The canvas media info button is not rendered in chat history nodes.
+- Poster or representative-frame Asset renditions can be reused as still-image context for a later request.
+- Carries the same run metadata shape as generated images.
+
+### `aiCollapsibleBlock`
+
+Inline generation trace block.
+
+- Content: `(paragraph | block)*`
+- Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
+- Used for image and video generation details.
+- Renders generation details as one continuous response block. Prompt, final prompt, references, and resolver audit are separated by subsection titles instead of collapsible chrome.
+- Trace rendering is shared through `image-generation-trace-details.ts`; reference thumbnails resolve authenticated Asset rendition URLs, collapse historical duplicate candidate IDs by Asset identity while retaining the strongest reference role, and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded. Reference labels use ARIA and the application-level ui-kit help-tooltip provider instead of native `title` tooltips.
+- Generated prompt text uses the same left-border output treatment as extraction-stage model output.
+- The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
+
+## Request Construction
+
+`handleChatRequest()` reads model and media attrs from the `aiChatThread` node after the controller injects the submitted user message.
+
+The request payload includes:
+
+- `messages`
+- `mediaGenerationMode`
+- `aiReasoningModels` (ordered model-id array; collapsed to the first entry when `useMultipleReasoningModels` is off)
+- `reasoningOptions` (carries one synchronized configuration group per selected reasoning model)
+- `useMultipleReasoningModels` / `useMultipleImageModels` / `useMultipleVideoModels`
+- `conversationAssetId`
+- `imageOptions` (carries `aiImageModels` only in image mode)
+- `videoOptions` (carries `aiVideoModels` only in video mode)
+
+Each section's selection is a JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
+
+`mediaGenerationMode` is authoritative. Prompt text cannot switch image/video routing. The handler validates that the active mode has a selected model, removes inactive media model ids from the request, and sets the matching single output media type. A multi-model selection fans out only within that explicit mode.
+
+Reasoning and media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored generation config matrix. Reasoning groups are forwarded through `reasoningOptions.configGroups`; the active media groups are forwarded through `imageOptions.configGroups` or `videoOptions.configGroups`. The thread does not derive provider-specific controls from selected model metadata.
+
+`ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and
+`aiResponseMessage` blocks. It preserves code blocks with triple backticks,
+converts hard breaks to newlines, and leaves typed `prompt_reference` atoms in the persisted message document. The request payload does not duplicate those references. After acquiring the conversation lease, the API reads the authoritative latest user message, validates each atom's union shape, and authorizes its stable identity. Generated media is resolved from API-authorized Workspace and Asset context rather than from browser-built Object Store coordinates.
+
+`ContentExtractor.toMessages()` maps `aiUserMessage` to `user`,
+`aiResponseMessage` to `assistant`, and merges adjacent text-only messages with
+the same role. Browser payloads never contain `nats-obj://` coordinates.
+
+## Streaming
+
+The plugin subscribes through the segment source and handles these event families:
+
+- stream errors
+- `image_partial`
+- `image_complete`
+- `image_error`
+- `image_branch_resolved`
+- `image_branch_resolution_error`
+- `media_lineage_planned`
+- `image_generation_trace`
+- `context_relevance_resolved`
+- `context_relevance_error`
+- `video_pending`
+- `video_generating`
+- `video_complete`
+- `video_error`
+- `video_generation_trace`
+
+`video_pending` includes the API-persisted canvas projection for its placeholder. The canvas router forwards that geometry unchanged; browser code does not create or position a fallback video node.
+
+Single-writer text streams are applied by `ProseMirrorAuthorityService`, which
+subscribes to the document step subject and applies `STEP` events with
+`Step.fromJSON(view.state.schema, event.step)`. The plugin still owns the
+non-ProseMirror pipeline event families delivered through the segment source.
+Raw `START_STREAM` / `STREAMING` / `END_STREAM` text events are not parsed in
+the browser. Generated-prompt collapsible blocks are authored by the API-side
+ProseMirror assembler. Pipeline side-event handlers do not author the same text
+document in the browser.
+When a mounted editor receives a step that was authored against a different
+seed document, the authority service enters snapshot recovery instead of
+retrying the same structural failure. The final API-persisted snapshot is the
+recovery source for that stale editor.
+
+Image and video completion/error events finalize the generated media node state
+and close the matching receiving run so prompt inputs leave stop mode when the
+media run finishes.
+
+`generationRun` metadata scopes parallel model outputs:
+
+- Matrix text responses are grouped by `reasoningRunId`.
+- Media nodes are grouped by `mediaRunId`.
+- Matrix generation trace blocks are grouped by `reasoningRunId`; scalar media traces stay in the plain response message.
+- `receivingThreadIds` is thread-level, while `receivingRunKeysByThread` keeps sibling reasoning runs active independently.
+- Local `aiReasoningSection` placeholders are created only for media-generation matrix requests. Scalar single-model media requests can still carry `generationRun` lineage metadata for canvas/media provenance, but they use a plain `aiResponseMessage` so the normal stream lifecycle owns the loading indicator.
+
+## Positioning Helpers
+
+`PositionFinder.findThreadInsertionPoint(state, threadId)` returns the end of the matching thread. A supplied `threadId` scopes the lookup to that thread.
+
+`PositionFinder.findResponseNode(state, threadId, generationRun)` searches within the matching thread and resolves media matrix runs to `aiReasoningSection` targets. It prefers:
+
+1. exact `reasoningRunId` section matches
+2. provisional local section templates matching `reasoningModelId` and `reasoningIndex`
+3. receiving/initial-render responses, with newest winning ties
+
+That scoping keeps concurrent streams routed to the correct thread and model variant.
+
+## Decorations And Plugin State
+
+Plugin state:
+
+- `receivingThreadIds`
+- `receivingRunKeysByThread`
+- code-block stream parser state: `insideBackticks`, `backtickBuffer`, `insideCodeBlock`, `codeBuffer`
+- `decorations`
+- `collapsibleThreadIds`
+- `collapsibleRunKeys`
+
+Decoration output:
+
+- receiving-state class on `aiChatThread` nodes while any run in that thread is active
+
+## Registered NodeViews
+
+`ai-chat-thread-plugin.ts` registers:
+
+- `aiChatThreadNodeView`
+- `aiResponseMessageNodeView`
+- `aiReasoningSectionNodeView`
+- `aiLineageEventNodeView`
+- `aiUserMessageNodeView`
+- `aiCollapsibleBlockNodeView`
+- `aiGeneratedVideoNodeView`
+
+Generated-image rendering is handled by `imageSelectionPlugin`.
+
+## Read-Only Provenance Projections
+
+The read-only renderer mounts a conversation Asset snapshot with an optional trace-details context. `@lixpi/prosemirror/shared/generated-media-turn-projection` builds a scoped projection by cloning the producing user and response messages from the Asset's `conversation` document role. Matrix responses select the matching reasoning section by response, reasoning run, media run, Asset, or model identity. Per-media provenance prunes both generated-media atoms and sibling generation-trace blocks to the exact `mediaRunId`, `assetId`, and `variantIndex`; branch-fork provenance leaves siblings visible.
+
+Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view. `branch-origin`, `branch-fork`, and `media-run` projections materialize scope-local branch decisions as standalone `aiLineageEvent` nodes, then relocate them directly after the generation trace block that renders resolver audit details so they stay with the branch decision context instead of at the top of the reasoning section. Projection cloning filters materialized lineage-event siblings through the selected generated media's lineage ids and deduplicates repeated event ids, so a scoped panel renders one matching workflow marker instead of every sibling marker in the response. This keeps branch-root, branch-fork, and branch-line workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
+
+Read-only projections do not subscribe to the segment source, do not call thread persistence callbacks, and reject document-changing transactions. NodeViews that own local controls guard direct dispatches with `view.editable`, so image resize, image/video selection, and focus writebacks do not mutate the projected document.
+
+## Files
+
+- `ai-chat-thread-plugin.ts`: orchestration, stream handling, request construction, decorations, plugin state, NodeView registration.
+- `capability-chat-run-progress.ts`: per-run Capability progress timelines mounted into the streaming response, given `renderContext.promptReferencePreviewRenderer` so step traces render Asset and Capability hover cards.
+- `ai-chat-thread-node.ts`: thread schema and minimal wrapper NodeView.
+- `ai-user-message-node.ts`: sent-user-message schema and shell NodeView.
+- `ai-response-message-node.ts`: assistant response schema and shell NodeView.
+- `ai-reasoning-section-node.ts`: per-reasoning-run section schema and NodeView for one shared media response message.
+- `ai-lineage-events.ts`: shared lineage-event projection, labels, and icon marker rendering.
+- `ai-lineage-event-node.ts`: standalone projected workflow event node.
+- `@lixpi/prosemirror/frontend/rich-editing` `image-selection/image-node-view.ts`: visible regular/generated image NodeView, authenticated image loading, resizing, and generated-media provider badge.
+- `ai-generated-video-node.ts`: generated-video schema, callback surface, in-chat video NodeView, controls mount, and generated-media provider badge.
+- `ai-collapsible-block-node.ts`: trace disclosure schema and NodeView.
+- `image-generation-trace-details.ts`: shared trace detail renderer.
+- `ai-chat-message-shells.ts`: shared user/assistant message shells.
+- `@lixpi/prosemirror/shared/generated-media-turn-projection`: helpers for generated-media provenance.
+- `ai-chat-thread-plugin-constants.ts`: shared `PluginKey` and transaction meta constants.
+- `@lixpi/prosemirror/styles/editor/chat-thread` owns thread-log, message, media, and compatibility styles.
+
+## Transaction Meta
+
+- `USE_AI_CHAT_META` (`use:aiChat`): starts request construction for a thread. Expected payload is `{ threadId, nodePos }`.
+- `STOP_AI_CHAT_META` (`stop:aiChat`): calls `stopAiRequestHandler({ threadId })`.
+- `insert:aiChatThread`: inserts an empty thread node for command-driven thread creation.
+- Internal meta `setReceiving`: toggles receiving state per thread and run key.
+- Internal meta `setCollapsible`: tracks active trace block streams per thread and run key.
+
+## Extension Points
+
+Add new streamed block types in `packages/lixpi/prosemirror/src/shared/stream-assembly.ts`.
+
+Add new inline stream segment behavior in `packages/lixpi/prosemirror/src/shared/stream-assembly.ts`.
+
+Add provider/model attribution in the generation trace block or the shared shell helpers.
+
+Add generated-media canvas behavior through `imageCallbacks` or `videoCallbacks` in the `createAiChatThreadPlugin()` call site.
+
+## Debugging
+
+`IS_RECEIVING_TEMP_DEBUG_STATE` can keep receiving styling active while inspecting CSS. Leave it `false` in normal development.

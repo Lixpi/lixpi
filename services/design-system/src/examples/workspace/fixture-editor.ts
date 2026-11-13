@@ -13,7 +13,8 @@ import {
     type Node as ProseMirrorNode,
 } from 'prosemirror-model'
 import { aiPromptInputNodeType } from '@lixpi/prosemirror'
-import { createProseMirrorSchema } from '@lixpi/prosemirror/shared/schema-builder'
+import { PromptInputSurface } from '@lixpi/prosemirror/frontend/editor'
+import { designSystemDocumentKinds } from './document-kinds.ts'
 import { createCodeBlockPlugin } from '@lixpi/prosemirror/frontend/code-block'
 import {
     parseAiModelSelectionAttr,
@@ -39,7 +40,6 @@ import {
 } from '@lixpi/ui-kit/svg'
 import { getExampleTheme } from '../example-theme.ts'
 import {
-    PromptInputSurface,
     createPromptMediaModeSwitch,
     createPromptModelMenuTrigger,
     createPromptSubmitButton,
@@ -87,7 +87,7 @@ export class FixtureEditor {
         host: HTMLElement,
         content: DocumentContent,
     ): FixtureEditor {
-        const schema = createProseMirrorSchema('assetContent')
+        const schema = designSystemDocumentKinds.schema('assetContent')
 
         return new FixtureEditor(
             host,
@@ -102,7 +102,7 @@ export class FixtureEditor {
     constructor(
         host: HTMLElement,
         content: object,
-        schema: Schema = createProseMirrorSchema('assetContent'),
+        schema: Schema = designSystemDocumentKinds.schema('assetContent'),
         plugins: Plugin[] = [],
         private readonly onChange: (content: object) => void = () => {},
         readOnly = false,
@@ -308,7 +308,7 @@ export class FixturePromptEditor {
         this.editor = new FixtureEditor(
             request.host,
             request.initialContent,
-            createProseMirrorSchema('aiPromptInput'),
+            designSystemDocumentKinds.schema('aiPromptInput'),
             [],
             request.onContentChange,
             false,
@@ -657,7 +657,7 @@ class FixtureConversationEditor {
         this.editor = new FixtureEditor(
             request.container,
             request.thread.content ?? {},
-            createProseMirrorSchema('assetConversation'),
+            designSystemDocumentKinds.schema('assetConversation'),
             [],
             request.onChange,
             request.readOnly ?? true,

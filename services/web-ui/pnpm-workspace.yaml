@@ -6,6 +6,7 @@ packages:
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/nats-service/ts"
   - "packages/lixpi/prosemirror"
+  - "packages/lixpi/prosemirror-themes"
   - "packages/lixpi/test-utils"
   - "packages/lixpi/ui-kit"
   - "packages/lixpi/themes"
@@ -20,3 +21,11 @@ allowBuilds:
 
 patchedDependencies:
   '@nats-io/obj@3.4.0': packages/lixpi/nats-service/patches/@nats-io__obj@3.4.0.patch
+
+# Every ProseMirror package must share one prosemirror-model. Without this pin,
+# prosemirror-state and prosemirror-view resolve the newest model release while
+# the workspace pins the registry version, and nodes from one copy fail the
+# other's instanceof checks. Keep it equal to prosemirror-model in
+# dev-tools/versions-registry/versions/typescript.json.
+overrides:
+  prosemirror-model: 1.25.12

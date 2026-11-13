@@ -10,9 +10,6 @@ export {
     createGenericVideoDurationDropdown,
     getModelOptionsForCapability,
     transformModelsToOptions,
-    type AiModelDropdownOption,
-    type MediaGenerationConfigMatrixControls,
-    type MediaGenerationConfigMatrixViewInstance,
 } from '$src/components/aiModelControls/aiModelControls.ts'
 
 export {
@@ -27,9 +24,6 @@ export {
 export {
     applyAiModelMenuStyleSettings,
     createAiModelMenuContent,
-    type AiModelMenuContentView,
-    type AiModelMenuControlItem,
-    type AiModelMenuSectionConfig,
     type AiModelMenuSectionView,
 } from '$src/components/aiModelControls/modelMenuSection.ts'
 

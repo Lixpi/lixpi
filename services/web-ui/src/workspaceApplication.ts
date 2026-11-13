@@ -171,7 +171,7 @@ export const createWorkspaceApplication = (config: {
                 organizationId: auth.userStore.getData('organizations')[0],
             })
             servicesStore.getData('aiModelService')!.getAvailableAiModels()
-            servicesStore.getData('workspaceService')!.getUserWorkspaces()
+            servicesStore.getData('workspaceService')!.getUserWorkspaceTree()
         },
         shutdownServices: async () => {
             await servicesStore.getData('workspaceService')?.canvasSessions.close()

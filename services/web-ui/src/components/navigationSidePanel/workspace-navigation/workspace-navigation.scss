@@ -1,0 +1,93 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+@use "@lixpi/prosemirror/styles/nested-list";
+
+.workspace-navigation-organization {
+    padding: 0;
+    margin: 0;
+    background: transparent;
+}
+
+.nested-list .nested-list-document .workspace-navigation-organization > .nested-list-item-content > p:first-child {
+    padding-block: 16px 4px;
+    padding-inline: 20px;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+.nested-list .nested-list-document .workspace-navigation-organization[data-nested-list-hover="true"] > .nested-list-item-content > p:first-child,
+.nested-list .nested-list-document .workspace-navigation-organization > .nested-list-item-content > p:first-child:hover {
+    background: transparent;
+}
+
+.nested-list .nested-list-document .nested-list-item.workspace-navigation-organization > .nested-list-item-row-underlay {
+    background: transparent;
+}
+
+.workspace-navigation-single-organization .nested-list .nested-list-document .workspace-navigation-organization > .nested-list-item-content > p:first-child {
+    display: none;
+}
+
+.workspace-navigation-single-organization .nested-list .ProseMirror.nested-list-document > .workspace-navigation-organization:only-child > .nested-list-item-content > p:first-child + :is(h1, h2, h3) {
+    margin-block-start: 0;
+}
+
+.workspace-navigation-single-organization .workspace-navigation-organization > .nested-list-item-content > ul {
+    --nested-list-depth-indent: 0px;
+}
+
+.nested-list .nested-list-document .nested-list-item[data-item-type="workspace"] > .nested-list-item-content > p:first-child {
+    padding-block: 5px;
+    padding-inline: calc(var(--nested-list-row-indent) + 28px) 12px;
+}
+
+.nested-list-item[data-item-type="workspace"]:not(.nested-list-active)[data-nested-list-hover="true"] > .nested-list-item-content > p:first-child,
+.nested-list-item[data-item-type="workspace"]:not(.nested-list-active):has(> .nested-list-item-content > p:first-child:hover) > .nested-list-item-content > p:first-child,
+.nested-list-item[data-item-type="workspace"]:not(.nested-list-active):focus-visible > .nested-list-item-content > p:first-child {
+    color: #{themeScope.token("components-composer-mode-switch-selected-option-color", themePalette.$roles)};
+}
+
+.nested-list[data-mode="view"] .nested-list-item[data-item-type="workspace"] > .nested-list-item-content > p:first-child {
+    cursor: pointer;
+}
+
+.workspace-navigation-status {
+    display: grid;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 8px 20px;
+    border-block-start: 1px solid currentColor;
+    color: inherit;
+    font-size: 12px;
+}
+
+.workspace-navigation-status[hidden] {
+    display: none;
+}
+
+.workspace-navigation-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.workspace-navigation-status-message {
+    min-width: 0;
+}
+
+.workspace-navigation-status-action {
+    flex: 0 0 auto;
+    border: 0;
+    padding: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}

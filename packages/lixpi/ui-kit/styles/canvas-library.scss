@@ -119,7 +119,11 @@ textarea {
 .canvas-library-navigation {
     gap: 0;
     padding-inline: 0;
-    padding-bottom: 24px;
+    padding-block: 0;
+}
+
+.canvas-library-navigation .nested-list[data-mode="view"] .nested-list-item > .nested-list-item-content > p:first-child {
+    cursor: pointer;
 }
 
 .canvas-library-section-items {

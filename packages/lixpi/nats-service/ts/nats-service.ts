@@ -48,6 +48,55 @@ const DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS = 9
 // how long rejections may last before the session counts as rejected.
 const AUTH_REJECTION_MAX_BACKOFF_MS = 2000
 
+const ABORTED = Symbol('aborted')
+
+// Settles with `pending`, or rejects with the signal's reason as soon as it
+// aborts. An abandoned request can still fail later; nothing waits for it
+// then, and its rejection is absorbed here.
+const abandonOnAbort = async <T>(
+    pending: Promise<T>,
+    signal: AbortSignal,
+): Promise<T> => {
+    signal.throwIfAborted()
+    const outcome = (async (): Promise<{ value: T } | { error: unknown }> => {
+        try {
+            return { value: await pending }
+        } catch (error) {
+            return { error }
+        }
+    })()
+    let onAbort = (): void => void undefined
+    const aborted = new Promise<typeof ABORTED>(resolve => {
+        onAbort = () => resolve(ABORTED)
+        signal.addEventListener(
+            'abort',
+            onAbort,
+            { once: true },
+        )
+    })
+
+    try {
+        const result = await Promise.race([outcome, aborted])
+
+        if (result === ABORTED)
+            throw signal.reason
+
+        if ('error' in result)
+            throw result.error
+
+        return result.value
+    } finally {
+        signal.removeEventListener('abort', onAbort)
+    }
+}
+
+// How many requests one reply subscription handles at once.
+const DEFAULT_MAX_CONCURRENT_REPLIES = 64
+
+// A reply that takes at least this long from arrival to response is logged
+// with its queue wait and handler time.
+const DEFAULT_SLOW_REPLY_MS = 250
+
 import {
     log,
     info,
@@ -106,6 +155,10 @@ export type NatsServiceConfig = {
         data: unknown,
         operation: (assertActive: () => void) => Promise<void>,
     ) => Promise<void>
+    // Requests one reply subscription handles at once (defaults to DEFAULT_MAX_CONCURRENT_REPLIES).
+    maxConcurrentReplies?: number
+    // Replies slower than this are logged (defaults to DEFAULT_SLOW_REPLY_MS).
+    slowReplyMs?: number
     streamReplicas?: number // Replication factor for created stores (defaults to DEFAULT_STREAM_REPLICAS)
     // How many attempts init()'s first connect makes before rejecting (defaults to
     // DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS). Raise it for a caller that starts
@@ -1047,23 +1100,30 @@ export default class NatsService {
         return subscription
     }
 
-    // Request data
+    // Request data. Aborting `signal` rejects at once with the signal's
+    // reason and discards the reply when it arrives. NATS has no way to
+    // withdraw a request the responder already received.
     async request<T = any, R = any>(
         subject: string,
         data: T,
         timeout = 3000,
+        signal?: AbortSignal,
     ): Promise<R> {
+        signal?.throwIfAborted()
+
         if (!this.nc) {
             err('NATS client is not connected.')
 
             return null as unknown as R
         }
 
-        const response = await this.nc.request(
+        const pending = this.nc.request(
             subject,
             JSON.stringify(data),
             { timeout },
         )
+
+        const response = signal ? await abandonOnAbort(pending, signal) : await pending
 
         const result = JSON.parse(
             response.string(),
@@ -1107,42 +1167,84 @@ export default class NatsService {
         const middlewareChain = this.config.replyMiddleware
             || this.config.middleware
             || []
-        ;(async () => {
-            for await (const msg of subscription) {
-                try {
-                    // let data: T = payloadType === 'json' ? JSON.parse(msg.string()) as T : msg.string() as T
-                    let data = decode(msg, payloadType)
+        const respond = async (
+            msg: Msg,
+            receivedAt: number,
+        ): Promise<void> => {
+            const startedAt = performance.now()
 
-                    if (middlewareChain.length) {
-                        const result = await this.applyMiddleware(
-                            data,
-                            msg,
-                            middlewareChain,
-                        )
-                        data = result.data
-                    }
+            try {
+                let data = decode(msg, payloadType)
 
-                    await this.runRequestScope(data, async assertActive => {
-                        assertActive()
-                        const result = await handler(data, msg)
-                        assertActive()
-                        msg.respond(
-                            encode(result, payloadType),
-                        )
-                    })
-                } catch (error) {
-                    err(`Reply error on subject ${subject}`, error)
-                    msg.respond(
-                        encode(
-                            getReplyErrorPayload(error, payloadType),
-                            payloadType,
-                        ),
+                if (middlewareChain.length) {
+                    const result = await this.applyMiddleware(
+                        data,
+                        msg,
+                        middlewareChain,
                     )
+                    data = result.data
                 }
+
+                await this.runRequestScope(data, async assertActive => {
+                    assertActive()
+                    const result = await handler(data, msg)
+                    assertActive()
+                    msg.respond(
+                        encode(result, payloadType),
+                    )
+                })
+            } catch (error) {
+                err(`Reply error on subject ${subject}`, error)
+                msg.respond(
+                    encode(
+                        getReplyErrorPayload(error, payloadType),
+                        payloadType,
+                    ),
+                )
+            } finally {
+                const finishedAt = performance.now()
+
+                if (finishedAt - receivedAt >= this.slowReplyMs)
+                    warn(
+                        `NATS -> slow reply on ${msg.subject}: waited ${Math.round(startedAt - receivedAt)}ms, handled ${Math.round(
+                            finishedAt - startedAt,
+                        )}ms`,
+                    )
+            }
+        }
+
+        // Requests run concurrently, the same as they would across the
+        // instances of a queue group. The cap keeps a burst from starting
+        // unbounded work; past it, new requests wait for a running one.
+        ;(async () => {
+            const running = new Set<Promise<void>>()
+
+            for await (const msg of subscription) {
+                const receivedAt = performance.now()
+
+                while (running.size >= this.maxConcurrentReplies)
+                    await Promise.race(running)
+
+                const task: Promise<void> = (async () => {
+                    try {
+                        await respond(msg, receivedAt)
+                    } finally {
+                        running.delete(task)
+                    }
+                })()
+                running.add(task)
             }
         })()
 
         return subscription
+    }
+
+    private get maxConcurrentReplies(): number {
+        return this.config.maxConcurrentReplies ?? DEFAULT_MAX_CONCURRENT_REPLIES
+    }
+
+    private get slowReplyMs(): number {
+        return this.config.slowReplyMs ?? DEFAULT_SLOW_REPLY_MS
     }
 
     // ===========================================

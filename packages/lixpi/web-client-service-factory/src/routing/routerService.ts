@@ -6,9 +6,11 @@ import {
 } from '../stores/routerStore.ts'
 
 export type RouteDefinition = {
+    // The signal aborts when another navigation supersedes this load.
     load?: (
         params: RouteValues,
         query: RouteValues,
+        signal: AbortSignal,
     ) => Promise<void>
     path: string
 }
@@ -56,6 +58,7 @@ export class WebClientRouterService {
     private readonly store: RouterStore
     private readonly browserWindow: Window
     private unsubscribeRouter: (() => void) | null = null
+    private routeLoad: AbortController | null = null
 
     constructor(config: RouterServiceConfig) {
         this.routeDefinitions = config.routes
@@ -168,11 +171,31 @@ export class WebClientRouterService {
         if (!routeDefinition.load)
             return
 
-        await routeDefinition.load(params, query)
+        this.cancelRouteLoad()
+        const routeLoad = new AbortController()
+        this.routeLoad = routeLoad
+
+        try {
+            await routeDefinition.load(
+                params,
+                query,
+                routeLoad.signal,
+            )
+        } catch (error) {
+            if (routeLoad.signal.aborted)
+                return
+
+            throw error
+        } finally {
+            if (this.routeLoad === routeLoad)
+                this.routeLoad = null
+        }
+
         const currentRoute = this.store.getData('currentRoute')
 
         if (
-            currentRoute.path !== routeDefinition.path
+            routeLoad.signal.aborted
+            || currentRoute.path !== routeDefinition.path
             || !routeValuesMatch(currentRoute.routeParams, params)
             || !routeValuesMatch(currentRoute.routeQuery, query)
         )
@@ -259,22 +282,41 @@ export class WebClientRouterService {
         const routerState = this.store.getData()
         const history = routerState.history.slice()
 
+        // Leaving the route or switching its parameters abandons the data
+        // the previous route was still loading.
+        if (
+            routerState.currentRoute.path !== path
+            || !routeValuesMatch(routerState.currentRoute.routeParams, params)
+        )
+            this.cancelRouteLoad()
+
         if (
             !isInitializationStep
             && routerState.currentRoute.path
         )
             history.push(routerState.currentRoute)
 
+        const currentRoute: CurrentRoute = {
+            path,
+            language,
+            hash,
+            routeParams: params,
+            routeQuery: query,
+            isInitializationStep,
+            shouldFetchData,
+        }
+
+        // Views react to the route change synchronously, so the address bar
+        // updates before they run instead of after the slowest one.
+        if (
+            this.unsubscribeRouter
+            && !isInitializationStep
+            && this.shouldUpdateBrowserHistory(currentRoute)
+        )
+            this.updateBrowserHistory(currentRoute)
+
         this.store.setDataValues({
-            currentRoute: {
-                path,
-                language,
-                hash,
-                routeParams: params,
-                routeQuery: query,
-                isInitializationStep,
-                shouldFetchData,
-            },
+            currentRoute,
             history,
         })
 
@@ -289,6 +331,14 @@ export class WebClientRouterService {
                 params,
                 query,
             )
+    }
+
+    // Aborts the route data load in flight, if any. Its loader receives the
+    // abort through its signal and its result is never applied.
+    cancelRouteLoad(): void {
+        const routeLoad = this.routeLoad
+        this.routeLoad = null
+        routeLoad?.abort()
     }
 
     shouldFetchRouteData(): boolean {
@@ -340,6 +390,7 @@ export class WebClientRouterService {
     }
 
     destroy(): void {
+        this.cancelRouteLoad()
         this.unsubscribeRouter?.()
         this.unsubscribeRouter = null
         this.browserWindow.removeEventListener('popstate', this.handlePopState)

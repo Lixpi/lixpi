@@ -108,6 +108,27 @@ describe('API deployment with native NATS storage', () => {
         expect(definition).not.toHaveProperty('globalSecondaryIndexes')
     })
 
+    it('deploys the workspace tree tables and the grant index from the shared key schemas', async () => {
+        const { getTableDefinitions } = await import('./db/DynamoDB-tables.ts')
+        const definitions = getTableDefinitions()
+        const deployed = (name: string) => resources.find(resource => resource.type === 'aws:dynamodb/table:Table' && resource.inputs.name === name)?.inputs
+
+        expect(definitions.workspaceTreeTable).toMatchObject({
+            hashKey: 'pk',
+            rangeKey: 'sk',
+        })
+        expect(deployed(definitions.workspaceTreeTable.name)).toMatchObject(definitions.workspaceTreeTable)
+        expect(definitions.workspaceTreeLocksTable).toMatchObject({ hashKey: 'organizationId' })
+        expect(definitions.workspaceTreeLocksTable).not.toHaveProperty('rangeKey')
+        expect(deployed(definitions.workspaceTreeLocksTable.name)).toMatchObject(definitions.workspaceTreeLocksTable)
+        expect(deployed(definitions.workspacesAccessListTable.name)?.globalSecondaryIndexes).toEqual([{
+            name: 'workspaceId-userId',
+            hashKey: 'workspaceId',
+            rangeKey: 'userId',
+            projectionType: 'ALL',
+        }])
+    })
+
     it('creates domain tables without an application journal or content bucket', () => {
         expect(resources.some(resource => resource.type.startsWith('aws:s3/'))).toBe(false)
         const tables = resources.filter(resource => resource.type === 'aws:dynamodb/table:Table')

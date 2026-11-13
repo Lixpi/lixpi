@@ -3,6 +3,7 @@ import {
     AGENT_DISPATCH_SHARDS,
     getDynamoDbTableStageName,
     type AccountWorkContext,
+    type ConversationDelegation,
     type ConversationRun,
     type ConversationSettings,
 } from '@lixpi/constants'
@@ -33,6 +34,8 @@ export type ConversationMeta = {
     leaseOwner?: string
     leaseExpiresAt?: number
     run?: ConversationRun
+    // Set on a conversation a parent workspace's agent started.
+    delegatedBy?: ConversationDelegation
     checkpointNamespace: string
     createdAt: number
     updatedAt: number

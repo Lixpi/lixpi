@@ -7,6 +7,7 @@ import {
     mediaSequenceArtifactDefinition,
     readMediaSequenceDocument,
 } from '../shared/media-sequence-artifact.ts'
+import { buildDocumentKindSchema } from '@lixpi/prosemirror/shared/document-kind'
 import { MediaSequenceService, type MediaSequenceAccess, type MediaSequencePorts, type MediaSequenceReceipt } from './media-sequence-service.ts'
 
 const harness = () => {
@@ -26,7 +27,7 @@ const harness = () => {
             )
                 return false
 
-            const schema = mediaSequenceArtifactDefinition.createDocumentSchema()
+            const schema = buildDocumentKindSchema(mediaSequenceArtifactDefinition.documentKind)
             const document = schema.nodeFromJSON(createMediaSequenceDocument(input.sequence))
             document.check()
             documents.set(input.sequence.revision, readMediaSequenceDocument(document.toJSON()))
@@ -94,7 +95,7 @@ describe('MediaSequenceService', () => {
                 kind: 'video',
             }),
         ]))
-        const emptyDocument = mediaSequenceArtifactDefinition.createDocumentSchema().topNodeType.createAndFill()!
+        const emptyDocument = buildDocumentKindSchema(mediaSequenceArtifactDefinition.documentKind).topNodeType.createAndFill()!
         expect(() => mediaSequenceArtifactDefinition.assertInitialDocument(emptyDocument.toJSON())).toThrow()
     })
     it('loads an exact historical snapshot only after current source Artifact read authorization', async () => {

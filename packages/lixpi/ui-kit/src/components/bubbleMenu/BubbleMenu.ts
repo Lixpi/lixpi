@@ -54,7 +54,6 @@ export class BubbleMenu {
         const style = {
             position: 'absolute',
             visibility: 'hidden',
-            zIndex: '100',
         }
         this.menu = html`
             <div
@@ -147,10 +146,15 @@ export class BubbleMenu {
         this.hide()
     }
 
+    // Moves an open menu. A hidden menu stays hidden: only show() opens it,
+    // so a late reposition can never bring back a menu that was closed.
     reposition(position?: BubbleMenuPositionRequest): void {
         const pos = position ?? this.lastPosition
 
-        if (!pos)
+        if (
+            !pos
+            || !this.isVisible
+        )
             return
 
         this.lastPosition = pos
@@ -167,6 +171,9 @@ export class BubbleMenu {
         context: string,
         position: BubbleMenuPositionRequest,
     ): void {
+        if (!this.isVisible)
+            return
+
         if (context !== this.currentContext)
             this.updateVisibleItems(context)
 
@@ -261,7 +268,46 @@ export class BubbleMenu {
         const menuWidthLocal = (menuLayoutWidth || menuRect.width / fallbackScale) * visualScale
         const menuHeightScreen = (menuLayoutHeight || menuRect.height / fallbackScale) * scale * visualScale
 
-        if (placement === 'below') {
+        if (placement === 'right') {
+            // 'end' keeps the menu inside the target, against its right edge.
+            const menuScreenLeft = position.horizontalAlignment === 'end'
+                ? targetRect.right - menuWidthLocal * scale - 4 * scale
+                : targetRect.right + 8 * scale
+            const menuScreenTop = targetRect.top + targetRect.height / 2 - menuHeightScreen / 2
+            const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
+            const finalLeft = shouldClampToParent ? this.clampHorizontal(
+                local.x,
+                menuWidthLocal,
+                scale,
+            ) : local.x
+
+            applyStyle(
+                this.menu,
+                {
+                    left: `${finalLeft}px`,
+                    top: `${local.y}px`,
+                    visibility: 'visible',
+                },
+            )
+        } else if (placement === 'left') {
+            const menuScreenLeft = targetRect.left - menuWidthLocal * scale - 8 * scale
+            const menuScreenTop = targetRect.top + targetRect.height / 2 - menuHeightScreen / 2
+            const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
+            const finalLeft = shouldClampToParent ? this.clampHorizontal(
+                local.x,
+                menuWidthLocal,
+                scale,
+            ) : local.x
+
+            applyStyle(
+                this.menu,
+                {
+                    left: `${finalLeft}px`,
+                    top: `${local.y}px`,
+                    visibility: 'visible',
+                },
+            )
+        } else if (placement === 'below') {
             // Center horizontally below target
             const targetCenterX = targetRect.left + targetRect.width / 2
             const menuScreenLeft = position.horizontalAlignment === 'end'
@@ -376,12 +422,17 @@ export class BubbleMenu {
         x: number
         y: number
     } {
-        const parentRect = this.parentEl.getBoundingClientRect()
+        // The menu is absolutely positioned, so its offsets count from its
+        // offset parent, which is the host's parent element only when that
+        // element is positioned. A scrolled offset parent also shifts its
+        // content by its scroll position.
+        const origin = (this.menu.offsetParent as HTMLElement | null) ?? this.parentEl
+        const originRect = origin.getBoundingClientRect()
         const transformInfo = this.findTransformedAncestor()
         const scale = transformInfo?.scale ?? 1
 
-        const localX = (screenX - parentRect.left) / scale
-        const localY = (screenY - parentRect.top) / scale
+        const localX = (screenX - originRect.left - origin.clientLeft) / scale + origin.scrollLeft
+        const localY = (screenY - originRect.top - origin.clientTop) / scale + origin.scrollTop
 
         return {
             x: localX,

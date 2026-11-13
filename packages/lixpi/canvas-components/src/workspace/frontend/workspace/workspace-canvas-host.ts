@@ -199,6 +199,12 @@ export type WorkspaceCanvasHost = {
             error?: unknown
         }) => void) => () => void
         reload: (workspaceId: string) => Promise<unknown>
+        // Opens a conversation in another workspace, such as the parent
+        // conversation whose agent started a delegated one.
+        openConversation?: (
+            workspaceId: string,
+            conversationAssetId: string,
+        ) => void
     }
     models: {
         read: () => readonly WorkspaceCanvasModelEntry[]

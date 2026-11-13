@@ -256,11 +256,25 @@
 }
 
 .workspace-conversation-state,
-.workspace-conversation-queue {
+.workspace-conversation-queue,
+.workspace-conversation-origin {
     padding: 4px 12px;
     font-size: #{themeScope.token("components-composer-workspace-workspace-conversation-state-base-font-size", themePalette.$roles)};
 }
 
 .workspace-conversation-queue:empty {
+    display: none;
+}
+
+// The agent that started a delegated conversation, with a link back to its
+// parent conversation.
+.workspace-conversation-origin {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.workspace-conversation-origin[hidden] {
     display: none;
 }

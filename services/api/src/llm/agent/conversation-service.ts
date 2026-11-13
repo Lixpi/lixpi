@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { err } from '@lixpi/debug-tools'
 import {
     CONVERSATION_RESPONSE_MAX_BYTES,
     type AccountWorkContext,
@@ -22,6 +23,8 @@ import {
     type ConversationStopRequest,
     type ConversationSubmitRequest,
     type ConversationTurn,
+    type ConversationDelegation,
+    type ConversationTurnDelegation,
 } from '@lixpi/constants'
 import {
     isTransactionConditionalCheckFailure,
@@ -42,6 +45,7 @@ import {
     type ConversationDispatch,
     type ConversationMeta,
 } from './conversation-repository.ts'
+import { delegatedAuthorLabel } from './agent-delegation.ts'
 
 export type ConversationAccess = {
     userId: string
@@ -52,7 +56,9 @@ export type ConversationAccess = {
 }
 
 export type ConversationServicePorts = {
-    migrate?: (access: ConversationAccess) => Promise<void>
+    // Migrates legacy conversations; resolves true once a full pass over the
+    // workspace has finished with nothing left pending.
+    migrate?: (access: ConversationAccess) => Promise<boolean | void>
     title?: (meta: ConversationMeta) => Promise<string | undefined>
     retainReferences?: (
         access: ConversationAccess,
@@ -90,15 +96,78 @@ const terminal = new Set([
     'failed',
 ])
 
+// Workspaces whose legacy conversations completed a full migration pass in
+// this process, and the migration running for each workspace. A listing
+// waits for migration only until the first full pass; after that it lists at
+// once and keeps migrating in the background, so a legacy conversation added
+// later, such as by an import, appears on a following listing.
+const MIGRATED_WORKSPACES_LIMIT = 10_000
+const migratedWorkspaces = new Set<string>()
+const runningMigrations = new Map<string, Promise<void>>()
+
+const runMigration = (
+    key: string,
+    migrate: () => Promise<boolean | void>,
+): Promise<void> => {
+    let running = runningMigrations.get(key)
+
+    if (!running) {
+        running = (async () => {
+            try {
+                if (await migrate() !== true)
+                    return
+
+                migratedWorkspaces.delete(key)
+                migratedWorkspaces.add(key)
+
+                if (migratedWorkspaces.size > MIGRATED_WORKSPACES_LIMIT)
+                    migratedWorkspaces.delete(migratedWorkspaces.values().next().value!)
+            } finally {
+                runningMigrations.delete(key)
+            }
+        })()
+        runningMigrations.set(key, running)
+    }
+
+    return running
+}
+
 export class ConversationService {
     constructor(
         readonly repository: ConversationRepository,
         private readonly ports: ConversationServicePorts,
     ) {}
 
+    private async migrateForListing(access: ConversationAccess): Promise<void> {
+        const migrate = this.ports.migrate
+
+        if (!migrate)
+            return
+
+        const key = `${access.organizationId}#${access.workspaceId}`
+        const running = runMigration(key, async () => await migrate(access))
+
+        if (!migratedWorkspaces.has(key)) {
+            await running
+
+            return
+        }
+
+        void (async () => {
+            try {
+                await running
+            } catch (error) {
+                err('Background conversation migration failed', error)
+            }
+        })()
+    }
+
+    // `delegatedBy` is set only by the API's own delegation, never from a
+    // client request; it links the conversation to the parent turn.
     async create(
         request: ConversationCreateRequest,
         userId: string,
+        options: { delegatedBy?: ConversationDelegation } = {},
     ): Promise<ConversationSnapshot> {
         const access = await this.ports.authorize(
             request.workspaceId,
@@ -134,6 +203,7 @@ export class ConversationService {
             documentRevision: 0,
             epoch: 0,
             checkpointNamespace: 'context-1',
+            ...(options.delegatedBy ? { delegatedBy: options.delegatedBy } : {}),
             createdAt: now,
             updatedAt: now,
             expiresAt: Math.floor(now / 1000) + 86400,
@@ -176,7 +246,7 @@ export class ConversationService {
             userId,
             false,
         )
-        await this.ports.migrate?.(access)
+        await this.migrateForListing(access)
         const page = await this.repository.query<{ conversationAssetId: string }>(
             conversationWorkspacePartition(access.organizationId, request.workspaceId),
             'CONVERSATION#',
@@ -268,9 +338,12 @@ export class ConversationService {
         )
     }
 
+    // `delegation` is set only by the API's own delegation. It travels with
+    // the turn and limits what the turn may do.
     async submit(
         request: ConversationSubmitRequest,
         userId: string,
+        options: { delegation?: ConversationTurnDelegation } = {},
     ): Promise<ConversationAcknowledgement> {
         const payloadHash = conversationPayloadHash(request)
 
@@ -379,10 +452,16 @@ export class ConversationService {
                 references: sources,
                 settings: meta.settings,
                 settingsRevision: meta.settingsRevision,
-                midRunPolicy: request.interruptId ? 'steer' : request.midRunPolicy ?? meta.settings.midRunPolicy,
+                // A delegated turn waits behind a person's running turn.
+                midRunPolicy: options.delegation
+                    ? 'queue'
+                    : request.interruptId
+                        ? 'steer'
+                        : request.midRunPolicy ?? meta.settings.midRunPolicy,
                 state: 'queued',
                 createdAt: now,
                 ...(request.interruptId ? { interruptId: request.interruptId } : {}),
+                ...(options.delegation ? { delegation: options.delegation } : {}),
             }
             const next: ConversationMeta = {
                 ...meta,
@@ -492,6 +571,7 @@ export class ConversationService {
                         role: 'user',
                         text: conversationMessageText(request.fragment),
                         clientMessageId: request.clientMessageId,
+                        ...(options.delegation ? { authorLabel: delegatedAuthorLabel(options.delegation.parentWorkspaceName) } : {}),
                         complete: true,
                         createdAt: now,
                     },
@@ -687,6 +767,116 @@ export class ConversationService {
                 }
             },
         )
+    }
+
+    // Stops every unfinished turn in a workspace that is being deleted. The
+    // workspace is already marked as deleting, so the access check a user's
+    // stop goes through refuses it, and agent writes are already fenced out.
+    // This stop pauses each queue and moves each running turn to stopping,
+    // the same state change a user's stop makes. Running it again is safe.
+    async stopWorkspace(
+        organizationId: string,
+        workspaceId: string,
+    ): Promise<number> {
+        let stopped = 0
+        let after: string | undefined
+
+        do {
+            const page = await this.repository.query<{ conversationAssetId: string }>(
+                conversationWorkspacePartition(organizationId, workspaceId),
+                'CONVERSATION#',
+                {
+                    limit: 100,
+                    ...(after ? { after } : {}),
+                },
+            )
+
+            for (const entry of page.items) {
+                if (await this.stopConversationBySystem(organizationId, entry.conversationAssetId))
+                    stopped += 1
+            }
+
+            after = page.cursor
+        } while (after)
+
+        return stopped
+    }
+
+    // Pauses a conversation's queue and moves its running turn to stopping
+    // without a user's access check. The API uses it when the workspace is
+    // being deleted and when the run that delegated to it stops.
+    async stopConversationBySystem(
+        organizationId: string,
+        conversationAssetId: string,
+        attempt = 0,
+    ): Promise<boolean> {
+        const pk = conversationPartition(organizationId, conversationAssetId)
+        const meta = await this.repository.read<ConversationMeta>(pk, 'META')
+
+        if (
+            !meta
+            || (meta.queuePaused && (!meta.run || terminal.has(meta.run.state) || meta.run.state === 'stopping'))
+        )
+            return false
+
+        const now = this.ports.now()
+        const next: ConversationMeta = {
+            ...meta,
+            queuePaused: true,
+            queueRevision: meta.queueRevision + 1,
+            ...(meta.run
+                ? {
+                    run: {
+                        ...meta.run,
+                        state: terminal.has(meta.run.state) ? meta.run.state : 'stopping',
+                        continuationEpoch: meta.run.continuationEpoch + 1,
+                        updatedAt: now,
+                    },
+                }
+                : {}),
+            revision: meta.revision + 1,
+            eventSeq: meta.eventSeq + 1,
+            updatedAt: now,
+        }
+        const event: ConversationEvent = {
+            ...this.eventBase(next, now),
+            type: 'queue.state',
+            payload: {
+                revision: next.queueRevision,
+                paused: true,
+                turnIds: [],
+            },
+        }
+
+        try {
+            await this.repository.commit([
+                this.repository.put(
+                    pk,
+                    'META',
+                    next,
+                    meta.revision,
+                ),
+                this.repository.put(
+                    pk,
+                    `EVENT#${conversationSequenceKey(next.eventSeq)}`,
+                    event,
+                ),
+            ])
+        } catch (error) {
+            if (
+                isTransactionConditionalCheckFailure(error)
+                && attempt < 4
+            )
+                return await this.stopConversationBySystem(
+                    organizationId,
+                    conversationAssetId,
+                    attempt + 1,
+                )
+
+            throw error
+        }
+
+        return true
     }
 
     async queue(
@@ -1049,6 +1239,7 @@ export class ConversationService {
             messages: [],
             documentRevision: meta.documentRevision,
             eventSeq: meta.eventSeq,
+            ...(meta.delegatedBy ? { delegatedBy: meta.delegatedBy } : {}),
             createdAt: meta.createdAt,
             updatedAt: meta.updatedAt,
         }

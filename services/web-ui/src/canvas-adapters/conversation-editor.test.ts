@@ -16,19 +16,26 @@ import {
     p,
     thread,
     createEditorState,
-} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
-import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+} from '@lixpi/prosemirror/test-helpers'
+import { USE_AI_CHAT_META } from '@lixpi/prosemirror/frontend/editor'
+import { createCapabilityRunProgress } from '$src/components/capabilityRun/index.ts'
 import { createCanvasConversationEditorPort } from './conversation-editor.ts'
 
 const mocks = vi.hoisted(() => ({ mount: vi.fn() }))
-vi.mock('$src/components/proseMirror/components/editor.ts', () => ({
-    ProseMirrorEditor: class {
-        constructor(options: unknown) {
-            return mocks.mount(options)
-        }
-    },
+vi.mock('@lixpi/prosemirror/frontend/editor', async importOriginal => ({
+    ...await importOriginal<typeof import('@lixpi/prosemirror/frontend/editor')>(),
+    mountEditorDocument: mocks.mount,
 }))
 vi.mock('$src/services/ai-interaction-service.ts', () => ({ default: class {} }))
+
+const transport = { isReady: () => false } as never
+const environment = {
+    registry: {} as never,
+    authorityTransport: transport,
+    services: {
+        createCapabilityRunProgress: (previewRenderer, outputPorts) => createCapabilityRunProgress(undefined, previewRenderer, outputPorts),
+    } as never,
+}
 
 const setup = (version = 7, readOnly = false) => {
     const state = createEditorState(doc(p('prefix'), thread({ threadId: 'conversation' }, p('request'))))
@@ -40,7 +47,7 @@ const setup = (version = 7, readOnly = false) => {
     } as unknown as EditorView
     const destroy = vi.fn()
     mocks.mount.mockReturnValue({
-        editorView: view,
+        view,
         destroy,
     })
     const unregister = vi.fn()
@@ -62,7 +69,10 @@ const setup = (version = 7, readOnly = false) => {
         onReceiving: vi.fn(),
         onSegment: vi.fn(),
     }
-    const editor = createCanvasConversationEditorPort({ register })(request)
+    const editor = createCanvasConversationEditorPort({
+        environment,
+        register,
+    })(request)
 
     return {
         editor,
@@ -81,7 +91,8 @@ describe('canvas conversation editor adapter', () => {
     it('mounts an agent transcript read-only and cannot submit through the legacy editor command', () => {
         const fixture = setup(7, true)
         expect(mocks.mount.mock.calls[0][0].readOnly).toBe(true)
-        expect(mocks.mount.mock.calls[0][0].proseMirrorAuthority.receiveOnly).toBe(true)
+        expect(mocks.mount.mock.calls[0][0].authority.receiveOnly).toBe(true)
+        expect(mocks.mount.mock.calls[0][0].context.chat.renderContext.readOnly).toBe(true)
         fixture.editor.submitPersisted()
         expect(fixture.dispatch).not.toHaveBeenCalled()
         fixture.editor.destroy()
@@ -107,7 +118,7 @@ describe('canvas conversation editor adapter', () => {
         mount.className = 'ai-response-capability-progress'
         response.append(mount)
         fixture.view.dom.append(response)
-        mocks.mount.mock.calls[0][0].onStreamingUpdate(fixture.view.state.doc.toJSON())
+        mocks.mount.mock.calls[0][0].onLiveChange(fixture.view.state.doc.toJSON())
         expect(mount.querySelector('.capability-run-progress')?.textContent).toContain('Export sequence')
         expect(fixture.request.onStreaming).toHaveBeenCalledWith(fixture.view.state.doc.toJSON())
         fixture.editor.destroy()
@@ -115,7 +126,8 @@ describe('canvas conversation editor adapter', () => {
     })
     it('mounts receive-only authority with the captured identity and waits before registration', () => {
         const fixture = setup()
-        expect(mocks.mount.mock.calls[0][0].proseMirrorAuthority).toEqual({
+        expect(mocks.mount.mock.calls[0][0].authority).toEqual({
+            transport,
             organizationId: 'org',
             workspaceId: 'workspace',
             assetId: 'conversation',
@@ -174,7 +186,7 @@ describe('canvas conversation editor adapter', () => {
 
     it.each([-1, 1.5, NaN])('uses zero for an invalid document version %s', version => {
         const fixture = setup(version)
-        expect(mocks.mount.mock.calls[0][0].proseMirrorAuthority.baseVersion).toBe(0)
+        expect(mocks.mount.mock.calls[0][0].authority.baseVersion).toBe(0)
         fixture.editor.destroy()
     })
 

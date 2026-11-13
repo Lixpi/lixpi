@@ -12,6 +12,7 @@ import Workspace from './workspace.ts'
 const dynamo = {
     getItem: vi.fn(),
     updateItem: vi.fn(),
+    transactRead: vi.fn(),
     transactWrite: vi.fn(),
 }
 
@@ -31,8 +32,68 @@ const transactionalConditionalFailure = (message: string) => new TransactionCanc
 beforeEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
+    dynamo.getItem.mockReset()
     ;(globalThis as any).dynamoDBService = dynamo
 })
+
+const childMeta = (overrides: Record<string, unknown> = {}) => ({
+    workspaceId: 'workspace-1',
+    organizationId: 'org-1',
+    name: 'Child',
+    tagIds: [],
+    ancestorIds: ['parent-1'],
+    parentWorkspaceId: 'parent-1',
+    position: 'V',
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+})
+
+const parentMeta = (overrides: Record<string, unknown> = {}) => ({
+    ...childMeta(),
+    workspaceId: 'parent-1',
+    ancestorIds: [],
+    parentWorkspaceId: undefined,
+    ...overrides,
+})
+
+// The resolver reads the workspace meta, then the organization lock with the
+// access chain in one consistent read. The full workspace row is read
+// alongside and returned only when access is granted.
+const mockChain = ({
+    parent = parentMeta(),
+    child = childMeta(),
+    parentGrant,
+    childGrant,
+    workspace,
+}: {
+    parent?: Record<string, unknown>
+    child?: Record<string, unknown>
+    parentGrant?: Record<string, unknown>
+    childGrant?: Record<string, unknown>
+    workspace?: Record<string, unknown>
+}) => {
+    dynamo.getItem.mockImplementation(async ({ origin }: { origin: string }) => {
+        if (origin === 'WorkspaceTree.getWorkspaceMeta')
+            return child
+
+        if (origin === 'WorkspaceTree.getLock')
+            return undefined
+
+        if (origin === 'WorkspaceTree.getNavigationRecord')
+            return {
+                revision: 1,
+                revisionId: 'navigation-1',
+                schemaVersion: 1,
+            }
+
+        if (origin === 'model::Workspace->get(workspace-1)')
+            return workspace
+
+        throw new Error(`Unexpected workspace read: ${origin}`)
+    })
+    dynamo.transactRead.mockResolvedValueOnce([undefined, parent, parentGrant, child, childGrant])
+}
 
 describe('Workspace.getWorkspace', () => {
     it('normalizes missing workspaces into NOT_FOUND', async () => {
@@ -49,20 +110,8 @@ describe('Workspace.getWorkspace', () => {
         }))
     })
 
-    it('returns PERMISSION_DENIED when the requesting user lacks access', async () => {
-        dynamo.getItem.mockResolvedValueOnce({
-            workspaceId: 'workspace-1',
-            accessList: [{ userId: 'other-user' }],
-            canvasState: {
-                viewport: {
-                    x: 0,
-                    y: 0,
-                    zoom: 1,
-                },
-                nodes: [],
-                edges: [],
-            },
-        })
+    it('returns PERMISSION_DENIED when no grant covers the workspace or its ancestors', async () => {
+        mockChain({})
 
         await expect(Workspace.getWorkspace({
             workspaceId: 'workspace-1',
@@ -72,21 +121,28 @@ describe('Workspace.getWorkspace', () => {
         )
     })
 
-    it('falls back to updatedAt as canvasStateUpdatedAt and keeps an empty edges array', async () => {
-        dynamo.getItem.mockResolvedValueOnce({
-            workspaceId: 'workspace-1',
-            accessList: [{ userId: 'user-1' }],
-            updatedAt: 10,
-            canvasState: {
-                viewport: {
-                    x: 1,
-                    y: 2,
-                    zoom: 1,
+    it('grants through a parent grant and returns the effective level with the grant it used', async () => {
+        mockChain({
+            parentGrant: {
+                userId: 'user-1',
+                workspaceId: 'parent-1',
+                accessLevel: 'editor',
+            },
+            workspace: {
+                workspaceId: 'workspace-1',
+                organizationId: 'org-1',
+                updatedAt: 10,
+                canvasState: {
+                    viewport: {
+                        x: 1,
+                        y: 2,
+                        zoom: 1,
+                    },
+                    nodes: [{
+                        nodeId: 'n-1',
+                        type: 'image',
+                    }],
                 },
-                nodes: [{
-                    nodeId: 'n-1',
-                    type: 'image',
-                }],
             },
         })
 
@@ -97,19 +153,45 @@ describe('Workspace.getWorkspace', () => {
 
         expect(result).toMatchObject({
             workspaceId: 'workspace-1',
+            accessLevel: 'editor',
+            accessGrant: {
+                grantWorkspaceId: 'parent-1',
+                accessLevel: 'editor',
+                ancestorIds: ['parent-1'],
+            },
             canvasStateUpdatedAt: 10,
             canvasState: {
-                viewport: {
-                    x: 1,
-                    y: 2,
-                    zoom: 1,
-                },
                 nodes: [{
                     nodeId: 'n-1',
                     type: 'image',
                 }],
                 edges: [],
             },
+        })
+    })
+
+    it('reports a workspace under a deleting ancestor as deleting', async () => {
+        mockChain({
+            parent: parentMeta({ deletingAt: 77 }),
+            childGrant: {
+                userId: 'user-1',
+                workspaceId: 'workspace-1',
+                accessLevel: 'owner',
+            },
+            workspace: {
+                workspaceId: 'workspace-1',
+                organizationId: 'org-1',
+                updatedAt: 10,
+                canvasState: { nodes: [] },
+            },
+        })
+
+        await expect(Workspace.getWorkspace({
+            workspaceId: 'workspace-1',
+            userId: 'user-1',
+        })).resolves.toMatchObject({
+            deletingAt: 77,
+            accessLevel: 'owner',
         })
     })
 })
@@ -735,89 +817,6 @@ describe('Workspace.updateCanvasState', () => {
 // =============================================================================
 // WORKSPACE LIFECYCLE
 // =============================================================================
-
-describe('Workspace.markDeleting', () => {
-    it('sets deletingAt only when the workspace exists and it has not already been set', async () => {
-        dynamo.updateItem.mockResolvedValue(undefined)
-
-        await Workspace.markDeleting({ workspaceId: 'workspace-1' })
-
-        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
-            key: { workspaceId: 'workspace-1' },
-            updateExpression: 'SET #deletingAt = if_not_exists(#deletingAt, :deletingAt)',
-            conditionExpression: 'attribute_exists(#workspaceId)',
-            expressionAttributeNames: {
-                '#workspaceId': 'workspaceId',
-                '#deletingAt': 'deletingAt',
-            },
-            expressionAttributeValues: { ':deletingAt': expect.any(Number) },
-            origin: 'Workspace.markDeleting',
-        }))
-    })
-})
-
-describe('Workspace.delete', () => {
-    it('deletes the workspace, its meta record, and every access-list entry in one transaction', async () => {
-        dynamo.getItem.mockResolvedValueOnce({
-            workspaceId: 'workspace-1',
-            accessList: [{
-                userId: 'user-1',
-                accessLevel: 'owner',
-            }, {
-                userId: 'user-2',
-                accessLevel: 'editor',
-            }],
-        })
-        dynamo.transactWrite.mockResolvedValue(undefined)
-
-        await expect(Workspace.delete({
-            workspaceId: 'workspace-1',
-            userId: 'user-1',
-        })).resolves.toEqual({
-            status: 'deleted',
-            workspaceId: 'workspace-1',
-        })
-
-        const { operations } = dynamo.transactWrite.mock.calls[0][0]
-        expect(operations).toHaveLength(4)
-        expect(operations[0]).toEqual(expect.objectContaining({
-            type: 'delete',
-            key: { workspaceId: 'workspace-1' },
-        }))
-        expect(operations[2]).toEqual(expect.objectContaining({
-            type: 'delete',
-            key: {
-                userId: 'user-1',
-                workspaceId: 'workspace-1',
-            },
-        }))
-        expect(operations[3]).toEqual(expect.objectContaining({
-            type: 'delete',
-            key: {
-                userId: 'user-2',
-                workspaceId: 'workspace-1',
-            },
-        }))
-    })
-
-    it('refuses to delete a workspace whose access list has grown unreasonably large', async () => {
-        dynamo.getItem.mockResolvedValueOnce({
-            workspaceId: 'workspace-1',
-            accessList: Array.from({ length: 99 }, (_, index) => ({
-                userId: `user-${index}`,
-                accessLevel: 'viewer',
-            })),
-        })
-
-        await expect(Workspace.delete({
-            workspaceId: 'workspace-1',
-            userId: 'user-1',
-        }))
-            .rejects.toThrow('WORKSPACE_ACCESS_LIST_TOO_LARGE')
-
-        expect(dynamo.transactWrite).not.toHaveBeenCalled()
-    })
-})
 
 describe('Workspace.getWorkspaceInternal', () => {
     it('returns null for a workspace that does not exist', async () => {

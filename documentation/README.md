@@ -61,6 +61,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | Authoritative context, Capability preflight, selected reasoning/media axes, media strategies, lineage, settlement, cancellation, and cleanup |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Data Storage](platform/DATA-STORAGE.md) | Asset/Blob tables, typed references, scope projections, organization Object Store layout, deletion/repair, and revision-2 portability |
+| [Document Kinds and Editors](platform/DOCUMENT-EDITORS.md) | ProseMirror document kinds, schema bundles, view features, the document authority, package layers and the ports hosts implement |
 | [Authentication](platform/AUTHENTICATION.md) | Embedded Go admission, shared permission contracts, API request authorization, service identities, LocalAuth0 |
 | [NATS Service](../services/nats/README.md) | Embedded broker architecture, peer admission, runtime configuration, certificates, health, maintenance commands and Docker development |
 | [Caddy Certificate Service](../services/caddy/README.md) | Embedded certificate issuance, local CA trust, public renewal, durable ACME state and serving-secret publication |
@@ -83,6 +84,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 |------|----------------|
 | [Workspace Model](canvas/WORKSPACE-MODEL.md) | Core concepts, the `CanvasState`/`CanvasNode`/`WorkspaceEdge` data model, stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, storage durability, lazy loading |
 | [User Flows](canvas/USER-FLOWS.md) | Opening a workspace, creating documents, uploading/converting/saving/deleting/moving/editing media |
+| [Workspace Tree](canvas/WORKSPACE-TREE.md) | Nested workspaces, navigation headings and tags, inherited access, tree subjects and locks, and sidebar editing |
 | [Canvas Component Library](../services/design-system/documentation/CANVAS-LIBRARY.md) | Isolated live examples of canvas interactions, nodes, components and workspace composition |
 | [Canvas Engine](../packages/lixpi/canvas-engine/README.md) | Rendering, scene contracts, node registration, input, connectors, collisions and resource ownership |
 | [Canvas Components](../packages/lixpi/canvas-components/README.md) | Reusable media surfaces, glass, outlines, loading effects and examples |

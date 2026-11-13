@@ -56,7 +56,8 @@ const mocks = vi.hoisted(() => {
                 workspaceData.requiresSave = values.requiresSave
         }),
         beginWorkspaceLoad: vi.fn(),
-        updateWorkspace: vi.fn(),
+        completeWorkspaceLoad: vi.fn(),
+        failWorkspaceLoad: vi.fn(),
     }
 })
 
@@ -92,12 +93,8 @@ vi.mock('$src/stores/workspaceStore.ts', () => ({
         getMeta: vi.fn(() => mocks.workspaceData.requiresSave),
         setMetaValues: mocks.setMetaValues,
         beginWorkspaceLoad: mocks.beginWorkspaceLoad,
-    },
-}))
-
-vi.mock('$src/stores/workspacesStore.ts', () => ({
-    workspacesStore: {
-        updateWorkspace: mocks.updateWorkspace,
+        completeWorkspaceLoad: mocks.completeWorkspaceLoad,
+        failWorkspaceLoad: mocks.failWorkspaceLoad,
     },
 }))
 
@@ -354,7 +351,6 @@ describe('WorkspaceService canvas save queue', () => {
         expect(mocks.request).toHaveBeenCalledTimes(2)
         expect(mocks.setDataValues).not.toHaveBeenCalled()
         expect(mocks.setMetaValues).not.toHaveBeenCalled()
-        expect(mocks.updateWorkspace).toHaveBeenCalledWith('workspace-1', { updatedAt: 20 })
     })
 
     it('does not include an optimistic canvas save token when none is available', async () => {
@@ -458,7 +454,6 @@ describe('WorkspaceService canvas save queue', () => {
             canvasState: staleState,
             expectedCanvasStateUpdatedAt: 6,
         }))
-        expect(mocks.updateWorkspace).toHaveBeenCalledWith('workspace-1', { updatedAt: 11 })
         expect(mocks.setDataValues).toHaveBeenCalledWith({ updatedAt: 11 })
         expect(mocks.setDataValues).toHaveBeenCalledWith({ canvasStateUpdatedAt: 6 })
         await vi.waitFor(() => void expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false }))
@@ -760,9 +755,8 @@ describe('WorkspaceService state loading', () => {
         expect(mocks.request).toHaveBeenCalledWith(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE, {
             token: 'token-1',
             workspaceId: 'workspace-1',
-        }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
-        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })
-        expect(mocks.setDataValues).toHaveBeenCalledWith(expect.objectContaining({
+        }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS, undefined)
+        expect(mocks.completeWorkspaceLoad).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
             workspaceId: 'workspace-1',
             updatedAt: 10,
             canvasStateUpdatedAt: 10,
@@ -787,8 +781,35 @@ describe('WorkspaceService state loading', () => {
         await service.getWorkspace({ workspaceId: 'workspace-1' })
 
         expect(mocks.beginWorkspaceLoad).not.toHaveBeenCalled()
+        expect(mocks.completeWorkspaceLoad).not.toHaveBeenCalled()
         expect(mocks.setMetaValues).not.toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })
         expect(mocks.setDataValues).not.toHaveBeenCalled()
+    })
+
+    it('hands the fetched workspace to beforePublish before the store renders it', async () => {
+        const service = createWorkspaceService(router)
+        const canvasState = {
+            nodes: [],
+            edges: [],
+        }
+        mocks.request.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            updatedAt: 10,
+            canvasState,
+        })
+        const order: string[] = []
+        mocks.completeWorkspaceLoad.mockImplementationOnce(() => void order.push('publish'))
+
+        await service.getWorkspace({
+            workspaceId: 'workspace-1',
+            beforePublish: workspace => {
+                order.push('beforePublish')
+                expect(workspace.canvasState).toMatchObject(canvasState)
+                expect(mocks.completeWorkspaceLoad).not.toHaveBeenCalled()
+            },
+        })
+
+        expect(order).toEqual(['beforePublish', 'publish'])
     })
 
     it('keeps stale canvas cleared when the active workspace load times out', async () => {
@@ -799,8 +820,8 @@ describe('WorkspaceService state loading', () => {
         await service.getWorkspace({ workspaceId: 'workspace-1' })
 
         expect(mocks.beginWorkspaceLoad).toHaveBeenCalledWith('workspace-1')
-        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.error })
-        expect(mocks.setDataValues).toHaveBeenCalledWith({ error: timeout })
+        expect(mocks.failWorkspaceLoad).toHaveBeenCalledExactlyOnceWith(timeout)
+        expect(mocks.completeWorkspaceLoad).not.toHaveBeenCalled()
         expect(mocks.setDataValues).not.toHaveBeenCalledWith(expect.objectContaining({
             canvasState: expect.objectContaining({
                 nodes: expect.arrayContaining([expect.anything()]),

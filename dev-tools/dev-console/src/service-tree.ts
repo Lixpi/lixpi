@@ -28,18 +28,32 @@ export class ServiceTree {
 
         this.allServices = children.flatMap(node => this.leaves(node))
         this.baseServices = this.allServices.filter(name => catalog.startsByDefault(name, layout.baseProfile))
+        // Choosing a preset sets the tree to its services, and Custom clears the tree so
+        // only the services picked below run.
         this.roots = [
             {
-                value: 'preset:base',
-                label: 'Base services',
-                hint: 'What the application needs to run',
-                selection: this.baseServices,
-            },
-            {
-                value: 'preset:all',
-                label: 'All services',
-                hint: 'Base plus the admin and developer tools',
-                selection: this.allServices,
+                value: 'preset:services',
+                label: 'Services',
+                choices: [
+                    {
+                        value: 'preset:base',
+                        label: 'Base',
+                        hint: 'What the application needs to run',
+                        selection: this.baseServices,
+                    },
+                    {
+                        value: 'preset:custom',
+                        label: 'Custom',
+                        hint: 'Pick the services below',
+                        selection: [],
+                    },
+                    {
+                        value: 'preset:all',
+                        label: 'All',
+                        hint: 'Base plus the admin and developer tools',
+                        selection: this.allServices,
+                    },
+                ],
             },
             ...children,
         ]

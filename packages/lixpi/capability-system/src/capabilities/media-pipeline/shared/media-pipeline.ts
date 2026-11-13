@@ -1,9 +1,9 @@
 import {
     type CapabilityJsonValue,
 } from '@lixpi/constants'
-import { Schema } from 'prosemirror-model'
 
 import {
+    defineCapabilityArtifactDocumentKind,
     type CapabilityArtifactSharedDefinition,
 } from '../../../shared/capability-artifact.ts'
 import { validateJsonSchemaValue } from '../../../shared/capability-json-schema.ts'
@@ -486,27 +486,39 @@ export const readMediaPipelineDocument = (document: object): MediaPipeline => {
     return assertMediaPipeline(parsed.content[0].attrs?.pipeline)
 }
 
+const assertMediaPipelineMutation = (
+    previous: object,
+    next: object,
+): void => {
+    if (JSON.stringify(previous) !== JSON.stringify(next))
+        throw new Error('PIPELINE_TYPED_PATCH_REQUIRED')
+}
+
 export const mediaPipelineSharedDefinition: CapabilityArtifactSharedDefinition = {
     artifactTypeId: MEDIA_PIPELINE_ARTIFACT_TYPE_ID,
     displayName: 'Media Pipeline',
     schemaVersion: MEDIA_PIPELINE_SCHEMA_VERSION,
     allowedEmbeddedReferenceTypes: [],
-    createDocumentSchema: () => new Schema({
-        nodes: {
-            doc: { content: 'mediaPipeline' },
-            text: {},
-            mediaPipeline: {
-                atom: true,
-                attrs: { pipeline: { default: null } },
-                toDOM: () => ['section', { class: 'media-pipeline-artifact' }],
+    documentKind: defineCapabilityArtifactDocumentKind({
+        artifactTypeId: MEDIA_PIPELINE_ARTIFACT_TYPE_ID,
+        schemaVersion: MEDIA_PIPELINE_SCHEMA_VERSION,
+        bundles: [{
+            id: 'media-pipeline',
+            nodes: {
+                text: {},
+                mediaPipeline: {
+                    atom: true,
+                    attrs: { pipeline: { default: null } },
+                    toDOM: () => ['section', { class: 'media-pipeline-artifact' }],
+                },
             },
-        },
+        }],
+        topNode: { content: 'mediaPipeline' },
+        assertInitialDocument: document => void readMediaPipelineDocument(document),
+        assertEditableMutation: assertMediaPipelineMutation,
     }),
     assertInitialDocument: document => void readMediaPipelineDocument(document),
-    assertEditableMutation: (previous, next) => {
-        if (JSON.stringify(previous) !== JSON.stringify(next))
-            throw new Error('PIPELINE_TYPED_PATCH_REQUIRED')
-    },
+    assertEditableMutation: assertMediaPipelineMutation,
     collectReferencedAssetIds: document => [...new Set(
         readMediaPipelineDocument(document).sources.map(source => source.assetId),
     )],

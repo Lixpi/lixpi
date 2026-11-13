@@ -166,6 +166,7 @@
         "@lixpi/nats-service": "0.0.1",
         "@lixpi/nats-subject-registry": "0.0.1",
         "@lixpi/prosemirror": "0.0.1",
+        "@lixpi/prosemirror-themes": "0.0.1",
         "@lixpi/setup-env": "1.0.0",
         "@lixpi/dev-console": "1.0.0",
         "@lixpi/cli-ui": "0.0.1",

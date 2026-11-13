@@ -35,6 +35,7 @@ import {
 } from './asset-maintenance-queue.ts'
 import AssetDocumentService from './asset-document-service.ts'
 import { MediaGenerationRequestEventLog } from './media-generation-request-event-log.ts'
+import { apiDocumentKinds } from '../prosemirror/document-kinds.ts'
 
 const {
     ORG_NAME,
@@ -542,7 +543,8 @@ const materializeAssetProvenanceAttempt = async ({
         generationProgress,
     })
     new HeadlessProseMirrorEngine({
-        documentType: DOCUMENT_TYPE.ASSET_PROVENANCE,
+        registry: apiDocumentKinds(),
+        kindId: DOCUMENT_TYPE.ASSET_PROVENANCE,
         doc: provenanceDocument,
         version: 1,
     })

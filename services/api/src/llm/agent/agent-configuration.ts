@@ -24,6 +24,10 @@ export class AgentConfiguration {
     readonly maxModelCalls: number
     readonly maxToolCalls: number
     readonly maxSpecialistCalls: number
+    readonly maxDelegationCalls: number
+    // How long a delegating agent waits for the child's answer before the
+    // delegation continues as a pending operation.
+    readonly delegationWaitMs: number
 
     constructor(environment: Record<string, string | undefined>) {
         this.maxModelCalls = boundedInteger(
@@ -43,6 +47,18 @@ export class AgentConfiguration {
             'AGENT_MAX_SPECIALIST_CALLS',
             4,
             16,
+        )
+        this.maxDelegationCalls = boundedInteger(
+            environment,
+            'AGENT_MAX_DELEGATION_CALLS',
+            8,
+            64,
+        )
+        this.delegationWaitMs = boundedInteger(
+            environment,
+            'AGENT_DELEGATION_WAIT_MS',
+            120_000,
+            900_000,
         )
     }
 }

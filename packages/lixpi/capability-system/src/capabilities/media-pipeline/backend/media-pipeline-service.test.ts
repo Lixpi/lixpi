@@ -20,6 +20,7 @@ import {
     type MediaPipelineStoredArtifact,
 } from './media-pipeline-ports.ts'
 import { MediaPipelineService, hashMediaPipelineValue } from './media-pipeline-service.ts'
+import { buildDocumentKindSchema } from '@lixpi/prosemirror/shared/document-kind'
 import { expandMediaPipelineMatrix, type MediaPipelineMatrixInput } from './media-pipeline-matrix.ts'
 
 const context: MediaPipelineContext = {
@@ -410,7 +411,7 @@ describe('media pipeline validation', () => {
     it('round trips the typed Artifact and rejects direct rich-text mutations', () => {
         const document = createMediaPipelineDocument(pipeline())
         expect(readMediaPipelineDocument(document)).toEqual(pipeline())
-        expect(mediaPipelineSharedDefinition.createDocumentSchema().nodeFromJSON(document).check()).toBeUndefined()
+        expect(buildDocumentKindSchema(mediaPipelineSharedDefinition.documentKind).nodeFromJSON(document).check()).toBeUndefined()
         expect(mediaPipelineSharedDefinition.collectReferencedAssetIds(document)).toEqual(['asset-reference'])
         expect(mediaPipelineSharedDefinition.collectOperationKeys!(document)).toEqual([...new Set(pipeline().nodes.map(node => node.operationKey))])
         expect(() => mediaPipelineSharedDefinition.assertEditableMutation(document, createMediaPipelineDocument({

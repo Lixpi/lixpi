@@ -7,9 +7,6 @@ import {
     vi,
 } from 'vitest'
 import {
-    type EditorView,
-} from 'prosemirror-view'
-import {
     WorkspacePromptComposer,
     type WorkspacePromptComposerOptions,
 } from './workspace-prompt-composer.ts'
@@ -48,7 +45,11 @@ const fixture = (raw: string | null = null) => {
             requests.push(request)
 
             return {
-                editorView: {} as EditorView,
+                readContent: vi.fn(() => null),
+                emptyContent: vi.fn(() => null),
+                applyModelPreferences: vi.fn(),
+                insertCapabilityReference: vi.fn(),
+                focus: vi.fn(),
                 restoreContent: vi.fn(),
                 destroy: editorDestroy,
             }

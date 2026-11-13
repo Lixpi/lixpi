@@ -3,8 +3,11 @@ import {
     type PromptReferenceType,
 } from '@lixpi/constants'
 import {
-    type Schema,
-} from 'prosemirror-model'
+    createFilledDocument,
+    type DocumentKindDefinition,
+    type DocumentKindRegistry,
+    type SchemaBundle,
+} from '@lixpi/prosemirror/shared/document-kind'
 
 export type CapabilityArtifactModelInput = {
     text: string
@@ -24,7 +27,9 @@ export type CapabilityArtifactSharedDefinition = {
     displayName: string
     schemaVersion: string
     allowedEmbeddedReferenceTypes: PromptReferenceType[]
-    createDocumentSchema: () => Schema
+    // The artifact's ProseMirror document kind, registered by every
+    // composition root that reads or edits the artifact.
+    documentKind: DocumentKindDefinition
     assertInitialDocument: (doc: object) => void
     assertEditableMutation: (
         previousDoc: object,
@@ -38,6 +43,53 @@ export type CapabilityArtifactSharedDefinition = {
         labels: ReadonlyMap<string, string>,
     ) => CapabilityArtifactModelInput
     buildCatalogMetadata: (doc: object) => Record<string, CapabilityJsonValue>
+}
+
+export const capabilityArtifactKindId = (artifactTypeId: string): string => `capabilityArtifact:${artifactTypeId}`
+
+// Builds an artifact's document kind. The artifact's own JSON assertions
+// become the kind's rules, so the registry enforces them on every parse.
+export const defineCapabilityArtifactDocumentKind = ({
+    artifactTypeId,
+    schemaVersion,
+    bundles,
+    topNode,
+    assertInitialDocument,
+    assertEditableMutation,
+}: {
+    artifactTypeId: string
+    schemaVersion: string
+    bundles: SchemaBundle[]
+    topNode: DocumentKindDefinition['topNode']
+    assertInitialDocument: (doc: object) => void
+    assertEditableMutation: (
+        previousDoc: object,
+        proposedDoc: object,
+    ) => void
+}): DocumentKindDefinition => ({
+    id: capabilityArtifactKindId(artifactTypeId),
+    schemaVersion,
+    bundles,
+    topNode,
+    createEmptyDocument: createFilledDocument,
+    assertInitialDocument: doc => assertInitialDocument(
+        doc.toJSON(),
+    ),
+    assertEditableMutation: (previous, proposed) => assertEditableMutation(
+        previous.toJSON(),
+        proposed.toJSON(),
+    ),
+})
+
+// Registers the document kind of every listed artifact definition.
+export const registerCapabilityArtifactDocumentKinds = (
+    definitions: Array<Pick<CapabilityArtifactSharedDefinition, 'documentKind'>>,
+    registry: DocumentKindRegistry,
+): void => {
+    for (const definition of definitions) {
+        if (!registry.has(definition.documentKind.id))
+            registry.register(definition.documentKind)
+    }
 }
 
 export class CapabilityArtifactSharedRegistry {
@@ -85,6 +137,9 @@ export const assertCompleteSharedDefinition = (definition: CapabilityArtifactSha
 
     if (!definition.schemaVersion.trim())
         throw new Error(`CAPABILITY_ARTIFACT_SCHEMA_VERSION_REQUIRED:${definition.artifactTypeId}`)
+
+    if (definition.documentKind?.id !== capabilityArtifactKindId(definition.artifactTypeId))
+        throw new Error(`CAPABILITY_ARTIFACT_DOCUMENT_KIND_INVALID:${definition.artifactTypeId}`)
 
     if (new Set(definition.allowedEmbeddedReferenceTypes).size !== definition.allowedEmbeddedReferenceTypes.length)
         throw new Error(`CAPABILITY_ARTIFACT_DUPLICATE_REFERENCE_TYPE:${definition.artifactTypeId}`)

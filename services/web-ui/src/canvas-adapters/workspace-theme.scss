@@ -1,5 +1,5 @@
 @use "@lixpi/themes/dist/scss/one-dark-pro-mariana/theme";
-@import "@lixpi/canvas-components/styles/workspace/prompt-reference-colors";
+@import "@lixpi/prosemirror/styles/editor/prompt-reference-colors";
 
 .workspace-pane {
     --workspace-analysis-color: var(--theme-text-muted);

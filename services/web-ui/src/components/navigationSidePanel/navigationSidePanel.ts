@@ -1,11 +1,15 @@
-// NavigationSidePanel - workspace-list side panel built on the shared SidePanel component.
+// NavigationSidePanel - the workspace tree side panel built on the shared
+// SidePanel component.
 //
-// Renderer: TypeScript `html` DOM. Store access stays behind small store APIs
-// so the panel remains a framework-agnostic DOM component.
+// Renderer: TypeScript `html` DOM for the panel chrome. The workspace tree in
+// the list uses the local workspace adapter; this panel supplies its
+// ports (NATS requests, routing, confirmation, import and export, collapse
+// persistence) and keeps the header, footer and SidePanel shell.
 
 import {
-    type WorkspaceMeta,
-} from '@lixpi/constants'
+    createWorkspaceNavigation,
+    type WorkspaceNavigationHandle,
+} from './workspace-navigation/create-workspace-navigation.ts'
 import {
     type AuthClientInstance,
 } from '@lixpi/auth-client'
@@ -13,6 +17,9 @@ import {
     type WebClientRouterService,
 } from '@lixpi/web-client-service-factory'
 
+import {
+    type LoadingLease,
+} from '@lixpi/canvas-components/loading'
 import { html } from '@lixpi/ui-primitives/dom'
 import {
     createSidePanel,
@@ -23,10 +30,9 @@ import { settings } from '$src/settings.ts'
 import {
     createNewFileIcon,
     navigationSidePanelToggleIcon,
-    verticalTrippleDots,
 } from '@lixpi/ui-kit/svg'
 
-import { workspacesStore } from '$src/stores/workspacesStore.ts'
+import { workspaceTreeStore } from '$src/stores/workspaceTreeStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { navigationSidePanelStore } from '$src/stores/navigationSidePanelStore.ts'
@@ -36,16 +42,16 @@ const NAVIGATION_SIDE_PANEL_SETTINGS = settings.navigationSidePanel
 export type NavigationSidePanelConfig = {
     // Host element the panel/backdrop/overlay/toggle/resize-handle mount into.
     auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently' | 'logout' | 'createSessionHandoffUrl'>
-    // Content area the panel floats over. It receives
+    // Content area beside the panel. It receives
     // `--navigation-side-panel-inset`, the width the open panel covers, so
-    // content can keep its own overlays clear of the panel.
+    // content can keep its own overlays clear of the panel, and
+    // `--navigation-side-panel-dock-width`, the space a `push` panel claims,
+    // so content can shrink beside it.
     contentEl: HTMLElement
     paneEl: HTMLElement
-    router: Pick<WebClientRouterService, 'getCurrentRoute' | 'navigateTo' | 'subscribe'>
+    router: Pick<WebClientRouterService, 'cancelRouteLoad' | 'getCurrentRoute' | 'navigateTo' | 'subscribe'>
     userPortalUrl: string
     workspaceService: {
-        createWorkspace: (input: { name: string }) => Promise<void>
-        deleteWorkspace: (input: { workspaceId: string }) => Promise<void>
         getWorkspace: (input: { workspaceId: string }) => Promise<void>
     }
 }
@@ -54,24 +60,17 @@ export type NavigationSidePanelInstance = {
     destroy: () => void
 }
 
-type WorkspaceRow = {
-    el: HTMLButtonElement
-    dropdown: ReturnType<typeof createPureDropdown>
-    signature: string
+type PendingWorkspaceSwitch = {
+    frame: number
+    timer?: ReturnType<typeof setTimeout>
+    lease?: LoadingLease
 }
-
-// Name and tags are everything a row shows, so a row whose signature is
-// unchanged is kept as it is.
-const getWorkspaceRowSignature = (workspace: WorkspaceMeta): string => JSON.stringify([
-    workspace.name,
-    workspace.tags ?? [],
-])
 
 class NavigationSidePanel implements NavigationSidePanelInstance {
     private readonly contentEl: HTMLElement
     private readonly paneEl: HTMLElement
     private readonly unsubscribers: Array<() => void> = []
-    private readonly workspaceRows = new Map<string, WorkspaceRow>()
+    private readonly navigation: WorkspaceNavigationHandle
     private readonly panelEl: HTMLDivElement
     private readonly headerEl: HTMLDivElement
     private readonly listEl: HTMLDivElement
@@ -85,6 +84,12 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private readonly workspaceService: NavigationSidePanelConfig['workspaceService']
     private importTargetWorkspaceId: string | null = null
     private width = 0
+    // Whether a `push` panel currently claims its space beside the content.
+    private docked = false
+    // Bumped on every open or close so a superseded close does not undock a
+    // panel the user reopened while it was still sliding out.
+    private motionVersion = 0
+    private pendingWorkspaceSwitch: PendingWorkspaceSwitch | null = null
     private signingOut = false
     private destroyed = false
 
@@ -198,10 +203,36 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         )
         this.reflectInitialOpenState()
 
-        this.renderWorkspaceList()
-        this.unsubscribers.push(
-            workspacesStore.subscribe(this.renderWorkspaceList),
-        )
+        this.navigation = createWorkspaceNavigation({
+            container: this.listEl,
+            store: workspaceTreeStore,
+            scrollContainer: () => this.listEl,
+            ports: {
+                request: async (subject, payload) => await servicesStore.getData('nats')!.request(
+                    subject,
+                    {
+                        token: await this.auth.getTokenSilently(),
+                        ...payload,
+                    },
+                ),
+                navigate: workspaceId => this.handleWorkspaceClick(workspaceId),
+                buildHref: workspaceId => `/workspace/${workspaceId}`,
+                confirm: async message => window.confirm(message),
+                reportError: (message, error) => console.error(message, error),
+                importWorkspace: workspaceId => this.onWorkspaceImportHandler(workspaceId),
+                exportWorkspace: workspaceId => void this.onWorkspaceExportHandler(workspaceId),
+                collapsed: {
+                    load: () => navigationSidePanelStore.getData().collapsedWorkspaceIds,
+                    save: workspaceIds => navigationSidePanelStore.setValues({ collapsedWorkspaceIds: workspaceIds }),
+                },
+                onWorkspaceCreated: workspace => this.openWorkspace(workspace.workspaceId),
+                onWorkspacesDeleted: this.handleWorkspacesDeleted,
+            },
+        })
+        window.addEventListener('beforeunload', this.handleBeforeUnload)
+        window.addEventListener('pagehide', this.handlePageHide)
+        document.addEventListener('visibilitychange', this.handleVisibilityChange)
+        this.reflectActiveWorkspace()
         this.unsubscribers.push(
             this.router.subscribe(this.reflectActiveWorkspace),
         )
@@ -248,6 +279,28 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         }
     }
 
+    private handleBeforeUnload = (event: BeforeUnloadEvent): void => {
+        if (!this.navigation.hasPendingChanges())
+            return
+
+        void this.navigation.flushPendingChanges()
+        event.preventDefault()
+        event.returnValue = ''
+    }
+
+    private handlePageHide = (): void => {
+        if (this.navigation.hasPendingChanges())
+            void this.navigation.flushPendingChanges()
+    }
+
+    private handleVisibilityChange = (): void => {
+        if (
+            document.visibilityState === 'hidden'
+            && this.navigation.hasPendingChanges()
+        )
+            void this.navigation.flushPendingChanges()
+    }
+
     private signOut = async (): Promise<void> => {
         if (
             this.signingOut
@@ -259,7 +312,20 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         this.accountDropdown.setErrorState()
 
         try {
-            await this.auth.logout()
+            const saved = await this.navigation.flushPendingChanges()
+
+            if (
+                !saved
+                || this.navigation.hasPendingChanges()
+            ) {
+                if (!this.destroyed)
+                    this.accountDropdown.setErrorState({ title: 'Navigation changes were not saved. Resolve them and try signing out again.' })
+
+                return
+            }
+
+            if (!this.destroyed)
+                await this.auth.logout()
         } catch {
             if (!this.destroyed)
                 this.accountDropdown.setErrorState({ title: 'Sign out failed. Try again.' })
@@ -284,8 +350,11 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     }
 
     private reflectInset = (): void => {
-        const inset = navigationSidePanelStore.getData().isOpen ? this.width : 0
-        this.contentEl.style.setProperty('--navigation-side-panel-inset', `${inset}px`)
+        const isPush = NAVIGATION_SIDE_PANEL_SETTINGS.placement === 'push'
+        const coversContent = !isPush && navigationSidePanelStore.getData().isOpen
+        const claimsSpace = isPush && this.docked
+        this.contentEl.style.setProperty('--navigation-side-panel-inset', `${coversContent ? this.width : 0}px`)
+        this.contentEl.style.setProperty('--navigation-side-panel-dock-width', `${claimsSpace ? this.width : 0}px`)
     }
 
     private reflectStyleSettings = (): void => {
@@ -296,159 +365,93 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     }
 
     private reflectInitialOpenState(): void {
-        if (navigationSidePanelStore.getData().isOpen)
+        const isOpen = navigationSidePanelStore.getData().isOpen
+
+        if (isOpen)
             this.sidePanel.mountOpen(this.panelEl)
         else
             this.sidePanel.mountClosed(this.panelEl)
 
+        this.docked = isOpen
         this.reflectInset()
     }
 
-    private handleOpenChange = (open: boolean): void => {
+    private handleOpenChange = (open: boolean): void => void this.setOpen(open)
+
+    private toggleVisibility = (): void => void this.setOpen(!navigationSidePanelStore.getData().isOpen)
+
+    // Opening docks first so a `push` panel slides into its own space.
+    // Closing slides the panel out first and only then releases the space, so
+    // the content does not jump before the panel has left.
+    private setOpen = async (open: boolean): Promise<void> => {
+        const version = ++this.motionVersion
         navigationSidePanelStore.setValues({ isOpen: open })
-        this.reflectInset()
-        void this.runSlide(open)
-    }
 
-    private runSlide = async (open: boolean): Promise<void> => {
-        if (open)
+        if (open) {
+            this.docked = true
+            this.reflectInset()
             await this.sidePanel.playOpen(this.panelEl)
-        else
-            await this.sidePanel.playClose()
-    }
 
-    private toggleVisibility = (): void => {
-        const isOpen = navigationSidePanelStore.getData().isOpen
-        navigationSidePanelStore.setValues({ isOpen: !isOpen })
+            return
+        }
+
         this.reflectInset()
-        void this.runSlide(!isOpen)
-    }
+        await this.sidePanel.playClose()
 
-    // --- Workspace list rendering -------------------------------------------------
-
-    // Rows stay in the DOM across renders, and only a row whose name or tags
-    // changed is rebuilt. Switching workspaces only moves the active class, so
-    // the row under the pointer keeps its hover and pressed state.
-    private renderWorkspaceList = (): void => {
-        const workspaces = workspacesStore.getData()
-        const workspaceIds = new Set(
-            workspaces.map(workspace => workspace.workspaceId),
+        if (
+            this.destroyed
+            || this.motionVersion !== version
         )
+            return
 
-        for (const [workspaceId, row] of this.workspaceRows) {
-            if (workspaceIds.has(workspaceId))
-                continue
-
-            this.destroyWorkspaceRow(row)
-            this.workspaceRows.delete(workspaceId)
-        }
-
-        const rowEls = workspaces.map(workspace => this.syncWorkspaceRow(workspace))
-        const inOrder = rowEls.length === this.listEl.children.length
-            && rowEls.every((rowEl, index) => this.listEl.children[index] === rowEl)
-
-        if (!inOrder)
-            this.listEl.replaceChildren(...rowEls)
-
-        this.reflectActiveWorkspace()
-    }
-
-    private syncWorkspaceRow(workspace: WorkspaceMeta): HTMLButtonElement {
-        const signature = getWorkspaceRowSignature(workspace)
-        const existing = this.workspaceRows.get(workspace.workspaceId)
-
-        if (existing?.signature === signature)
-            return existing.el
-
-        const row = this.renderWorkspaceRow(workspace)
-        const next = {
-            ...row,
-            signature,
-        }
-
-        if (existing) {
-            existing.el.replaceWith(next.el)
-            this.destroyWorkspaceRow(existing)
-        }
-
-        this.workspaceRows.set(workspace.workspaceId, next)
-
-        return next.el
-    }
-
-    private destroyWorkspaceRow(row: WorkspaceRow): void {
-        row.dropdown.destroy()
-        row.el.remove()
+        this.docked = false
+        this.reflectInset()
     }
 
     private reflectActiveWorkspace = (): void => {
-        const currentWorkspaceId = this.router.getCurrentRoute().routeParams.workspaceId
+        const workspaceId = this.router.getCurrentRoute().routeParams.workspaceId
 
-        for (const [workspaceId, row] of this.workspaceRows)
-            row.el.classList.toggle('navigation-side-panel-row-active', workspaceId === currentWorkspaceId)
+        this.navigation.setActive(typeof workspaceId === 'string' ? workspaceId : undefined)
     }
 
-    private renderWorkspaceRow(workspace: WorkspaceMeta): Omit<WorkspaceRow, 'signature'> {
-        const menuAnchor = html`<div className="navigation-side-panel-row-menu"></div>` as HTMLDivElement
-        const dropdown = createPureDropdown({
-            id: `navigation-side-panel-workspace-menu-${workspace.workspaceId}`,
-            selectedValue: { title: '' },
-            options: [
-                { title: 'Import' },
-                { title: 'Export' },
-                { title: 'Delete' },
-            ],
-            theme: 'dark',
-            buttonIcon: verticalTrippleDots,
-            disableTriggerHover: true,
-            renderTitleForSelectedValue: false,
-            renderIconForSelectedValue: false,
-            renderIconForOptions: false,
-            mountToBody: true,
-            onSelect: option => {
-                if (option.title === 'Import')
-                    this.onWorkspaceImportHandler(workspace.workspaceId)
-                else if (option.title === 'Export')
-                    void this.onWorkspaceExportHandler(workspace.workspaceId)
-                else if (option.title === 'Delete')
-                    void this.onWorkspaceDeleteHandler(workspace.workspaceId)
-            },
-        })
-        menuAnchor.appendChild(dropdown.dom)
-        menuAnchor.addEventListener('click', event => event.stopPropagation())
-
-        const tagsEl = html`<div className="navigation-side-panel-row-tags"></div>` as HTMLDivElement
-
-        if (workspace.tags?.length) {
-            for (const tag of workspace.tags) {
-                tagsEl.appendChild(html`<span className="navigation-side-panel-row-tag">${tag}</span>` as HTMLElement)
-            }
-        }
-
-        const row = html`
-            <button
-                type="button"
-                className="navigation-side-panel-row"
-                onclick=${() => this.handleWorkspaceClick(workspace.workspaceId)}
-            >
-                <div className="navigation-side-panel-row-top">
-                    <div className="navigation-side-panel-row-title">${workspace.name}</div>
-                </div>
-            </button>
-        ` as HTMLButtonElement
-
-        row.querySelector<HTMLDivElement>('.navigation-side-panel-row-top')?.appendChild(menuAnchor)
-
-        if (workspace.tags?.length)
-            row.appendChild(tagsEl)
-
-        return {
-            el: row,
-            dropdown,
-        }
-    }
-
+    // Switching workspaces tears the open canvas down synchronously, and
+    // nothing paints until that finishes. The clicked row and the spinner
+    // show first, and the route changes once the browser has painted them.
+    // A click while another workspace is still loading abandons that load
+    // and starts the spinner over.
     private handleWorkspaceClick(workspaceId: string): void {
+        this.router.cancelRouteLoad()
+        this.navigation.setActive(workspaceId)
+        const loadingLayer = servicesStore.getData('loadingLayer')
+        const lease = loadingLayer?.acquire({ visible: true })
+        this.cancelPendingWorkspaceSwitch()
+        loadingLayer?.restartSpin()
+        const pending: PendingWorkspaceSwitch = {
+            frame: requestAnimationFrame(() => {
+                pending.timer = setTimeout(() => {
+                    this.pendingWorkspaceSwitch = null
+                    this.openWorkspace(workspaceId)
+                    lease?.destroy()
+                }, 0)
+            }),
+            lease,
+        }
+        this.pendingWorkspaceSwitch = pending
+    }
+
+    private cancelPendingWorkspaceSwitch(): void {
+        const pending = this.pendingWorkspaceSwitch
+
+        if (!pending)
+            return
+
+        this.pendingWorkspaceSwitch = null
+        cancelAnimationFrame(pending.frame)
+        clearTimeout(pending.timer)
+        pending.lease?.destroy()
+    }
+
+    private openWorkspace(workspaceId: string): void {
         this.router.navigateTo(
             '/workspace/:workspaceId',
             {
@@ -459,9 +462,27 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         workspaceStore.beginWorkspaceLoad(workspaceId)
     }
 
-    private handleCreateNewWorkspaceClick = async (): Promise<void> => await this.workspaceService.createWorkspace({ name: 'New Workspace' })
+    // The header button creates a root workspace in the user's first
+    // organization and opens it.
+    private handleCreateNewWorkspaceClick = (): void => void this.navigation.createWorkspace({})
 
-    private onWorkspaceDeleteHandler = async (workspaceId: string): Promise<void> => await this.workspaceService.deleteWorkspace({ workspaceId })
+    // When the open workspace is deleted, opens the first remaining
+    // workspace, or the start page when none is left.
+    private handleWorkspacesDeleted = (workspaceIds: string[]): void => {
+        const currentWorkspaceId = this.router.getCurrentRoute().routeParams.workspaceId
+
+        if (!workspaceIds.includes(
+            String(currentWorkspaceId),
+        ))
+            return
+
+        const next = workspaceTreeStore.current.organizations.flatMap(tree => tree.roots).find(entry => entry.entryType === 'workspace')
+
+        if (next?.entryType === 'workspace')
+            this.openWorkspace(next.workspace.workspaceId)
+        else
+            this.router.navigateTo('/', { params: {} })
+    }
 
     private onWorkspaceExportHandler = async (workspaceId: string): Promise<void> => {
         const token = await this.auth.getTokenSilently()
@@ -531,16 +552,17 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
     destroy = (): void => {
         this.destroyed = true
+        this.cancelPendingWorkspaceSwitch()
+        window.removeEventListener('beforeunload', this.handleBeforeUnload)
+        window.removeEventListener('pagehide', this.handlePageHide)
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange)
         this.accountDropdown.destroy()
         this.importFileInput.removeEventListener('change', this.handleImportFileSelected)
 
         for (const unsubscribe of this.unsubscribers)
             unsubscribe()
 
-        for (const row of this.workspaceRows.values())
-            this.destroyWorkspaceRow(row)
-
-        this.workspaceRows.clear()
+        this.navigation.destroy()
         this.sidePanel.destroy()
         this.panelEl.remove()
     }

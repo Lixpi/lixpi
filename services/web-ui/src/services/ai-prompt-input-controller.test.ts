@@ -16,11 +16,9 @@ import {
     type CanvasNode,
     type CanvasState,
 } from '@lixpi/constants'
-import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
-import {
+import { USE_AI_CHAT_META,
     serializeAiModelSelectionAttr,
-    serializeMediaGenerationConfigSelectionAttr,
-} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+    serializeMediaGenerationConfigSelectionAttr } from '@lixpi/prosemirror/frontend/editor'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 
 vi.mock('uuid', () => ({ v4: vi.fn(() => 'thread-id') }))

@@ -5,11 +5,11 @@ import {
     type ConversationEvent,
     type ConversationReference,
     type ConversationSourceSnapshot,
-    type Workspace as WorkspaceRecord,
 } from '@lixpi/constants'
 import { warn } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import { PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
+import { canEditWorkspace } from '../../services/workspace-navigation/access.ts'
 import Workspace from '../../models/workspace.ts'
 import AssetModel, {
     publishAssetEvent,
@@ -17,6 +17,10 @@ import AssetModel, {
 } from '../../models/asset.ts'
 import BlobModel, { buildBlobReferenceBatchOperations } from '../../models/blob.ts'
 import { AccountRequestContext } from '../../services/account-request-context.ts'
+import {
+    workspaceAccessResolver,
+    workspaceTreeRepository,
+} from '../../services/workspace-tree.ts'
 import { ConversationDispatcher } from './conversation-dispatcher.ts'
 import { ConversationMigration } from './conversation-migration.ts'
 import {
@@ -47,7 +51,7 @@ export class ConversationAdapters {
     service(): ConversationService {
         const ports: ConversationServicePorts = {
             ...conversationServiceClock,
-            migrate: async access => void (await new ConversationMigration(this.repository).migrateWorkspace(access)),
+            migrate: async access => (await new ConversationMigration(this.repository).migrateWorkspace(access)).complete,
             title: async meta => {
                 if (!meta.activated)
                     return undefined
@@ -156,8 +160,9 @@ export class ConversationAdapters {
                         surfaceIds: [`conversation:${meta.conversationAssetId}`],
                     },
                 })
-                // Acceptance already checks this workspace's organization,
-                // access list and deletion state in the same transaction.
+                // Acceptance already fences this workspace's organization,
+                // the grant it was authorized by, its ancestors and its
+                // deletion state in the same transaction.
                 await this.repository.commit([
                     ...prepared.operations.filter(operation => operation.tableName !== tableName('WORKSPACES')),
                     ...operations,
@@ -187,11 +192,9 @@ export class ConversationAdapters {
         )
             throw new Error('CONVERSATION_WORKSPACE_ACCESS_DENIED')
 
-        const access = workspace.accessList.find(entry => entry.userId === userId)
-
         if (
-            !access
-            || (write && access.accessLevel !== 'owner' && access.accessLevel !== 'editor')
+            write
+            && !canEditWorkspace(workspace.accessLevel)
         )
             throw new Error('CONVERSATION_WORKSPACE_ACCESS_DENIED')
 
@@ -203,21 +206,14 @@ export class ConversationAdapters {
             organizationId: workspace.organizationId,
             workspaceId,
             ...(account ? { account } : {}),
-            fences: [{
-                type: 'check',
-                tableName: tableName('WORKSPACES'),
-                key: { workspaceId },
-                conditionExpression: '#organization = :organization AND #access = :access AND attribute_not_exists(#deleting)',
-                expressionAttributeNames: {
-                    '#organization': 'organizationId',
-                    '#access': 'accessList',
-                    '#deleting': 'deletingAt',
-                },
-                expressionAttributeValues: {
-                    ':organization': workspace.organizationId,
-                    ':access': workspace.accessList,
-                },
-            }],
+            // A revoked or changed grant, a move or a deletion of this
+            // workspace or an ancestor fences out later agent writes.
+            fences: workspaceTreeRepository().accessFenceOperations({
+                userId,
+                workspaceId,
+                organizationId: workspace.organizationId,
+                grant: workspace.accessGrant,
+            }),
         }
     }
 
@@ -276,12 +272,7 @@ export class ConversationAdapters {
 
     readonly publish = async (event: ConversationEvent): Promise<void> => {
         try {
-            const workspace = (await dynamoDBService.getItem({
-                tableName: tableName('WORKSPACES'),
-                key: { workspaceId: event.workspaceId },
-                consistentRead: true,
-                origin: 'Conversation.publish',
-            })) as WorkspaceRecord | undefined
+            const workspace = await workspaceTreeRepository().getWorkspaceMeta(event.workspaceId)
 
             if (
                 !workspace
@@ -289,10 +280,12 @@ export class ConversationAdapters {
             )
                 return
 
-            for (const member of workspace.accessList)
+            // Everyone with a grant on this workspace or an ancestor can open
+            // its conversations, so each of them receives the event.
+            for (const userId of await workspaceAccessResolver().listUsersWithAccess(workspace))
                 NATS_Service.getInstance()?.publish(
                     conversationEventSubject(
-                        member.userId,
+                        userId,
                         event.workspaceId,
                         event.conversationAssetId,
                     ),

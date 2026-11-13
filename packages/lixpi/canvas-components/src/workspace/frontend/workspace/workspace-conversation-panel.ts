@@ -13,6 +13,16 @@ import {
     type WorkspaceConversationOutputPorts,
 } from './canvas-conversation-run.ts'
 
+// Opens a conversation in another workspace, such as the parent conversation
+// whose agent started this one.
+export type OpenWorkspaceConversation = (
+    workspaceId: string,
+    conversationAssetId: string,
+) => void
+
+// How a delegated conversation names the agent that started it.
+export const delegatedOriginLabel = (workspaceName: string): string => `Started by ${workspaceName || 'parent workspace'} agent`
+
 export type WorkspaceConversationTranscriptPorts = {
     load: (conversationAssetId: string) => Promise<CanvasConversationThread | null>
     mount: (request: CanvasConversationEditorMount) => CanvasConversationEditor
@@ -30,6 +40,7 @@ export class WorkspaceConversationPanel {
     private readonly newMessages: HTMLButtonElement
     private readonly queue: HTMLElement
     private readonly stop: HTMLButtonElement
+    private readonly origin: HTMLElement
     private readonly unsubscribe: () => void
     private lastSelected = ''
     private readonly timer: number
@@ -49,8 +60,15 @@ export class WorkspaceConversationPanel {
         onSelected: (conversationAssetId: string) => void,
         private readonly outputPorts: WorkspaceConversationOutputPorts | undefined,
         private readonly transcriptPorts: WorkspaceConversationTranscriptPorts,
+        private readonly openConversation?: OpenWorkspaceConversation,
     ) {
         this.html = createDocumentHtml(document)
+        this.origin = this.html`
+            <p
+                class="workspace-conversation-origin"
+                hidden
+            ></p>
+        ` as HTMLElement
         this.picker = this.html`
             <select
                 aria-label="Conversation"
@@ -142,6 +160,7 @@ export class WorkspaceConversationPanel {
                     >New conversation</button>
                     ${this.stop}${collapse}
                 </header>
+                ${this.origin}
                 ${this.messages}${this.newMessages}
                 <div class="workspace-conversation-settings">${this.context}${this.policy}${this.override}</div>
                 ${this.queue}${this.state}
@@ -216,11 +235,38 @@ export class WorkspaceConversationPanel {
         }
     }
 
+    // A conversation another workspace's agent started names that agent and,
+    // when the host can open it, links back to the parent conversation.
+    private renderOrigin(delegatedBy: NonNullable<WorkspaceConversationController['current']>['delegatedBy']): void {
+        this.origin.hidden = !delegatedBy
+
+        if (!delegatedBy) {
+            this.origin.replaceChildren()
+
+            return
+        }
+
+        const link = this.openConversation
+            ? this.html`
+                <button
+                    type="button"
+                    class="workspace-conversation-origin-link"
+                    onclick=${() => this.openConversation!(delegatedBy.workspaceId, delegatedBy.conversationAssetId)}
+                >Open parent conversation</button>
+            ` as HTMLElement
+            : null
+        this.origin.replaceChildren(
+            this.html`<span>${delegatedOriginLabel(delegatedBy.workspaceName)}</span>` as HTMLElement,
+            ...(link ? [link] : []),
+        )
+    }
+
     private render(): void {
         const current = this.controller.current
         const options = this.controller.conversations.map(item => {
             const active = item.run && !['completed', 'stopped', 'failed'].includes(item.run.state)
-            const label = `${item.title || 'Conversation'}${active ? ` · ${item.run!.state}` : ''}${this.controller.isUnread(item) ? ' · Unread' : ''}`
+            const origin = item.delegatedBy ? ` · ${delegatedOriginLabel(item.delegatedBy.workspaceName)}` : ''
+            const label = `${item.title || 'Conversation'}${origin}${active ? ` · ${item.run!.state}` : ''}${this.controller.isUnread(item) ? ' · Unread' : ''}`
 
             return this.html`<option value=${item.conversationAssetId}>${label}</option>` as HTMLOptionElement
         })
@@ -230,6 +276,7 @@ export class WorkspaceConversationPanel {
             this.picker.append(this.html`<option value="">New conversation</option>` as HTMLOptionElement)
 
         this.picker.value = current?.conversationAssetId ?? ''
+        this.renderOrigin(current?.delegatedBy)
 
         if (this.element.ownerDocument.activeElement !== this.title)
             this.title.value = current?.title ?? ''

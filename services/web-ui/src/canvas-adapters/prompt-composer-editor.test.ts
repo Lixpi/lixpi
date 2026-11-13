@@ -7,23 +7,21 @@ import {
     vi,
 } from 'vitest'
 
-import { createDefaultPromptControlFactories } from '$src/components/proseMirror/promptControlFactories.ts'
+import { createDefaultPromptControlFactories } from '$src/editor/prompt-control-factories.ts'
 import { createAiPromptComposer } from '@lixpi/canvas-components/workspace/composer'
 import { createPromptComposerEditorPort } from './prompt-composer-editor.ts'
 
 type MockEditorInstance = {
     options: Record<string, any>
     destroy: ReturnType<typeof vi.fn>
-    editorView: { focus: ReturnType<typeof vi.fn> }
+    view: { focus: ReturnType<typeof vi.fn> }
 }
 
 const editorInstances: MockEditorInstance[] = []
-const createEditorInstance = (options: Record<string, any>): MockEditorInstance => {
-    return {
-        options,
-        editorView: { focus: vi.fn() },
-        destroy: vi.fn(),
-    }
+const environment = {
+    registry: {} as never,
+    services: {} as never,
+    authorityTransport: {} as never,
 }
 
 const createShiftingGradientBackgroundMock = vi.fn()
@@ -32,19 +30,17 @@ const mockGradient = {
     destroy: vi.fn(),
 }
 
-vi.mock('$src/components/proseMirror/components/editor.ts', () => ({
-    ProseMirrorEditor: class {
-        options: Record<string, any>
-        destroy: ReturnType<typeof vi.fn>
-        editorView: { focus: ReturnType<typeof vi.fn> }
-
-        constructor(options: Record<string, any>) {
-            const instance = createEditorInstance(options)
-            this.options = instance.options
-            this.destroy = instance.destroy
-            this.editorView = instance.editorView
-            editorInstances.push(this as unknown as MockEditorInstance)
+vi.mock('@lixpi/prosemirror/frontend/editor', async importOriginal => ({
+    ...await importOriginal<typeof import('@lixpi/prosemirror/frontend/editor')>(),
+    mountEditorDocument: (options: Record<string, any>) => {
+        const instance: MockEditorInstance = {
+            options,
+            view: { focus: vi.fn() },
+            destroy: vi.fn(),
         }
+        editorInstances.push(instance)
+
+        return instance
     },
 }))
 
@@ -86,7 +82,10 @@ const createComposer = (overrides: Record<string, any> = {}) => {
             useShiftingGradientBackground: settings.aiPromptInput.useShiftingGradientBackground,
             gradientColors: settings.gradient.styles.shiftingColors,
         },
-        mountEditor: createPromptComposerEditorPort(overrides),
+        mountEditor: createPromptComposerEditorPort({
+            environment,
+            ...overrides,
+        }),
         onSubmit: vi.fn(),
         onContentChange: vi.fn(),
         ...overrides,
@@ -114,9 +113,9 @@ beforeEach(() => {
 describe('createAiPromptComposer', () => {
     it('enables Enter submission only when the workspace requests conversation behavior', () => {
         createComposer({ submitOnEnter: true })
-        expect(getLastEditor().options.promptSubmitOnEnter).toBe(true)
+        expect(getLastEditor().options.context.prompt.submitOnEnter).toBe(true)
         createComposer()
-        expect(getLastEditor().options.promptSubmitOnEnter).toBeUndefined()
+        expect(getLastEditor().options.context.prompt.submitOnEnter).toBeUndefined()
     })
 
     it('forwards the prompt-reference catalog to the editor plugin boundary', () => {
@@ -126,7 +125,7 @@ describe('createAiPromptComposer', () => {
             getModule: vi.fn(),
         }
         createComposer({ promptReferenceCatalog })
-        expect(getLastEditor().options.promptReferenceCatalog).toBe(promptReferenceCatalog)
+        expect(getLastEditor().options.context.promptReferences.catalog).toBe(promptReferenceCatalog)
     })
 
     it('forwards the prompt-reference preview renderer to the editor plugin boundary', () => {
@@ -147,7 +146,11 @@ describe('createAiPromptComposer', () => {
 
         createComposer({ promptReferencePreviewRenderer })
 
-        expect(getLastEditor().options.promptReferencePreviewRenderer).toBe(promptReferencePreviewRenderer)
+        expect(getLastEditor().options.context.promptReferences.previewRenderer).toMatchObject({
+            document,
+            resolveMediaKind: expect.any(Function),
+            createMediaPreview: expect.any(Function),
+        })
     })
 
     it('builds host and mount elements with expected base and custom classes', () => {
@@ -170,17 +173,17 @@ describe('createAiPromptComposer', () => {
         })
 
         const editor = getLastEditor()
-        expect(editor.options.promptControlFactories.createModelDropdown).toBe(createGenericAiModelDropdown)
-        expect(editor.options.promptControlFactories.createModelMultiSelect).toBe(createGenericAiModelMultiSelect)
-        expect(editor.options.promptControlFactories.createImageModelDropdown).toBe(createGenericImageModelDropdown)
-        expect(editor.options.promptControlFactories.createImageModelMultiSelect).toBe(createGenericImageModelMultiSelect)
-        expect(editor.options.promptControlFactories.createImageSizeDropdown).toBe(createGenericImageSizeDropdown)
-        expect(editor.options.promptControlFactories.createVideoModelDropdown).toBe(createGenericVideoModelDropdown)
-        expect(editor.options.promptControlFactories.createVideoModelMultiSelect).toBe(createGenericVideoModelMultiSelect)
-        expect(editor.options.promptControlFactories.createVideoAspectDropdown).toBe(createGenericVideoAspectDropdown)
-        expect(editor.options.promptControlFactories.createVideoResolutionDropdown).toBe(createGenericVideoResolutionDropdown)
-        expect(editor.options.promptControlFactories.createVideoDurationDropdown).toBe(createGenericVideoDurationDropdown)
-        expect(editor.options.promptControlFactories.createSubmitButton).toBe(createGenericSubmitButton)
+        expect(editor.options.context.prompt.controls.createModelDropdown).toBe(createGenericAiModelDropdown)
+        expect(editor.options.context.prompt.controls.createModelMultiSelect).toBe(createGenericAiModelMultiSelect)
+        expect(editor.options.context.prompt.controls.createImageModelDropdown).toBe(createGenericImageModelDropdown)
+        expect(editor.options.context.prompt.controls.createImageModelMultiSelect).toBe(createGenericImageModelMultiSelect)
+        expect(editor.options.context.prompt.controls.createImageSizeDropdown).toBe(createGenericImageSizeDropdown)
+        expect(editor.options.context.prompt.controls.createVideoModelDropdown).toBe(createGenericVideoModelDropdown)
+        expect(editor.options.context.prompt.controls.createVideoModelMultiSelect).toBe(createGenericVideoModelMultiSelect)
+        expect(editor.options.context.prompt.controls.createVideoAspectDropdown).toBe(createGenericVideoAspectDropdown)
+        expect(editor.options.context.prompt.controls.createVideoResolutionDropdown).toBe(createGenericVideoResolutionDropdown)
+        expect(editor.options.context.prompt.controls.createVideoDurationDropdown).toBe(createGenericVideoDurationDropdown)
+        expect(editor.options.context.prompt.controls.createSubmitButton).toBe(createGenericSubmitButton)
     })
 
     it('allows overriding all control factories via config', () => {
@@ -200,7 +203,7 @@ describe('createAiPromptComposer', () => {
         })
 
         const editor = getLastEditor()
-        expect(editor.options.promptControlFactories).toEqual(customFactories)
+        expect(editor.options.context.prompt.controls).toEqual(customFactories)
     })
 
     it('forwards editor submit callback to the composer onSubmit handler', () => {
@@ -214,12 +217,11 @@ describe('createAiPromptComposer', () => {
         })
 
         const editor = getLastEditor()
-        editor.options.onPromptSubmit(baseSubmitPayload)
+        editor.options.context.prompt.onSubmit(baseSubmitPayload)
 
         expect(onSubmit).toHaveBeenCalledOnce()
         expect(onSubmit).toHaveBeenCalledWith(baseSubmitPayload)
-        expect(editor.options.onPromptStop).toBeUndefined()
-        expect(editor.options.onReceivingStateChange).toBeUndefined()
+        expect(editor.options.context.chat).toBeUndefined()
     })
 
     it('forwards prompt content changes to onContentChange', () => {
@@ -236,7 +238,7 @@ describe('createAiPromptComposer', () => {
             type: 'doc',
             content: [],
         }
-        editor.options.onEditorChange?.(content)
+        editor.options.onChange?.(content)
 
         expect(onContentChange).toHaveBeenCalledWith(content)
     })
@@ -283,7 +285,7 @@ describe('createAiPromptComposer', () => {
         host.appendChild(composer.element)
 
         composer.focus()
-        expect(editor.editorView.focus).toHaveBeenCalledTimes(1)
+        expect(editor.view.focus).toHaveBeenCalledTimes(1)
 
         composer.destroy()
         expect(editor.destroy).toHaveBeenCalledTimes(1)

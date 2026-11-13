@@ -42,6 +42,7 @@ import {
     type MediaRenderAdapterPorts,
     type MediaRenderRecord,
 } from './media-render-adapter.ts'
+import { apiDocumentKinds } from '../prosemirror/document-kinds.ts'
 
 export class MediaRenderPlatform {
     constructor(
@@ -302,7 +303,8 @@ export class MediaRenderPlatform {
             record.conversation?.conversationAssetId,
         )
         new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.ASSET_PROVENANCE,
+            registry: apiDocumentKinds(),
+            kindId: DOCUMENT_TYPE.ASSET_PROVENANCE,
             doc: document,
             version: 1,
         })

@@ -9,7 +9,7 @@ A successful certificate-manager invocation means it completed maintenance, publ
 
 ## Local certificates and trust
 
-Compose builds [the service image](../Dockerfile) from the repository root. Local issuance is a one-shot utility in `infrastructure/docker/utilities/certificates/docker-compose.certificates.yml`, outside the application stack. **Initialize infrastructure** in `./run.sh` runs it. NATS and the local HTTPS gateway don't start it; they read the certificates it left in the volume, so run **Initialize infrastructure** again when the certificates need regenerating. Preserve the `caddy-certs` volume between runs. It holds the development CA as well as the exported certificate and key; removing it creates a different CA that existing host trust will not recognize.
+Compose builds [the service image](../Dockerfile) from the repository root. Local issuance is a one-shot utility in `infrastructure/docker/utilities/certificates/docker-compose.certificates.yml`, outside the application stack. **Initialize infrastructure** in `./run.sh` runs it. NATS and the local HTTPS gateway don't start it; they read the certificates it left in the volume. **Initialize infrastructure** generates them when the volume has none and otherwise keeps them, unless you choose **Regenerate certificate: Regenerate**, which empties the volume first. Preserve the `caddy-certs` volume between runs. It holds the development CA as well as the exported certificate and key; removing it creates a different CA that existing host trust will not recognize.
 
 The service exports the public CA at `/certificates/ca.crt`. To copy it out of a default Compose volume:
 
@@ -19,7 +19,7 @@ docker run --rm -v lixpi_caddy-certs:/certs:ro busybox cat /certs/ca.crt > ca.cr
 
 The volume's actual name follows the Compose project name. Export only the public root, never the CA key or serving private key. The certificate volume is not mounted beneath a web root.
 
-Installing the CA in the machine's trusted roots is needed only to run web-ui in a browser against the local stack. **Initialize infrastructure** does it when you choose **Trust: Install**, and skips it by default, because the desktop app trusts the CA on its own. To install it by hand:
+Installing the CA in the machine's trusted roots is needed only to run web-ui in a browser against the local stack. **Initialize infrastructure** does it when you choose **Install certificate: Install**, and skips it by default, because the desktop app trusts the CA on its own. To install it by hand:
 
 - On macOS, import `ca.crt` into the System keychain with Keychain Access and set its trust to Always Trust. The command-line equivalent is `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt`.
 - On Linux, copy it to `/usr/local/share/ca-certificates/lixpi-local-ca.crt`, then run `sudo update-ca-certificates`.

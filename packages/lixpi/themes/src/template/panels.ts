@@ -208,6 +208,8 @@ export type PanelTheme = {
         row: {
             base: {
                 padding: string
+                // Added per tree depth before a nested row's content.
+                indent: string
             }
         }
         rowTags: {
@@ -236,6 +238,52 @@ export type PanelTheme = {
                 paddingInline: string
                 paddingBlock: string
                 margin: string
+            }
+        }
+        // Outline headings in the navigation list, from the largest (level 1)
+        // to the smallest (level 3). Each is larger than a workspace row.
+        headingLevels: {
+            level1: {
+                base: {
+                    fontSize: string
+                    fontWeight: string
+                    lineHeight: string
+                    letterSpacing: string
+                    textTransform: string
+                    paddingInline: string
+                    paddingBlock: string
+                    margin: string
+                    // Applied to the theme's section-label color.
+                    opacity: string
+                }
+            }
+            level2: {
+                base: {
+                    fontSize: string
+                    fontWeight: string
+                    lineHeight: string
+                    letterSpacing: string
+                    textTransform: string
+                    paddingInline: string
+                    paddingBlock: string
+                    margin: string
+                    // Applied to the theme's section-label color.
+                    opacity: string
+                }
+            }
+            level3: {
+                base: {
+                    fontSize: string
+                    fontWeight: string
+                    lineHeight: string
+                    letterSpacing: string
+                    textTransform: string
+                    paddingInline: string
+                    paddingBlock: string
+                    margin: string
+                    // Applied to the theme's section-label color.
+                    opacity: string
+                }
             }
         }
         toggle: {

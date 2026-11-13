@@ -14,12 +14,12 @@ import {
     type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
-import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import {
+    USE_AI_CHAT_META,
     serializeAiModelSelectionAttr,
     serializeCapabilityInputsAttr,
     serializeMediaGenerationConfigSelectionAttr,
-} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+} from '@lixpi/prosemirror/frontend/editor'
 
 type ThreadEditorEntry = {
     editorView: EditorView

@@ -19,7 +19,6 @@ import {
     type AssetRequesterContext,
 } from '@lixpi/constants'
 import {
-    DOCUMENT_TYPE,
     HeadlessProseMirrorEngine,
     PROSEMIRROR_SCHEMA_VERSION,
     getAssetStepSubject,
@@ -57,6 +56,10 @@ import {
     KeyedOperationCoordinator,
     runOperationWithRetry,
 } from './keyed-operation-coordinator.ts'
+import {
+    apiDocumentKinds,
+    documentKindForAsset,
+} from '../prosemirror/document-kinds.ts'
 
 const {
     ORG_NAME,
@@ -105,19 +108,6 @@ const getSettlementErrorFields = (error: unknown): {
     errorMessage: error instanceof Error ? error.message : String(error),
 })
 
-const getDocumentType = (role: AssetDocumentRole) => {
-    if (role === 'content')
-        return DOCUMENT_TYPE.ASSET_CONTENT
-
-    if (role === 'conversation')
-        return DOCUMENT_TYPE.ASSET_CONVERSATION
-
-    if (role === 'provenance')
-        return DOCUMENT_TYPE.ASSET_PROVENANCE
-
-    return 'capabilityArtifact'
-}
-
 const getArtifactDefinition = (asset: Asset) => asset.artifact
     ? capabilityArtifactBackendRegistry.require(asset.artifact.artifactTypeId).shared
     : undefined
@@ -128,10 +118,8 @@ const getHeadlessEngineConfig = (
     doc: object | undefined,
     version: number,
 ) => ({
-    documentType: getDocumentType(role),
-    ...(role === 'capabilityArtifact'
-        ? { schema: getArtifactDefinition(asset)?.createDocumentSchema() }
-        : {}),
+    registry: apiDocumentKinds(),
+    kindId: documentKindForAsset(asset, role),
     doc,
     version,
 })

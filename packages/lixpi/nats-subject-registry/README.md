@@ -20,6 +20,8 @@ An endpoint declares `type`, `payloadType`, an optional queue, and required `per
 
 API domain files call `createNatsSubscriptions()` with their group name and handlers keyed by `getNatsSubjectPath()`. The factory attaches the shared metadata and rejects missing or extra handlers. The API composition checks that all active groups are supplied with matching subjects, formats, queues, and interaction kinds.
 
+The workspace group includes authenticated navigation snapshot and autosave requests. Navigation writes use the `workspaceNavigationWrites` queue so one API replica handles each request. Queue metadata changes the diagnostic policy digest but does not change the signed subject grants or registration version; deploy the same queue declaration to all API replicas. An old replica with a plain subscription still receives its own copy until replaced. The API validates organization and workspace access, document identities, expected revision, and explicit creation/deletion sets before publishing a saved document. The endpoint permission grants only the ability to send the request; it does not grant access to any workspace. The new navigation subjects require a regenerated signed declaration alongside their API and browser release.
+
 To add an endpoint, declare its subject in constants, add its metadata and explicit permissions to the appropriate contract group, and supply its API handler. Add a new group to the explicit composition when needed. Review service permissions separately: user grants do not define the API's internal requests or storage access.
 
 ## Signing and applying declarations

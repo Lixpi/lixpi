@@ -2126,11 +2126,14 @@ export type Workspace = {
     workspaceId: string
     organizationId: string
     name: string
-    accessType: 'private' | 'public'
-    accessList: {
-        userId: string
-        accessLevel: AccessLevel
-    }[]
+    // Plain text, up to WORKSPACE_NOTE_MAX_LENGTH characters.
+    note?: string
+    // Ids from the organization's `tags` map.
+    tagIds: string[]
+    parentWorkspaceId?: string
+    // Root first, excluding the workspace itself.
+    ancestorIds: string[]
+    position: string
     canvasState: CanvasState
     createdAt: number
     canvasStateUpdatedAt?: number
@@ -2142,8 +2145,187 @@ export type WorkspaceMeta = {
     workspaceId: string
     organizationId: string
     name: string
+    // Plain text, up to WORKSPACE_NOTE_MAX_LENGTH characters.
+    note?: string
+    // Ids from the organization's `tags` map.
+    tagIds: string[]
+    parentWorkspaceId?: string
+    // Root first, excluding the workspace itself.
+    ancestorIds: string[]
+    position: string
+    deletingAt?: number
     createdAt: number
     updatedAt: number
+}
+
+export const WORKSPACE_NOTE_MAX_LENGTH = 280
+// Headings and notes are text blocks the user types into, so their text can
+// be empty and keeps its spacing.
+export const WORKSPACE_OUTLINE_TEXT_MAX_LENGTH = 2000
+// An outline block's level. Level 0 is a note, a plain line of text that
+// groups nothing; levels 1 to 3 are headings, which group the entries after
+// them. Any block can switch to any level.
+export const WORKSPACE_NOTE_LEVEL = 0
+export const WORKSPACE_HEADING_LEVELS = [
+    0,
+    1,
+    2,
+    3,
+] as const
+export type WorkspaceHeadingLevel = typeof WORKSPACE_HEADING_LEVELS[number]
+
+export type WorkspaceHeading = {
+    headingId: string
+    organizationId: string
+    parentWorkspaceId?: string
+    level: WorkspaceHeadingLevel
+    name: string
+    note?: string
+    position: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type WorkspaceTreeEntry =
+    | {
+        entryType: 'workspace'
+        workspace: WorkspaceMeta
+        accessLevel: AccessLevel
+        children: WorkspaceTreeEntry[]
+    }
+    | {
+        entryType: 'heading'
+        heading: WorkspaceHeading
+    }
+
+export type WorkspaceTree = {
+    organizationId: string
+    organizationName: string
+    tags: Organization['tags']
+    roots: WorkspaceTreeEntry[]
+}
+
+export type UserWorkspaceTrees = {
+    organizations: WorkspaceTree[]
+}
+
+// JSON-only transport contract. The ProseMirror package owns its schema.
+export type WorkspaceNavigationJsonValue = string | number | boolean | null | WorkspaceNavigationJsonValue[] | { [key: string]: WorkspaceNavigationJsonValue }
+
+export type WorkspaceNavigationDocument = {
+    type: string
+    attrs?: Record<string, WorkspaceNavigationJsonValue>
+    content?: WorkspaceNavigationDocument[]
+    text?: string
+}
+
+export type WorkspaceNavigationSnapshot = {
+    organizationId: string
+    revision: number
+    schemaVersion: 1
+    document: WorkspaceNavigationDocument
+    tree: WorkspaceTree
+}
+
+export type UserWorkspaceNavigation = {
+    organizations: WorkspaceNavigationSnapshot[]
+}
+
+export type SaveWorkspaceNavigationRequest = {
+    organizationId: string
+    baseRevision: number
+    mutationId: string
+    deletedWorkspaceIds?: string[]
+    createdWorkspaceIds?: string[]
+    document: WorkspaceNavigationDocument
+}
+
+export type SaveWorkspaceNavigationResult =
+    | { snapshot: WorkspaceNavigationSnapshot }
+    | {
+        error: 'WORKSPACE_NAVIGATION_RATE_LIMITED'
+        retryAfterMs: number
+    }
+    | {
+        error: 'WORKSPACE_NAVIGATION_STALE'
+        snapshot: WorkspaceNavigationSnapshot
+    }
+
+// The grant an access decision used: the workspace that holds it, its level,
+// and the target's ancestor chain at the time of the decision. Agent writes
+// fence on all three.
+export type WorkspaceAccessGrant = {
+    grantWorkspaceId: string
+    accessLevel: AccessLevel
+    ancestorIds: string[]
+}
+
+export const WORKSPACE_TREE_ERROR = {
+    BUSY: 'WORKSPACE_TREE_BUSY',
+    STALE: 'WORKSPACE_TREE_STALE',
+    CYCLE: 'WORKSPACE_TREE_CYCLE',
+    CROSS_ORGANIZATION: 'WORKSPACE_TREE_CROSS_ORGANIZATION',
+    TAG_UNKNOWN: 'WORKSPACE_TAG_UNKNOWN',
+    NOTE_TOO_LONG: 'WORKSPACE_NOTE_TOO_LONG',
+    PERMISSION_DENIED: 'PERMISSION_DENIED',
+    NOT_FOUND: 'NOT_FOUND',
+} as const
+export type WorkspaceTreeErrorCode = typeof WORKSPACE_TREE_ERROR[keyof typeof WORKSPACE_TREE_ERROR]
+
+// Neighbor ids place an entry among its new siblings. The server computes the
+// position, so clients never send position strings.
+export type WorkspaceTreePlacement = {
+    parentWorkspaceId?: string
+    beforeEntryId?: string
+    afterEntryId?: string
+}
+
+export type CreateWorkspaceRequest = WorkspaceTreePlacement & {
+    organizationId: string
+    name: string
+}
+
+export type UpdateWorkspaceRequest = {
+    workspaceId: string
+    name?: string
+    // null clears the note.
+    note?: string | null
+    tagIds?: string[]
+}
+
+export type MoveWorkspaceRequest = WorkspaceTreePlacement & {
+    workspaceId: string
+}
+
+export type CreateWorkspaceHeadingRequest = WorkspaceTreePlacement & {
+    organizationId: string
+    level: WorkspaceHeadingLevel
+    name: string
+    note?: string
+}
+
+export type UpdateWorkspaceHeadingRequest = {
+    headingId: string
+    organizationId: string
+    name?: string
+    level?: WorkspaceHeadingLevel
+    // null clears the note.
+    note?: string | null
+}
+
+export type MoveWorkspaceHeadingRequest = WorkspaceTreePlacement & {
+    headingId: string
+    organizationId: string
+}
+
+export type DeleteWorkspaceHeadingRequest = {
+    headingId: string
+    organizationId: string
+}
+
+export type DeleteWorkspaceResult = {
+    deletedWorkspaceIds: string[]
+    tree: WorkspaceTree
 }
 
 export type WorkspaceAccessList = {

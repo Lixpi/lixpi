@@ -230,7 +230,7 @@ while true; do
         query)
             path="$(script_path)"
             [[ -f "${path}" ]] || fail "The console config names a script that does not exist: ${SCRIPT}."
-            echo "Asking the service for its commands..."
+            echo "Checking what this action can offer..."
 
             # Only the catalog line crosses back, so what a build prints stays out of the prompt.
             # A failure prints the service's own error and leaves the console without a catalog.

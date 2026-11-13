@@ -1,0 +1,167 @@
+@use "@lixpi/prosemirror/styles/document-view";
+@import "@lixpi/ui-kit/styles/tokens";
+@import "../../frontend/plugins/rich-editing/link-tooltip/editor-link-tooltip";
+@import "../../frontend/plugins/prompt-reference/prompt-reference-picker";
+@import "../../frontend/plugins/ai-chat-thread/chat-thread";
+@import "../../frontend/plugins/ai-prompt-input/native-prompt-controls";
+@import "../../frontend/plugins/rich-editing/image-selection/editor-image";
+
+.ProseMirror {
+    &::spelling-error {
+        border: 1px solid orange;
+        text-decoration: wavy orange;
+    }
+    min-height: calc(100% - 36px); // Important stuff, makes the editor to take the full height when the content is empty, but doesn't prevent it from growing when the content is long
+    width: 100%;
+    line-height: 1.2;
+    background: var(--canvas-surface, #fff);
+    h1.document-title {
+        margin-top: 0.5rem;
+        margin-bottom: 1.5rem;
+
+        // font-size: 30px;
+        // line-height: 1.3;
+        // letter-spacing: -.0167em;
+        // font-weight: 400;
+    }
+    // pre {
+    // 	white-space: pre-wrap;
+    // 	border: 1px solid #bababa;
+    // 	padding: .7rem .7rem;
+    // 	box-shadow: 1px 1px 11px 0px #dadee0;
+    // 	border-radius: 7px;
+    // 	background: red;
+    // }
+    code {
+        color: var(--canvas-lixpi-editor-code, #9d0006);
+        word-spacing: -5px;
+        font-style: italic;
+        padding-right: 2px;
+        font-weight: 500;
+    }
+    li {
+        position: relative;
+    }
+    p {
+        font-size: calc(var(--canvas-font-size, 15px) * 16 / 15);
+        margin-bottom: 0;
+        line-height: calc(var(--canvas-line-height, 1.5) * 1.45 / 1.5);
+        position: relative;
+        &::spelling-error {
+            border: 1px solid orange;
+            text-decoration: wavy orange;
+        }
+    }
+}
+
+//TODO rename, refactor
+.ProseMirror-example-setup-style {
+    // Add space around the hr to make clicking it easier
+    hr {
+        padding: 2px 10px;
+        border: none;
+        margin: 1em 0;
+        &:after {
+            content: "";
+            display: block;
+            height: 1px;
+            background-color: silver;
+            line-height: 2px;
+        }
+    }
+    img {
+        cursor: default;
+    }
+}
+
+.ProseMirror-textblock-dropdown {
+    min-width: 3em;
+}
+
+.ProseMirror ul, .ProseMirror ol {
+    padding-left: 30px;
+}
+
+.ProseMirror blockquote {
+    padding-left: 1em;
+    border-left: 3px solid #eee;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+//TODO: *************************************************** REMOVE WHEN REFACTORED ***************************************************
+.ProseMirror-prompt {
+    background: var(--canvas-surface, white);
+    padding: 5px 10px 5px 15px;
+    border: 1px solid silver;
+    position: fixed;
+    border-radius: 3px;
+    z-index: 11;
+    box-shadow: -0.5px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.ProseMirror-prompt h5 {
+    margin: 0;
+    font-weight: normal;
+    font-size: 100%;
+    color: #444;
+}
+
+.ProseMirror-prompt input[type="text"],
+.ProseMirror-prompt textarea {
+    background: #eee;
+    border: none;
+    outline: none;
+}
+
+.ProseMirror-prompt input[type="text"] {
+    padding: 0 4px;
+}
+
+.ProseMirror-prompt-close {
+    position: absolute;
+    left: 2px;
+    top: 1px;
+    color: #666;
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+.ProseMirror-prompt-close:after {
+    content: "✕";
+    font-size: 12px;
+}
+
+.ProseMirror-invalid {
+    background: #ffc;
+    border: 1px solid #cc7;
+    border-radius: 4px;
+    padding: 5px 10px;
+    position: absolute;
+    min-width: 10em;
+}
+
+.ProseMirror-prompt-buttons {
+    margin-top: 5px;
+    display: none;
+}
+//TODO END: *************************************************** REMOVE WHEN REFACTORED ***************************************************
+
+#editor, .editor {
+    height: 100%;
+    background: var(--canvas-surface, white);
+    background-clip: padding-box;
+}
+
+// .ai-user-message, .ai-response-message, .ai-user-input styles removed
+
+.ai-suggest-decorator {
+    &.visible {
+        opacity: 1;
+    }
+}
+.ai-suggest-highlighted {
+    font-weight: 400;
+    color: #56967c;
+}

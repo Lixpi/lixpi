@@ -44,14 +44,16 @@ The generated local environment sets `METRICS_ENABLED=false`. Enable it only whe
 
 Set up TLS certificates and DynamoDB tables. This is required before starting the application for the first time:
 
-Run `./run.sh` and choose **Initialize infrastructure**, pick the environment file, then choose whether to trust the local certificate authority. The action generates the local TLS certificates and initializes the DynamoDB tables with Pulumi.
+Run `./run.sh` and choose **Initialize infrastructure**, pick the environment file, then choose whether to regenerate the certificates and whether to trust the local certificate authority. The action sets up the local TLS certificates first, then initializes the DynamoDB tables with Pulumi.
+
+The certificates live in the `caddy-certs` Docker volume. On a first run the volume has none, so the action generates them, and the **Regenerate certificate** row stays on **Keep** with a note saying why. Once certificates exist, **Keep**, the default, reuses them and only the tables are initialized again. **Regenerate** empties the volume and creates a new certificate authority. Choose it only when the certificates are broken or expired, because a computer that trusts the old authority must install the new one, and running NATS and HTTPS gateway containers need a restart to pick it up.
 
 The local stack serves web-ui, Profile, the API and the NATS WebSocket over HTTPS, with certificates from a certificate authority that Caddy generates for this checkout. A browser accepts those certificates only if the computer trusts that authority. **Install certificate** decides whether the action adds it to the system trust store:
 
 - **Skip**, the default, leaves the computer's trust store unchanged. Choose it when you use the [desktop app](DESKTOP-APP.md), which embeds the authority and trusts it on its own, or when you only work against a remote environment, whose certificates are public.
 - **Install** adds the authority to the system trust store and asks for your password. Choose it when you open the local web-ui in a browser. Without it, the browser rejects the local certificates, and web-ui can't reach NATS even after you click through the warning for the page.
 
-You can rerun the action with **Install** at any time. The authority stays the same across reruns as long as the `caddy-certs` volume is kept. [Caddy certificate operations](../../services/caddy/documentation/OPERATIONS.md) covers installing it by hand and other browsers' trust stores.
+You can rerun the action with **Install** at any time. The authority stays the same across reruns unless you choose **Regenerate** or remove the `caddy-certs` volume. [Caddy certificate operations](../../services/caddy/documentation/OPERATIONS.md) covers installing it by hand and other browsers' trust stores.
 
 ### 4. Start the application
 

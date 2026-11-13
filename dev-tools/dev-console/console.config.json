@@ -95,8 +95,17 @@
                 { "type": "env-file" },
                 {
                     "type": "choices",
-                    "message": "The local stack serves HTTPS with certificates from its own certificate authority. Browsers accept them only if this computer trusts that authority. The desktop app trusts it on its own.",
+                    "message": "The local stack serves HTTPS with certificates from its own certificate authority, kept in the caddy-certs Docker volume. Browsers accept them only if this computer trusts that authority. The desktop app trusts it on its own.",
                     "options": [
+                        {
+                            "name": "regenerate-certificate",
+                            "label": "Regenerate certificate",
+                            "reported": true,
+                            "choices": [
+                                { "value": "keep", "label": "Keep", "hint": "Reuses the certificate authority and certificates already in the volume" },
+                                { "value": "regenerate", "label": "Regenerate", "hint": "Replaces the certificate authority, so a computer that trusts the old one needs the new one installed, and running services need a restart" }
+                            ]
+                        },
                         {
                             "name": "trust-certificate",
                             "label": "Install certificate",

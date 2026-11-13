@@ -1,8 +1,6 @@
 import {
     type CapabilityRun,
     type CapabilityRunEvent,
-    type CapabilityRunStepStatus,
-    type ExecutionTrace,
 } from '@lixpi/constants'
 import {
     createProgressTimeline,
@@ -17,28 +15,16 @@ import {
 import {
     type WorkspaceConversationOutputPorts,
 } from '@lixpi/canvas-components/workspace'
+import {
+    type CapabilityProgressState,
+    type CapabilityProgressStep,
+    type CapabilityRunProgressView,
+} from '@lixpi/prosemirror/frontend/editor'
 
 import {
     type CapabilityCatalogClient,
 } from '$src/services/capability-catalog-client.ts'
 import { html } from '@lixpi/ui-primitives/dom'
-
-export type CapabilityProgressStep = {
-    stepId: string
-    title: string
-    status: CapabilityRunStepStatus
-    summary?: string
-    error?: string
-    trace?: ExecutionTrace
-}
-
-export type CapabilityProgressState = {
-    runId: string
-    status: CapabilityRun['status']
-    lastSequence: number
-    steps: CapabilityProgressStep[]
-    outputAssetIds: string[]
-}
 
 const createStreamedCapabilityRun = (event: CapabilityRunEvent): CapabilityRun => ({
     runId: event.runId,
@@ -116,17 +102,7 @@ export const projectCapabilityRunEvents = (
     return state
 }
 
-export type CapabilityRunProgressInstance = {
-    readonly element: HTMLElement
-    replay: (runId: string) => Promise<void>
-    render: (
-        run: CapabilityRun,
-        events: CapabilityRunEvent[],
-    ) => void
-    applyEvent: (event: CapabilityRunEvent) => void
-    getState: () => CapabilityProgressState | null
-    destroy: () => void
-}
+export type CapabilityRunProgressInstance = CapabilityRunProgressView
 
 class CapabilityRunProgress implements CapabilityRunProgressInstance {
     readonly element = html`

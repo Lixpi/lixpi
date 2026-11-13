@@ -37,6 +37,7 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData()).toEqual({
                 isOpen: true,
                 width: null,
+                collapsedWorkspaceIds: [],
             })
             expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
             expect(navigationSidePanelStore.getData('width')).toBeNull()
@@ -54,10 +55,11 @@ describe('navigationSidePanelStore', () => {
             expect(stored).toEqual({
                 isOpen: false,
                 width: 300,
+                collapsedWorkspaceIds: [],
             })
         })
 
-        it('rehydrates from a previously persisted value on next import', async () => {
+        it('rehydrates from a previously persisted value on next import, filling fields it lacks', async () => {
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
                 isOpen: false,
                 width: 456,
@@ -68,6 +70,7 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData()).toEqual({
                 isOpen: false,
                 width: 456,
+                collapsedWorkspaceIds: [],
             })
         })
     })
@@ -86,6 +89,7 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData()).toEqual({
                 isOpen: false,
                 width: 320,
+                collapsedWorkspaceIds: [],
             })
         })
 
@@ -98,6 +102,7 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData()).toEqual({
                 isOpen: false,
                 width: 500,
+                collapsedWorkspaceIds: [],
             })
         })
 
@@ -129,6 +134,16 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
         })
 
+        it('replaces the collapsed workspaces with a copy of the given list', async () => {
+            const { navigationSidePanelStore } = await importFreshStore()
+            const collapsed = ['ws-1']
+
+            navigationSidePanelStore.setValues({ collapsedWorkspaceIds: collapsed })
+            collapsed.push('ws-2')
+
+            expect(navigationSidePanelStore.getData('collapsedWorkspaceIds')).toEqual(['ws-1'])
+        })
+
         it('supports calling setValues with no arguments as a no-op', async () => {
             const { navigationSidePanelStore } = await importFreshStore()
             navigationSidePanelStore.setValues({
@@ -141,6 +156,7 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData()).toEqual({
                 isOpen: false,
                 width: 250,
+                collapsedWorkspaceIds: [],
             })
         })
     })
@@ -162,11 +178,13 @@ describe('navigationSidePanelStore', () => {
             expect(navigationSidePanelStore.getData()).toEqual({
                 isOpen: true,
                 width: null,
+                collapsedWorkspaceIds: [],
             })
             const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) as string)
             expect(stored).toEqual({
                 isOpen: true,
                 width: null,
+                collapsedWorkspaceIds: [],
             })
         })
     })
@@ -181,6 +199,7 @@ describe('navigationSidePanelStore', () => {
             const seen: Array<{
                 isOpen: boolean
                 width: number | null
+                collapsedWorkspaceIds: string[]
             }> = []
             const unsubscribe = navigationSidePanelStore.subscribe((state) => void seen.push(state))
 
@@ -189,6 +208,7 @@ describe('navigationSidePanelStore', () => {
             expect(seen.at(-1)).toEqual({
                 isOpen: true,
                 width: 333,
+                collapsedWorkspaceIds: [],
             })
 
             unsubscribe()
@@ -196,6 +216,7 @@ describe('navigationSidePanelStore', () => {
             expect(seen.at(-1)).toEqual({
                 isOpen: true,
                 width: 333,
+                collapsedWorkspaceIds: [],
             })
         })
     })

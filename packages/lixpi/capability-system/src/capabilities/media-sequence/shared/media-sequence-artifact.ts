@@ -1,6 +1,5 @@
-import { Schema } from 'prosemirror-model'
-
 import {
+    defineCapabilityArtifactDocumentKind,
     type CapabilityArtifactSharedDefinition,
 } from '../../../shared/capability-artifact.ts'
 import {
@@ -44,28 +43,42 @@ export const readMediaSequenceDocument = (document: object): MediaSequence => {
     return sequence
 }
 
+const assertMediaSequenceMutation = (
+    previous: object,
+    proposed: object,
+): void => {
+    readMediaSequenceDocument(proposed)
+
+    if (JSON.stringify(previous) !== JSON.stringify(proposed))
+        throw new Error('MEDIA_SEQUENCE_TYPED_PATCH_REQUIRED')
+}
+
 export const mediaSequenceArtifactDefinition: CapabilityArtifactSharedDefinition = {
     artifactTypeId: MEDIA_SEQUENCE_ARTIFACT_TYPE_ID,
     displayName: 'Media Sequence',
     schemaVersion: MEDIA_SEQUENCE_SCHEMA_VERSION,
     allowedEmbeddedReferenceTypes: ['media'],
-    createDocumentSchema: () => new Schema({ nodes: {
-        doc: { content: 'mediaSequence' },
-        mediaSequence: {
-            group: 'block',
-            atom: true,
-            attrs: { sequence: { default: null } },
-            toDOM: () => ['div', { 'data-media-sequence': '' }],
-        },
-        text: { group: 'inline' },
-    } }),
+    documentKind: defineCapabilityArtifactDocumentKind({
+        artifactTypeId: MEDIA_SEQUENCE_ARTIFACT_TYPE_ID,
+        schemaVersion: MEDIA_SEQUENCE_SCHEMA_VERSION,
+        bundles: [{
+            id: 'media-sequence',
+            nodes: {
+                mediaSequence: {
+                    group: 'block',
+                    atom: true,
+                    attrs: { sequence: { default: null } },
+                    toDOM: () => ['div', { 'data-media-sequence': '' }],
+                },
+                text: { group: 'inline' },
+            },
+        }],
+        topNode: { content: 'mediaSequence' },
+        assertInitialDocument: document => void readMediaSequenceDocument(document),
+        assertEditableMutation: (previous, proposed) => assertMediaSequenceMutation(previous, proposed),
+    }),
     assertInitialDocument: document => void readMediaSequenceDocument(document),
-    assertEditableMutation: (previous, proposed) => {
-        readMediaSequenceDocument(proposed)
-
-        if (JSON.stringify(previous) !== JSON.stringify(proposed))
-            throw new Error('MEDIA_SEQUENCE_TYPED_PATCH_REQUIRED')
-    },
+    assertEditableMutation: (previous, proposed) => assertMediaSequenceMutation(previous, proposed),
     collectReferencedAssetIds: document => [...new Set(
         readMediaSequenceDocument(document).sources.map(source => source.assetId),
     )],

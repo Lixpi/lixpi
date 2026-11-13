@@ -10,6 +10,7 @@ import {
     type AssetMeta,
     type AssetPrimaryCategory,
     type AssetScope,
+    type CanvasState,
     type SubjectIdentityClassification,
     type GeneratedOutputReviewRequest,
     type GeneratedOutputReviewResponse,
@@ -328,9 +329,12 @@ export class AssetService {
         return result
     }
 
+    // `canvasState` lets a caller load the assets of a workspace it fetched
+    // before the store holds it; otherwise the store's canvas is used.
     async loadWorkspaceAssets(
         workspaceId: string,
         current: () => boolean = () => true,
+        canvasState?: CanvasState,
     ): Promise<Asset[]> {
         const workspace = workspaceStore.getData()
 
@@ -339,7 +343,7 @@ export class AssetService {
 
         return this.workspaceAssets.load(
             workspaceId,
-            workspace.canvasState,
+            canvasState ?? workspace.canvasState,
             () => current() && workspaceStore.getData('workspaceId') === workspaceId,
         )
     }
