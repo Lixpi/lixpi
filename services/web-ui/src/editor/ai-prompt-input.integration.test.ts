@@ -76,7 +76,7 @@ const expectSourceToContain = (source: string, snippet: string): void => void ex
 const expectSourceNotToContain = (source: string, snippet: string): void => void expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 
 const promptStylesheetPaths = ["native-prompt-controls.scss", "prompt-input.scss"]
-    .map(fileName => resolve(import.meta.dirname, "../../packages/lixpi/prosemirror/src/styles/editor/", fileName))
+    .map(fileName => resolve(import.meta.dirname, "../../packages/lixpi/prosemirror/src/frontend/plugins/ai-prompt-input/", fileName))
 
 const promptStylesSource = (): string => promptStylesheetPaths
     .map(path => readFileSync(path, "utf-8"))

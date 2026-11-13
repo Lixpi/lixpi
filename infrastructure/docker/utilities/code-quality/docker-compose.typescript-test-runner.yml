@@ -352,6 +352,18 @@ services:
             - ../../../../packages/lixpi/nats-service/patches:/usr/src/service/nex/packages/lixpi/nats-service/patches:ro,cached
             - ../../../../packages/lixpi/test-utils/package.json:/usr/src/service/nex/packages/lixpi/test-utils/package.json:ro,cached
             - ../../../../packages/lixpi/test-utils/src:/usr/src/service/nex/packages/lixpi/test-utils/src:ro,cached
+            # capability-system reads document kinds from @lixpi/prosemirror,
+            # which brings its themes and UI kit dependencies.
+            - ../../../../packages/lixpi/prosemirror/package.json:/usr/src/service/nex/packages/lixpi/prosemirror/package.json:ro,cached
+            - ../../../../packages/lixpi/prosemirror/src:/usr/src/service/nex/packages/lixpi/prosemirror/src:ro,cached
+            - ../../../../packages/lixpi/prosemirror-themes:/usr/src/service/nex/packages/lixpi/prosemirror-themes:ro,cached
+            - ../../../../packages/lixpi/themes/package.json:/usr/src/service/nex/packages/lixpi/themes/package.json:ro,cached
+            - ../../../../packages/lixpi/themes/src:/usr/src/service/nex/packages/lixpi/themes/src:ro,cached
+            - ../../../../packages/lixpi/themes/dist/scss:/usr/src/service/nex/packages/lixpi/themes/dist/scss:ro,cached
+            - ../../../../packages/lixpi/themes/tooling:/usr/src/service/nex/packages/lixpi/themes/tooling:ro,cached
+            - ../../../../packages/lixpi/ui-kit/package.json:/usr/src/service/nex/packages/lixpi/ui-kit/package.json:ro,cached
+            - ../../../../packages/lixpi/ui-kit/src:/usr/src/service/nex/packages/lixpi/ui-kit/src:ro,cached
+            - ../../../../packages/lixpi/ui-kit/styles:/usr/src/service/nex/packages/lixpi/ui-kit/styles:ro,cached
 
             # --- nex domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
@@ -364,6 +376,10 @@ services:
             - typescript-test-runner-node-modules-nex-dynamodb-service:/usr/src/service/nex/packages/lixpi/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-nex-nats-service-ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-nex-test-utils:/usr/src/service/nex/packages/lixpi/test-utils/node_modules
+            - typescript-test-runner-node-modules-nex-prosemirror:/usr/src/service/nex/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-nex-prosemirror-themes:/usr/src/service/nex/packages/lixpi/prosemirror-themes/node_modules
+            - typescript-test-runner-node-modules-nex-themes:/usr/src/service/nex/packages/lixpi/themes/node_modules
+            - typescript-test-runner-node-modules-nex-ui-kit:/usr/src/service/nex/packages/lixpi/ui-kit/node_modules
 
             # --- shared domain: this IS the source under test (read-write),
             #     but mounted file-by-file like the domains above rather than
@@ -554,6 +570,10 @@ volumes:
     typescript-test-runner-node-modules-nex-dynamodb-service:
     typescript-test-runner-node-modules-nex-nats-service-ts:
     typescript-test-runner-node-modules-nex-test-utils:
+    typescript-test-runner-node-modules-nex-prosemirror:
+    typescript-test-runner-node-modules-nex-prosemirror-themes:
+    typescript-test-runner-node-modules-nex-themes:
+    typescript-test-runner-node-modules-nex-ui-kit:
     typescript-test-runner-node-modules-shared-auth-service:
     typescript-test-runner-node-modules-shared-usage-reporter:
     typescript-test-runner-node-modules-shared-capability-system:

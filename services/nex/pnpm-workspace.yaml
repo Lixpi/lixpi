@@ -6,7 +6,11 @@ packages:
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/dynamodb-service"
   - "packages/lixpi/nats-service/ts"
+  - "packages/lixpi/prosemirror"
+  - "packages/lixpi/prosemirror-themes"
   - "packages/lixpi/test-utils"
+  - "packages/lixpi/themes"
+  - "packages/lixpi/ui-kit"
 
 allowBuilds:
   # Sass reaches this workspace through a shared package's dev dependencies. Its
@@ -18,3 +22,11 @@ allowBuilds:
 
 patchedDependencies:
   '@nats-io/obj@3.4.0': packages/lixpi/nats-service/patches/@nats-io__obj@3.4.0.patch
+
+# Capability artifacts reach this workspace's ProseMirror packages through
+# @lixpi/prosemirror, and every ProseMirror package must share one
+# prosemirror-model, or nodes from one copy fail the other's instanceof checks.
+# Keep it equal to prosemirror-model in
+# dev-tools/versions-registry/versions/typescript.json.
+overrides:
+  prosemirror-model: 1.25.12
