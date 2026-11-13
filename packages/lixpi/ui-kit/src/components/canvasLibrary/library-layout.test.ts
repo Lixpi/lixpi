@@ -32,7 +32,8 @@ describe('canvas library panel surfaces', () => {
 
         expect(navigation.getWidth()).toBe(280)
         expect(layout.minimumWidth('navigation')).toBe(220)
-        expect(navigation.element.style.width).toBe('20px')
+        // The collapsed panel is as wide as the theme's resize grab area.
+        expect(navigation.element.style.width).toBe(`${lixpiLightTheme.components.sidePanel.resizeHandle.grabWidth}px`)
         expect(navigation.toggleElement?.matches('.navigation-side-panel-toggle')).toBe(true)
         expect(navigation.toggleElement?.style.left).toBe('20px')
         expect(navigation.toggleElement?.style.top).toBe('20px')

@@ -95,7 +95,7 @@ describe('workspace canvas styles', () => {
 
         expect(layoutSource.includes("import '$src/components/navigationSidePanel/workspace-navigation/workspace-navigation.scss'")).toBe(true)
         expect(result.css).toContain('.nested-list-item')
-        expect(result.css).toContain('.nested-list-pencil')
+        expect(result.css).toContain('.nested-list-block-trigger')
         expect(result.css).toContain('.nested-list-block-panel')
     })
 })

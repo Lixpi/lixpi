@@ -45,7 +45,10 @@ export class NestedListDragPreview {
             const property = rootStyle.item(index)
 
             if (property.startsWith('--'))
-                this.portal.style.setProperty(property, rootStyle.getPropertyValue(property))
+                this.portal.style.setProperty(
+                    property,
+                    rootStyle.getPropertyValue(property),
+                )
         }
 
         const content = html`<div className="ProseMirror nested-list-document"></div>` as HTMLDivElement
@@ -62,7 +65,10 @@ export class NestedListDragPreview {
 
         if (source.matches('li.nested-list-item')) {
             const list = html`<ul></ul>` as HTMLUListElement
-            list.style.setProperty('--nested-list-depth-indent', sourceStyle.getPropertyValue('--nested-list-row-indent'))
+            list.style.setProperty(
+                '--nested-list-depth-indent',
+                sourceStyle.getPropertyValue('--nested-list-row-indent'),
+            )
             list.append(clone)
             content.append(list)
         } else {
@@ -84,7 +90,10 @@ export class NestedListDragPreview {
         source.dataset.nestedListDragSource = 'true'
     }
 
-    update(x: number, y: number): void {
+    update(
+        x: number,
+        y: number,
+    ): void {
         this.portal.style.transform = `translate3d(${x - this.offsetX}px, ${y - this.offsetY}px, 0)`
     }
 
