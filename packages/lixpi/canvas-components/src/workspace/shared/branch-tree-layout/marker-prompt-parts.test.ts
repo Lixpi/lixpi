@@ -23,8 +23,8 @@ const submittedMessage = {
                 type: 'prompt_reference',
                 attrs: {
                     referenceType: 'capability-module',
-                    moduleId: 'action-timeline',
-                    displayName: 'Action Timeline',
+                    moduleId: 'fixture-artifact',
+                    displayName: 'Fixture Artifact',
                 },
             },
             {
@@ -101,13 +101,13 @@ describe('branch marker prompt content', () => {
             text: 'Create ',
         })
         expect(parts[1]?.type).toBe('capability-module')
-        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Action Timeline 15s ...')
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Fixture Artifact 15s...')
     })
 
     it('never degrades a partially visible Capability badge into plain text', () => {
         const parts = truncateBranchMarkerPromptParts(getBranchMarkerPromptParts(submittedMessage, ''), 12)
 
-        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Action Timeline...')
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Fixture Artifact...')
         expect(parts[1]?.type).toBe('capability-module')
     })
 

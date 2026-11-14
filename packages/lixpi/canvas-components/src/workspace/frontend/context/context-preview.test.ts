@@ -197,7 +197,7 @@ const createCapabilityArtifactNode = (overrides: any = {}) => {
     return {
         type: 'capabilityArtifact',
         nodeId: 'timeline-node',
-        artifactTypeId: 'action-timeline',
+        artifactTypeId: 'fixture-artifact',
         assetId: 'timeline-asset',
         position: {
             x: 0,

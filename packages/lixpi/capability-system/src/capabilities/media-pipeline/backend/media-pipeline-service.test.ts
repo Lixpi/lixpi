@@ -10,7 +10,8 @@ import {
     type MediaPipelineNode,
     type MediaPipelineSource,
 } from '../shared/media-pipeline.ts'
-import { getExecutableMediaPipelineOperations } from './media-pipeline-catalog.ts'
+import { getExecutableMediaPipelineOperations, inspectMediaPipelineExecutability } from './media-pipeline-catalog.ts'
+import { createMediaPipelineImageHandler } from './media-pipeline-image.ts'
 import {
     type MediaPipelineCatalog,
     type MediaPipelineContext,
@@ -278,8 +279,59 @@ describe('reviewable pipeline matrices', () => {
                 revision: 2,
                 sources: pipeline().sources,
                 constraints: pipeline().constraints,
+                nodes: expect.arrayContaining([expect.objectContaining({ inputs: [{
+                    portId: 'reference-1',
+                    kind: 'image',
+                    required: false,
+                }] })]),
+                edges: expect.arrayContaining([expect.objectContaining({ from: { sourceId: 'reference' } })]),
             } } },
         })
+    })
+
+    it('binds every explicit image source to every expanded image node in source order', () => {
+        const patch = expandMediaPipelineMatrix({
+            ...input(),
+            sources: [source('first'), source('brief', 'text'), source('second')],
+        })
+        expect(patch.nodes).toHaveLength(4)
+        expect(patch.edges).toHaveLength(8)
+
+        for (const node of patch.nodes!) {
+            expect(node.inputs).toEqual([
+                {
+                    portId: 'reference-1',
+                    kind: 'image',
+                    required: false,
+                },
+                {
+                    portId: 'reference-2',
+                    kind: 'image',
+                    required: false,
+                },
+            ])
+            expect(patch.edges!.filter(edge => edge.to.nodeId === node.nodeId)).toEqual([
+                {
+                    from: { sourceId: 'first' },
+                    to: {
+                        nodeId: node.nodeId,
+                        portId: 'reference-1',
+                    },
+                },
+                {
+                    from: { sourceId: 'second' },
+                    to: {
+                        nodeId: node.nodeId,
+                        portId: 'reference-2',
+                    },
+                },
+            ])
+        }
+
+        expect(() => expandMediaPipelineMatrix({
+            ...input(),
+            sources: [source('one'), source('two'), source('three')],
+        })).toThrow('PIPELINE_MATRIX_IMAGE_REFERENCE_LIMIT')
     })
 
     it('rejects duplicate variants, excessive fanout and unknown fields before persistence', async () => {
@@ -569,19 +621,67 @@ describe('media pipeline actions', () => {
             clientSubmissionId: 'submit',
         })).toMatchObject({
             status: 'error',
-            error: { code: 'PIPELINE_BEDROCK_ROUTE_UNAVAILABLE' },
+            error: { code: 'PIPELINE_MODEL_ROUTE_UNAVAILABLE' },
         })
         expect(harness.ports.createExecution).not.toHaveBeenCalled()
     })
 
-    it('refuses a direct provider route and a metadata-only operation', async () => {
+    it('advertises a usable configured route and refuses metadata-only operations', async () => {
         const harness = new Harness()
-        harness.modelCatalog.modelRoutes[0].inferenceProviderCalledByThePlatform = 'direct'
-        expect(getExecutableMediaPipelineOperations(harness.modelCatalog)).toEqual([])
-        harness.modelCatalog.modelRoutes[0].inferenceProviderCalledByThePlatform = 'aws-bedrock'
+        harness.modelCatalog.modelRoutes[0].inferenceProviderCalledByThePlatform = 'stability'
+        expect(getExecutableMediaPipelineOperations(harness.modelCatalog)).toHaveLength(1)
+        expect(await harness.service.listOperations(context)).toEqual([expect.objectContaining({ modelIds: ['test-model'] })])
         harness.modelCatalog.operations[0].ready = false
         expect(getExecutableMediaPipelineOperations(harness.modelCatalog)).toEqual([])
         expect(await harness.service.listOperations(context)).toEqual([])
+    })
+
+    it('preserves the selected configured route in the durable operation request', async () => {
+        const harness = new Harness()
+        harness.modelCatalog.modelRoutes[0].inferenceProviderCalledByThePlatform = 'stability'
+        const submitted = await harness.service.submit(context, {
+            pipelineId: 'pipeline-1',
+            revision: 1,
+            clientSubmissionId: 'direct-submit',
+        })
+
+        if (submitted.status !== 'pending')
+            throw new Error('Expected queued execution')
+
+        expect((await harness.service.advance(submitted.operationId)).state).toBe('succeeded')
+        expect(harness.ports.ensureOperation).toHaveBeenCalledWith(expect.objectContaining({ inferenceProvider: 'stability' }))
+    })
+
+    it('does not attach another branch image to a node with no reference inputs', async () => {
+        const harness = new Harness()
+        const plan = pipeline()
+        const brief = source('brief', 'text')
+        plan.sources.push(brief)
+        plan.nodes[0].inputs[0].required = false
+        plan.nodes.push({
+            ...node('second'),
+            inputs: [],
+        })
+        harness.modelCatalog.operations[0].inputPorts[0].required = false
+        harness.artifacts.set('pipeline-1', {
+            assetId: 'pipeline-1',
+            pipeline: plan,
+        })
+        const submitted = await harness.service.submit(context, {
+            pipelineId: 'pipeline-1',
+            revision: 1,
+            clientSubmissionId: 'mixed-branches',
+        })
+
+        if (submitted.status !== 'pending')
+            throw new Error('Expected queued execution')
+
+        expect((await harness.service.advance(submitted.operationId)).state).toBe('succeeded')
+        expect(harness.ports.ensureOperation).toHaveBeenCalledWith(expect.objectContaining({
+            node: expect.objectContaining({ nodeId: 'second' }),
+            inputs: {},
+            sourceSnapshots: [brief],
+        }))
     })
 
     it('checks scope and source snapshots before creating a durable execution', async () => {
@@ -881,4 +981,49 @@ describe('media pipeline execution', () => {
         },
         b: 2,
     })))
+})
+
+
+describe('image operation input contracts', () => {
+    it('permits absent optional references and checks every supplied port against the installed contract', () => {
+        const operation = createMediaPipelineImageHandler({
+            ensure: vi.fn(),
+            read: vi.fn(),
+        }).definition
+        const catalog: MediaPipelineCatalog = {
+            operations: [operation],
+            modelRoutes: [{
+                modelId: 'Stability:sd3.5-large',
+                operationKeys: ['image.generate'],
+                inputKinds: ['image'],
+                outputKinds: ['image'],
+                inferenceProviderCalledByThePlatform: 'stability',
+                adapterReady: true,
+                credentialsReady: true,
+                regionReady: true,
+                pricingReady: true,
+            }],
+        }
+        const plan = pipeline()
+        plan.nodes = [{
+            nodeId: 'image',
+            operationKey: 'image.generate',
+            modelId: 'Stability:sd3.5-large',
+            parameters: {
+                prompt: 'The accepted request.',
+                imageSize: '1:1',
+            },
+            inputs: [],
+            outputs: operation.outputPorts,
+        }]
+        expect(inspectMediaPipelineExecutability(plan, catalog)).toEqual([])
+        plan.nodes[0].inputs = operation.inputPorts
+        expect(inspectMediaPipelineExecutability(plan, catalog)).toEqual([])
+        plan.nodes[0].inputs = [{
+            portId: 'unrecognized',
+            kind: 'image',
+            required: false,
+        }]
+        expect(inspectMediaPipelineExecutability(plan, catalog)).toMatchObject([{ code: 'PIPELINE_OPERATION_PORTS_INVALID' }])
+    })
 })

@@ -43,7 +43,11 @@ const inspectNode = (
         return issue('PIPELINE_OPERATION_UNAVAILABLE', `Operation ${node.operationKey} has no installed, ready executor.`)
 
     if (
-        !samePorts(node.inputs, operation.inputPorts)
+        !samePorts(
+            node.inputs,
+            operation.inputPorts,
+            true,
+        )
         || !samePorts(node.outputs, operation.outputPorts)
     )
         return issue('PIPELINE_OPERATION_PORTS_INVALID', 'Node ports must match the installed operation contract.')
@@ -66,7 +70,7 @@ const inspectNode = (
         || !isUsableRoute(route)
         || !route.operationKeys.includes(operation.operationKey)
     )
-        return issue('PIPELINE_BEDROCK_ROUTE_UNAVAILABLE', 'The selected model has no usable AWS Bedrock route for this installed operation.')
+        return issue('PIPELINE_MODEL_ROUTE_UNAVAILABLE', 'The selected model has no usable configured provider route for this installed operation.')
 
     if (
         node.inputs.some(port => !route.inputKinds.includes(port.kind))
@@ -78,15 +82,18 @@ const inspectNode = (
 }
 
 const isUsableRoute = (route: MediaPipelineCatalog['modelRoutes'][number]): boolean => {
-    return route.inferenceProviderCalledByThePlatform === 'aws-bedrock'
+    return Boolean(route.inferenceProviderCalledByThePlatform)
         && route.adapterReady && route.credentialsReady && route.regionReady && route.pricingReady
 }
 
 const samePorts = (
     actual: MediaPipelinePort[],
     expected: MediaPipelinePort[],
+    allowOmittedOptional = false,
 ): boolean => {
-    return actual.length === expected.length && expected.every(
+    const required = allowOmittedOptional ? expected.filter(port => port.required || actual.some(candidate => candidate.portId === port.portId)) : expected
+
+    return actual.length === required.length && required.every(
         port => actual.some(
             candidate => (
                 candidate.portId === port.portId && candidate.kind === port.kind && candidate.required === port.required

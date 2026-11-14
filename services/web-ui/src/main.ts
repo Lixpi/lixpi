@@ -5,10 +5,15 @@ import '$src/sass/styles.scss'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/canvas-components/styles/loading-overlay'
 import { WebUiStartup } from './startup.ts'
+import { mountWindowTitleBar } from '$src/components/windowTitleBar/windowTitleBar.ts'
 
 // Opt-in development profiling; see documentation/platform/DEVELOPMENT.md.
 if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
     reportClientPerformance(import.meta.hot)
+
+// The desktop app's title bar row lives for the whole page, through sign-in
+// and every workspace, so it mounts before anything else.
+mountWindowTitleBar(document.body)
 
 // The workspace modules start loading now, alongside authentication, so a
 // signed-in visit does not wait for them after the session is ready. A

@@ -8,7 +8,11 @@ import { MediaSequencePipelineOperations, MediaSequenceService, mediaPipelineSav
 import { defaultSequenceAudio, defaultSequenceTransform, ticksToSeconds, type MediaSequence } from '@lixpi/capability-system/shared'
 
 import { AgentBedrockModel, convertAgentMessages, resolveAgentReasoningOptions, type AgentBedrockModelProfile, type AgentBedrockTransport } from './agent-bedrock-model.ts'
-import { AgentScopedBackend, classifyIntent, createAgentHarness, type AgentScratchFile } from './agent-harness.ts'
+import {
+    AgentScopedBackend,
+    createAgentHarness,
+    type AgentScratchFile,
+} from './agent-harness.ts'
 import { AgentPendingTools } from './agent-pending-tools.ts'
 import { AgentToolResults } from './agent-tool-results.ts'
 import { ConversationCheckpointSaver } from './conversation-checkpoint-saver.ts'
@@ -388,130 +392,6 @@ describe('AgentBedrockModel', () => {
                 properties: {},
             },
         }])).toThrow('AGENT_MODEL_CLOSED_TOOL_SCHEMA_REQUIRED')
-    })
-})
-
-describe('structured intent boundary', () => {
-    it.each(['chat', 'inspect', 'plan', 'execute'] as const)('validates a %s classification through one metered call', async intent => {
-        const fixture = new ModelFixture()
-        fixture.replies = [response([{
-            type: 'tool_use',
-            id: 'intent',
-            name: 'classify_intent',
-            input: {
-                intent,
-                operationFamilies: intent === 'chat' ? [] : ['image'],
-                targetAssetIds: ['asset-1'],
-                confidence: 0.99,
-                needsClarification: false,
-            },
-        }])]
-        const result = await classifyIntent(fixture.model, {
-            acceptedMessageId: 'user-message',
-            instruction: 'The accepted instruction.',
-            operationFamilies: ['image'],
-            explicitTargetAssetIds: ['asset-1'],
-        })
-        expect(result.intent).toBe(intent)
-        expect(fixture.calls.execute).toHaveBeenCalledTimes(1)
-        expect((fixture.requests[0] as { tools: Array<{ name: string }> }).tools.map(tool => tool.name)).toEqual(['classify_intent'])
-
-        if (intent === 'chat')
-            expect(result.targetAssetIds).toEqual([])
-    })
-
-    it('cannot expand the supplied family or target allowlist', async () => {
-        const fixture = new ModelFixture()
-        fixture.replies = [response([{
-            type: 'tool_use',
-            id: 'intent',
-            name: 'classify_intent',
-            input: {
-                intent: 'execute',
-                operationFamilies: ['outside-family'],
-                targetAssetIds: ['other-account'],
-                confidence: 1,
-                needsClarification: false,
-            },
-        }])]
-        expect(await classifyIntent(fixture.model, {
-            acceptedMessageId: 'user-message',
-            instruction: 'The accepted instruction.',
-            operationFamilies: ['image'],
-            explicitTargetAssetIds: ['asset-1'],
-        })).toMatchObject({
-            intent: 'chat',
-            needsClarification: true,
-            operationFamilies: [],
-            targetAssetIds: [],
-        })
-    })
-
-    it('classifies running the saved local two-step plan from its required families without granting omitted or prohibited work', async () => {
-        const fixture = new ModelFixture()
-        const input = {
-            acceptedMessageId: 'run-blue-hold',
-            instruction: 'Run the saved Blue hold pipeline now and export its MP4. Use its frozen existing image and corrected five-second 320 by 180 settings. No AI image, audio or video generation; local assembly and export only.',
-            operationFamilies: ['image', 'video', 'sequence-edit', 'sequence-export'],
-            explicitTargetAssetIds: ['blue-pipeline', 'blue-image'],
-            familyDescriptions: [
-                {
-                    family: 'video',
-                    description: 'AI video generation.',
-                },
-                {
-                    family: 'sequence-edit',
-                    description: 'Create or edit a local sequence using existing media.',
-                },
-                {
-                    family: 'sequence-export',
-                    description: 'Render a local sequence to MP4, WAV or MP3.',
-                },
-            ],
-            executionTargets: [{
-                assetId: 'blue-pipeline',
-                title: 'Blue hold',
-                artifactTypeId: 'media-pipeline',
-                revision: 5,
-                operationKeys: ['sequence.create', 'sequence.export'],
-                requiredOperationFamilies: ['sequence-edit', 'sequence-export'],
-                unavailableOperationKeys: [],
-            }],
-        }
-        const reply = (families: string[]) => response([{
-            type: 'tool_use',
-            id: 'intent',
-            name: 'classify_intent',
-            input: {
-                intent: 'execute',
-                operationFamilies: families,
-                targetAssetIds: ['blue-pipeline'],
-                confidence: 0.95,
-                needsClarification: false,
-            },
-        }])
-        fixture.replies = [reply(['sequence-edit', 'sequence-export'])]
-        expect(await classifyIntent(fixture.model, input)).toMatchObject({
-            intent: 'execute',
-            operationFamilies: ['sequence-edit', 'sequence-export'],
-            targetAssetIds: ['blue-pipeline'],
-        })
-        const request = fixture.requests[0] as {
-            system: string
-            messages: Array<{ content: Array<{ text?: string }> }>
-        }
-        const facts = JSON.parse(request.messages[0].content[0].text!)
-        expect(facts.executionTargets).toEqual(input.executionTargets)
-        expect(facts.familyDescriptions).toEqual(input.familyDescriptions)
-        expect(request.system).toContain('cannot grant permission or override a prohibition')
-        fixture.replies = [reply(['sequence-export'])]
-        expect((await classifyIntent(fixture.model, input)).operationFamilies).toEqual(['sequence-export'])
-        fixture.replies = [reply(['outside-family'])]
-        expect(await classifyIntent(fixture.model, input)).toMatchObject({
-            intent: 'chat',
-            operationFamilies: [],
-            needsClarification: true,
-        })
     })
 })
 

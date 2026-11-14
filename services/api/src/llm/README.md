@@ -1,28 +1,30 @@
 # LLM Module
 
-The in-process TypeScript LangGraph workflow for conversation streaming, context resolution, multi-model media generation, Asset lineage, provenance, usage, and cancellation.
+The persistent Deep Agents conversation runtime and controlled LangGraph workflows for context resolution, multi-model media generation, Asset lineage, provenance, provider usage, and cancellation.
 
 ## Conversational workspace
 
 `agent/` owns the persistent Deep Agents conversation runtime, which serves every workspace. The versioned conversation NATS endpoints accept a rich user message, reference identities and settings revision. Acceptance commits the command, duplicate-submission receipt, user message and dispatch intent before acknowledging it. The conversation Asset is created on the first accepted message and does not need a canvas node.
 
-The root instruction asks for action results and meaningful progress in product terms. Routine identifiers, hashes and tool mechanics stay in private context unless technical details are requested or needed for a specific diagnostic. Errors are explained from confirmed facts without guessing at authorization or configuration.
+The root instruction asks for action results and meaningful progress in product terms. Routine identifiers, hashes and tool mechanics stay in private context unless technical details are requested or needed for a specific diagnostic. Errors are explained from confirmed facts without guessing at authorization or configuration. An unavailable request-authorization service, an invalid authorization request and a policy denial have distinct durable model-call errors and visible messages. None of these failures submits a model request.
 
-The [intent classification and agent execution](#intent-classification-and-agent-execution) flow separates Lixpi's preliminary classification from the Deep Agents model/tool loop.
+The [agent reasoning and execution](#agent-reasoning-and-execution) flow shows how the main agent chooses work through the unified Capability catalog while Lixpi enforces access and execution limits.
 
-The DynamoDB Agent-Conversations table stores execution metadata, ordered events, the queue, operation receipts and LangGraph checkpoints. Large checkpoint and tool payloads use retained content-addressed Blobs. A DynamoDB dispatch outbox feeds the JetStream conversation queue. The dispatcher does not poll it: each API process sweeps the due partitions once at startup to recover rows a crashed process left behind, then sweeps again only when it commits a new due row, when the earliest future due time it saw arrives, or one second after a failed sweep. An idle API never queries the outbox. Media render jobs use the same relay for their own due partitions. A renewable owner lease and monotonically increasing epoch fence every checkpoint, mutation and operation continuation. The transcript projector writes the server-managed conversation document from durable messages using the shared Markdown/ProseMirror assembler.
+The DynamoDB Agent-Conversations table stores execution metadata, ordered events, the queue, operation receipts and LangGraph checkpoints. Large checkpoint and tool payloads use retained content-addressed Blobs. A DynamoDB dispatch outbox feeds the JetStream conversation queue. The dispatcher does not poll it: each API process sweeps the due partitions once at startup to recover rows a crashed process left behind, then sweeps again only when it commits a new due row, when the earliest future due time it saw arrives, or one second after a failed sweep. An idle API never queries the outbox. The retained, disabled media-render integration uses the same relay for its own due partitions. A renewable owner lease and monotonically increasing epoch fence every checkpoint, mutation and operation continuation. The transcript projector writes the server-managed conversation document from durable messages using the shared Markdown/ProseMirror assembler.
 
 Outbox sweeps run in the service's startup context, so closing the request that scheduled a sweep cannot cancel publication of its committed dispatch. The worker rechecks account admission for the stored command before it executes the turn.
 
 Model-facing tool results larger than 8 KB carry a private result reference and complete identity fields. `read_tool_result` retrieves bounded structural pages or exact JSON character ranges from the same context namespace, rechecking the continuation and source access. Reads begin at the root structure and follow its exact pointers and page offsets. Invalid read arguments return recoverable tool errors; authorization, source-integrity, and Stop failures still end the invocation. Native checkpoints retain the complete result and tool-call pairing, including asynchronous completion overlays. Model-facing tool schemas follow the active action scope at every call. A fenced, definitively unsubmitted model call records zero usage and completes its authorization; a dispatched call with an uncertain outcome remains blocked from automatic retry.
 
-Media references with an omitted rendition name identify `original`, including when Discovery and an Artifact dependency refer to the same source. Context identity still distinguishes other renditions, Blob hashes and document versions.
+Media references with an omitted rendition name identify `original`, including when Discovery and an Artifact dependency refer to the same source. Context identity still distinguishes other renditions, Blob hashes and document versions. Initialization restores still-authorized attachments from the bounded retained message history before building the agent's source inventory, including when a native checkpoint resumes. The inventory links source identities to their originating human messages with bounded text excerpts, so a follow-up can refer to an earlier image without another attachment. A current accepted rendition takes precedence over an older rendition of the same Asset. Historical references must still match their accepted source identity; unavailable or changed references are not admitted. An unknown `inspect_inputs` target returns a recoverable tool error without reading or admitting that Asset. Access revocation, source-integrity failures and continuation fences remain enforced.
 
 Conversation snapshots open at the latest bounded message page and expose a conversation-bound cursor for `conversation.messages`. History pages preserve storage order independently of imported message IDs. Snapshot reads retry if metadata changes during assembly. List, transcript and replay responses enforce serialized byte limits; queue summaries omit rich turn payloads. Replay validates every event sequence and requests a snapshot when retained events contain a gap.
 
 Each accepted turn fixes its model preferences, references and initial context mode. It retains the synchronized reasoning controls and resolved Bedrock model ID before inference, so a resolver refresh cannot change an uncertain request's receipt identity. A changed catalog model version requires a new user instruction. Explicit mode admits attached sources and authorized conversation outputs; discovery and mixed modes additionally expose bounded workspace discovery. An active context-mode change takes effect at the next safe model boundary. The runtime rebuilds native context and scratch from admissible history and minimal paired action receipts, retaining the execution, budget and operation identities. Discovered inputs, tool arguments and generated summaries do not cross into Explicit mode. Uncertain model or operation outcomes block the rebuild. Source content cannot grant tool authority. The model adapter makes individual Anthropic Bedrock calls through existing provider-usage authorization and measured usage reporting. Metrics identify the provider model version; canonical selections remain in workspace metadata. An uncertain submitted call is never automatically repeated. Budgets cover model and tool calls, including compaction.
 
-Capability modules publish agent tools and read-only Skill resources. Each turn retains its sealed Skill paths and bytes, so a package update cannot rewrite instructions or relative resource links during recovery. Installers declare a native Skill name and a complete resource-ID-to-relative-path map. The agent filesystem mounts each bundle under `/skills/<capabilityId>/<skill-name>/`, and the native loader receives that directory directly. Its `SKILL.md` has YAML `name` and `description`; the name matches the containing directory. Missing or invalid bundle maps fail with an explicit Skill diagnostic. Resuming a turn and invoking the model recheck current access using the Capability ID. Saved snapshots retain their exact paths. Isolated durable scratch files live under `/scratch/`; the agent has no host filesystem or shell access. The media pipeline module owns graph validation and execution policy; sequence and render adapters supply authorized storage, source resolution and worker transport. Long operations return durable handles. Their terminal results resume the same conversation with paired native tool messages and recorded continuation identity.
+Capability modules publish agent Tools, domain experts and read-only Skill resources. Each turn retains its sealed Skill paths and bytes, so a package update cannot rewrite instructions or relative resource links during recovery. Installers declare a native Skill name and a complete resource-ID-to-relative-path map. The agent filesystem mounts each bundle under `/skills/<capabilityId>/<skill-name>/`, and the native loader receives that directory directly. Its `SKILL.md` has YAML `name` and `description`; the name matches the containing directory. Missing or invalid bundle maps fail with an explicit Skill diagnostic. Resuming a turn and invoking the model recheck current access using the Capability ID. Saved snapshots retain their exact paths. Native `read_file` requests return at most 500 lines per page even when the model requests a larger window; continuation metadata identifies the next line to read. Isolated durable scratch files live under `/scratch/`; the agent has no host filesystem or shell access. The media pipeline module owns graph validation and execution policy. Media Sequence editing and export are unplugged from the application; their module, adapters and render composition remain in source for later work. Long operations return durable handles. Their terminal results resume the same conversation with paired native tool messages and recorded continuation identity.
+
+Prepared media matrices connect frozen image sources to named inputs. Each step records its own bound image inputs in its provenance, so an image used by another branch is not attributed to that step. Execution still depends on the installed operation handler and its advertised input and provider support.
 
 The runtime persists and projects the first provider text immediately. Later chunks share a batch until it reaches 128 characters or its 100 ms timer expires. Each batch uses the same fenced conversation writer, and model, tool and turn transitions wait for pending writes before continuing.
 
@@ -34,77 +36,77 @@ Settings changes atomically retain a configuration message with the settings rev
 
 Steering takes effect at a safe model boundary. Stop first revokes the old continuation before another turn starts. Queue preserves accepted FIFO order, and Stop pauses queued work until explicit resume. Account cancellation reaches the model signal and fences database/output writes; the bound cleanup pauses the conversation for reauthentication. A refreshed request can resume only the original user's accepted work. Asset deletion removes retained execution, source and checkpoint references before deleting the conversation state.
 
-The `request_user_input` tool suspends work at a native checkpointed question boundary. One matching answer can be accepted even when the ordinary queue is full. An accepted answer cannot be cancelled as an ordinary queued message; its interrupt receipt prevents a second answer. Its accepted answer replaces the pending native tool result; the answer overlay, queue removal and answer-turn completion commit together. Recovery preserves the original turn, action scope and budget instead of repeating finished tools or classifying the answer as a new execution grant. Explicit Continue after a budget limit creates a linked budget allocation while retaining the execution run, turn, continuation epoch and native checkpoint. The allocation receipt, answer completion and response pointer commit together, so duplicate answers or lost acknowledgements cannot reset counters twice. Each allocation has its own checkpointed budget question; completed tool results and prior native answers survive repeated continuation. Terminal failures persist both structured run errors and a visible assistant message, so reconnect does not erase the explanation.
+The `request_user_input` tool suspends work at a native checkpointed question boundary. One matching answer can be accepted even when the ordinary queue is full. An accepted answer cannot be cancelled as an ordinary queued message; its interrupt receipt prevents a second answer. Its accepted answer replaces the pending native tool result; the answer overlay, queue removal and answer-turn completion commit together. Recovery preserves the original turn, deterministic permissions and budget instead of repeating finished tools. Explicit Continue after a budget limit creates a linked budget allocation while retaining the execution run, turn, continuation epoch and native checkpoint. The allocation receipt, answer completion and response pointer commit together, so duplicate answers or lost acknowledgements cannot reset counters twice. Each allocation has its own checkpointed budget question; completed tool results and prior native answers survive repeated continuation. Terminal failures persist both structured run errors and a visible assistant message, so reconnect does not erase the explanation.
 
-## Intent classification and agent execution
+## Agent reasoning and execution
 
-Lixpi classifies what the accepted human instruction asks it to do before entering the Deep Agents model/tool loop. This is a separate, metered model request implemented by [`classifyIntent`](agent/agent-harness.ts), using LangChain's `model.bindTools(...).invoke(...)`. It is not a built-in Deep Agents classifier or a separate LangGraph classification loop. The call sets `emitText: false`, so its structured decision is private; a necessary clarification question is shown to the user.
+The accepted human instruction enters `createDeepAgent` directly. The agent decides whether to answer, inspect available context, use private scratch or todos, ask a question, invoke a Tool, read a Skill, or delegate to a domain expert. There is no preliminary intent-classification model call. Ordinary context compaction remains part of the agent harness and uses the same metered model-call infrastructure.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TD
-    Accepted["Accepted human instruction<br/>and authorized context metadata"]
+    Accepted["Accepted human instruction<br/>Authorized conversation context"]
+    Catalog["Capability catalog<br/>Tools, Skills and domain experts"]
 
-    subgraph Preflight["Lixpi intent preflight"]
-        Saved{"Saved intent for this turn?"}
-        Classify["classifyIntent<br/>Direct LangChain model call"]
-        Validate["Validate and normalize AgentIntent<br/>Closed family and target allowlists"]
-        Persist["Persist decision<br/>INTENT#turnId"]
-        Clarify{"needsClarification?"}
-        Ask["AgentInput<br/>LangGraph interrupt; wait for answer"]
+    subgraph Conversation["Main Deep Agents loop"]
+        Agent["Reason about the request<br/>Choose the next step"]
+        Question["request_user_input<br/>Checkpointed LangGraph interrupt"]
+        Answer["Accepted human answer"]
     end
 
-    subgraph Agent["Deep Agents model/tool loop"]
-        Harness["createAgentHarness<br/>createDeepAgent"]
-        Model["Model response or tool request"]
-        Guards["Lixpi tool authorization<br/>Scope, access and target checks"]
-        Tool["Execute authorized tool"]
+    subgraph Execution["Lixpi execution boundary"]
+        Guards["Check access, admitted targets,<br/>delegated limits and budgets"]
+        Tool["Run a registered Tool"]
+        Expert["Delegate to a registered expert<br/>Own reasoning or domain workflow"]
+        Domain["Controlled domain execution<br/>LangGraph and existing media services"]
+        Result["Persist result or pending operation<br/>Resume the owning checkpoint"]
     end
 
-    Transcript["Stream response through ProseMirror authority<br/>Shared aiChatThread renderer"]
+    Transcript["Stream the main response<br/>through ProseMirror authority"]
 
-    Accepted --> Saved
-    Saved -->|No| Classify
-    Classify --> Validate
-    Validate --> Persist
-    Persist --> Clarify
-    Saved -->|Yes: recovery| Clarify
-    Clarify -->|Yes| Ask
-    Ask -->|Accepted answer becomes next instruction| Accepted
-    Clarify -->|No| Harness
-    Harness --> Model
-    Model -->|Tool request| Guards
-    Guards -->|Allowed| Tool
-    Tool -->|Tool result| Model
-    Guards -->|Denied: tool error| Model
-    Model -->|Reply text| Transcript
+    Accepted --> Agent
+    Catalog --> Agent
+    Agent -->|Needs information| Question
+    Question --> Answer
+    Answer --> Agent
+    Agent -->|Tool or expert call| Guards
+    Guards -->|Allowed Tool| Tool
+    Guards -->|Allowed expert| Expert
+    Guards -->|Recoverable denial| Agent
+    Tool --> Domain
+    Expert --> Domain
+    Tool --> Result
+    Expert --> Result
+    Domain --> Result
+    Result --> Agent
+    Agent -->|Reply| Transcript
 ```
 
-The classifier returns these fields. Lixpi validates and normalizes the result before storing it.
+| Component | Responsibility |
+|-----------|----------------|
+| Main Deep Agent | Interpret accepted human instructions and decide what work is needed. |
+| Capability catalog | Describe the available Tools, Skills and experts, including their owned execution contracts. |
+| Execution boundary | Enforce current access, source admission, delegated limits, continuation fences and budgets in code. |
+| Domain expert | Perform a delegated task within its declared tools and the caller's limits, returning its result to the main agent. |
+| LangGraph and domain services | Control workflow steps, durable pauses and domain-specific execution beneath the agent's decisions. |
 
-| Field | Meaning |
-|-------|---------|
-| `intent` | One of `chat`, `inspect`, `plan`, or `execute`, as defined below. |
-| `operationFamilies` | Requested kinds of work, selected only from the runtime's family allowlist. The list combines built-in families such as image, video, speech, music, sound effects and operation cancellation with registered Tool and Capability families. |
-| `targetAssetIds` | Existing target Assets selected only from the runtime's explicit target allowlist. This does not grant access to an Asset. |
-| `confidence` | The model's reported confidence between 0 and 1. Lixpi requires at least 0.8 to proceed without clarification; this is not a measured probability of correctness. |
-| `needsClarification` | Whether the request needs an answer from the user before starting the main agent loop. |
-| `question` | Optional clarification wording. Lixpi supplies a fallback when clarification is required and no question was returned. |
+### Requested work and permissions
 
-| Intent | What the classifier is instructed to recognize |
-|--------|-----------------------------------------------|
-| `chat` | Greetings, questions, hypothetical discussion and model preferences. Selecting a model or attaching a source does not authorize an action. |
-| `inspect` | Reading or inspecting authorized inputs. |
-| `plan` | Saving or revising a requested draft without executing media operations. A plan can therefore involve a persisted draft mutation. |
-| `execute` | Performing explicitly requested workspace mutations or media work. |
+The main agent interprets whether the human requested an action. Source documents, retrieved content, Skill resources, expert results and tool output are context, not new human authorization. A model selection or attachment alone does not request generation.
 
-The classifier receives the accepted message's text and identity, available operation-family names and descriptions, the explicit target allowlist, access-checked execution-target metadata, and up to eight prior human instructions to resolve references. Target metadata includes frozen operation keys, required families and unavailable operations. This lets a request to run a saved local pipeline identify its creation, editing and export requirements. Prior instructions cannot override a new restriction, and referenced documents, target metadata and tool output cannot grant execution authority.
+Tool declarations describe the operation they perform. They do not classify the whole conversation or prevent a question from requiring inspection, scratch files or todos. Invalid arguments return the native schema diagnostic, including the rejected field and accepted enum values, so the agent can correct the call before execution. Workspace mutations and paid media operations still pass the normal typed validation, account and workspace checks, Asset authorization, operation receipts, and execution budgets.
 
-Malformed or schema-invalid results, confidence below 0.8, an explicit clarification flag, or a `plan`/`execute` result with no operation family require clarification. The normalized decision becomes `chat` with empty family and target lists. An ordinary `chat` decision also clears both lists. Provider authorization and transport failures instead follow the turn's failure path; they are not interpreted as uncertain intent.
+A requested mutation can target an Asset that the agent discovers within the permitted context. Every operation rechecks admission and access. Explicit context admits attached inputs and authorized conversation outputs; discovery and mixed context can admit workspace discoveries. An arbitrary Asset ID in model output does not admit that Asset. Changing context mode or revoking access can therefore reject a target that was available earlier.
 
-[`ConversationRuntime`](agent/conversation-runtime.ts) persists the decision under `INTENT#turnId` and reuses it when recovering that turn. For delegated work it can further narrow the decision to the parent delegation's allowance. If clarification is required, [`AgentInput`](agent/agent-input.ts) uses a separate, single-node LangGraph interrupt to wait. The accepted answer becomes the next instruction and goes through classification with prior human context. This differs from `request_user_input` during an active agent loop, whose answer resumes the existing action scope and budget.
+A delegated workspace or domain expert cannot widen its caller's allowance. Read-only delegation prevents workspace mutations and media execution while retaining private reasoning tools. Family limits narrow which registered operations a child may perform. The agent's own uncertainty is resolved through `request_user_input`; there is no model-reported confidence threshold acting as a permission gate.
 
-When clarification is unnecessary, `createAgentHarness` constructs `createDeepAgent` for all four intent categories. The Deep Agents graph handles model/tool iteration. Planning and execution additionally enable scratch writes and the todo tool. Lixpi filters tools before model calls and checks them again when called; [`AgentExecutionScope`](agent/agent-execution-scope.ts) enforces intent rank, execution families, mutation targets and current source access. Targets created by the same execution are tracked separately. Classification constrains the requested work but never replaces account, workspace or Asset authorization.
+### Clarification and recovery
+
+`request_user_input` pauses the active graph at a checkpointed boundary. Its matching answer resumes the same accepted execution, continuation and budget. Completed tool results and pending-operation identities survive the pause. A new unrelated instruction uses the normal steering or queue contract.
+
+Existing unfinished turns can contain a persisted `INTENT#turnId` decision from the previous runtime. That decision remains a compatibility limit on the original turn, including its operation families and mutation targets; recovery never invokes the classifier again. A saved classifier-generated question completes its existing interrupt and treats the accepted answer as the next human turn. New turns do not create classifier records.
+
+Each actual model invocation, including expert reasoning and compaction, uses its own provider-usage authorization identity and durable response and usage receipts. Recovery reuses a saved response. A submitted request with an uncertain outcome is not automatically repeated.
 
 ## Storage contract
 
@@ -329,8 +331,8 @@ The selected `AiModel` record supplies `inferenceCapabilities` to ordinary provi
 - Reasoning providers expose `search_capabilities`, `use_capability`, and attached `model-choice` Tools through bounded provider-native continuation loops. Transient image/video providers never expose Capability invocation functions.
 - Preflight-required Tools execute before reasoning. Model-required Tools execute inside the selected reasoning adapter with provider-native forced Tool choice, then return their structured result to the same agent loop so the ordinary assistant response continues. Every Tool action resolves through the server allowlist and emits replayable generic run events with sealed manifest provenance.
 - Media-generation Tools return provider-neutral instructions and model-safe references or a typed `capabilityMediaExecutionPlan`. Shared preflight forwards that output to every selected reasoning/media child without changing the selected model matrix. `MediaBranchLineagePlanner` allocates the normal output Assets and topology before provider fanout; Tool runtimes and media strategies do not attach those outputs themselves.
-- A model-required non-generation Tool may return terminal output Assets and suppress ordinary media routing when its product contract makes those Assets the request result. Action Timeline uses this path for one non-media Artifact per selected reasoning model; explicit `/` selection keeps the generic module badge and resolves duration/precision from authoritative prompt wording before Tool-input validation. Character Creator remains a preflight plan-producing Tool.
-- Capability-only routing is identical for scalar and matrix submissions: ignored image/video axes are removed before model lookup, the selected reasoning model is forced to call Action Timeline, the Tool stages the terminal Artifact output, and media-branch resolution plus media-lineage planning stay disabled. The same provider loop then streams a brief plain-language confirmation through the API-owned ProseMirror conversation writer under an explicit no-code/no-visualization completion contract. `BaseProvider` publishes the terminal stream event and finalizes the conversation before the registered output finalizer reconstructs the authoritative canvas run from staged-Asset lineage, then attaches, activates, and publishes the Artifact node; pipeline-event purge remains deferred until normal cleanup. Failed or cancelled continuations discard their staged Assets. Stable request/reasoning-run IDs bind that response and the Capability generation trace to the Artifact's standard lineage history without creating image or video work.
+- A model-required non-generation Tool may return terminal output Assets and suppress ordinary media routing when its product contract makes those Assets the request result.
+- Capability-only output stages its terminal Assets until the provider continuation and conversation are durable. The registered output finalizer then attaches and publishes them; failed or cancelled continuations discard staged outputs.
 - Capability output classification keeps all output Asset IDs for projection and a separate media-only list for media lineage. Non-media Artifacts never enter image/video run planning.
 - Transient media providers do not emit their own top-level start/end lifecycle.
 - Reference traces never contain inline image bytes.

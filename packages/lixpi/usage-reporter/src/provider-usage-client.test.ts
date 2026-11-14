@@ -11,6 +11,7 @@ import {
 
 import {
     ProviderUsageClient,
+    providerUsageOptionsFromEnv,
     type ProviderUsageOptions,
     type ProviderUsageTransport,
 } from './provider-usage-client.ts'
@@ -131,6 +132,68 @@ afterEach(() => {
     consoleWarnSpy = null
 })
 
+describe('provider usage environment policy', () => {
+    beforeEach(() => {
+        vi.stubEnv('ENVIRONMENT', 'production')
+        vi.stubEnv('METRICS_ENABLED', 'true')
+        vi.stubEnv('METRICS_FAIL_OPEN', undefined)
+        vi.stubEnv('METRICS_REQUEST_TIMEOUT_MS', undefined)
+    })
+
+    afterEach(() => void vi.unstubAllEnvs())
+
+    it('enables hosted metering with a finite default timeout and fail-closed authorization', async () => {
+        const configured = providerUsageOptionsFromEnv()
+        expect(configured).toEqual({
+            enabled: true,
+            requestTimeoutMs: 3000,
+            denyRequestWhenAuthorizationUnavailable: true,
+        })
+        const request = vi.fn().mockRejectedValue(new Error('unavailable'))
+        await expect(new ProviderUsageClient(stubTransport(request), configured).authorizeRequest(authorizationRequest)).resolves.toEqual({
+            authorized: false,
+            reason: 'authorization_unavailable',
+        })
+    })
+
+    it.each([undefined, '', 'production', 'staging', 'unknown', 'LOCAL', 'local '])('requires metering outside exact local environment (%s)', environment => {
+        vi.stubEnv('ENVIRONMENT', environment)
+
+        for (const enabled of [undefined, 'false', 'TRUE']) {
+            vi.stubEnv('METRICS_ENABLED', enabled)
+            expect(providerUsageOptionsFromEnv).toThrow('enabled and fail closed')
+        }
+
+        vi.stubEnv('METRICS_ENABLED', 'true')
+        vi.stubEnv('METRICS_FAIL_OPEN', 'true')
+        expect(providerUsageOptionsFromEnv).toThrow('enabled and fail closed')
+    })
+
+    it('preserves explicit local disabled and fail-open settings', () => {
+        vi.stubEnv('ENVIRONMENT', 'local')
+        vi.stubEnv('METRICS_ENABLED', 'false')
+        expect(providerUsageOptionsFromEnv().enabled).toBe(false)
+
+        vi.stubEnv('METRICS_ENABLED', 'true')
+        vi.stubEnv('METRICS_FAIL_OPEN', 'true')
+        expect(providerUsageOptionsFromEnv()).toEqual({
+            enabled: true,
+            requestTimeoutMs: 3000,
+            denyRequestWhenAuthorizationUnavailable: false,
+        })
+    })
+
+    it.each(['', '0', '-1', '1.5', 'invalid', 'Infinity', '2147483648'])('rejects an invalid request timeout (%s)', timeout => {
+        vi.stubEnv('METRICS_REQUEST_TIMEOUT_MS', timeout)
+        expect(providerUsageOptionsFromEnv).toThrow('METRICS_REQUEST_TIMEOUT_MS')
+    })
+
+    it('accepts a configured positive integer timeout', () => {
+        vi.stubEnv('METRICS_REQUEST_TIMEOUT_MS', '4500')
+        expect(providerUsageOptionsFromEnv().requestTimeoutMs).toBe(4500)
+    })
+})
+
 describe('provider usage contract fixture', () => {
     it('matches the TypeScript request and result bytes', () => {
         expect(providerUsageContractFixture.version).toBe(PROVIDER_USAGE_CONTRACT_VERSION)
@@ -178,6 +241,33 @@ describe('ProviderUsageClient.authorizeRequest', () => {
         })
         expect('internalContext' in response).toBe(false)
         expect('internalPolicy' in response).toBe(false)
+    })
+
+    it.each(['request_denied', 'invalid_request', 'authorization_unavailable'] as const)('preserves the public responder reason %s', async reason => {
+        const request = vi.fn().mockResolvedValue({
+            authorized: false,
+            reason,
+            privateDetail: 'not public',
+        })
+        const response = await new ProviderUsageClient(stubTransport(request), options()).authorizeRequest(authorizationRequest)
+
+        expect(response).toEqual({
+            authorized: false,
+            reason,
+        })
+    })
+
+    it('reduces unknown private denial reasons to request_denied', async () => {
+        const request = vi.fn().mockResolvedValue({
+            authorized: false,
+            reason: 'private-policy-detail',
+        })
+        const response = await new ProviderUsageClient(stubTransport(request), options()).authorizeRequest(authorizationRequest)
+
+        expect(response).toEqual({
+            authorized: false,
+            reason: 'request_denied',
+        })
     })
 
     it('fails closed with a neutral reason when authorization is unavailable', async () => {

@@ -373,15 +373,15 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.published).toHaveLength(2)
     })
 
-    it('publishes Action Timeline execution metadata as a first-class generation trace', async () => {
+    it('publishes Fixture Artifact execution metadata as a first-class generation trace', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
 
         publisher.capabilityGenerationTrace({
             traceVersion: 'capability-generation-trace-v1',
             generationRun,
-            capabilityId: 'action-timeline',
-            capabilityName: 'Action Timeline',
+            capabilityId: 'fixture-artifact',
+            capabilityName: 'Fixture Artifact',
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Anthropic',
             chatModelId: 'Anthropic:claude-sonnet-4-6',
@@ -403,7 +403,7 @@ describe('StreamPublisher extraction progress', () => {
             status: STREAM_STATUS.CAPABILITY_GENERATION_TRACE,
             generationRun,
             capabilityGenerationTrace: expect.objectContaining({
-                capabilityName: 'Action Timeline',
+                capabilityName: 'Fixture Artifact',
                 capabilityRunId: 'timeline-run',
                 outputAssetIds: ['timeline-asset'],
             }),

@@ -87,6 +87,22 @@ describe('conversation protocol trust boundary', () => {
         settingsRevision,
     })).toThrow('INVALID_CONVERSATION_REVISION'))
 
+    it('accepts omitted optional video preferences and rejects empty placeholder strings', () => {
+        const models = {
+            reasoningModelIds: [],
+            imageModelIds: [],
+            videoModelIds: ['test:video'],
+            videoOptions: {},
+        }
+        expect(resolveConversationSettings({ models }).models).toEqual(models)
+
+        for (const name of ['aspectRatio', 'resolution', 'duration'])
+            expect(() => resolveConversationSettings({ models: {
+                ...models,
+                videoOptions: { [name]: '' },
+            } })).toThrow('INVALID_CONVERSATION_SETTING')
+    })
+
     it('rejects invalid policies and unbounded replay', () => {
         expect(() => resolveConversationSettings({ contextMode: 'all' })).toThrow('INVALID_CONVERSATION_SETTING')
         expect(() => resolveConversationSettings({ midRunPolicy: 'immediate' })).toThrow('INVALID_CONVERSATION_SETTING')

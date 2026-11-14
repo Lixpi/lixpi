@@ -44,7 +44,7 @@ vi.mock('./asset-document-service.ts', () => ({
     },
 }))
 
-import { buildActionTimelineDocument } from '@lixpi/capability-system'
+import { createMediaPipelineDocument } from '@lixpi/capability-system/shared'
 import { PromptReferenceCatalogService } from './prompt-reference-catalog-service.ts'
 
 const moduleItems = [
@@ -303,27 +303,43 @@ describe('PromptReferenceCatalogService', () => {
     })
 
     it('lists registered Artifacts canvas-first with module-owned metadata', async () => {
-        const document = buildActionTimelineDocument({
-            durationMs: 2500,
-            precisionMs: 1000,
-        }, [
-            {
-                slotIndex: 0,
-                runs: [{ text: 'Establish ' }, { assetId: 'asset-portrait' }],
+        const document = createMediaPipelineDocument({
+            schemaVersion: 'media-pipeline-v1',
+            pipelineId: 'fixture-pipeline',
+            revision: 1,
+            requestedOutcome: 'Prepare a reference composition',
+            constraints: [],
+            sources: [],
+            nodes: [{
+                nodeId: 'prepare',
+                operationKey: 'fixture.prepare',
+                parameters: {},
+                inputs: [],
+                outputs: [{
+                    portId: 'result',
+                    kind: 'image',
+                    required: true,
+                }],
+            }],
+            edges: [],
+            executionPolicy: {
+                maxConcurrency: 1,
+                maxFanout: 1,
             },
-            {
-                slotIndex: 1,
-                runs: [{ text: 'Continue' }],
+            outputBindings: [{
+                outputId: 'result',
+                nodeId: 'prepare',
+                portId: 'result',
+            }],
+            origin: {
+                conversationAssetId: 'conversation-1',
+                turnId: 'turn-1',
             },
-            {
-                slotIndex: 2,
-                runs: [{ text: 'Finish' }],
-            },
-        ])
+        })
         const artifactAsset = (assetId: string, updatedAt: number) => ({
             assetId,
             organizationId: 'organization-1',
-            title: 'Action Timeline',
+            title: 'Media Pipeline',
             scope: 'workspace',
             scopeOwnerId: 'workspace-1',
             originWorkspaceId: 'workspace-1',
@@ -332,13 +348,13 @@ describe('PromptReferenceCatalogService', () => {
                 capabilityArtifact: {
                     blobHash: `${assetId}-snapshot`,
                     version: 0,
-                    schemaVersion: 'action-timeline-v1',
+                    schemaVersion: 'media-pipeline-v1',
                     byteSize: 1,
                 },
             },
             artifact: {
-                artifactTypeId: 'action-timeline',
-                schemaVersion: 'action-timeline-v1',
+                artifactTypeId: 'media-pipeline',
+                schemaVersion: 'media-pipeline-v1',
             },
             states: { lifecycle: 'active' },
             referenceCount: 1,
@@ -357,7 +373,7 @@ describe('PromptReferenceCatalogService', () => {
             assetId: asset.assetId,
             role: 'capabilityArtifact',
             version: 0,
-            schemaVersion: 'action-timeline-v1',
+            schemaVersion: 'media-pipeline-v1',
             doc: document,
         }))
         const artifactWorkspace = {
@@ -368,7 +384,7 @@ describe('PromptReferenceCatalogService', () => {
                     nodeId: 'node-artifact',
                     type: 'capabilityArtifact',
                     assetId: canvasArtifact.assetId,
-                    artifactTypeId: 'action-timeline',
+                    artifactTypeId: 'media-pipeline',
                 }],
             },
         }
@@ -386,12 +402,12 @@ describe('PromptReferenceCatalogService', () => {
                 nodeId: 'node-artifact',
                 source: 'canvas',
                 displayMetadata: {
-                    durationMs: 2500,
-                    precisionMs: 1000,
-                    segmentCount: 3,
-                    referencedAssetIds: ['asset-portrait'],
+                    pipelineId: 'fixture-pipeline',
+                    revision: 1,
+                    requestedOutcome: 'Prepare a reference composition',
+                    nodeCount: 1,
                 },
-                referenceThumbnailAssetIds: ['asset-portrait'],
+                referenceThumbnailAssetIds: [],
             }),
             expect.objectContaining({
                 assetId: libraryArtifact.assetId,

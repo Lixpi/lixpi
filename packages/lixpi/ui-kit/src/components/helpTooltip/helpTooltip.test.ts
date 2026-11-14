@@ -106,7 +106,7 @@ describe('helpTooltip', () => {
         expect(customTooltip.dom.style.getPropertyValue('--help-tooltip-icon-size')).toBe('14px')
     })
 
-    it('adds tooltip content on pointer enter and removes it on pointer leave', () => {
+    it('shows tooltip content on pointer enter and hides it on pointer leave', () => {
         const {
             tooltip,
             trigger,
@@ -146,22 +146,73 @@ describe('helpTooltip', () => {
         expect(content?.classList.contains('is-visible')).toBe(true)
 
         trigger.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
-        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+        expect(getTooltipContent(tooltip).classList.contains('is-visible')).toBe(false)
     })
 
-    it('opens on focus and closes on blur', () => {
+    it('stays hidden on keyboard focus and toggles with Enter or Space', () => {
         const {
             tooltip,
             trigger,
         } = createTooltip()
         document.body.appendChild(tooltip.dom)
+        const content = getTooltipContent(tooltip)
 
         trigger.focus()
-        trigger.dispatchEvent(new FocusEvent('focusin'))
-        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+        trigger.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+        expect(content.classList.contains('is-visible')).toBe(false)
+        expect(document.getElementById(trigger.getAttribute('aria-describedby') ?? '')).toBe(content)
+
+        const enter = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        })
+        trigger.dispatchEvent(enter)
+        expect(enter.defaultPrevented).toBe(true)
+        expect(content.classList.contains('is-visible')).toBe(true)
+
+        trigger.dispatchEvent(new KeyboardEvent('keydown', {
+            key: ' ',
+            bubbles: true,
+        }))
+        expect(content.classList.contains('is-visible')).toBe(false)
+
+        trigger.dispatchEvent(new KeyboardEvent('keydown', {
+            key: ' ',
+            bubbles: true,
+        }))
+        expect(content.classList.contains('is-visible')).toBe(true)
 
         trigger.dispatchEvent(new FocusEvent('focusout'))
+        expect(content.classList.contains('is-visible')).toBe(false)
+        expect(tooltip.dom.contains(content)).toBe(true)
+
+        tooltip.destroy()
+    })
+
+    it('leaves Enter and Space alone on a caller-supplied trigger', () => {
+        const trigger = document.createElement('button')
+        document.body.appendChild(trigger)
+        const tooltip = createHelpTooltip({
+            label: 'Collapse panel',
+            text: 'Collapse panel',
+            triggerElement: trigger,
+        })
+
+        trigger.focus()
+        trigger.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+        const enter = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        })
+        trigger.dispatchEvent(enter)
+
+        expect(enter.defaultPrevented).toBe(false)
         expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+        tooltip.destroy()
+        trigger.remove()
     })
 
     it('hides immediately on pointer leave for non-interactive tooltips', () => {
@@ -200,7 +251,7 @@ describe('helpTooltip', () => {
         expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
 
         trigger.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
-        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+        expect(getTooltipContent(tooltip).classList.contains('is-visible')).toBe(false)
     })
 
     it('suppresses a tooltip after its trigger is clicked until the pointer leaves', () => {
@@ -821,6 +872,29 @@ describe('helpTooltip', () => {
         } finally {
             vi.useRealTimers()
         }
+    })
+
+    it('does not show delegated tooltips when keyboard focus reaches the trigger', () => {
+        const root = document.createElement('div')
+        const trigger = document.createElement('button')
+        trigger.setAttribute('aria-label', 'Collapse navigation side panel')
+        trigger.dataset.helpTooltip = 'aria-label'
+        root.appendChild(trigger)
+        document.body.appendChild(root)
+        const provider = createHelpTooltipProvider({
+            showDelayMs: 0,
+            root,
+        })
+
+        trigger.focus()
+        trigger.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+        trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+
+        provider.destroy()
+        root.remove()
     })
 
     it('respects provider visibility guards before and after an expanded control opens', async () => {

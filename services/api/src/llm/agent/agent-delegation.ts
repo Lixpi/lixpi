@@ -241,13 +241,13 @@ export class AgentDelegation {
             try {
                 await AgentExecutionScope.authorize('execute')
             } catch {
-                return toolError(
-                    'DELEGATION_ACTION_NOT_AUTHORIZED',
-                    'The current instruction does not authorize work, so a sub-workspace can only be asked to read.',
-                )
+                return toolError('DELEGATION_ACTION_NOT_AUTHORIZED', 'The current execution scope only allows read access to a sub-workspace.')
             }
 
-            allowedOperationFamilies = [...execution.intent.operationFamilies]
+            const { permissions } = execution
+            allowedOperationFamilies = permissions.allowedOperationFamilies.filter(
+                family => !permissions.legacyIntent || permissions.legacyIntent.operationFamilies.includes(family),
+            )
         }
 
         const access = await workspaceAccessResolver().resolve({

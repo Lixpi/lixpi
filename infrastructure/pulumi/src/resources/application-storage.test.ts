@@ -19,6 +19,11 @@ vi.mock('../constants/logging.ts', () => ({
     CONTAINER_INSIGHTS_ENABLED: false,
 }))
 
+const providerUsageEnvironment = {
+    METRICS_ENABLED: 'true',
+    METRICS_FAIL_OPEN: 'false',
+    METRICS_REQUEST_TIMEOUT_MS: '3000',
+} as const
 const resources: pulumi.runtime.MockResourceArgs[] = []
 const resolveOutput = <T>(value: pulumi.Input<T>): Promise<T> => new Promise(resolve => void pulumi.output(value).apply(result => void resolve(result)))
 let tableArns: string[]
@@ -77,6 +82,7 @@ beforeAll(async () => {
             accountAdmissionTableArn: 'arn:aws:dynamodb:us-east-1:123456789012:table/Test-Account-Admission-Storage',
         },
         environment: {
+            ...providerUsageEnvironment,
             NATS_SERVERS: 'nats://broker:4222',
             NATS_API_NKEY_SEED: 'synthetic-api-seed',
         } as any,
@@ -89,6 +95,35 @@ beforeAll(async () => {
 })
 
 describe('API deployment with native NATS storage', () => {
+    it.each([
+        {},
+        {
+            ...providerUsageEnvironment,
+            METRICS_ENABLED: 'false',
+        },
+        {
+            ...providerUsageEnvironment,
+            METRICS_FAIL_OPEN: 'true',
+        },
+        {
+            ...providerUsageEnvironment,
+            METRICS_REQUEST_TIMEOUT_MS: undefined,
+        },
+        {
+            ...providerUsageEnvironment,
+            METRICS_REQUEST_TIMEOUT_MS: '0',
+        },
+        {
+            ...providerUsageEnvironment,
+            METRICS_REQUEST_TIMEOUT_MS: '2147483648',
+        },
+    ])('rejects a hosted API without valid fail-closed metering (%j)', async environment => {
+        const { createMainApiService } = await import('./main-api-service.ts')
+        const before = resources.length
+        await expect(createMainApiService({ environment } as any)).rejects.toThrow('Hosted API deployment requires')
+        expect(resources).toHaveLength(before)
+    })
+
     it('uses the same conversation table definition locally and in deployment', async () => {
         const { getTableDefinitions } = await import('./db/DynamoDB-tables.ts')
         const definition = getTableDefinitions().agentConversationsTable
@@ -150,6 +185,7 @@ describe('API deployment with native NATS storage', () => {
             value: string
         }) => [entry.name, entry.value]))
         expect(environment).toEqual({
+            ...providerUsageEnvironment,
             NATS_SERVERS: 'nats://broker:4222',
             NATS_API_NKEY_SEED: 'synthetic-api-seed',
         })

@@ -173,14 +173,14 @@ const makeModelRequiredPlan = (): SealedResolvedCapabilityPlan => {
     }
     const manifest: CapabilityManifest = {
         schemaVersion: 1,
-        capabilityId: 'action-timeline',
+        capabilityId: 'fixture-artifact',
         kind: 'tool',
-        name: 'Action Timeline',
-        description: 'Create a timed action timeline.',
+        name: 'Fixture Artifact',
+        description: 'Create a timed fixture artifact.',
         references: [],
         resources: [schemaRef],
         tool: {
-            toolType: 'action-timeline',
+            toolType: 'fixture-artifact',
             inputSchema: schemaRef,
             outputSchema: schemaRef,
             executionPolicy: 'model-required',
@@ -198,21 +198,21 @@ const makeModelRequiredPlan = (): SealedResolvedCapabilityPlan => {
         },
     }
     const serializable: ResolvedCapabilityPlan = {
-        rootCapabilityIds: ['action-timeline'],
+        rootCapabilityIds: ['fixture-artifact'],
         capabilities: [{
-            capabilityId: 'action-timeline',
+            capabilityId: 'fixture-artifact',
             kind: 'tool',
             manifestBlobHash: 'manifest-hash',
             manifest,
         }],
         resolvedManifests: [{
-            capabilityId: 'action-timeline',
+            capabilityId: 'fixture-artifact',
             manifestBlobHash: 'manifest-hash',
         }],
     }
 
     return new SealedResolvedCapabilityPlan(serializable, [{
-        capabilityId: 'action-timeline',
+        capabilityId: 'fixture-artifact',
         ref: schemaRef,
         bytes: new TextEncoder().encode(JSON.stringify({
             type: 'object',
@@ -850,8 +850,8 @@ describe('GoogleProvider internals', () => {
         }))
     })
 
-    it('forces the attached Action Timeline Tool, then streams the reasoning response after execution', async () => {
-        const toolName = directCapabilityToolName('action-timeline')
+    it('forces the attached Fixture Artifact Tool, then streams the reasoning response after execution', async () => {
+        const toolName = directCapabilityToolName('fixture-artifact')
         googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([{
             candidates: [{
                 content: {
@@ -868,7 +868,7 @@ describe('GoogleProvider internals', () => {
             }],
         }]))
         googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([{
-            candidates: [{ content: { parts: [{ text: 'The action timeline is ready.' }] } }],
+            candidates: [{ content: { parts: [{ text: 'The fixture artifact is ready.' }] } }],
         }]))
         const use = vi.fn(async () => ({
             run: {
@@ -899,7 +899,7 @@ describe('GoogleProvider internals', () => {
             },
             resolvedCapabilityPlan: makeModelRequiredPlan(),
             capabilityInputs: {
-                'action-timeline': {
+                'fixture-artifact': {
                     durationMs: 15000,
                     precisionMs: 2000,
                 },
@@ -949,10 +949,10 @@ describe('GoogleProvider internals', () => {
             }),
         }))
         expect(capabilityGenerationTrace).toHaveBeenCalledWith(expect.objectContaining({
-            capabilityName: 'Action Timeline',
+            capabilityName: 'Fixture Artifact',
             capabilityRunId: 'timeline-run',
         }))
-        expect(internals.chunk).toHaveBeenCalledWith('The action timeline is ready.')
+        expect(internals.chunk).toHaveBeenCalledWith('The fixture artifact is ready.')
         expect(internals.end).not.toHaveBeenCalled()
     })
 

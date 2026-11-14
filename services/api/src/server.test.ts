@@ -410,6 +410,17 @@ describe('services/api server startup', () => {
 
     afterEach(() => void vi.restoreAllMocks())
 
+    it('rejects invalid provider usage configuration before registering services', async () => {
+        mocks.providerUsageOptionsFromEnv.mockImplementationOnce(() => {
+            throw new Error('Provider usage must be enabled and fail closed')
+        })
+
+        await expect(loadServer()).rejects.toThrow('Provider usage must be enabled and fail closed')
+        expect(mocks.registrationApply).not.toHaveBeenCalled()
+        expect(mocks.natsInit).not.toHaveBeenCalled()
+        expect(mocks.httpServer.listen).not.toHaveBeenCalled()
+    })
+
     it('initializes core services, middleware, routes, and shutdown handlers', async () => {
         const processOnCalls: Array<{
             event: string

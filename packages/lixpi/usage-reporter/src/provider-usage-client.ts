@@ -32,11 +32,30 @@ export type ProviderUsageOutbox = {
     enqueueCompletion(request: ProviderRequestCompletionRequest): Promise<void>
 }
 
-export const providerUsageOptionsFromEnv = (): ProviderUsageOptions => ({
-    enabled: process.env.METRICS_ENABLED === 'true',
-    requestTimeoutMs: Number(process.env.METRICS_REQUEST_TIMEOUT_MS ?? 3000),
-    denyRequestWhenAuthorizationUnavailable: process.env.METRICS_FAIL_OPEN !== 'true',
-})
+export const providerUsageOptionsFromEnv = (): ProviderUsageOptions => {
+    const enabled = process.env.METRICS_ENABLED === 'true'
+    const denyRequestWhenAuthorizationUnavailable = process.env.METRICS_FAIL_OPEN !== 'true'
+    const requestTimeoutMs = Number(process.env.METRICS_REQUEST_TIMEOUT_MS ?? 3000)
+
+    if (
+        process.env.ENVIRONMENT !== 'local'
+        && (!enabled || !denyRequestWhenAuthorizationUnavailable)
+    )
+        throw new Error('Provider usage must be enabled and fail closed outside ENVIRONMENT=local')
+
+    if (
+        !Number.isSafeInteger(requestTimeoutMs)
+        || requestTimeoutMs <= 0
+        || requestTimeoutMs > 2147483647
+    )
+        throw new Error('METRICS_REQUEST_TIMEOUT_MS must be a positive integer within the timer range')
+
+    return {
+        enabled,
+        requestTimeoutMs,
+        denyRequestWhenAuthorizationUnavailable,
+    }
+}
 
 const authorizationResult = (value: unknown): ProviderRequestAuthorizationResult => {
     if (
@@ -50,10 +69,15 @@ const authorizationResult = (value: unknown): ProviderRequestAuthorizationResult
     if (typeof result.authorized !== 'boolean')
         throw new Error('Invalid authorization decision')
 
+    const reason = result.reason === 'invalid_request'
+        || result.reason === 'authorization_unavailable'
+        ? result.reason
+        : 'request_denied'
+
     return {
         authorized: result.authorized,
         ...(typeof result.authorizationId === 'string' ? { authorizationId: result.authorizationId } : {}),
-        ...(!result.authorized ? { reason: 'request_denied' as const } : {}),
+        ...(!result.authorized ? { reason } : {}),
     }
 }
 
@@ -80,8 +104,13 @@ export class ProviderUsageClient {
             )
 
             return authorizationResult(result)
-        } catch {
-            warn('[ProviderUsage] request authorization unavailable')
+        } catch (error) {
+            warn(
+                '[ProviderUsage] request authorization unavailable',
+                {
+                    errorType: error instanceof Error ? error.name : 'UnknownError',
+                },
+            )
 
             return {
                 authorized: !this.options.denyRequestWhenAuthorizationUnavailable,

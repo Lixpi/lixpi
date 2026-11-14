@@ -8,6 +8,7 @@ import {
 } from 'vitest'
 import {
     type ProviderUsageClient,
+    type ProviderRequestAuthorizationResult,
 } from '@lixpi/usage-reporter'
 import { AgentModelCalls } from './agent-model-calls.ts'
 import { createConversationExecutionFixture } from './conversation-test-support.ts'
@@ -23,7 +24,7 @@ const fixture = async () => {
     const execution = await createConversationExecutionFixture()
     const metrics = {
         enabled: true,
-        authorizeRequest: vi.fn(async () => ({
+        authorizeRequest: vi.fn(async (): Promise<ProviderRequestAuthorizationResult> => ({
             authorized: true,
             authorizationId: 'authorization',
         })),
@@ -80,6 +81,51 @@ describe('agent model calls', () => {
         expect(metrics.completeRequest).toHaveBeenLastCalledWith(expect.objectContaining({ providerRequestIds: ['provider_request'] }))
     })
 
+    it.each([
+        {
+            result: {
+                authorized: false,
+                reason: 'request_denied',
+            },
+            code: 'AGENT_MODEL_CALL_NOT_AUTHORIZED',
+        },
+        {
+            result: {
+                authorized: false,
+                reason: 'invalid_request',
+            },
+            code: 'AGENT_MODEL_AUTHORIZATION_INVALID_REQUEST',
+        },
+        {
+            result: {
+                authorized: false,
+                reason: 'authorization_unavailable',
+            },
+            code: 'AGENT_MODEL_AUTHORIZATION_UNAVAILABLE',
+        },
+        {
+            result: { authorized: true },
+            code: 'AGENT_MODEL_AUTHORIZATION_UNAVAILABLE',
+        },
+    ] as const)('persists $code without submitting or settling an unauthorized call', async ({
+        result,
+        code,
+    }) => {
+        const f = await fixture()
+        f.metrics.authorizeRequest.mockResolvedValue(result)
+
+        await expect(f.calls.execute(f.input)).rejects.toThrow(code)
+        await expect(f.calls.execute(f.input)).rejects.toThrow(code)
+        expect(f.invoke).not.toHaveBeenCalled()
+        expect(f.metrics.authorizeRequest).toHaveBeenCalledTimes(1)
+        expect(f.metrics.recordUsage).not.toHaveBeenCalled()
+        expect(f.metrics.completeRequest).not.toHaveBeenCalled()
+        expect([...f.database.rows.values()].find(row => String(row.sk).startsWith('MODEL#'))).toMatchObject({
+            state: 'failed',
+            error: code,
+        })
+    })
+
     it('quarantines an ambiguous submission and never invokes it again', async () => {
         const {
             calls,
@@ -95,6 +141,65 @@ describe('agent model calls', () => {
         expect(metrics.authorizeRequest).toHaveBeenCalledTimes(1)
         expect(metrics.completeRequest).not.toHaveBeenCalled()
         expect([...database.rows.values()].find(row => String(row.sk).startsWith('MODEL#'))?.state).toBe('unknown')
+    })
+
+    it('blocks a changed prompt after an uncertain submission without another authorization or budget charge', async () => {
+        const {
+            calls,
+            input,
+            invoke,
+            metrics,
+            owner,
+        } = await fixture()
+        invoke.mockRejectedValueOnce(new Error('CONNECTION_LOST'))
+        await expect(calls.execute(input)).rejects.toThrow('CONNECTION_LOST')
+        await expect(calls.execute({
+            ...input,
+            requestKey: 'changed-system-prompt',
+        })).rejects.toThrow('AGENT_MODEL_CALL_OUTCOME_UNKNOWN')
+        expect(invoke).toHaveBeenCalledTimes(1)
+        expect(metrics.authorizeRequest).toHaveBeenCalledTimes(1)
+        expect((await owner.read()).run?.budget.modelCalls).toBe(1)
+    })
+
+    it('keeps concurrent expert calls independent even when their provider inputs match', async () => {
+        const {
+            calls,
+            input,
+            metrics,
+            owner,
+        } = await fixture()
+        const started = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        const first = calls.execute({
+            ...input,
+            invocationId: 'expert-first',
+            invoke: async observe => {
+                started.resolve()
+                await release.promise
+                observe({
+                    promptTokens: 3,
+                    completionTokens: 2,
+                }, 'first-provider-request')
+
+                return { text: 'First expert finished' }
+            },
+        })
+        await started.promise
+
+        try {
+            expect(await calls.execute({
+                ...input,
+                invocationId: 'expert-second',
+            })).toEqual({ text: 'Finished' })
+        } finally {
+            release.resolve()
+            await first
+        }
+
+        expect(metrics.authorizeRequest).toHaveBeenCalledTimes(2)
+        expect(new Set(metrics.authorizeRequest.mock.calls.map(([request]) => request.workflowId)).size).toBe(2)
+        expect((await owner.read()).run?.budget.modelCalls).toBe(2)
     })
 
     it('retries stored measured usage after an ambiguous call without resubmitting the provider request', async () => {

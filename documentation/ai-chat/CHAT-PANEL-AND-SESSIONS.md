@@ -40,7 +40,7 @@ Accepted creation and editing operations appear as action cards inside the assis
 
 The user portal's Preferences page sets context mode and whether a message should steer a run in progress, stop it and start a new run, or wait in the queue. Each accepted message captures the sending account's saved agent behavior and the conversation's model preferences. Accounts without saved agent behavior use the conversation's stored settings. The chat panel shows the current run and queue. Stop pauses queued work until Resume queue. A run waiting for necessary input shows Waiting for your answer, and the next message carries its interrupt identity.
 
-A necessary-input answer resumes the saved tool result under the original action scope and budget. The server accepts one answer from the active turn's author, and repeated submission of that same message remains idempotent. Completed work is retained across the question and reconnect. A terminal failure stores an assistant explanation and a structured run error; both remain available after reload.
+When the agent needs information, it asks through its checkpointed input tool. A matching answer resumes the saved tool result under the original deterministic permissions and budget. The server accepts one answer from the active turn's author, and repeated submission of that same message remains idempotent. Completed work is retained across the question and reconnect. A terminal failure stores an assistant explanation and a structured run error; both remain available after reload.
 
 The active conversation, rich draft, context chips, read position and transcript scroll are private browser state keyed by user, workspace and conversation. The shared workspace panel state does not receive those private selections.
 

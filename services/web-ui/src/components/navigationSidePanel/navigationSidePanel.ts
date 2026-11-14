@@ -27,10 +27,7 @@ import {
 } from '@lixpi/ui-kit/components/side-panel'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import { settings } from '$src/settings.ts'
-import {
-    createNewFileIcon,
-    navigationSidePanelToggleIcon,
-} from '@lixpi/ui-kit/svg'
+import { navigationSidePanelToggleIcon } from '@lixpi/ui-kit/svg'
 
 import { workspaceTreeStore } from '$src/stores/workspaceTreeStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -143,9 +140,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         ` as HTMLInputElement
         this.importFileInput.addEventListener('change', this.handleImportFileSelected)
 
-        this.headerEl.appendChild(
-            this.createNewWorkspaceButton(),
-        )
         this.footerEl.append(html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement, this.accountDropdown.dom)
         this.panelEl.append(
             this.headerEl,
@@ -241,18 +235,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         this.unsubscribers.push(
             this.auth.authStore.subscribe(this.renderAvatar),
         )
-    }
-
-    private createNewWorkspaceButton(): HTMLButtonElement {
-        return html`
-            <button
-                type="button"
-                className="navigation-side-panel-new-workspace-button"
-                aria-label="New workspace"
-                innerHTML=${createNewFileIcon}
-                onclick=${this.handleCreateNewWorkspaceClick}
-            ></button>
-        ` as HTMLButtonElement
     }
 
     private renderAvatar = (): void => {
@@ -461,10 +443,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         )
         workspaceStore.beginWorkspaceLoad(workspaceId)
     }
-
-    // The header button creates a root workspace in the user's first
-    // organization and opens it.
-    private handleCreateNewWorkspaceClick = (): void => void this.navigation.createWorkspace({})
 
     // When the open workspace is deleted, opens the first remaining
     // workspace, or the start page when none is left.

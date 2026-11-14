@@ -1,6 +1,6 @@
 ---
 title: Tools, Skills, and Capability Modules
-description: How Lixpi packages AI instructions and executable workflows, how users attach and run them, and how developers add modules, standalone Tools, and standalone Skills.
+description: How Lixpi packages instructions, Tools and domain experts, exposes them to the conversation agent, and authorizes module and package execution.
 ---
 
 # Tools, Skills, and Capability Modules
@@ -14,7 +14,7 @@ Tools and Skills are manifest-backed packages. They share scopes, permissions, d
 
 ## Taxonomy
 
-A **Capability module** is a source-registered product behavior. It has a stable `moduleId`, presentation metadata, exactly one owned entry package, and an explicit set of Tool and Skill package installers. Character Creator, Style Extraction, and Action Timeline are modules.
+A **Capability module** is a source-registered product behavior. It has a stable `moduleId`, presentation metadata, exactly one owned entry package, and an explicit set of Tool and Skill package installers. Media Pipeline is an installed module.
 
 A **Capability package** is one stored record with `kind: 'skill'` or `kind: 'tool'`. Every package has its own immutable ID, manifest, resources, permissions, and manifest hash. Packages are either:
 
@@ -36,6 +36,34 @@ Module registration rejects a missing, empty, or malformed sheet. Authorized mod
 {% callout type="important" %}
 A manifest can describe resources, dependencies, and workflow bindings. It cannot register JavaScript, grant access to an action, embed credentials, or execute arbitrary code. Executable actions must be compiled into the API and registered in the allowlist.
 {% /callout %}
+
+## Agent discovery and domain experts
+
+The conversation agent receives the human instruction first and chooses how to work. It sees Tools, Skills and domain experts through one invocation-scoped registry created by `CapabilityModuleCatalog.createAgentRegistry()`. Modules publish their agent entries through `CapabilityModuleDefinition.agentEntries`; the host contributes conversation tools to the same registry. Host callbacks remain scoped to that invocation rather than being stored on the application-wide catalog.
+
+| Entry | What the agent receives | What invoking it does |
+|-------|------------------------|-----------------------|
+| Tool | A description and typed input schema | Runs one registered operation under the current execution checks. |
+| Skill | A description and sealed instruction-resource identity | Loads instructions and supporting text resources. Loading it does not execute its suggested actions. |
+| Domain expert | A description, task contract and declared execution scope | Delegates work to an isolated agent or a controlled domain workflow and returns its result. |
+
+An expert is an agent-facing registration. It does not add a third stored Capability package kind: manifests remain `tool` or `skill`, and the module continues to own its packages and domain implementation.
+
+A reasoning expert declares its instructions, tool names, Skill IDs and operation families. The Media Pipeline expert uses its module's existing operations. The host supplies the isolated checkpoint, private scratch, selected model, cancellation and bounded execution context. A workflow expert declares the owned Capability entry and input schema. Its host binding separates initial submission from recovery, so resuming an uncertain operation cannot submit it again. Workflow experts without an installed executor are omitted from discovery. Media integrations retain the enclosing graph that consumes instructions, reference images or a `capabilityMediaExecutionPlan`, including its output settlement and provider-usage handling.
+
+The registry describes what is available. The main agent interprets what the human requested, and code validates each proposed operation. Expert permissions intersect the caller's limits. An expert result cannot authorize a new action. Long work retains its operation receipt and resumes its owning checkpoint; an uncertain provider submission is not repeated automatically.
+
+### Publishing native Skills
+
+An installer exposes a native Skill with `agentSkill: { name, files }`. The registry derives that Skill entry independently of whether the module publishes ordinary agent Tools. Each `files` mapping names the relative path of a sealed resource, including exactly one `SKILL.md` with matching YAML name and description. The API authorizes the package and freezes the complete resource map for the turn.
+
+Native Skill bundles contain supported text resources. Existing Capability media resources keep their authorized resource-loading path; a module can publish a separate native instruction bundle that explains how to use the module's tools or expert. A native Skill name does not replace its Capability ID for authorization.
+
+### Adding an expert
+
+Declare the expert in the owning module's `agentEntries`. Use the `agent` runtime for a specialist that chooses among a declared collection of Tools and Skills. Use the `workflow` runtime for an existing controlled domain workflow. Keep domain instructions and execution behavior inside the module, with typed ports for host infrastructure.
+
+The declaration must identify the operations and resources it needs. Registry validation rejects duplicate names and unresolved references. Current package access determines which declarations are available to a conversation. Do not assemble another independent expert list in a service or give an expert a broader tool set than its declaration.
 
 ## Runtime package anatomy
 
@@ -150,14 +178,11 @@ The authoritative submitted conversation document is the reference source of tru
 
 The right-side Capability panel lists authorized standalone packages for inspection and attachment. Top-level modules are selected through `/` or the Capabilities category in `@`. The package catalog client and NATS API also expose manifest details, dependency names, input schemas, and detached Tool-run operations. The side-panel inspector does not render a Run form.
 
-A Tool can start in four ways:
+The conversation agent calls registered operations directly or delegates to a registered domain expert. Its `search_capabilities` tool searches the unified agent registry, including Tools, Skills and experts.
 
-1. An attached Tool with `executionPolicy: 'required'` runs before the reasoning model streams.
-2. An attached `model-choice` Tool becomes a model function for that turn.
-3. A reasoning model calls `search_capabilities`, then `use_capability`.
-4. An authorized client publishes a detached run request through the Capability Run API.
+The manifest-based Capability runtime also supports attached packages and detached runs. An attached `required` Tool runs in media preflight, a `model-required` Tool must be called by the selected reasoning provider, and a `model-choice` Tool is optional. Its provider adapter exposes package discovery and `use_capability`. Authorized clients can also publish detached requests through the Capability Run API. These package policies belong to the domain runtime; they do not put a classifier in front of the conversation agent.
 
-Every path resolves and authorizes the same package graph. A detached run and a prompt-originated run use the same dispatcher, workflow runner, event log, cancellation path, and output rules.
+Each package-execution path resolves and authorizes the same package graph. A detached run and a prompt-originated run use the same dispatcher, workflow runner, event log, cancellation path, and output rules.
 
 Explicit image chips become authorized Asset IDs only when the selected Tool declares a compatible Asset-ID input. Transient image and video provider instances do not receive Capability model functions.
 
@@ -274,7 +299,17 @@ Catalog rows contain metadata and the manifest pointer. Search never returns Obj
 
 User and organization packages store resources in the organization Blob bucket. Deployment-owned global packages use the system bucket. Global mutation requires server authority.
 
-## Built-in modules
+## Installed modules
+
+Media Pipeline owns reusable operation plans, draft revisions, execution and pending-operation receipts. It publishes its existing Tools and Skills plus a domain expert through the same agent registry. Only installed operation handlers are exposed for planning and execution.
+
+## Retained disabled modules
+
+Character Creator, Style Extraction and Media Sequence are not registered in the API or browser composition roots. They are unavailable for discovery, attachment, seeding and execution. Their implementation source remains for later retirement; the following descriptions document that retained source.
+
+### Media Sequence
+
+Media Sequence retains its sequence Artifact, editing tools, render compiler and integration source for later work. Sequence editing and export are unplugged from the app. The canvas image/video switch continues to select media generation modes.
 
 ### Style Extraction
 
@@ -285,10 +320,6 @@ Style Extraction lives under `packages/lixpi/capability-system/src/capabilities/
 Character Creator lives under `packages/lixpi/capability-system/src/capabilities/character-creator/`. Its module-internal entry Tool validates the request and builds a typed provider-neutral plan for 3 to 10 shots. Separate module-internal Skills define the dependency graph, reference fidelity, and per-panel prompt rules.
 
 The Tool does not select a hidden media model or generate an Asset itself. The selected reasoning and image-model matrix remains authoritative. The media strategy reauthorizes canonical/original sources, analyzes structured evidence, generates and checks isolated panels, and assembles the final PNG with owned deterministic layout code. The final image settles through ordinary Asset and canvas paths. Character Creator excludes video generation. See [Character Creator](CHARACTER-CREATOR.md).
-
-### Action Timeline
-
-Action Timeline lives under `packages/lixpi/capability-system/src/capabilities/action-timeline/`. Its entry Tool runs once per selected reasoning model, ignores persistent image/video selections, extracts duration and precision from authoritative prompt text, writes a server-owned timing grid in sequential token-budgeted batches, and persists one reusable `capabilityArtifact` Asset per successful model variant. Its timing-grid, segment-writing, and reference-fidelity Skills are module-internal. The module owns all Artifact-specific schema, validation, serialization, editor, picker, library, info, and replay factories; explicit `/` selection uses the same generic module badge as other Capabilities and mounts no parameter form. See [Action Timeline](ACTION-TIMELINE.md).
 
 ## Storage and operations
 

@@ -121,8 +121,8 @@ export const createCapabilityStructuredModelPort = (): CapabilityStructuredModel
                     content: buildModelContent(request.userPrompt, request.inputs),
                 }],
                 schema: {
-                    name: 'action_timeline_batch',
-                    description: 'A complete Action Timeline segment batch.',
+                    name: 'capability_model_output',
+                    description: 'A complete structured Capability model result.',
                     schema: request.schema,
                 },
                 natsService,
@@ -266,7 +266,7 @@ export const resolveAuthorizedAssetModelInput = async (
     ) {
         throw new CapabilityError(
             'CAPABILITY_ACTION_INPUT_INVALID',
-            `Action Timeline cannot cite nested Capability Artifact ${asset.assetId}`,
+            `Asset ${asset.assetId} is a Capability Artifact`,
             {
                 assetId: asset.assetId,
                 reason: 'NESTED_ARTIFACT_FORBIDDEN',

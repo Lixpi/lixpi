@@ -8,6 +8,7 @@ import {
 } from '@lixpi/prosemirror/shared/thread-doc'
 import {
     buildCanvasConversationContent,
+    buildCanvasConversationModelPreferences,
     contentJSONHasPromptReference,
     extractPromptTextFromContentJSON,
     getPromptReferenceCanvasNodeIds,
@@ -47,6 +48,55 @@ const input = (): AiPromptComposerSubmitData => ({
     useMultipleImageModels: false,
     useMultipleVideoModels: false,
     capabilityInputs: {},
+})
+
+describe('canvas conversation model preferences', () => {
+    it('omits unset video controls so a greeting can be submitted in video mode', () => {
+        const data = input()
+        data.mediaGenerationMode = 'video'
+        data.videoOptions = {
+            aiVideoModels: ['test:video'],
+            videoAspectRatio: '',
+            videoResolution: '',
+            videoDuration: '',
+        }
+        expect(buildCanvasConversationModelPreferences(data)).toEqual({
+            reasoningModelIds: data.aiReasoningModels,
+            imageModelIds: [],
+            videoModelIds: ['test:video'],
+            videoOptions: {},
+        })
+        expect(data.mediaGenerationMode).toBe('video')
+        expect(data.videoOptions.videoDuration).toBe('')
+    })
+
+    it('preserves chosen video controls and configuration groups exactly', () => {
+        const data = input()
+        data.mediaGenerationMode = 'video'
+        data.videoOptions = {
+            aiVideoModels: ['test:video'],
+            videoAspectRatio: '16:9',
+            videoResolution: '720p',
+            videoDuration: '5',
+            configGroups: [{
+                groupId: 'video',
+                modelIds: ['test:video'],
+                values: { quality: 'standard' },
+            }],
+        }
+        expect(buildCanvasConversationModelPreferences(data).videoOptions).toEqual({
+            aspectRatio: '16:9',
+            resolution: '720p',
+            duration: '5',
+            configGroups: data.videoOptions.configGroups,
+        })
+    })
+
+    it('still rejects malformed selected model identities', () => {
+        const data = input()
+        data.aiReasoningModels = ['missing-provider']
+        expect(() => buildCanvasConversationModelPreferences(data)).toThrow('Select a valid model before sending.')
+    })
 })
 
 describe('canvas conversation content', () => {

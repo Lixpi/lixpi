@@ -88,6 +88,25 @@ describe('CapabilityModuleCatalog', () => {
         ])
     })
 
+    it('retains the owning module entry separately from a native Skill package identity', () => {
+        const definition = makeModule('test-module', [])
+        definition.name = 'Test Module'
+        definition.skills[0].agentSkill = {
+            name: 'test-instructions',
+            files: { instructions: 'SKILL.md' },
+        }
+        const catalog = new CapabilityModuleCatalog()
+        catalog.registerModule(definition)
+        expect(catalog.createAgentRegistry().skills()).toMatchObject([{
+            capabilityId: 'global.test-module.instructions',
+            owner: {
+                kind: 'module',
+                moduleId: 'test-module',
+                capabilityId: 'global.test-module',
+            },
+        }])
+    })
+
     it('installs module-owned media strategies into the host registry', () => {
         const strategy = {
             kind: 'character-sheet' as const,

@@ -16,7 +16,7 @@ import {
     createSlidingSwitch,
     type SlidingSwitchInstance,
 } from '@lixpi/ui-kit/components/sliding-switch'
-import { aiChatPanelCollapseIcon } from '@lixpi/ui-kit/svg'
+import { navigationSidePanelToggleIcon } from '@lixpi/ui-kit/svg'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 
 export type WorkspaceRightPanelSettings = {
@@ -127,7 +127,8 @@ export class WorkspaceRightPanel {
             drag: settings.drag,
             toggle: {
                 ...settings.toggle,
-                iconSvg: aiChatPanelCollapseIcon,
+                // The navigation panel's icon, mirrored in CSS so its bar sits on the right.
+                iconSvg: navigationSidePanelToggleIcon,
                 className: 'workspace-ai-chat-panel-toggle',
                 onToggle: () => {
                     if (!this.lifetime.signal.aborted)

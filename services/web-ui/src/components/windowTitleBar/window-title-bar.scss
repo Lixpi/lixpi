@@ -1,0 +1,42 @@
+// The desktop app sets `--window-title-bar-height` and `--window-controls-inset`
+// on `<html>` together with `data-title-bar="overlay"`, and adds
+// `data-window-fullscreen` in full screen, where macOS shows its own title bar
+// on demand and the page's row goes away.
+//
+// `--window-title-bar-active` is 1 while the row shows and 0 otherwise, so a
+// position can pick its desktop or browser value in one `calc()`, as the panel
+// toggle settings do. `--window-title-bar-inset` is the row's height while it
+// shows, for content that must start below it.
+:root {
+    --window-title-bar-active: 0;
+    --window-title-bar-inset: 0px;
+}
+
+:root[data-title-bar="overlay"] {
+    --window-title-bar-active: 1;
+    --window-title-bar-inset: var(--window-title-bar-height);
+}
+
+:root[data-title-bar="overlay"][data-window-fullscreen] {
+    --window-title-bar-active: 0;
+    --window-title-bar-inset: 0px;
+}
+
+// Below the navigation panel's surface, so the open panel hides it, and above
+// the main pane. The solid centre covers the traffic lights and the
+// navigation toggle after them, and the edge fades into the content to the
+// right and below.
+.window-title-bar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: calc(var(--window-controls-inset) + var(--window-title-bar-height) * 1.5);
+    height: calc(var(--window-title-bar-height) * 1.6);
+    z-index: 10025;
+    pointer-events: none;
+    background: radial-gradient(farthest-side at top left, var(--theme-background) 65%, transparent);
+}
+
+:root[data-window-fullscreen] .window-title-bar-backdrop {
+    display: none;
+}

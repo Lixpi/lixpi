@@ -30,15 +30,14 @@ import BlobModel, { buildBlobReferenceBatchOperations } from '../models/blob.ts'
 import {
     AgentExecutionScope,
     type AgentExecution,
+    type AgentExecutionPermissions,
+    type LegacyAgentIntent,
 } from '../llm/agent/agent-execution-scope.ts'
 import {
     AgentPayloadStore,
     type AgentPayload,
     type AgentPayloadPort,
 } from '../llm/agent/agent-payload-store.ts'
-import {
-    type AgentIntent,
-} from '../llm/agent/agent-harness.ts'
 import {
     type ConversationOwner,
 } from '../llm/agent/conversation-owner.ts'
@@ -54,11 +53,14 @@ type ExecutionRecord = {
     inputHash: string
     runId: string
     continuationEpoch: number
+    invocationId?: string
     state: MediaPipelineExecution['state']
     payload: AgentPayload
-    intent: AgentIntent
     createdAssetIds: string[]
-}
+} & (
+    | { permissions: AgentExecutionPermissions }
+    | { intent: LegacyAgentIntent }
+)
 type CompletionRecord = {
     executionId: string
     notified: boolean
@@ -196,6 +198,7 @@ export class MediaPipelineAdapter {
                     inputHash: string
                     assetId: string
                     revision: number
+                    created?: boolean
                 }>(
                     partition(context),
                     mutationKey(context, clientMutationId),
@@ -219,7 +222,12 @@ export class MediaPipelineAdapter {
                 if (!pipeline)
                     throw new Error('PIPELINE_MUTATION_ARTIFACT_MISSING')
 
-                AgentExecutionScope.current().createdAssetIds.add(receipt.assetId)
+                if (
+                    receipt.created
+                    ?? receipt.revision === 1
+                )
+                    AgentExecutionScope.current().createdAssetIds.add(receipt.assetId)
+
                 await this.publishDraft(
                     context,
                     pipeline,
@@ -241,6 +249,7 @@ export class MediaPipelineAdapter {
                     pipeline,
                 } = input
                 await this.assertContext(context)
+                const scope = AgentExecutionScope.current()
                 const committed = await this.artifacts.commit({
                     access: context,
                     assetId: pipeline.pipelineId,
@@ -251,7 +260,11 @@ export class MediaPipelineAdapter {
                     value: pipeline,
                     document: createMediaPipelineDocument(pipeline),
                     definition: mediaPipelineSharedDefinition,
-                    fences: () => AgentExecutionScope.current().owner.fences(context.continuationEpoch),
+                    fences: () => scope.owner.fences(context.continuationEpoch),
+                    agentTurn: {
+                        partition: scope.owner.partition,
+                        turnId: scope.turn.turnId,
+                    },
                     additionalOperations: [
                         this.repository.put(
                             partition(context),
@@ -260,6 +273,7 @@ export class MediaPipelineAdapter {
                                 inputHash: input.inputHash,
                                 assetId: pipeline.pipelineId,
                                 revision: pipeline.revision,
+                                created: input.expectedRevision === 0,
                             },
                         ),
                         ...(input.expectedRevision === 0 ? [this.repository.put(
@@ -284,7 +298,9 @@ export class MediaPipelineAdapter {
                 if (!committed)
                     throw new Error('PIPELINE_REVISION_CONFLICT')
 
-                AgentExecutionScope.current().createdAssetIds.add(pipeline.pipelineId)
+                if (input.expectedRevision === 0)
+                    scope.createdAssetIds.add(pipeline.pipelineId)
+
                 await this.publishDraft(
                     context,
                     pipeline,
@@ -374,9 +390,10 @@ export class MediaPipelineAdapter {
             const scope: AgentExecution = {
                 owner,
                 turn,
-                intent: record.intent,
+                permissions: this.restorePermissions(record, turn),
                 responseMessageId: restored.context.responseMessageId,
                 continuationEpoch: record.continuationEpoch,
+                invocationId: record.invocationId,
                 createdAssetIds: new Set([
                     ...record.createdAssetIds,
                     ...Object
@@ -450,9 +467,10 @@ export class MediaPipelineAdapter {
                     {
                         owner,
                         turn,
-                        intent: record.intent,
+                        permissions: this.restorePermissions(record, turn),
                         responseMessageId: execution.context.responseMessageId,
                         continuationEpoch: record.continuationEpoch,
+                        invocationId: record.invocationId,
                         createdAssetIds: new Set(record.createdAssetIds),
                     },
                     async () => this.cancelRecord(execution),
@@ -725,12 +743,29 @@ export class MediaPipelineAdapter {
                 inputHash: execution.inputHash,
                 runId: execution.context.runId,
                 continuationEpoch: execution.context.continuationEpoch,
+                ...(scope.invocationId ? { invocationId: scope.invocationId } : {}),
                 state: execution.state,
                 payload: prepared.payload,
-                intent: scope.intent,
+                permissions: scope.permissions,
                 createdAssetIds: [...scope.createdAssetIds],
             },
             operations: prepared.operations,
+        }
+    }
+
+    private restorePermissions(
+        record: ExecutionRecord,
+        turn: ConversationTurn,
+    ): AgentExecutionPermissions {
+        if ('permissions' in record)
+            return record.permissions
+
+        return {
+            readOnly: turn.delegation?.access === 'read',
+            allowedOperationFamilies: record.intent.operationFamilies.filter(
+                family => !turn.delegation || turn.delegation.allowedOperationFamilies.includes(family),
+            ),
+            legacyIntent: record.intent,
         }
     }
 

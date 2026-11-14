@@ -359,7 +359,15 @@ const resolveCapabilityArtifactContextBlocks = async (
     )
         throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_TYPE_MISMATCH:${node.nodeId}`)
 
-    const definition = capabilityArtifactBackendRegistry.require(artifactAsset.artifact.artifactTypeId).shared
+    const definition = capabilityArtifactBackendRegistry.get(artifactAsset.artifact.artifactTypeId)?.shared
+
+    if (!definition) {
+        if (node.isExplicitChip)
+            throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_TYPE_UNAVAILABLE:${node.artifactTypeId}`)
+
+        return []
+    }
+
     const loadSnapshot = deps.loadAssetDocumentSnapshot ?? AssetDocumentService.loadCurrentSnapshot
     const snapshot = await loadSnapshot(artifactAsset, 'capabilityArtifact')
 

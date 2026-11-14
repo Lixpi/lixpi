@@ -101,7 +101,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 | Page | What it covers |
 |------|----------------|
 | [Workspace Composer & Generated Output Details](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | Conversation Assets, detached streaming authority, the canvas composer, and the persisted unified generated-output details panel |
-| [Agent Intent and Execution](../services/api/src/llm/README.md#intent-classification-and-agent-execution) | Diagram of Lixpi's preliminary intent classification, clarification and recovery, followed by the Deep Agents model/tool loop |
+| [Agent Reasoning and Execution](../services/api/src/llm/README.md#agent-reasoning-and-execution) | Main-agent decisions, unified Tool/Skill/expert discovery, controlled domain workflows, clarification and execution permissions |
 | [Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Explicit, Discovery, and Mixed conversation context; prompt references, source authorization, and direct-generation media candidates |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 | [Markdown Rendering](ai-chat/MARKDOWN-RENDERING.md) | The one-parser rule and the editable and non-editable rendering paths |
@@ -122,9 +122,8 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 |------|----------------|
 | [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Self-contained Capability modules, typed host ports, description sheets, standalone packages, sealed execution, scopes, and progress |
 | [Capability Storage and Operations](library/CAPABILITY-STORAGE.md) | Catalog tables, Blob-backed packages, run logs, limits, backup, restore, repair, and garbage collection |
-| [Character Creator](library/CHARACTER-CREATOR.md) | Panel graph, source evidence, provider capability adapters, fidelity assessment, deterministic composition, and normal Asset settlement |
-| [Action Timeline](library/ACTION-TIMELINE.md) | Reusable timed prompt Artifacts, prompt-derived timing, editing, references, library behavior, and model admission |
-| [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md) | The built-in Capability module's Tool DAG, specialist actions, standalone visual-style output, and generic progress |
+| [Character Creator](library/CHARACTER-CREATOR.md) | Retained, disabled implementation: panel graph, source evidence, fidelity assessment and deterministic composition |
+| [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md) | Retained, disabled implementation: Tool DAG, specialist actions and visual-style output |
 | [Style Extraction Pipeline](library/STYLE-EXTRACTION-PIPELINE.md) | Router, parallel axis specialists, crops, synthesis, samples, validation, and visual-style persistence |
 | [Style Reference Isolation](library/ANTI-LEAKAGE.md) | Source evidence, neutral probes, provider-neutral references, traceability, and isolation limits |
 | [Media Library](library/MEDIA-LIBRARY.md) | The saved-media panel, saved images/videos, scopes, ownership, URL import, data model, service surface |

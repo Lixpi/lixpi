@@ -44,15 +44,14 @@ import {
     AgentDelegation,
     combineConversationOperations,
 } from './agent-delegation.ts'
-import { AgentExecutionScope } from './agent-execution-scope.ts'
 import {
-    type AgentIntent,
-} from './agent-harness.ts'
+    AgentExecutionScope,
+    type AgentExecutionPermissions,
+} from './agent-execution-scope.ts'
 import {
     ConversationRepository,
     conversationPartition,
 } from './conversation-repository.ts'
-import { narrowDelegatedIntent } from './conversation-runtime.ts'
 
 // =============================================================================
 // HARNESS
@@ -99,15 +98,6 @@ const budget = (overrides: Partial<AgentTurnBudget> = {}): AgentTurnBudget => ({
     maxToolCalls: 64,
     maxSpecialistCalls: 4,
     maxDelegationCalls: 8,
-    ...overrides,
-})
-
-const intent = (overrides: Partial<AgentIntent> = {}): AgentIntent => ({
-    intent: 'inspect',
-    operationFamilies: [],
-    targetAssetIds: [],
-    confidence: 1,
-    needsClarification: false,
     ...overrides,
 })
 
@@ -210,12 +200,15 @@ const delegate = async (
         instruction: string
         access: 'read' | 'act'
     },
-    executionIntent = intent(),
+    permissions: AgentExecutionPermissions = {
+        readOnly: false,
+        allowedOperationFamilies: ['image'],
+    },
 ): Promise<Record<string, any>> => JSON.parse(await AgentExecutionScope.run(
     {
         owner: currentOwner as never,
         turn: { turnId: 'parent-turn' } as never,
-        intent: executionIntent,
+        permissions,
         responseMessageId: 'response-1',
         continuationEpoch: 0,
         createdAssetIds: new Set(),
@@ -311,13 +304,16 @@ describe('delegate_to_workspace rejections', () => {
         expect(service.submit).not.toHaveBeenCalled()
     })
 
-    it('refuses act without an execute scope and a call with no delegations left', async () => {
+    it('refuses act from a read-only caller and a call with no delegations left', async () => {
         const delegation = createDelegation()
 
         expect((await delegate(delegation, owner(), {
             workspaceId: 'storyboard',
             instruction: 'Generate a cover',
             access: 'act',
+        }, {
+            readOnly: true,
+            allowedOperationFamilies: [],
         })).error.code).toBe('DELEGATION_ACTION_NOT_AUTHORIZED')
 
         meta.run.budget = budget({ delegationCalls: 8 })
@@ -414,10 +410,10 @@ describe('delegate_to_workspace', () => {
                 instruction: 'Generate a cover image',
                 access: 'act',
             },
-            intent({
-                intent: 'execute',
-                operationFamilies: ['image'],
-            }),
+            {
+                readOnly: false,
+                allowedOperationFamilies: ['image'],
+            },
         )
 
         expect(service.submit.mock.calls[0][2].delegation).toMatchObject({
@@ -539,37 +535,30 @@ describe('delegation outline and scope', () => {
         expect(prompt).toContain('- Storyboard [workspace storyboard]')
     })
 
-    it('gives a read delegation no action scope and narrows an act delegation to the caller families', () => {
-        const delegation = {
-            access: 'read',
-            allowedOperationFamilies: [],
-        } as unknown as ConversationTurnDelegation
+    it('passes only the legacy family allowance to an act delegation from an unfinished turn', async () => {
+        await delegate(
+            createDelegation(),
+            owner(),
+            {
+                workspaceId: 'storyboard',
+                instruction: 'Generate a cover image',
+                access: 'act',
+            },
+            {
+                readOnly: false,
+                allowedOperationFamilies: ['image', 'sequence-edit'],
+                legacyIntent: {
+                    intent: 'execute',
+                    operationFamilies: ['image'],
+                    targetAssetIds: [],
+                    needsClarification: false,
+                },
+            },
+        )
 
-        expect(narrowDelegatedIntent(intent({
-            intent: 'execute',
-            operationFamilies: ['image'],
-        }), delegation)).toMatchObject({
-            intent: 'inspect',
-            operationFamilies: [],
-        })
-        expect(narrowDelegatedIntent(intent({
-            intent: 'execute',
-            operationFamilies: ['image', 'video'],
-        }), {
-            ...delegation,
+        expect(service.submit.mock.calls[0][2].delegation).toMatchObject({
             access: 'act',
             allowedOperationFamilies: ['image'],
-        })).toMatchObject({
-            intent: 'execute',
-            operationFamilies: ['image'],
         })
-        expect(narrowDelegatedIntent(intent({
-            intent: 'execute',
-            operationFamilies: ['video'],
-        }), {
-            ...delegation,
-            access: 'act',
-            allowedOperationFamilies: ['image'],
-        }).intent).toBe('inspect')
     })
 })

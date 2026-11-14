@@ -10,10 +10,10 @@ import {
 import AdmZip from 'adm-zip'
 
 import {
-    ACTION_TIMELINE_ARTIFACT_TYPE_ID,
-    ACTION_TIMELINE_SCHEMA_VERSION,
-    buildActionTimelineDocument,
-} from '@lixpi/capability-system'
+    MEDIA_PIPELINE_ARTIFACT_TYPE_ID,
+    MEDIA_PIPELINE_SCHEMA_VERSION,
+    createMediaPipelineDocument,
+} from '@lixpi/capability-system/shared'
 
 const mocks = vi.hoisted(() => ({
     verify: vi.fn(),
@@ -354,20 +354,43 @@ describe('Workspace import route', () => {
         })
     })
 
-    it('imports an Action Timeline Artifact document with its module-owned schema', async () => {
+    it('imports a Media Pipeline Artifact document with its module-owned schema', async () => {
         const sourceAssetId = '7e7d5caa-58b1-44dd-b9bd-38ab99f28b4a'
         const sourceWorkspaceId = 'source-workspace-1'
         const nodeId = 'capability-artifact-node-1'
-        const document = buildActionTimelineDocument(
-            {
-                durationMs: 2000,
-                precisionMs: 2000,
-            },
-            [{
-                slotIndex: 0,
-                runs: [{ text: 'The subject crosses the frame.' }],
+        const document = createMediaPipelineDocument({
+            schemaVersion: 'media-pipeline-v1',
+            pipelineId: 'fixture-pipeline',
+            revision: 1,
+            requestedOutcome: 'Prepare a reference composition',
+            constraints: [],
+            sources: [],
+            nodes: [{
+                nodeId: 'prepare',
+                operationKey: 'fixture.prepare',
+                parameters: {},
+                inputs: [],
+                outputs: [{
+                    portId: 'result',
+                    kind: 'image',
+                    required: true,
+                }],
             }],
-        )
+            edges: [],
+            executionPolicy: {
+                maxConcurrency: 1,
+                maxFanout: 1,
+            },
+            outputBindings: [{
+                outputId: 'result',
+                nodeId: 'prepare',
+                portId: 'result',
+            }],
+            origin: {
+                conversationAssetId: 'conversation-1',
+                turnId: 'turn-1',
+            },
+        })
         const documentBytes = Buffer.from(JSON.stringify(document))
         const blobHash = createHash('sha256').update(documentBytes).digest('hex')
         const manifest = {
@@ -384,7 +407,7 @@ describe('Workspace import route', () => {
                         nodeId,
                         type: 'capabilityArtifact',
                         assetId: sourceAssetId,
-                        artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+                        artifactTypeId: MEDIA_PIPELINE_ARTIFACT_TYPE_ID,
                         position: {
                             x: 0,
                             y: 0,
@@ -400,7 +423,7 @@ describe('Workspace import route', () => {
             assets: [{
                 assetId: sourceAssetId,
                 organizationId: 'source-organization-1',
-                title: 'Action Timeline',
+                title: 'Media Pipeline',
                 scope: 'workspace',
                 scopeOwnerId: sourceWorkspaceId,
                 originWorkspaceId: sourceWorkspaceId,
@@ -410,14 +433,14 @@ describe('Workspace import route', () => {
                         role: 'capabilityArtifact',
                         blobHash,
                         version: 0,
-                        schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                        schemaVersion: MEDIA_PIPELINE_SCHEMA_VERSION,
                         byteSize: documentBytes.byteLength,
                         updatedAt: 100,
                     },
                 },
                 artifact: {
-                    artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
-                    schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                    artifactTypeId: MEDIA_PIPELINE_ARTIFACT_TYPE_ID,
+                    schemaVersion: MEDIA_PIPELINE_SCHEMA_VERSION,
                 },
                 states: {
                     lifecycle: 'active',
@@ -465,13 +488,13 @@ describe('Workspace import route', () => {
 
         expect(mocks.assetCreate).toHaveBeenCalledWith(expect.objectContaining({
             artifact: {
-                artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
-                schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                artifactTypeId: MEDIA_PIPELINE_ARTIFACT_TYPE_ID,
+                schemaVersion: MEDIA_PIPELINE_SCHEMA_VERSION,
             },
             documents: {
                 capabilityArtifact: expect.objectContaining({
                     role: 'capabilityArtifact',
-                    schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                    schemaVersion: MEDIA_PIPELINE_SCHEMA_VERSION,
                 }),
             },
         }))

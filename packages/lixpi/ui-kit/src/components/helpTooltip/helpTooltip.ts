@@ -232,10 +232,9 @@ class HelpTooltip implements HelpTooltipInstance {
     private addTriggerListeners(): void {
         this.trigger.addEventListener('pointerenter', this.handleTriggerPointerEnter)
         this.trigger.addEventListener('pointerleave', this.handleTriggerPointerLeave)
-        this.trigger.addEventListener('focusin', this.handleTriggerFocusIn)
         this.trigger.addEventListener('focusout', this.handleTriggerFocusOut)
         this.trigger.addEventListener('click', this.handleTriggerClick)
-        this.trigger.addEventListener('keydown', this.handleEscapeKey)
+        this.trigger.addEventListener('keydown', this.handleTriggerKeyDown)
 
         if (this.config.interactive) {
             this.content.addEventListener('pointerenter', this.handleContentPointerEnter)
@@ -249,10 +248,9 @@ class HelpTooltip implements HelpTooltipInstance {
     private removeTriggerListeners(): void {
         this.trigger.removeEventListener('pointerenter', this.handleTriggerPointerEnter)
         this.trigger.removeEventListener('pointerleave', this.handleTriggerPointerLeave)
-        this.trigger.removeEventListener('focusin', this.handleTriggerFocusIn)
         this.trigger.removeEventListener('focusout', this.handleTriggerFocusOut)
         this.trigger.removeEventListener('click', this.handleTriggerClick)
-        this.trigger.removeEventListener('keydown', this.handleEscapeKey)
+        this.trigger.removeEventListener('keydown', this.handleTriggerKeyDown)
 
         if (this.config.interactive) {
             this.content.removeEventListener('pointerenter', this.handleContentPointerEnter)
@@ -647,17 +645,54 @@ class HelpTooltip implements HelpTooltipInstance {
         this.requestHideTooltip()
     }
 
-    private handleTriggerFocusIn = (): void => {
-        this.isTriggerActive = true
-        this.showTooltip()
-    }
-
+    // Keyboard focus never opens the tooltip, so tabbing through controls stays quiet. Screen readers
+    // still announce the trigger's label and description, and a keyboard user can open help content
+    // on demand with Enter or Space. Focus leaving the trigger closes anything the keyboard opened.
     private handleTriggerFocusOut = (): void => {
-        if (!this.isPointerWithinTrigger)
-            this.isActivationSuppressedUntilExit = false
+        if (this.isPointerWithinTrigger)
+            return
 
+        this.isActivationSuppressedUntilExit = false
         this.isTriggerActive = false
         this.requestHideTooltip()
+    }
+
+    private toggleTooltipFromKeyboard(): void {
+        if (this.content.classList.contains('is-visible')) {
+            this.isTriggerActive = false
+            this.hideTooltip()
+
+            return
+        }
+
+        this.isActivationSuppressedUntilExit = false
+        this.isTriggerActive = true
+        this.clearHideTimer()
+        this.clearShowTimer()
+        this.displayTooltip()
+    }
+
+    private handleTriggerKeyDown = (event: Event): void => {
+        if (!(event instanceof KeyboardEvent))
+            return
+
+        if (event.key === 'Escape') {
+            this.handleEscapeKey(event)
+
+            return
+        }
+
+        // Only the component's own help trigger toggles on Enter or Space. A caller-supplied trigger
+        // is a real control whose activation keys must keep doing their normal job.
+        if (
+            !this.ownsTrigger
+            || (event.key !== 'Enter' && event.key !== ' ')
+        )
+            return
+
+        event.preventDefault()
+        event.stopPropagation()
+        this.toggleTooltipFromKeyboard()
     }
 
     private handleTriggerClick = (): void => {
@@ -728,8 +763,25 @@ class HelpTooltip implements HelpTooltipInstance {
         this.content.classList.remove('is-visible')
         this.removeViewportListeners()
         this.disconnectContentResizeObserver()
-        this.content.remove()
+        this.restoreContentForDescription()
         this.syncTriggerDescription(false)
+    }
+
+    // An owned trigger keeps aria-describedby pointing at the content, so hidden content goes back into
+    // the component root instead of leaving the document. Its fixed position and hidden visibility keep
+    // it out of layout and out of sight while assistive technology can still read the description.
+    private restoreContentForDescription(): void {
+        if (
+            !this.ownsTrigger
+            || this.destroyed
+        ) {
+            this.content.remove()
+
+            return
+        }
+
+        if (this.content.parentElement !== this.dom)
+            this.dom.appendChild(this.content)
     }
 
     show(): void {
@@ -777,8 +829,9 @@ class HelpTooltipProvider implements HelpTooltipProviderInstance {
         this.activeTriggerObserver = typeof MutationObserver === 'undefined'
             ? null
             : new MutationObserver(this.refreshActiveTooltip)
+        // Delegated tooltips only repeat a control's accessible name or description, which screen
+        // readers already announce on focus, so only pointer hover shows them.
         this.root.addEventListener('pointerover', this.handleActivation)
-        this.root.addEventListener('focusin', this.handleActivation)
     }
 
     private findTrigger(target: EventTarget | null): HelpTooltipTriggerElement | null {
@@ -932,7 +985,6 @@ class HelpTooltipProvider implements HelpTooltipProviderInstance {
 
     destroy(): void {
         this.root.removeEventListener('pointerover', this.handleActivation)
-        this.root.removeEventListener('focusin', this.handleActivation)
         this.destroyActiveTooltip()
     }
 }

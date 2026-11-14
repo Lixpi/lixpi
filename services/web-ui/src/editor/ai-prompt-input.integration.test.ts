@@ -2212,8 +2212,8 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const plugin = createAiPromptInputPlugin(options)
         const capabilityReference = promptReference({
             referenceType: 'capability-module',
-            moduleId: 'action-timeline',
-            displayName: 'Action Timeline',
+            moduleId: 'fixture-artifact',
+            displayName: 'Fixture Artifact',
         })
         const testDoc = doc(promptInput(
             { aiReasoningModels: '["gpt-4"]' },
@@ -2243,8 +2243,8 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
                     type: 'prompt_reference',
                     attrs: expect.objectContaining({
                         referenceType: 'capability-module',
-                        moduleId: 'action-timeline',
-                        displayName: 'Action Timeline',
+                        moduleId: 'fixture-artifact',
+                        displayName: 'Fixture Artifact',
                     }),
                 },
                 {

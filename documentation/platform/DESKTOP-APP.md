@@ -35,9 +35,24 @@ The app saves downloads by fetching the file from inside the page and handing it
 
 WebKit treats plain-HTTP `localhost` as insecure, unlike Chrome, and silently cancels a plain-HTTP frame inside an HTTPS page. The local auth client refreshes tokens in such a hidden frame, so the local HTTPS gateway serves LocalAuth0 at `https://localhost:3446` and the frontends use that origin. When NATS rejects a stored session, such as one from before LocalAuth0 restarted, the client fetches a new token in the background and reconnects, in Safari and the desktop app as in Chrome. NATS rejects a session the same way while the API restarts after a code change, so the client retries with its cached token at most 2 seconds apart and reconnects once the API is back instead of signing out. An edit to a file only the browser uses doesn't restart the API at all. The refresh keeps its time limit, so a refresh that can't complete still ends at the sign-in screen instead of loading forever.
 
-The page has no access to Tauri's native commands. The app grants no capabilities to the remote origin, so web-ui runs with exactly the permissions it has in a browser.
+Apart from dragging the window, described in the next section, the page has no access to Tauri's native commands, so web-ui runs with the permissions it has in a browser.
 
 The window remembers its size and position between launches.
+
+## Title bar
+
+On macOS the window has no native title bar. web-ui fills the whole window, starting at its top edge, and the traffic lights float over the page's top-left corner. Tauri's overlay title bar style sets this up, and the app moves the buttons so they sit centred in a 40-point row.
+
+The page draws that row itself, so it belongs to the interface rather than sitting above it as a grey strip. A script that runs before any page script marks `<html>` with `data-title-bar="overlay"` and sets `--window-title-bar-height` and `--window-controls-inset`, the space the three buttons need. In a browser none of this is set, and web-ui looks as it always has.
+
+The row holds web-ui's own panel toggles. While the navigation panel is open its header becomes the row under the traffic lights, and the navigation toggle sits just outside the panel's edge. When the panel closes the toggle slides with it to just after the traffic lights, with a clear gap to their right. The right panel's toggle shows the same icon, mirrored, at the row's right end. They are the same buttons the browser shows, positioned through `--window-title-bar-active`, which is 1 while the row shows and 0 otherwise, so each toggle setting picks its desktop or browser position in one `calc()`. In a browser the navigation toggle stays fixed at the panel's top-left as before. The right panel's content starts below the row, by `--window-title-bar-inset`. The app places the traffic lights so their centres line up with the toggles.
+
+web-ui's `WindowTitleBar` handles the rest for the life of the page, from sign-in onwards:
+
+- Because controls live in the row, no element covers it. Instead a capturing `pointerdown` listener treats a press in the row that doesn't land on a control (a button, link, field, focusable element or resize handle) as a press on the title bar. That press drags the window, and a double click that stays in place zooms it, as on a native title bar. The page never sees those presses, so pressing the row above the canvas doesn't also pan it. Like any overlay title bar, it can't drag the window until the window is focused, so the first click on an inactive window only focuses it.
+- A backdrop behind the traffic lights, in the page background colour, fades into the content to the right and below, so the buttons and the navigation toggle stay readable over a canvas or a conversation. It sits beneath the navigation panel, which gives them its own background while it's open.
+
+Dragging needs two of Tauri's window commands, `start_dragging` and `internal_toggle_maximize`. At startup the app grants them to the web-ui origin in the main window, and nothing else. In full screen macOS hides the traffic lights and slides its own title bar in on demand, so the app tells the page by setting `data-window-fullscreen` on `<html>` after each page load and resize. The page then hides the backdrop, stops treating the row as a title bar and puts the controls back in their browser positions.
 
 ## Hot reload, reloading and developer tools
 
@@ -144,7 +159,7 @@ docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/deskto
 
 Without the console, the build takes `LIXPI_DESKTOP_TARGET`, `LIXPI_DESKTOP_DIAGNOSTICS` and `LIXPI_DESKTOP_HOT_RELOAD` from the environment file: `x86_64-apple-darwin` for an Intel Mac, `true` for a diagnostics build, `false` for a build without hot reload. The console's choices override them for its builds. The Cargo registry and build output live in the `cargo-registry` and `cargo-target` volumes, so later builds compile only what changed. Open the result with `open gui/tauri/dist/Lixpi.app`, or move it to Applications.
 
-The app's Rust code is formatted, linted and tested by the shared Rust runners under the `desktop` target, which compile it natively on Linux so CI can run them. Its tests cover the decisions the window makes: which navigations become downloads, where a new window goes, how a download URL enters the page script, which URLs the build accepts, what Reload does with the current page, which menu items and keys run a command, and when the hot reload script is installed. [Rust Testing and Tooling](../code-quality/testing/RUST.md) has the commands.
+The app's Rust code is formatted, linted and tested by the shared Rust runners under the `desktop` target, which compile it natively on Linux so CI can run them. Its tests cover the decisions the window makes: which navigations become downloads, where a new window goes, how a download URL enters the page script, which URLs the build accepts, what Reload does with the current page, which menu items and keys run a command, when the hot reload script is installed, and what the title bar script tells the page. [Rust Testing and Tooling](../code-quality/testing/RUST.md) has the commands.
 
 The ad-hoc signature lets the app run on the Mac that built it. Sharing the app with other people needs a Developer ID certificate and Apple's notarization, which this build doesn't do.
 

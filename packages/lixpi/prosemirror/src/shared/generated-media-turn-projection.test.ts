@@ -147,8 +147,8 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
                         type: 'prompt_reference',
                         attrs: {
                             referenceType: 'capability-module',
-                            moduleId: 'action-timeline',
-                            displayName: 'Action Timeline',
+                            moduleId: 'fixture-artifact',
+                            displayName: 'Fixture Artifact',
                         },
                     },
                     {
@@ -174,7 +174,7 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
                             generationRequestId: 'request-1',
                             reasoningRunId: 'reasoning-1',
                             branchForkNodeId: 'fork-1',
-                        }, 'Building the Action Timeline.')],
+                        }, 'Building the Fixture Artifact.')],
                     ),
                 ],
             }],
@@ -197,8 +197,8 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
             projectedUserMessage?.content?.[0]?.content?.map((node) => (
                 node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
             )),
-        ).toEqual(['Create ', 'Action Timeline', ' 15s duration with 2s gaps.'])
-        expect(collectProseMirrorText(projection?.content)).toContain('Building the Action Timeline.')
+        ).toEqual(['Create ', 'Fixture Artifact', ' 15s duration with 2s gaps.'])
+        expect(collectProseMirrorText(projection?.content)).toContain('Building the Fixture Artifact.')
     })
 
     it('projects an in-flight Capability turn without leaking the previous response', () => {
@@ -215,8 +215,8 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
                         type: 'prompt_reference',
                         attrs: {
                             referenceType: 'capability-module',
-                            moduleId: 'action-timeline',
-                            displayName: 'Action Timeline',
+                            moduleId: 'fixture-artifact',
+                            displayName: 'Fixture Artifact',
                         },
                     },
                     {

@@ -19,11 +19,14 @@ import {
 import {
     type CanvasLayer,
     type DrawingResources,
+    type TextureInput,
 } from './resources.ts'
 import { PixiDrawingResources } from './pixi-drawing-resources.ts'
 import { CanvasDrawingScope } from './drawing-scope.ts'
 import { ScopedDrawingResources } from './scoped-drawing-resources.ts'
 import { PixiGpuRetirement } from './pixi-gpu-retirement.ts'
+import { keepMsaaStored } from './pixi-stored-msaa.ts'
+import { webGpuBisect } from './webgpu-bisect.ts'
 
 export type CanvasRendererOptions = {
     root: HTMLElement
@@ -34,6 +37,42 @@ export type CanvasRendererOptions = {
     mediaCache?: MediaCacheOptions
     decoder?: ImageDecoderOptions
     beforeRender?: () => void
+}
+
+// The bisect's bitmap-upload round hands Pixi plain pixels instead of the
+// decoded ImageBitmap, which takes copyExternalImageToTexture out of the path.
+const bitmapPixels = (
+    bitmap: ImageBitmap,
+    mipmaps: boolean,
+): TextureInput => {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const context = canvas.getContext('2d')
+
+    if (!context)
+        throw new Error('Canvas 2D is unavailable for the WebGPU bisect')
+
+    context.drawImage(
+        bitmap,
+        0,
+        0,
+    )
+    const pixels = context.getImageData(
+        0,
+        0,
+        bitmap.width,
+        bitmap.height,
+    ).data
+    bitmap.close()
+
+    return {
+        kind: 'pixels',
+        size: {
+            width: canvas.width,
+            height: canvas.height,
+        },
+        rgba: pixels,
+        mipmaps,
+    }
 }
 
 export class CanvasRenderer {
@@ -89,14 +128,21 @@ export class CanvasRenderer {
             cache: options.mediaCache,
             decoder: options.decoder,
             createTexture: bitmap => {
-                const texture = this.backend.createOwnedTexture(
-                    {
-                        kind: 'image',
-                        source: bitmap,
-                        mipmaps: true,
-                    },
-                    () => bitmap.close(),
-                )
+                const bisect = webGpuBisect()
+                const mipmaps = !bisect?.disables('mipmaps')
+                const texture = bisect?.disables('bitmap-upload')
+                    ? this.backend.createTexture(
+                        bitmapPixels(bitmap, mipmaps),
+                    )
+                    : this.backend.createOwnedTexture(
+                        {
+                            kind: 'image',
+                            source: bitmap,
+                            mipmaps,
+                        },
+                        () => bitmap.close(),
+                    )
+                bisect?.imageShown()
 
                 return {
                     texture,
@@ -122,14 +168,14 @@ export class CanvasRenderer {
             await this.app.init({
                 preference: this.options.preference ?? 'webgpu',
                 backgroundAlpha: 0,
-                antialias: true,
+                antialias: !webGpuBisect()?.disables('antialias'),
                 autoDensity: true,
                 resolution: this.options.resolution ?? Math.min(window.devicePixelRatio || 1, 2),
                 autoStart: false,
                 sharedTicker: false,
                 gcActive: false,
                 webgpu: {
-                    antialias: true,
+                    antialias: !webGpuBisect()?.disables('antialias'),
                     powerPreference: 'high-performance',
                 },
                 webgl: {
@@ -143,8 +189,11 @@ export class CanvasRenderer {
             if (
                 'gpu' in this.app.renderer
                 && 'buffer' in this.app.renderer
-            )
+            ) {
+                keepMsaaStored(this.app.renderer)
                 this.gpuRetirement = new PixiGpuRetirement(this.app.renderer, this.retire)
+                webGpuBisect()?.watch(this.app.renderer.gpu.device)
+            }
 
             if (this.destroyed) {
                 await this.disposeApplication()
@@ -246,7 +295,9 @@ export class CanvasRenderer {
             this.renderedSize = { ...this.size }
         }
 
-        this.backend.renderCaptures(this.app.renderer)
+        if (!webGpuBisect()?.disables('captures'))
+            this.backend.renderCaptures(this.app.renderer)
+
         this.backend.prepareProjection({
             x: 0,
             y: 0,

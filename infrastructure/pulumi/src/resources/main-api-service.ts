@@ -59,6 +59,9 @@ export type MainApiServiceArgs = {
         AUTH0_API_IDENTIFIER: string
         ACCOUNT_ADMISSION_ENABLED: string
         ACCOUNT_ADMISSION_STREAM: string
+        METRICS_ENABLED: 'true'
+        METRICS_FAIL_OPEN: 'false'
+        METRICS_REQUEST_TIMEOUT_MS: string
         SAVE_LLM_RESPONSES_TO_DEBUG_DIR: string
         AGENT_MAX_MODEL_CALLS: string
         AGENT_MAX_TOOL_CALLS: string
@@ -97,6 +100,21 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         dockerBuildContext,
         dockerfilePath,
     } = args
+
+    if (
+        environment.METRICS_ENABLED !== 'true'
+        || environment.METRICS_FAIL_OPEN !== 'false'
+    )
+        throw new Error('Hosted API deployment requires enabled, fail-closed provider usage')
+
+    const metricsTimeoutMs = Number(environment.METRICS_REQUEST_TIMEOUT_MS)
+
+    if (
+        !Number.isSafeInteger(metricsTimeoutMs)
+        || metricsTimeoutMs <= 0
+        || metricsTimeoutMs > 2147483647
+    )
+        throw new Error('Hosted API deployment requires a valid METRICS_REQUEST_TIMEOUT_MS')
 
     // Format names consistently
     const formattedServiceName = formatStageResourceName(

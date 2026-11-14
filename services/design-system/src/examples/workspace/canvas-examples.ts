@@ -862,16 +862,14 @@ export class DocumentNodesExample extends NodeExample {
 }
 
 export class ArtifactNodesExample extends NodeExample {
-    private readOnlyParameter?: ReturnType<ExampleFrame["toggle"]>
     private views: WorkspaceCapabilityNode[] = []
     private artifactType = 'all'
     private width = 520
-    private readOnly = false
 
     constructor(host: HTMLElement) {
         super(
             host,
-            'WorkspaceCapabilityNode mounts the installed Artifact module view. Action Timeline supplies its editor, schema and plugins; Media Pipeline and Media Sequence supply summary cards. The editor lease applies to editable module views.',
+            'WorkspaceCapabilityNode mounts the Media Pipeline Artifact view and the retained Media Sequence view in this example.',
         )
 
         try {
@@ -882,7 +880,6 @@ export class ArtifactNodesExample extends NodeExample {
                 this.artifactType,
                 {
                     all: 'All registered modules',
-                    'action-timeline': 'Action Timeline editor',
                     'media-pipeline': 'Media Pipeline summary',
                     'media-sequence': 'Media Sequence summary',
                 },
@@ -901,18 +898,10 @@ export class ArtifactNodesExample extends NodeExample {
                     this.render()
                 },
             )
-            this.readOnlyParameter = this.frame.toggle(
-                'Editor read-only lease',
-                this.readOnly,
-                readOnly => {
-                    this.readOnly = readOnly
-                    this.render()
-                },
-            )
             this.frame.code(
                 () => ["import {", "    WorkspaceCapabilityNode,", "    type WorkspaceCapabilityNodePorts,", "    type WorkspaceNodeShells,", "} from '@lixpi/canvas-components/workspace/nodes'", "import { type CapabilityArtifactCanvasNode } from '@lixpi/constants'", "", "// Ports resolve the installed module's schema, node view and editor plugins.", `// Selected module: ${  String(
                     (this.artifactType),
-                )  }. Editor lease readOnly: ${  String((this.readOnly))  }.`, "const mount=(", "    host: HTMLElement,", "    node: CapabilityArtifactCanvasNode,", "    shells: WorkspaceNodeShells,", "    ports: WorkspaceCapabilityNodePorts,", ") => {", "    const view=new WorkspaceCapabilityNode({", "        ...node,", `        dimensions: { ...node.dimensions, width: ${  String(
+                )  }.`, "const mount=(", "    host: HTMLElement,", "    node: CapabilityArtifactCanvasNode,", "    shells: WorkspaceNodeShells,", "    ports: WorkspaceCapabilityNodePorts,", ") => {", "    const view=new WorkspaceCapabilityNode({", "        ...node,", `        dimensions: { ...node.dimensions, width: ${  String(
                     (this.width),
                 )  } },`, "    }, shells, ports)", "    host.append(view.element)", "    return () => view.destroy()", "}"].join('\n'),
             )
@@ -933,7 +922,6 @@ export class ArtifactNodesExample extends NodeExample {
     }
 
     private render(reset = false): void {
-        this.readOnlyParameter?.setDisabled(this.artifactType !== 'all' && this.artifactType !== 'action-timeline')
         this.clearViews()
         this.stage.replaceChildren()
         ensureArtifactStyles(this.stage.ownerDocument)
@@ -997,21 +985,8 @@ export class ArtifactNodesExample extends NodeExample {
                             titleOverride: request.displayName,
                         })
                     },
-                    mountEditor: request => {
-                        request.onLeaseStateChange({ readOnly: this.readOnly })
-
-                        return new FixtureEditor(
-                            request.container,
-                            request.document,
-                            request.schema,
-                            request.plugins,
-                            content => this.fixtures.setDocument(
-                                assetId,
-                                'capabilityArtifact',
-                                content,
-                            ),
-                            this.readOnly,
-                        )
+                    mountEditor: () => {
+                        throw new Error('Fixture Artifact has no editor')
                     },
                     onHeightChange: (_nodeId, height) => void (view.element.style.height = `${height}px`),
                     onError: this.frame.error,
@@ -1021,7 +996,7 @@ export class ArtifactNodesExample extends NodeExample {
             this.stage.append(view.element)
         }
 
-        this.frame.report('Registered Artifact types: action-timeline, media-pipeline, media-sequence.')
+        this.frame.report('Example Artifact types: media-pipeline, media-sequence.')
     }
 }
 

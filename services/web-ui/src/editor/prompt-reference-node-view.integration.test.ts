@@ -114,19 +114,18 @@ describe('PromptReferenceNodeView', () => {
         expect(nodeView.dom.textContent?.includes('/')).toBe(false)
     })
 
-    it('renders a slash-selected Action Timeline with the standard Capability module badge', () => {
+    it('renders a slash-selected module with the standard Capability badge', () => {
         const node = promptReference({
             referenceType: 'capability-module',
-            moduleId: 'action-timeline',
-            displayName: 'Action Timeline',
+            moduleId: 'fixture-artifact',
+            displayName: 'Fixture Artifact',
         })
         const nodeView = new PromptReferenceNodeView(node)
 
         expect(nodeView.dom.classList.contains('prompt-reference-chip-capability-module')).toBe(true)
-        expect(nodeView.dom.querySelector('.prompt-reference-chip-content')?.textContent).toBe('Action Timeline')
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-content')?.textContent).toBe('Fixture Artifact')
         expect(nodeView.dom.querySelector('.prompt-reference-chip-icon svg')).not.toBeNull()
         expect(nodeView.dom.querySelector('input')).toBeNull()
-        expect(nodeView.dom.querySelector('.action-timeline-controls')).toBeNull()
     })
 
     it('loads the capability description through the shared context-preview card on focus', async () => {
@@ -230,18 +229,19 @@ describe('PromptReferenceNodeView', () => {
         expect(load).toHaveBeenCalledTimes(2)
     })
 
-    it('renders an Action Timeline Artifact with its registered existing icon', () => {
+    it('keeps a saved Artifact reference readable when its type is unavailable', () => {
         const node = promptReference({
             referenceType: 'capability-artifact',
-            assetId: 'timeline-asset',
-            artifactTypeId: 'action-timeline',
-            displayName: 'Travel Timeline',
+            assetId: 'unavailable-artifact',
+            artifactTypeId: 'unavailable-type',
+            displayName: 'Saved Artifact',
         })
         const nodeView = new PromptReferenceNodeView(node)
 
-        expect(getCapabilityArtifactIcon('action-timeline')).toContain('<svg')
+        expect(getCapabilityArtifactIcon('unavailable-type')).toContain('<svg')
         expect(nodeView.dom.querySelector('.prompt-reference-chip-icon svg')).not.toBeNull()
-        expect(nodeView.dom.querySelector('.action-timeline-reference')?.textContent).toBe('Travel Timeline')
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-artifact-host')?.textContent).toBe('Saved Artifact')
+        nodeView.destroy()
     })
 
     it('keeps identical markup and asks ProseMirror to recreate changed reference markup', () => {

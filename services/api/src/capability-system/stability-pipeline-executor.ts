@@ -274,7 +274,9 @@ export class StabilityPipelineExecutor {
         )
         const outputAssetId = `image-${createHash('sha256').update(request.operationId).digest('hex')}`
         const sourceSnapshots: ConversationSourceSnapshot[] = [...new Map(
-            [...request.sourceSnapshots ?? [], ...Object.values(request.inputs)].map(source => [source.sourceId, source]),
+            [...(request.sourceSnapshots ?? []).filter(source => source.kind !== 'image'), ...Object.values(request.inputs)].map(
+                source => [source.sourceId, source],
+            ),
         ).values()].map(
             source => ({
                 assetId: source.assetId,
@@ -338,6 +340,7 @@ export class StabilityPipelineExecutor {
                 },
                 scope.owner.abort.signal,
             )
+
             observed = {
                 ...record,
                 usage: { imageCount: result.filtered ? 0 : 1 },
@@ -453,7 +456,10 @@ export class StabilityPipelineExecutor {
             description: 'Generated pipeline image',
         })
         const document = buildMediaPipelineImageProvenance(
-            request,
+            {
+                ...request,
+                inferenceProvider: record.inferenceProvider,
+            },
             {
                 assetId,
                 blobHash: blob.blobHash,

@@ -380,8 +380,8 @@ describe('createImageGenerationTraceDetails — render contract', () => {
         const details = createImageGenerationTraceDetails()
         const capabilityGenerationTrace: CapabilityGenerationTrace = {
             traceVersion: 'capability-generation-trace-v1',
-            capabilityId: 'action-timeline',
-            capabilityName: 'Action Timeline',
+            capabilityId: 'fixture-artifact',
+            capabilityName: 'Fixture Artifact',
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Anthropic',
             chatModelId: 'Anthropic:claude-haiku-4-5',
@@ -400,7 +400,7 @@ describe('createImageGenerationTraceDetails — render contract', () => {
 
         details.render({
             attrs: {
-                title: 'Action Timeline generation details',
+                title: 'Fixture Artifact generation details',
                 isOpen: false,
                 isStreaming: false,
                 capabilityGenerationTrace,
@@ -416,7 +416,7 @@ describe('createImageGenerationTraceDetails — render contract', () => {
         expect(details.dom.classList.contains('has-capability-generation-trace')).toBe(true)
         expect(capabilitySection.hidden).toBe(false)
         expect(toolPromptSection.hidden).toBe(true)
-        expect(metadataText).toContain('Action Timeline')
+        expect(metadataText).toContain('Fixture Artifact')
         expect(metadataText).toContain('Anthropic:claude-haiku-4-5')
         expect(metadataText).toContain('timeline-run')
         expect(step.textContent).toContain('Persist timeline')

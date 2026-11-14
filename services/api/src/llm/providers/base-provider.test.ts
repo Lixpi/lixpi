@@ -888,7 +888,7 @@ describe('BaseProvider routing', () => {
         })
         const streamImpl = vi.spyOn(provider as any, 'streamImpl')
         const state = {
-            capabilityOutputAssetIds: ['asset-action-timeline'],
+            capabilityOutputAssetIds: ['asset-fixture-artifact'],
             capabilityOutputMediaAssetIds: [],
             enableImageGeneration: false,
             enableVideoGeneration: false,
@@ -928,7 +928,7 @@ describe('BaseProvider routing', () => {
             aiModelMetaInfo: { model: 'claude-haiku-4-5' },
             eventMeta: {},
             resolvedCapabilityPlan: {
-                serializable: { rootCapabilityIds: ['action-timeline'] },
+                serializable: { rootCapabilityIds: ['fixture-artifact'] },
                 getManifest: () => ({
                     manifest: {
                         tool: {
@@ -991,7 +991,7 @@ describe('BaseProvider routing', () => {
                 organizationId: 'organization-1',
             },
             pendingCapabilityOutputFinalizations: [{
-                capabilityId: 'action-timeline',
+                capabilityId: 'fixture-artifact',
                 capabilityRunId: 'run-1',
                 assetId: 'artifact-1',
                 input: {},
@@ -1029,7 +1029,7 @@ describe('BaseProvider routing', () => {
         }
         const state = {
             pendingCapabilityOutputFinalizations: [{
-                capabilityId: 'action-timeline',
+                capabilityId: 'fixture-artifact',
                 capabilityRunId: 'run-1',
                 assetId: 'artifact-1',
                 input: {},

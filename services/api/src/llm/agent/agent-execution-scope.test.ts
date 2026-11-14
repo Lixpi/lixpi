@@ -18,12 +18,9 @@ describe('agent read authority', () => {
                     relationshipPath: ['attached'],
                 }],
             },
-            intent: {
-                intent: 'inspect',
-                operationFamilies: [],
-                targetAssetIds: [],
-                confidence: 1,
-                needsClarification: false,
+            permissions: {
+                readOnly: false,
+                allowedOperationFamilies: [],
             },
             responseMessageId: 'response',
             continuationEpoch: 0,
@@ -35,19 +32,16 @@ describe('agent read authority', () => {
         })
     })
 
-    it('requires the context resolver to authorize a discovery and preserves revocation', async () => {
+    it('admits discovered mutation targets only while context access is current', async () => {
         const f = await createConversationExecutionFixture()
         const assertReadTarget = vi.fn(async (assetId: string) => { if (assetId !== 'discovered')
             throw new Error('SOURCE_NOT_ADMITTED') })
         const scope: AgentExecution = {
             owner: f.owner,
             turn: f.turn,
-            intent: {
-                intent: 'inspect',
-                operationFamilies: [],
-                targetAssetIds: [],
-                confidence: 1,
-                needsClarification: false,
+            permissions: {
+                readOnly: false,
+                allowedOperationFamilies: ['sequence-edit'],
             },
             responseMessageId: 'response',
             continuationEpoch: 0,
@@ -56,9 +50,13 @@ describe('agent read authority', () => {
         }
         await AgentExecutionScope.run(scope, async () => {
             await expect(AgentExecutionScope.authorize('inspect', [], ['discovered'])).resolves.toBe(scope)
+            await expect(AgentExecutionScope.authorize('plan', ['sequence-edit'], ['discovered'])).resolves.toBe(scope)
+            await expect(AgentExecutionScope.authorize('execute', ['sequence-edit'], ['discovered'])).resolves.toBe(scope)
+            await expect(AgentExecutionScope.authorize('execute', ['image'], ['discovered'])).rejects.toThrow('AGENT_OPERATION_FAMILY_NOT_AUTHORIZED')
             await expect(AgentExecutionScope.authorize('inspect', [], ['not-discovered'])).rejects.toThrow('SOURCE_NOT_ADMITTED')
             assertReadTarget.mockRejectedValue(new Error('SOURCE_REVOKED'))
             await expect(AgentExecutionScope.authorize('inspect', [], ['discovered'])).rejects.toThrow('SOURCE_REVOKED')
+            await expect(AgentExecutionScope.authorize('execute', ['sequence-edit'], ['discovered'])).rejects.toThrow('SOURCE_REVOKED')
         })
     })
 
@@ -67,18 +65,46 @@ describe('agent read authority', () => {
         const scope: AgentExecution = {
             owner: f.owner,
             turn: f.turn,
-            intent: {
-                intent: 'execute',
-                operationFamilies: ['sequence-edit'],
-                targetAssetIds: ['discovered'],
-                confidence: 1,
-                needsClarification: false,
+            permissions: {
+                readOnly: false,
+                allowedOperationFamilies: ['sequence-edit', 'image'],
+                legacyIntent: {
+                    intent: 'execute',
+                    operationFamilies: ['sequence-edit'],
+                    targetAssetIds: ['discovered'],
+                    needsClarification: false,
+                },
             },
             responseMessageId: 'response',
             continuationEpoch: 0,
             createdAssetIds: new Set(),
             assertReadTarget: async () => { throw new Error('SOURCE_NOT_ADMITTED') },
         }
-        await AgentExecutionScope.run(scope, async () => void (await expect(AgentExecutionScope.authorize('execute', ['sequence-edit'], ['discovered'])).rejects.toThrow('SOURCE_NOT_ADMITTED')))
+        await AgentExecutionScope.run(scope, async () => {
+            await expect(AgentExecutionScope.authorize('execute', ['sequence-edit'], ['discovered'])).rejects.toThrow('SOURCE_NOT_ADMITTED')
+            await expect(AgentExecutionScope.authorize('execute', ['image'])).rejects.toThrow('AGENT_OPERATION_FAMILY_NOT_AUTHORIZED')
+            await expect(AgentExecutionScope.authorize('execute', ['sequence-edit'], ['other'])).rejects.toThrow('AGENT_MUTATION_TARGET_NOT_AUTHORIZED')
+        })
+    })
+
+    it('denies all workspace mutations to a read-only delegate, including actions with no operation family', async () => {
+        const f = await createConversationExecutionFixture()
+        const scope: AgentExecution = {
+            owner: f.owner,
+            turn: f.turn,
+            permissions: {
+                readOnly: true,
+                allowedOperationFamilies: [],
+            },
+            responseMessageId: 'response',
+            continuationEpoch: 0,
+            createdAssetIds: new Set(),
+        }
+
+        await AgentExecutionScope.run(scope, async () => {
+            await expect(AgentExecutionScope.authorize('inspect')).resolves.toBe(scope)
+            await expect(AgentExecutionScope.authorize('plan')).rejects.toThrow('AGENT_EXECUTION_READ_ONLY')
+            await expect(AgentExecutionScope.authorize('execute')).rejects.toThrow('AGENT_EXECUTION_READ_ONLY')
+        })
     })
 })

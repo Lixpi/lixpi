@@ -97,7 +97,7 @@ describe('Asset document snapshot route', () => {
             role: 'capabilityArtifact',
             blobHash: 'a'.repeat(64),
             version: 0,
-            schemaVersion: 'action-timeline-v1',
+            schemaVersion: 'fixture-artifact-v1',
             doc: {
                 type: 'doc',
                 content: [],

@@ -36,12 +36,9 @@ const fixture = async () => {
     const scope: AgentExecution = {
         owner: test.owner,
         turn: test.turn,
-        intent: {
-            intent: 'execute',
-            operationFamilies: ['image'],
-            targetAssetIds: ['pipeline'],
-            confidence: 1,
-            needsClarification: false,
+        permissions: {
+            readOnly: false,
+            allowedOperationFamilies: ['image'],
         },
         responseMessageId: 'response',
         continuationEpoch: 0,
@@ -156,7 +153,7 @@ const fixture = async () => {
 }
 
 describe('durable pipeline adapter', () => {
-    it('saves the requested Blue hold draft under plan scope without authorizing sequence execution', async () => {
+    it('preserves the legacy plan limits while saving the Blue hold draft', async () => {
         const f = await fixture()
         const prompt = 'Save a draft local pipeline named Blue hold that creates a five-second 320 by 180 sequence using only the existing workspace image Solid Blue Field, then exports an MP4. Do not execute it yet. Do not generate any new media.'
         f.turn.fragment = {
@@ -177,12 +174,15 @@ describe('durable pipeline adapter', () => {
             acquiredBy: 'discovery',
             relationshipPath: ['blue-image'],
         }]
-        f.scope.intent = {
-            intent: 'plan',
-            operationFamilies: ['sequence-edit', 'sequence-export'],
-            targetAssetIds: ['blue-image'],
-            confidence: 0.95,
-            needsClarification: false,
+        f.scope.permissions = {
+            readOnly: false,
+            allowedOperationFamilies: ['sequence-edit', 'sequence-export'],
+            legacyIntent: {
+                intent: 'plan',
+                operationFamilies: ['sequence-edit', 'sequence-export'],
+                targetAssetIds: ['blue-image'],
+                needsClarification: false,
+            },
         }
         vi.mocked(AssetModel.get).mockResolvedValue({
             assetId: 'blue-image',
@@ -636,9 +636,27 @@ describe('durable pipeline adapter', () => {
         await AgentExecutionScope.run(f.scope, async () => void await expect(f.ports.readExecution('execution', true)).rejects.toThrow('PIPELINE_RUN_MISMATCH'))
     })
 
-    it('rehydrates the accepted grant with a replacement owner epoch', async () => {
+    it.each(['permissions', 'legacy intent'] as const)('restores %s with a replacement owner epoch', async format => {
         const f = await fixture()
         await AgentExecutionScope.run(f.scope, () => f.ports.createExecution(f.execution))
+        const key = 'PIPELINE#execution'
+        const record = (await f.repository.read<Record<string, unknown>>(f.partition, key))!
+
+        if (format === 'legacy intent') {
+            delete record.permissions
+            await f.repository.commit([f.repository.replace(f.partition, key, {
+                ...record,
+                intent: {
+                    intent: 'execute',
+                    operationFamilies: ['image'],
+                    targetAssetIds: ['pipeline'],
+                    confidence: 1,
+                    needsClarification: false,
+                },
+            })])
+        } else
+            expect(record).toMatchObject({ permissions: f.scope.permissions })
+
         await f.owner.release()
         const replacement = (await ConversationOwner.acquire(f.job, f.repository, f.ownerPorts))!
         expect((await f.adapter.advanceForRun(replacement)).completed[0].state).toBe('succeeded')

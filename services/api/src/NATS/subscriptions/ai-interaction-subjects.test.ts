@@ -10,7 +10,6 @@ import {
     getAiInteractionResponseSubject,
     NATS_SUBJECTS,
 } from '@lixpi/constants'
-import { buildActionTimelineDocument } from '@lixpi/capability-system'
 import { MediaBranchAmbiguityError } from '../../llm/graph/media-branch-resolver.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -202,155 +201,12 @@ const baseMessageData = {
     videoDuration: '30',
 }
 
-const actionTimelineInputSchema = new TextEncoder().encode(JSON.stringify({
-    type: 'object',
-    additionalProperties: false,
-    required: ['prompt', 'referenceAssetIds', 'durationMs', 'precisionMs'],
-    properties: {
-        prompt: {
-            type: 'string',
-            minLength: 1,
-        },
-        referenceAssetIds: {
-            type: 'array',
-            items: { type: 'string' },
-        },
-        durationMs: {
-            type: 'integer',
-            minimum: 1,
-        },
-        precisionMs: {
-            type: 'integer',
-            minimum: 1,
-        },
-    },
-}))
-
-const actionTimelineArtifactAsset = {
-    assetId: 'timeline-1',
-    organizationId: 'org-1',
-    title: 'Night encounter shot plan',
-    scope: 'workspace',
-    scopeOwnerId: 'workspace-1',
-    states: { lifecycle: 'active' },
-    documents: { capabilityArtifact: { docId: 'artifact-doc-1' } },
-    artifact: { artifactTypeId: 'action-timeline' },
-    createdAt: 1,
-}
-
-const actionTimelineCitedImageAsset = {
-    assetId: 'timeline-image-1',
-    organizationId: 'org-1',
-    title: 'Night encounter first frame',
-    scope: 'workspace',
-    scopeOwnerId: 'workspace-1',
-    states: { lifecycle: 'active' },
-    documents: {},
-    subjectIdentity: {
-        classification: 'no-person',
-        source: 'automatic-lineage',
-        providerVerifications: [],
-    },
-    media: {
-        kind: 'image',
-        renditions: { canonical: {
-            status: 'ready',
-            blobHash: 'hash-1',
-            mimeType: 'image/png',
-        } },
-    },
-    createdAt: 1,
-}
-
-const actionTimelineArtifactDoc = buildActionTimelineDocument(
-    {
-        durationMs: 2000,
-        precisionMs: 1000,
-    },
-    [
-        {
-            slotIndex: 0,
-            runs: [{ assetId: 'timeline-image-1' }, { text: ' opens the alley beat.' }],
-        },
-        {
-            slotIndex: 1,
-            runs: [{ text: 'They walk deeper into the alley.' }],
-        },
-    ],
-    new Map([['timeline-image-1', {
-        mediaKind: 'image' as const,
-        displayName: 'Night encounter first frame',
-    }]]),
-)
-
-// Conversation where the user cites an existing Action Timeline Artifact and asks
-// for media from it. The Artifact chip carries a title that reads like a request
-// to create a timeline, which is exactly what must not route to the timeline tool.
-const useReferencedActionTimelineConversation = (promptText: string): void => {
-    mocks.assetDocumentService.loadCurrentSnapshot.mockImplementation(async (_asset: unknown, documentKind: string) => (
-        documentKind === 'capabilityArtifact'
-            ? {
-                doc: actionTimelineArtifactDoc,
-                version: 2,
-            }
-            : {
-                doc: {
-                    ...conversationDoc,
-                    content: [{
-                        ...conversationDoc.content[0],
-                        content: [{
-                            type: 'aiUserMessage',
-                            content: [{
-                                type: 'paragraph',
-                                content: [
-                                    {
-                                        type: 'text',
-                                        text: promptText,
-                                    },
-                                    {
-                                        type: 'prompt_reference',
-                                        attrs: {
-                                            referenceType: 'capability-artifact',
-                                            artifactTypeId: 'action-timeline',
-                                            assetId: 'timeline-1',
-                                            displayName: 'Night encounter shot plan',
-                                        },
-                                    },
-                                ],
-                            }],
-                        }],
-                    }],
-                },
-                version: 5,
-            }
-    ))
-    mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) => {
-        if (assetId === 'timeline-1')
-            return actionTimelineArtifactAsset
-
-        if (assetId === 'timeline-image-1')
-            return actionTimelineCitedImageAsset
-
-        return conversationAsset
-    })
-}
-
 const makeModule = () => ({
     process: mocks.llmModule.process,
     processMediaGenerationMatrix: mocks.llmModule.processMediaGenerationMatrix,
     stop: mocks.llmModule.stop,
     stopMediaGenerationMatrix: mocks.llmModule.stopMediaGenerationMatrix,
-    capabilityModuleCatalog: {
-        routePrompt: (prompt: string) =>
-            prompt.includes('shot plan')
-                ? {
-                    capabilityId: 'global.action-timeline',
-                    kind: 'tool',
-                    input: {},
-                    missingInputFields: ['durationMs', 'precisionMs'],
-                }
-                : undefined,
-    },
+    capabilityModuleCatalog: { resolveEntry: () => undefined },
 })
 
 describe('AI interaction message routing', () => {
@@ -394,16 +250,6 @@ describe('AI interaction message routing', () => {
             subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.conv-1`,
             events: [],
         })
-        mocks.capabilities.resolve.mockResolvedValue({
-            getManifest: () => ({
-                manifest: {
-                    tool: {
-                        inputSchema: { resourceId: 'action-timeline-input-schema' },
-                    },
-                },
-            }),
-            getResource: () => ({ bytes: actionTimelineInputSchema }),
-        })
         mocks.llmModule.process.mockResolvedValue(undefined)
         mocks.llmModule.processMediaGenerationMatrix.mockResolvedValue(undefined)
         mocks.llmModule.stop.mockResolvedValue(undefined)
@@ -446,65 +292,39 @@ describe('AI interaction message routing', () => {
         )
     })
 
-    it('generates video from a referenced Action Timeline Artifact instead of routing to timeline creation', async () => {
-        // restrictMediaRequestToExplicitVideoOutput() is now a compatibility
-        // no-op — prompt wording no longer strips the image axis from a
-        // structured mediaGenerationRequest — so both axes the caller sent
-        // survive untouched into the matrix request.
-        useReferencedActionTimelineConversation('Generate a video following ')
-
+    it('forwards video selections without accepting browser-supplied Capability runtime state', async () => {
+        const mediaGenerationRequest = {
+            generationRequestId: 'video-request',
+            mediaGenerationMode: 'video',
+            outputMediaTypes: ['video'],
+            reasoningModelIds: baseMessageData.aiReasoningModels,
+            imageModelIds: [],
+            videoModelIds: baseMessageData.aiVideoModels,
+            videoOptions: {
+                aspectRatio: '16:9',
+                resolution: '1080p',
+                duration: '30',
+            },
+        }
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
-            messages: [{
-                role: 'user',
-                content: 'Generate a video following Night encounter shot plan',
-            }],
-            mediaGenerationRequest: {
-                generationRequestId: 'request-timeline-1',
-                reasoningModelIds: ['openai:gpt-4'],
-                imageModelIds: ['google:imagen3'],
-                videoModelIds: ['openai:gpt-4o-video'],
-            },
+            mediaGenerationRequest,
+            capabilityUsageMode: 'character-creator',
+            capabilityMediaExecutionPlan: { kind: 'character-sheet' },
         })
         await flushPromises()
 
-        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
-            capabilityInputs: {},
-            capabilityReferences: [],
-            mediaGenerationRequest: expect.objectContaining({
-                imageModelIds: ['google:imagen3'],
-                videoModelIds: ['openai:gpt-4o-video'],
-            }),
-            mediaReferenceBindings: expect.arrayContaining([
-                expect.objectContaining({ assetId: 'timeline-image-1' }),
-            ]),
-        }))
-    })
-
-    it('keeps the timeline creation route off when the prompt itself names a shot plan it references', async () => {
-        useReferencedActionTimelineConversation('Generate a video from this shot plan ')
-
-        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
-            ...baseMessageData,
-            messages: [{
-                role: 'user',
-                content: 'Generate a video from this shot plan Night encounter shot plan',
-            }],
-            mediaGenerationRequest: {
-                generationRequestId: 'request-timeline-2',
-                reasoningModelIds: ['openai:gpt-4'],
-                imageModelIds: [],
-                videoModelIds: ['openai:gpt-4o-video'],
-            },
+        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledOnce()
+        const matrixRequest = mocks.llmModule.processMediaGenerationMatrix.mock.calls[0]![0]
+        expect(matrixRequest).toMatchObject({
+            aiVideoModels: baseMessageData.aiVideoModels,
+            videoAspectRatio: '16:9',
+            videoResolution: '1080p',
+            videoDuration: '30',
+            mediaGenerationRequest,
         })
-        await flushPromises()
-
-        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
-            capabilityInputs: {},
-            mediaGenerationRequest: expect.objectContaining({
-                videoModelIds: ['openai:gpt-4o-video'],
-            }),
-        }))
+        expect(matrixRequest).not.toHaveProperty('capabilityUsageMode')
+        expect(matrixRequest).not.toHaveProperty('capabilityMediaExecutionPlan')
     })
 
     it('skips ai model lookup entirely when media generation request path is taken', async () => {
@@ -798,19 +618,24 @@ describe('AI interaction message routing', () => {
         expect(mocks.llmModule.process).not.toHaveBeenCalled()
     })
 
-    it('requests missing free-form timeline timing despite populated image and video selections', async () => {
-        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+    it.each(['character-creator', 'style-extraction'])('rejects a saved %s module chip before provider execution', async moduleId => {
+        const thread = conversationDoc.content[0]!
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValueOnce({
             doc: {
                 ...conversationDoc,
                 content: [{
-                    ...conversationDoc.content[0],
+                    ...thread,
                     content: [{
                         type: 'aiUserMessage',
                         content: [{
                             type: 'paragraph',
                             content: [{
-                                type: 'text',
-                                text: 'Make a shot plan for this',
+                                type: 'prompt_reference',
+                                attrs: {
+                                    referenceType: 'capability-module',
+                                    moduleId,
+                                    displayName: 'Saved Capability',
+                                },
                             }],
                         }],
                     }],
@@ -819,180 +644,14 @@ describe('AI interaction message routing', () => {
             version: 5,
         })
 
-        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
-            ...baseMessageData,
-            messages: [{
-                role: 'user',
-                content: 'Make a shot plan for this',
-            }],
-            aiImageModels: ['google:imagen3'],
-            aiVideoModels: ['openai:gpt-4o-video'],
-        })
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)(baseMessageData)
         await flushPromises()
 
-        expect(mocks.nats.publish).not.toHaveBeenCalledWith(
-            expect.stringContaining(`${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.`),
-            { error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' },
+        expect(mocks.nats.publish).toHaveBeenCalledWith(
+            getAiInteractionResponseSubject('user-1', 'workspace-1', 'conv-1'),
+            { error: `PROMPT_REFERENCE_MODULE_NOT_FOUND:${moduleId}` },
         )
-        expect(mocks.llmModule.process).toHaveBeenCalledOnce()
-        expect(mocks.llmModule.process).toHaveBeenCalledWith(
-            expect.any(String),
-            expect.any(String),
-            expect.objectContaining({
-                enableImageGeneration: false,
-                capabilityReferences: [],
-                capabilityInputs: {},
-                messages: expect.arrayContaining([
-                    expect.objectContaining({
-                        role: 'user',
-                        content: expect.stringContaining('the total timeline duration and the timing precision or gap interval'),
-                    }),
-                ]),
-            }),
-        )
-        expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
-    })
-
-    it('resumes the same Action Timeline turn when the user supplies the requested timing', async () => {
-        const clarification = '17 seconds total with 2 second gaps'
-        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
-            doc: {
-                ...conversationDoc,
-                content: [{
-                    ...conversationDoc.content[0],
-                    content: [
-                        {
-                            type: 'aiUserMessage',
-                            content: [{
-                                type: 'paragraph',
-                                content: [{
-                                    type: 'text',
-                                    text: 'Make a shot plan for this chase',
-                                }],
-                            }],
-                        },
-                        {
-                            type: 'aiResponseMessage',
-                            content: [{
-                                type: 'paragraph',
-                                content: [{
-                                    type: 'text',
-                                    text: 'What duration and timing gap should I use?',
-                                }],
-                            }],
-                        },
-                        {
-                            type: 'aiUserMessage',
-                            content: [{
-                                type: 'paragraph',
-                                content: [{
-                                    type: 'text',
-                                    text: clarification,
-                                }],
-                            }],
-                        },
-                    ],
-                }],
-            },
-            version: 6,
-        })
-
-        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
-            ...baseMessageData,
-            messages: [
-                {
-                    role: 'user',
-                    content: 'Make a shot plan for this chase',
-                },
-                {
-                    role: 'assistant',
-                    content: 'What duration and timing gap should I use?',
-                },
-                {
-                    role: 'user',
-                    content: clarification,
-                },
-            ],
-            mediaGenerationRequest: undefined,
-        })
-        await flushPromises()
-
-        expect(mocks.llmModule.process).toHaveBeenCalledWith(
-            'workspace-1:conv-1',
-            'openai',
-            expect.objectContaining({
-                imageModelMetaInfo: null,
-                videoModelMetaInfo: null,
-                enableImageGeneration: false,
-                capabilityInputs: {
-                    'global.action-timeline': {
-                        prompt: `Make a shot plan for this chase\n\nClarification: ${clarification}`,
-                        referenceAssetIds: [],
-                        durationMs: 17000,
-                        precisionMs: 2000,
-                    },
-                },
-            }),
-        )
-        expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
-    })
-
-    it('removes scalar image and video axes when Action Timeline owns the turn', async () => {
-        const prompt = 'Create a 17s shot plan with 2ms details for an imaginary film'
-        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
-            doc: {
-                ...conversationDoc,
-                content: [{
-                    ...conversationDoc.content[0],
-                    content: [{
-                        type: 'aiUserMessage',
-                        content: [{
-                            type: 'paragraph',
-                            content: [{
-                                type: 'text',
-                                text: prompt,
-                            }],
-                        }],
-                    }],
-                }],
-            },
-            version: 6,
-        })
-
-        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
-            ...baseMessageData,
-            messages: [{
-                role: 'user',
-                content: prompt,
-            }],
-            aiImageModels: ['google:imagen3'],
-            aiVideoModels: ['openai:gpt-4o-video'],
-            mediaGenerationRequest: undefined,
-        })
-        await flushPromises()
-
-        expect(mocks.aiModel.getAiModel).toHaveBeenCalledTimes(1)
-        expect(mocks.llmModule.process).toHaveBeenCalledWith(
-            'workspace-1:conv-1',
-            'openai',
-            expect.objectContaining({
-                imageModelMetaInfo: null,
-                videoModelMetaInfo: null,
-                enableImageGeneration: false,
-                videoAspectRatio: undefined,
-                videoResolution: undefined,
-                videoDurationSeconds: undefined,
-                videoSourceForExtension: undefined,
-                capabilityInputs: {
-                    'global.action-timeline': {
-                        prompt,
-                        referenceAssetIds: [],
-                        durationMs: 17000,
-                        precisionMs: 2,
-                    },
-                },
-            }),
-        )
+        expect(mocks.llmModule.process).not.toHaveBeenCalled()
         expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
     })
 
@@ -1126,7 +785,7 @@ describe('AI interaction message routing', () => {
         const artifactNode = {
             nodeId: 'capability-artifact-asset-timeline',
             type: 'capabilityArtifact',
-            artifactTypeId: 'action-timeline',
+            artifactTypeId: 'fixture-artifact',
             assetId: 'asset-timeline',
             position: {
                 x: 100,
@@ -1140,8 +799,8 @@ describe('AI interaction message routing', () => {
                 outputKind: 'capabilityArtifact',
                 conversationAssetId: 'source-conversation',
                 capabilityRunId: 'capability-run-1',
-                capabilityId: 'global.action-timeline',
-                toolId: 'action-timeline.generate',
+                capabilityId: 'global.fixture-artifact',
+                toolId: 'fixture-artifact.generate',
                 input: {},
             },
         } as const
@@ -1166,7 +825,7 @@ describe('AI interaction message routing', () => {
                     type: artifactNode.type,
                     artifactTypeId: 'untrusted-browser-type',
                     assetId: artifactNode.assetId,
-                    title: 'Travel Timeline',
+                    title: 'Travel Artifact',
                     isExplicitChip: true,
                     isEdgeForced: false,
                 }],
@@ -1182,9 +841,9 @@ describe('AI interaction message routing', () => {
         expect(processPayload?.workspaceContextSnapshot?.nodes).toEqual([expect.objectContaining({
             nodeId: artifactNode.nodeId,
             type: 'capabilityArtifact',
-            artifactTypeId: 'action-timeline',
+            artifactTypeId: 'fixture-artifact',
             assetId: artifactNode.assetId,
-            title: 'Travel Timeline',
+            title: 'Travel Artifact',
             sourceConversationAssetId: 'source-conversation',
             isExplicitChip: true,
         })])
@@ -1195,7 +854,7 @@ describe('AI interaction message routing', () => {
         const artifactNode = {
             nodeId: 'capability-artifact-asset-timeline',
             type: 'capabilityArtifact',
-            artifactTypeId: 'action-timeline',
+            artifactTypeId: 'fixture-artifact',
             assetId: 'asset-timeline',
             position: {
                 x: 100,

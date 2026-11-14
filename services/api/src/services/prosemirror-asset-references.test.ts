@@ -29,7 +29,7 @@ const referencedDocument = {
                 type: 'prompt_reference',
                 attrs: {
                     referenceType: 'capability-module',
-                    moduleId: 'action-timeline',
+                    moduleId: 'fixture-artifact',
                 },
             },
         ],

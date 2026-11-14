@@ -118,6 +118,7 @@ import {
     type AiInteractionMediaGenerationRequest,
     type MediaPromptReference,
 } from '@lixpi/constants'
+import { buildCanvasConversationModelPreferences } from '../../shared/composer/canvas-conversation-content.ts'
 import {
     WorkspacePromptComposer,
     type AiPromptComposerSubmitData,
@@ -2567,18 +2568,6 @@ export class LixpiWorkspaceCanvas {
         if (!this.agentConversation)
             throw new Error('The conversation is not ready yet.')
 
-        const modelIds = (values: string[]): Array<`${string}:${string}`> =>
-            values.map(value => {
-                const separator = value.indexOf(':')
-
-                if (
-                    separator <= 0
-                    || separator === value.length - 1
-                )
-                    throw new Error('Select a valid model before sending.')
-
-                return value as `${string}:${string}`
-            })
         const references = new Map<string, {
             assetId: string
             role: 'media' | 'artifact' | 'content' | 'conversation'
@@ -2636,22 +2625,7 @@ export class LixpiWorkspaceCanvas {
                 content: data.contentJSON,
             },
             [...references.values()],
-            {
-                reasoningModelIds: modelIds(data.aiReasoningModels),
-                imageModelIds: modelIds(data.imageOptions?.aiImageModels ?? []),
-                videoModelIds: modelIds(data.videoOptions?.aiVideoModels ?? []),
-                ...(data.reasoningOptions ? { reasoningOptions: data.reasoningOptions } : {}),
-                ...(data.imageOptions ? { imageOptions: {
-                    imageSize: data.imageOptions.imageGenerationSize as NonNullable<AiInteractionMediaGenerationRequest['imageOptions']>['imageSize'],
-                    ...(data.imageOptions.configGroups ? { configGroups: data.imageOptions.configGroups } : {}),
-                } } : {}),
-                ...(data.videoOptions ? { videoOptions: {
-                    aspectRatio: data.videoOptions.videoAspectRatio,
-                    resolution: data.videoOptions.videoResolution,
-                    duration: data.videoOptions.videoDuration,
-                    ...(data.videoOptions.configGroups ? { configGroups: data.videoOptions.configGroups } : {}),
-                } } : {}),
-            },
+            buildCanvasConversationModelPreferences(data),
         )
         this.context.clear()
     }

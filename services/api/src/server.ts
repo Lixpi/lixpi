@@ -39,8 +39,8 @@ import { ConversationRuntime } from './llm/agent/conversation-runtime.ts'
 import { ConversationDispatcher } from './llm/agent/conversation-dispatcher.ts'
 import { AgentConfiguration } from './llm/agent/agent-configuration.ts'
 import {
-    type MediaWorkspacePlatform,
-} from './installed-media-workspace.ts'
+    type ConversationMediaOperations,
+} from './llm/agent/agent-pending-tools.ts'
 import {
     capabilitySubjects,
     setCapabilityRunDispatcher,
@@ -90,6 +90,8 @@ if (
     err('LocalAuth0 can only be used when ENVIRONMENT=local')
     process.exit(1)
 }
+
+const providerUsageOptions = providerUsageOptionsFromEnv()
 
 // Set the global DynamoDB service instance to be used across the application for database operations
 global.dynamoDBService = new AccountDatabaseService(
@@ -220,7 +222,6 @@ const providerUsageTransport: ProviderUsageTransport = {
         timeoutMs,
     ),
 }
-const providerUsageOptions = providerUsageOptionsFromEnv()
 const providerUsageOutbox = providerUsageOptions.enabled
     ? new DurableProviderUsageOutbox(
         providerUsageConnection,
@@ -267,13 +268,13 @@ setLlmModule(llmModule)
 
 const agentConfiguration = new AgentConfiguration(process.env)
 const conversationRepository = new ConversationRepository()
-const mediaWorkspace = llmModule.capabilityModuleCatalog.getExtension<MediaWorkspacePlatform>('media-sequence', 'platform')
+const mediaOperations = llmModule.capabilityModuleCatalog.getExtension<ConversationMediaOperations>('media-pipeline', 'operations')
 const conversationRuntime = new ConversationRuntime(
     conversationRepository,
     agentConfiguration,
     llmModule.capabilityModuleCatalog,
     providerUsage,
-    mediaWorkspace?.operations,
+    mediaOperations,
 )
 const conversationDispatcher = new ConversationDispatcher(
     providerUsageConnection,
@@ -282,7 +283,6 @@ const conversationDispatcher = new ConversationDispatcher(
 )
 
 await conversationDispatcher.start()
-await mediaWorkspace?.start()
 
 // Workspace tree moves, rebalances and subtree deletes left unfinished by a
 // stopped process are finished in the background; the API serves requests
@@ -374,7 +374,6 @@ httpServer.listen(
 process.on('SIGINT', async () => {
     conversationDispatcher.stop()
     conversationRuntime.stop()
-    mediaWorkspace?.stop()
     accountWorkPolicy?.stop()
     accountAdmissionRuntime?.stop()
     log('Shutting down...')

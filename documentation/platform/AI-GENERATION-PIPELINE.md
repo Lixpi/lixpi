@@ -9,9 +9,9 @@ The enabled conversation workspace uses Deep Agents for discussion and planning,
 
 ## Conversational execution
 
-An accepted message enters its existing conversation without allocating media nodes. Lixpi makes a separate, metered intent-classification call before the Deep Agents model/tool loop. The [intent classification diagram and contract](../../services/api/src/llm/README.md#intent-classification-and-agent-execution) explain its inputs, the four intent categories, clarification, recovery and authorization boundaries. Selecting an image/video model is a preference for a future requested action and does not authorize generation.
+An accepted message enters the main Deep Agents loop without allocating media nodes or making a preliminary classification call. The agent chooses whether to respond, inspect authorized context, read a Skill, call a Tool, ask for input, or delegate to a domain expert exposed by the Capability catalog. The [agent execution diagram and contract](../../services/api/src/llm/README.md#agent-reasoning-and-execution) explain the boundary between those decisions and Lixpi's deterministic access, target, delegation and budget checks. Selecting an image/video model is a preference for a future requested action and does not authorize generation.
 
-The `media-pipeline` Capability owns validated dependency plans; `media-sequence` owns the multitrack sequence document and deterministic render compiler. The conversation agent edits sequences through revisioned patch validation. NEX renders frozen sequence revisions from authorized media inputs and returns an output descriptor for API settlement. Unsupported generation routes fail before media admission, while editing and exporting existing media remain available.
+The installed `media-pipeline` Capability owns validated dependency plans and exposes only its installed operation handlers. Media Sequence editing and export are unplugged; their module, integration and render-worker source are retained for later work. The canvas image/video switch and generation controls remain available. Unsupported generation routes fail before media admission.
 
 Each actual model call has an individual provider-usage authorization and durable response/usage receipt. Checkpoint recovery reuses saved responses. An uncertain paid submission is not automatically repeated. Pending media tools yield the conversation owner and resume from persisted completion data with the original native tool-call identity. Input questions use checkpointed interrupt IDs, and execution limits require a human follow-up before allocating another budget.
 
@@ -37,7 +37,7 @@ The submitted conversation Asset is authoritative. The API acquires its lease, r
 
 Capability resolution seals manifests and resources before execution. A `required` Tool runs before reasoning fanout. A `model-required` Tool runs once inside each selected reasoning provider's continuation loop. A `model-choice` Tool remains optional.
 
-A media-generating Capability can return ordinary provider-neutral instructions and references, or a typed `capabilityMediaExecutionPlan`. The abstract Capability runtime forwards either contract without provider logic. Character Creator uses the typed plan path; Style Extraction uses the instruction/reference path.
+A media-generating Capability can return ordinary provider-neutral instructions and references, or a typed `capabilityMediaExecutionPlan`. The abstract Capability runtime forwards either contract without provider logic. The retained, disabled Character Creator implementation uses the typed plan path; the retained, disabled Style Extraction implementation uses the instruction/reference path. Neither module is installed in the current application.
 
 Every Capability module publishes a required description sheet with purpose, expected inputs, best-result guidance, limitations, and qualitative cost and latency. Authorized catalog responses carry the same metadata used by prompt-reference hover and focus cards.
 
@@ -47,7 +47,7 @@ Reasoning and media models are independent selected axes. The reasoning provider
 
 The AI model catalog also returns synchronized configuration controls for each reasoning and media model. A matrix request carries one configuration group per selected model. The API validates every value against that model's catalog controls, applies the synchronized default when a stored value is invalid, and places only the resolved model-specific values in `ProviderState`. OpenAI receives effort, reasoning mode, and response verbosity where supported. Anthropic receives effort with its reviewed thinking mode. Google receives thinking level on reviewed reasoning models. Image providers receive only their reviewed size, aspect-ratio, resolution, quality, or background controls. Parameters marked `needs-implementation-investigation` in the AI Model Registry are not included in the catalog or provider requests.
 
-Capability policies may remove an axis. Character Creator removes video models before matrix normalization. It never substitutes an image model. Action Timeline produces non-media Artifacts and suppresses media lineage entirely.
+Capability policies can constrain the selected axes through their registered contracts. A policy cannot silently substitute a different media model.
 
 ## Capability media strategies
 
@@ -69,7 +69,7 @@ Media DAG nodes declare ordering dependencies and optional named output bindings
 
 The binding key is module-owned and opaque to the runner. A future Capability can reuse the same contract for keyframes, masks, layouts, calibration renders, audio stems, or any other generated prerequisite without adding a concrete Capability branch to shared infrastructure. Optional bindings preserve dependency ordering while allowing the consumer to execute without a producer result; required bindings settle the consumer as blocked and expose the missing key and producer ID to the module callback.
 
-Character Creator's strategy:
+The retained, disabled Character Creator strategy documents a concrete use of this media interface. It is not registered in the current application:
 
 1. reauthorizes canonical or original source Assets;
 2. analyzes source pixels with the selected reasoning model;

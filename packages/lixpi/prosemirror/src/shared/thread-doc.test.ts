@@ -268,8 +268,8 @@ describe('getBranchMarkerConversationPreviewFromThreadContent', () => {
                                 type: 'prompt_reference',
                                 attrs: {
                                     referenceType: 'capability-module',
-                                    moduleId: 'action-timeline',
-                                    displayName: 'Action Timeline',
+                                    moduleId: 'fixture-artifact',
+                                    displayName: 'Fixture Artifact',
                                 },
                             },
                             {
@@ -294,11 +294,11 @@ describe('getBranchMarkerConversationPreviewFromThreadContent', () => {
             preview?.userMessage.content?.[0]?.content?.map((node) => (
                 node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
             )),
-        ).toEqual(['Action Timeline', ' Create 15 seconds with 2-second segments.'])
+        ).toEqual(['Fixture Artifact', ' Create 15 seconds with 2-second segments.'])
         expect(preview?.promptReferences).toEqual([{
             referenceType: 'capability-module',
-            moduleId: 'action-timeline',
-            displayName: 'Action Timeline',
+            moduleId: 'fixture-artifact',
+            displayName: 'Fixture Artifact',
         }])
         expect(collectProseMirrorPromptReferences(content)).toEqual(preview?.promptReferences)
     })
@@ -327,14 +327,14 @@ describe('getLatestThreadTurnMessages', () => {
                 responseMessage({ id: 'resp-previous' }, [], [text('Previous response')]),
                 {
                     type: 'aiUserMessage',
-                    content: [text('Create an Action Timeline')],
+                    content: [text('Create an Fixture Artifact')],
                 },
             ],
         }
 
         const latestTurn = getLatestThreadTurnMessages(threadNode)
 
-        expect(collectProseMirrorText(latestTurn.userMessage ?? undefined).trim()).toBe('Create an Action Timeline')
+        expect(collectProseMirrorText(latestTurn.userMessage ?? undefined).trim()).toBe('Create an Fixture Artifact')
         expect(latestTurn.responseMessage).toBeNull()
     })
 })

@@ -16,8 +16,14 @@
 @import "../components/executionTrace/execution-trace";
 @import "../components/capabilityRun/capability-run";
 
+// web-ui fills the window and scrolls only inside its own panels and lists,
+// so the page itself never scrolls. A wheel over a list with nothing left to
+// scroll, such as a short conversation, passes to the page, and an element
+// that hangs past the window's edge would otherwise let the page scroll and
+// show its scrollbar at the window's right edge.
 html,
 body {
+    overflow: hidden;
     overscroll-behavior: none;
     background: var(--theme-background);
 }

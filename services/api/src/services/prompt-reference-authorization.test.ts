@@ -5,6 +5,7 @@ import {
     it,
     vi,
 } from 'vitest'
+import { createMediaPipelineDocument } from '@lixpi/capability-system/shared'
 
 const mocks = vi.hoisted(() => ({
     getAsset: vi.fn(),
@@ -298,15 +299,15 @@ describe('authorizePromptReferences', () => {
     })
 
     it('serializes a registered Artifact losslessly and expands its cited media once', async () => {
-        const longText = 'Complete beat. '.repeat(1100)
+        const longText = 'Source framing. '.repeat(450)
         const artifactAsset = {
             ...imageAsset,
-            assetId: 'timeline-1',
-            title: 'Action Timeline',
+            assetId: 'pipeline-1',
+            title: 'Media Pipeline',
             media: undefined,
             artifact: {
-                artifactTypeId: 'action-timeline',
-                schemaVersion: 'action-timeline-v1',
+                artifactTypeId: 'media-pipeline',
+                schemaVersion: 'media-pipeline-v1',
             },
             documents: { capabilityArtifact: { role: 'capabilityArtifact' } },
             states: {
@@ -315,55 +316,63 @@ describe('authorizePromptReferences', () => {
             },
         }
         mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) => (
-            assetId === 'timeline-1' ? artifactAsset : imageAsset
+            assetId === 'pipeline-1' ? artifactAsset : imageAsset
         ))
         mocks.loadSnapshot.mockResolvedValue({
-            doc: {
-                type: 'doc',
-                attrs: {
-                    schemaVersion: 'action-timeline-v1',
-                    durationMs: 1000,
-                    precisionMs: 1000,
-                },
-                content: [{
-                    type: 'actionTimelineSegment',
-                    attrs: {
-                        startMs: 0,
-                        endMs: 1000,
-                    },
-                    content: [{
-                        type: 'paragraph',
-                        content: [
-                            {
-                                type: 'text',
-                                text: longText,
-                            },
-                            {
-                                type: 'prompt_reference',
-                                attrs: {
-                                    referenceType: 'media',
-                                    assetId: 'asset-1',
-                                },
-                            },
-                        ],
+            doc: createMediaPipelineDocument({
+                schemaVersion: 'media-pipeline-v1',
+                pipelineId: 'pipeline-1',
+                revision: 1,
+                requestedOutcome: longText,
+                constraints: [],
+                sources: [{
+                    sourceId: 'source',
+                    assetId: 'asset-1',
+                    revision: 1,
+                    blobHash: 'image-hash',
+                    kind: 'image',
+                }],
+                nodes: [{
+                    nodeId: 'assemble',
+                    operationKey: 'sequence.create',
+                    parameters: {},
+                    inputs: [],
+                    outputs: [{
+                        portId: 'result',
+                        kind: 'sequence',
+                        required: true,
                     }],
                 }],
-            },
+                edges: [],
+                executionPolicy: {
+                    maxConcurrency: 1,
+                    maxFanout: 1,
+                },
+                outputBindings: [{
+                    outputId: 'result',
+                    nodeId: 'assemble',
+                    portId: 'result',
+                }],
+                origin: {
+                    conversationAssetId: 'thread-1',
+                    turnId: 'turn-1',
+                },
+            }),
         })
 
         const result = await authorizePromptReferences({
             references: [{
                 referenceType: 'capability-artifact',
-                assetId: 'timeline-1',
-                artifactTypeId: 'action-timeline',
+                assetId: 'pipeline-1',
+                artifactTypeId: 'media-pipeline',
             }],
             requester,
             workspace: workspace as any,
             moduleCatalog: moduleCatalog as any,
         })
 
-        expect(result.documentContext.join('\n')).toContain(longText)
-        expect(result.assetIds).toEqual(['timeline-1', 'asset-1'])
+        expect(result.documentContext.join('\n')).toContain(longText.trim())
+        expect(result.assetIds).toEqual(['pipeline-1', 'asset-1'])
         expect(result.modelInputs).toEqual([expect.objectContaining({
             kind: 'image',
             assetId: 'asset-1',

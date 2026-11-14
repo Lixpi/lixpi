@@ -70,7 +70,7 @@ type CapabilityArtifactCanvasNode = {
 }
 ```
 
-`artifactTypeId` selects package-owned schema, editor, body, info, replay, reference, and library factories. The workspace renderer contains no concrete Action Timeline branch.
+`artifactTypeId` selects package-owned schema, editor, body, info, replay, reference, and library factories. The workspace renderer delegates those behaviors to the installed Capability module.
 
 `nodeId` is a placement identity and is generated independently from `assetId`. It is used by edges, branch topology, selection, parent/child layout, and workspace references. Attaching one Asset twice creates two node IDs. Node IDs are never rewritten into Asset IDs during generation completion.
 

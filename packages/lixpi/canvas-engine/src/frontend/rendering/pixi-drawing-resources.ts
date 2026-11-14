@@ -37,6 +37,7 @@ import {
     dashVectorPath,
     projectVectorPath,
 } from './pixi-vector-path.ts'
+import { webGpuBisect } from './webgpu-bisect.ts'
 
 type Layer = {
     world: Container
@@ -454,7 +455,10 @@ export class PixiDrawingResources implements DrawingResources {
     ): void {
         const { container } = this.registry.get<Group>(group, 'group')
         this.changed(container)
-        container.mask = mask ? this.registry.get<Graphics>(mask, 'path') : null
+        container.mask = mask
+            && !webGpuBisect()?.disables('mask')
+            ? this.registry.get<Graphics>(mask, 'path')
+            : null
 
         if (mask)
             this.masks.set(group, mask)

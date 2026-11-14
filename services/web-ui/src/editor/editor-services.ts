@@ -91,8 +91,16 @@ export const createWebUiEditorServices = (auth: AuthTokenProvider): EditorServic
         },
         segments: SegmentsReceiver,
         capabilityArtifacts: {
-            createPromptReferenceView: (artifactTypeId, options) =>
-                capabilityArtifactFrontendRegistry.require(artifactTypeId).createPromptReferenceView(options),
+            createPromptReferenceView: (artifactTypeId, options) => {
+                const definition = capabilityArtifactFrontendRegistry.get(artifactTypeId)
+
+                if (definition)
+                    return definition.createPromptReferenceView(options)
+
+                options.container.textContent = options.title
+
+                return { destroy: () => options.container.replaceChildren() }
+            },
             icon: getCapabilityArtifactIcon,
             ensureStyles: ensureCapabilityStyles,
         },

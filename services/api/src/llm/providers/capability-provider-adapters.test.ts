@@ -89,7 +89,7 @@ const capabilityRunResult = () => {
     }
 }
 
-const actionTimelinePlan = (): SealedResolvedCapabilityPlan => {
+const modelRequiredToolPlan = (): SealedResolvedCapabilityPlan => {
     const schemaRef: CapabilityResourceRef = {
         resourceId: 'input',
         blobHash: 'input-hash',
@@ -98,14 +98,14 @@ const actionTimelinePlan = (): SealedResolvedCapabilityPlan => {
     }
     const manifest: CapabilityManifest = {
         schemaVersion: 1,
-        capabilityId: 'action-timeline',
+        capabilityId: 'fixture-artifact',
         kind: 'tool',
-        name: 'Action Timeline',
-        description: 'Create a timed action timeline.',
+        name: 'Fixture Artifact',
+        description: 'Create a timed fixture artifact.',
         references: [],
         resources: [schemaRef],
         tool: {
-            toolType: 'action-timeline',
+            toolType: 'fixture-artifact',
             inputSchema: schemaRef,
             outputSchema: schemaRef,
             executionPolicy: 'model-required',
@@ -123,21 +123,21 @@ const actionTimelinePlan = (): SealedResolvedCapabilityPlan => {
         },
     }
     const serializable: ResolvedCapabilityPlan = {
-        rootCapabilityIds: ['action-timeline'],
+        rootCapabilityIds: ['fixture-artifact'],
         capabilities: [{
-            capabilityId: 'action-timeline',
+            capabilityId: 'fixture-artifact',
             kind: 'tool',
             manifestBlobHash: 'manifest-hash',
             manifest,
         }],
         resolvedManifests: [{
-            capabilityId: 'action-timeline',
+            capabilityId: 'fixture-artifact',
             manifestBlobHash: 'manifest-hash',
         }],
     }
 
     return new SealedResolvedCapabilityPlan(serializable, [{
-        capabilityId: 'action-timeline',
+        capabilityId: 'fixture-artifact',
         ref: schemaRef,
         bytes: new TextEncoder().encode(JSON.stringify({
             type: 'object',
@@ -207,15 +207,15 @@ const state = (provider: 'OpenAI' | 'Anthropic') => {
     }
 }
 
-const actionTimelineState = (provider: 'OpenAI' | 'Anthropic') => {
+const modelRequiredToolState = (provider: 'OpenAI' | 'Anthropic') => {
     const base = state(provider)
 
     return {
         ...base,
         provider,
-        resolvedCapabilityPlan: actionTimelinePlan(),
+        resolvedCapabilityPlan: modelRequiredToolPlan(),
         capabilityInputs: {
-            'action-timeline': {
+            'fixture-artifact': {
                 prompt: 'Create a 15 second timeline with 2 second gaps',
                 durationMs: 15000,
                 precisionMs: 2000,
@@ -374,8 +374,8 @@ describe('Capability provider adapters', () => {
         expect(update.usage).toEqual(expect.objectContaining({ totalTokens: 10 }))
     })
 
-    it('forces Action Timeline once in Anthropic and streams the agent response after its tool result', async () => {
-        const toolName = directCapabilityToolName('action-timeline')
+    it('forces Fixture Artifact once in Anthropic and streams the agent response after its tool result', async () => {
+        const toolName = directCapabilityToolName('fixture-artifact')
         const firstFinal = {
             id: 'message-1',
             content: [{
@@ -396,7 +396,7 @@ describe('Capability provider adapters', () => {
             id: 'message-2',
             content: [{
                 type: 'text',
-                text: 'The action timeline is ready.',
+                text: 'The fixture artifact is ready.',
             }],
             usage: {
                 input_tokens: 3,
@@ -413,7 +413,7 @@ describe('Capability provider adapters', () => {
                     type: 'content_block_delta',
                     delta: {
                         type: 'text_delta',
-                        text: 'The action timeline is ready.',
+                        text: 'The fixture artifact is ready.',
                     },
                 }]),
                 finalMessage: vi.fn(async () => secondFinal),
@@ -432,7 +432,7 @@ describe('Capability provider adapters', () => {
         })
         const publisher = configure(provider)
 
-        await (provider as any).streamImpl(actionTimelineState('Anthropic'))
+        await (provider as any).streamImpl(modelRequiredToolState('Anthropic'))
 
         expect(anthropicMocks.messagesStream).toHaveBeenCalledTimes(2)
         expect(anthropicMocks.messagesStream.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
@@ -464,7 +464,7 @@ describe('Capability provider adapters', () => {
             }),
         }))
         expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
-        expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
+        expect(publisher.chunk).toHaveBeenCalledWith('The fixture artifact is ready.')
         expect(publisher.end).not.toHaveBeenCalled()
     })
 
@@ -527,8 +527,8 @@ describe('Capability provider adapters', () => {
         }))
     })
 
-    it('forces Action Timeline once in OpenAI and streams the agent response after its function output', async () => {
-        const toolName = directCapabilityToolName('action-timeline')
+    it('forces Fixture Artifact once in OpenAI and streams the agent response after its function output', async () => {
+        const toolName = directCapabilityToolName('fixture-artifact')
         openaiMocks.responsesCreate
             .mockResolvedValueOnce(asyncStream([{
                 type: 'response.completed',
@@ -552,7 +552,7 @@ describe('Capability provider adapters', () => {
             .mockResolvedValueOnce(asyncStream([
                 {
                     type: 'response.output_text.delta',
-                    delta: 'The action timeline is ready.',
+                    delta: 'The fixture artifact is ready.',
                 },
                 {
                     type: 'response.completed',
@@ -580,7 +580,7 @@ describe('Capability provider adapters', () => {
         })
         const publisher = configure(provider)
 
-        await (provider as any).streamImpl(actionTimelineState('OpenAI'))
+        await (provider as any).streamImpl(modelRequiredToolState('OpenAI'))
 
         expect(openaiMocks.responsesCreate).toHaveBeenCalledTimes(2)
         expect(openaiMocks.responsesCreate.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
@@ -609,7 +609,7 @@ describe('Capability provider adapters', () => {
             }),
         }))
         expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
-        expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
+        expect(publisher.chunk).toHaveBeenCalledWith('The fixture artifact is ready.')
         expect(publisher.end).not.toHaveBeenCalled()
     })
 })

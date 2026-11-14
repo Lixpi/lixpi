@@ -363,7 +363,7 @@ describe('Asset.attachWorkspaceReference', () => {
             nodes: [{
                 nodeId: 'node-artifact',
                 type: 'capabilityArtifact' as const,
-                artifactTypeId: 'action-timeline',
+                artifactTypeId: 'fixture-artifact',
                 assetId: 'asset-1',
                 position: {
                     x: 500,
@@ -379,15 +379,15 @@ describe('Asset.attachWorkspaceReference', () => {
             .mockResolvedValueOnce({
                 ...asset,
                 artifact: {
-                    artifactTypeId: 'action-timeline',
-                    schemaVersion: 'action-timeline-v1',
+                    artifactTypeId: 'fixture-artifact',
+                    schemaVersion: 'fixture-artifact-v1',
                 },
                 documents: {
                     capabilityArtifact: {
                         role: 'capabilityArtifact',
                         blobHash: 'a'.repeat(64),
                         version: 0,
-                        schemaVersion: 'action-timeline-v1',
+                        schemaVersion: 'fixture-artifact-v1',
                         byteSize: 100,
                         updatedAt: 10,
                     },
@@ -479,17 +479,17 @@ describe('Asset prompt-reference search', () => {
         })).toBeNull()
         expect(buildAssetSearchRecord({
             ...asset,
-            title: 'Action Timeline',
+            title: 'Fixture Artifact',
             artifact: {
-                artifactTypeId: 'action-timeline',
-                schemaVersion: 'action-timeline-v1',
+                artifactTypeId: 'fixture-artifact',
+                schemaVersion: 'fixture-artifact-v1',
             },
             documents: {
                 capabilityArtifact: {
                     role: 'capabilityArtifact',
                     blobHash: 'b'.repeat(64),
                     version: 0,
-                    schemaVersion: 'action-timeline-v1',
+                    schemaVersion: 'fixture-artifact-v1',
                     byteSize: 100,
                     updatedAt: 1,
                 },
@@ -500,9 +500,9 @@ describe('Asset prompt-reference search', () => {
             },
         })).toMatchObject({
             primaryCategory: 'capabilityArtifact',
-            artifactTypeId: 'action-timeline',
-            artifactSchemaVersion: 'action-timeline-v1',
-            searchKey: 'capabilityArtifact#action-timeline#action timeline#asset-1',
+            artifactTypeId: 'fixture-artifact',
+            artifactSchemaVersion: 'fixture-artifact-v1',
+            searchKey: 'capabilityArtifact#fixture-artifact#fixture artifact#asset-1',
         })
     })
 

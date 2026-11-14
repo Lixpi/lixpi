@@ -23,7 +23,6 @@ import { createDefaultCapabilityModuleCatalog } from '../installed-capabilities.
 import {
     type ProviderUsageClient,
 } from '@lixpi/usage-reporter'
-import { createCharacterCreatorRuntimePorts } from '../capability-system/character-creator-platform-adapter.ts'
 
 export type LlmModule = {
     process: (
@@ -74,12 +73,6 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     registry.setVideoRouter((state, options) => videoRouter.execute(state, options))
 
     const capabilityModules = createDefaultCapabilityModuleCatalog({
-        natsService: deps.natsService,
-        imageRouter,
-        characterCreatorRuntime: createCharacterCreatorRuntimePorts({
-            registry,
-            natsService: deps.natsService,
-        }),
         providerUsage: deps.providerUsage,
     })
     capabilityModules.registerMediaStrategies(capabilityMediaStrategies)
