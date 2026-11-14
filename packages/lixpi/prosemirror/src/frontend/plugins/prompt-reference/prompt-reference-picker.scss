@@ -137,7 +137,6 @@
     }
 }
 
-
 .prompt-reference-picker-badge {
     color: #{themeScope.token("components-composer-references-picker-badge-base-foreground", themePalette.$roles)};
     font-size: #{themeScope.token("components-composer-references-picker-badge-base-font-size", themePalette.$roles)};
