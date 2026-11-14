@@ -31,7 +31,10 @@ const fixture = async () => {
         turn: stored.turn,
         responseMessageId: 'response',
         continuationEpoch: 0,
-        permissions: { readOnly: false, allowedOperationFamilies: ['image', 'sequence-export'] },
+        permissions: {
+            readOnly: false,
+            allowedOperationFamilies: ['image', 'sequence-export'],
+        },
         createdAssetIds: new Set(),
         assertReadTarget: sourceAccess,
     }
@@ -40,7 +43,12 @@ const fixture = async () => {
         name: 'pipeline-expert',
         description: 'Plan media dependencies.',
         operationFamilies: ['image'],
-        runtime: { kind: 'agent', instructions: 'Use the installed operations.', toolNames: [], skillIds: [] },
+        runtime: {
+            kind: 'agent',
+            instructions: 'Use the installed operations.',
+            toolNames: [],
+            skillIds: [],
+        },
     }
     const run = vi.fn(async (_request: AgentExpertRun): Promise<unknown> => ({ text: 'Completed.' }))
     const options = {
@@ -50,14 +58,30 @@ const fixture = async () => {
         resolve: async () => expert,
         run,
         operations: {
-            advance: async () => ({ pending: false, completed: [] }),
+            advance: async () => ({
+                pending: false,
+                completed: [],
+            }),
             acknowledge: vi.fn(),
             cancel: vi.fn(),
             cancelOperation: vi.fn(),
         },
     }
-    const request = { expertName: expert.name, task: 'Prepare the requested media.', sourceAssetIds: ['source'] }
-    return { ...stored, execution, sourceAccess, expert, options, run, request }
+    const request = {
+        expertName: expert.name,
+        task: 'Prepare the requested media.',
+        sourceAssetIds: ['source'],
+    }
+
+    return {
+        ...stored,
+        execution,
+        sourceAccess,
+        expert,
+        options,
+        run,
+        request,
+    }
 }
 
 // =============================================================================
@@ -79,9 +103,7 @@ describe('AgentExperts', () => {
     it('recovers the committed allocation after an acknowledgement is lost', async () => {
         const f = await fixture()
         f.database.failAfterCommit = true
-        await AgentExecutionScope.run(f.execution, async () => {
-            await new AgentExperts(f.options).delegate(f.request, 'call-1')
-        })
+        await AgentExecutionScope.run(f.execution, async () => void (await new AgentExperts(f.options).delegate(f.request, 'call-1')))
         expect((await f.owner.read()).run!.budget.specialistCalls).toBe(1)
         expect(f.run).toHaveBeenCalledTimes(1)
     })
@@ -90,6 +112,7 @@ describe('AgentExperts', () => {
         const f = await fixture()
         f.run.mockImplementationOnce(async request => {
             await request.retainOperations(['media-1'])
+
             throw new AgentToolsPending()
         })
         await AgentExecutionScope.run(f.execution, async () => {
@@ -109,7 +132,10 @@ describe('AgentExperts', () => {
         f.run.mockRejectedValue(new Error('AGENT_MODEL_CALL_OUTCOME_UNKNOWN'))
         await AgentExecutionScope.run(f.execution, async () => {
             const experts = new AgentExperts(f.options)
-            expect(await experts.delegate(f.request, 'call-1')).toMatchObject({ status: 'error', error: { code: 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN' } })
+            expect(await experts.delegate(f.request, 'call-1')).toMatchObject({
+                status: 'error',
+                error: { code: 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN' },
+            })
             expect(await experts.delegate(f.request, 'call-1')).toMatchObject({ status: 'error' })
         })
         expect(f.run).toHaveBeenCalledTimes(1)
@@ -161,11 +187,10 @@ describe('AgentExperts', () => {
             await expect(AgentExecutionScope.assertReadTargets(['unrelated-parent-created'])).rejects.toThrow('AGENT_EXPERT_SOURCE_NOT_DELEGATED')
             execution.createdAssetIds.add('child-output')
             await AgentExecutionScope.assertReadTargets(['child-output'])
+
             return { text: 'Completed within the delegated sources.' }
         })
-        await AgentExecutionScope.run(f.execution, async () => {
-            expect(await new AgentExperts(f.options).delegate(f.request, 'call-1')).toMatchObject({ status: 'completed' })
-        })
+        await AgentExecutionScope.run(f.execution, async () => void expect(await new AgentExperts(f.options).delegate(f.request, 'call-1')).toMatchObject({ status: 'completed' }))
         expect(f.execution.createdAssetIds.has('child-output')).toBe(true)
         expect(f.sourceAccess).not.toHaveBeenCalledWith('unrelated-parent-created')
     })
@@ -174,8 +199,8 @@ describe('AgentExperts', () => {
         const f = await fixture()
         let entered!: (request: AgentExpertRun) => void
         let release!: () => void
-        const started = new Promise<AgentExpertRun>(resolve => { entered = resolve })
-        const released = new Promise<void>(resolve => { release = resolve })
+        const started = new Promise<AgentExpertRun>(resolve => void (entered = resolve))
+        const released = new Promise<void>(resolve => void (release = resolve))
         f.run.mockImplementation(async request => {
             await request.retainOperations(['media-1'])
             entered(request)
@@ -191,7 +216,10 @@ describe('AgentExperts', () => {
             const request = await started
             const cancelled = await new AgentExperts(f.options).operations().cancelOperation!(f.owner, request.invocation.operationId)
             release()
-            expect(cancelled).toMatchObject({ status: 'error', error: { code: 'AGENT_EXPERT_CANCELLED' } })
+            expect(cancelled).toMatchObject({
+                status: 'error',
+                error: { code: 'AGENT_EXPERT_CANCELLED' },
+            })
             expect(await active).toEqual(cancelled)
             expect(await new AgentExperts(f.options).delegate(f.request, 'call-1')).toEqual(cancelled)
             const saved = await f.repository.read<AgentExpertInvocation>(f.owner.partition, `EXPERT#${request.invocation.operationId}`)
@@ -205,11 +233,12 @@ describe('AgentExperts', () => {
         const f = await fixture()
         let entered!: () => void
         let release!: () => void
-        const started = new Promise<void>(resolve => { entered = resolve })
-        const released = new Promise<void>(resolve => { release = resolve })
+        const started = new Promise<void>(resolve => void (entered = resolve))
+        const released = new Promise<void>(resolve => void (release = resolve))
         f.run.mockImplementation(async () => {
             entered()
             await released
+
             return { text: 'Late result after Stop.' }
         })
         await AgentExecutionScope.run(f.execution, async () => {
@@ -217,7 +246,10 @@ describe('AgentExperts', () => {
             await started
             await AgentExperts.cancelForRun(f.repository, f.owner)
             release()
-            expect(await active).toMatchObject({ status: 'error', error: { code: 'AGENT_EXPERT_CANCELLED' } })
+            expect(await active).toMatchObject({
+                status: 'error',
+                error: { code: 'AGENT_EXPERT_CANCELLED' },
+            })
         })
         const rows = await f.repository.query<AgentExpertInvocation>(f.owner.partition, 'EXPERT#')
         expect(rows.items[0].state).toBe('cancelled')
@@ -227,9 +259,7 @@ describe('AgentExperts', () => {
         const f = await fixture()
         const steer = new Error('CONVERSATION_STEER_BOUNDARY')
         f.run.mockRejectedValue(new Error('Framework tool failed', { cause: steer }))
-        await AgentExecutionScope.run(f.execution, async () => {
-            await expect(new AgentExperts(f.options).delegate(f.request, 'call-1')).rejects.toBe(steer)
-        })
+        await AgentExecutionScope.run(f.execution, async () => void (await expect(new AgentExperts(f.options).delegate(f.request, 'call-1')).rejects.toBe(steer)))
         const rows = await f.repository.query<AgentExpertInvocation>(f.owner.partition, 'EXPERT#')
         expect(rows.items[0]).toMatchObject({ state: 'prepared' })
         expect(rows.items[0].payload).toBeUndefined()
@@ -240,11 +270,10 @@ describe('AgentExperts', () => {
         f.execution.permissions.readOnly = true
         f.run.mockImplementation(async () => {
             await expect(AgentExecutionScope.authorize('execute', ['image'])).rejects.toThrow('AGENT_EXECUTION_READ_ONLY')
+
             return { text: 'Inspected.' }
         })
-        await AgentExecutionScope.run(f.execution, async () => {
-            await new AgentExperts(f.options).delegate(f.request, 'call-1')
-        })
+        await AgentExecutionScope.run(f.execution, async () => void (await new AgentExperts(f.options).delegate(f.request, 'call-1')))
         expect(f.run.mock.calls[0][0].execution.permissions.readOnly).toBe(true)
     })
 })
@@ -257,11 +286,26 @@ describe('injected workflow experts', () => {
             name: f.request.expertName,
             description: 'Run the existing media graph.',
             operationFamilies: ['image'],
-            runtime: { kind: 'workflow', capabilityId: 'test-workflow', schema: { type: 'object' }, execution: 'media' },
+            runtime: {
+                kind: 'workflow',
+                capabilityId: 'test-workflow',
+                schema: { type: 'object' },
+                execution: 'media',
+            },
         }
-        const start = vi.fn(async (_request: AgentWorkflowExpertRun) => ({ status: 'pending', operationId: 'graph-run' }))
+        const start = vi.fn(async (_request: AgentWorkflowExpertRun) => ({
+            status: 'pending',
+            operationId: 'graph-run',
+        }))
         const resume = vi.fn(async (_request: AgentWorkflowExpertRun) => ({ outputAssetId: 'output' }))
-        const options = { ...f.options, resolve: async () => workflow, workflow: { start, resume } }
+        const options = {
+            ...f.options,
+            resolve: async () => workflow,
+            workflow: {
+                start,
+                resume,
+            },
+        }
         await AgentExecutionScope.run(f.execution, async () => {
             expect(await new AgentExperts(options).delegate(f.request, 'call-1')).toMatchObject({ status: 'pending' })
             expect((await new AgentExperts(options).operations().advance(f.owner)).completed).toHaveLength(1)
@@ -279,11 +323,17 @@ describe('injected workflow experts', () => {
             name: f.request.expertName,
             description: 'Unavailable graph.',
             operationFamilies: ['image'],
-            runtime: { kind: 'workflow', capabilityId: 'test-workflow', schema: {}, execution: 'media' },
+            runtime: {
+                kind: 'workflow',
+                capabilityId: 'test-workflow',
+                schema: {},
+                execution: 'media',
+            },
         }
-        await AgentExecutionScope.run(f.execution, async () => {
-            await expect(new AgentExperts({ ...f.options, resolve: async () => workflow }).delegate(f.request, 'call-1')).rejects.toThrow('AGENT_EXPERT_UNAVAILABLE')
-        })
+        await AgentExecutionScope.run(f.execution, async () => void (await expect(new AgentExperts({
+            ...f.options,
+            resolve: async () => workflow,
+        }).delegate(f.request, 'call-1')).rejects.toThrow('AGENT_EXPERT_UNAVAILABLE')))
         expect((await f.owner.read()).run!.budget.specialistCalls).toBe(0)
     })
 })

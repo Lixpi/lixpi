@@ -61,7 +61,11 @@ const catalog = {
         description: 'Test sealed instructions.',
         capabilityId: 'test-skill',
         bundle: fixture.bundle,
-        owner: { kind: 'module', moduleId: 'test-module', capabilityId: 'test-module' },
+        owner: {
+            kind: 'module',
+            moduleId: 'test-module',
+            capabilityId: 'test-module',
+        },
     } as CapabilityAgentEntry] : []),
 } as unknown as CapabilityModuleCatalog
 
@@ -94,16 +98,32 @@ describe('sealed conversation Skills', () => {
     })
 
     it('hides a newly installed Skill and dependent expert from a resumed older snapshot', async () => {
-        const { repository, payloads, owner } = await createConversationExecutionFixture()
+        const {
+            repository,
+            payloads,
+            owner,
+        } = await createConversationExecutionFixture()
         const skills = new AgentSkills(catalog, repository, payloads)
         fixture.installed = false
         await skills.load(owner)
         fixture.installed = true
         const files = await skills.load(owner)
         const registered = new CapabilityAgentRegistry([...catalog.createAgentRegistry().list(), {
-            kind: 'expert', name: 'new-expert', description: 'Requires the newly installed Skill.', operationFamilies: ['image'],
-            runtime: { kind: 'agent', instructions: 'Use the Skill.', toolNames: [], skillIds: ['test-skill'] },
-            owner: { kind: 'module', moduleId: 'test-module', capabilityId: 'test-module' },
+            kind: 'expert',
+            name: 'new-expert',
+            description: 'Requires the newly installed Skill.',
+            operationFamilies: ['image'],
+            runtime: {
+                kind: 'agent',
+                instructions: 'Use the Skill.',
+                toolNames: [],
+                skillIds: ['test-skill'],
+            },
+            owner: {
+                kind: 'module',
+                moduleId: 'test-module',
+                capabilityId: 'test-module',
+            },
         }])
         const registry = new AgentRegistry(registered, owner, false, new Set([...files.keys()].map(path => decodeURIComponent(path.split('/')[2]))))
         await registry.refresh()
@@ -143,14 +163,22 @@ describe('sealed conversation Skills', () => {
     })
 
     it('skips a Skill when its owning module package is unavailable', async () => {
-        const { repository, payloads, owner } = await createConversationExecutionFixture()
+        const {
+            repository,
+            payloads,
+            owner,
+        } = await createConversationExecutionFixture()
         fixture.moduleAuthorized = false
         expect(await new AgentSkills(catalog, repository, payloads).load(owner)).toEqual(new Map())
         expect(fixture.resourceReads).not.toHaveBeenCalled()
     })
 
     it('rejects sealed Skill recovery when its owning module access is revoked', async () => {
-        const { repository, payloads, owner } = await createConversationExecutionFixture()
+        const {
+            repository,
+            payloads,
+            owner,
+        } = await createConversationExecutionFixture()
         const skills = new AgentSkills(catalog, repository, payloads)
         const files = await skills.load(owner)
         fixture.moduleAuthorized = false

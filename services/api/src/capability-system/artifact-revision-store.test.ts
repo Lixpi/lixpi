@@ -157,8 +157,14 @@ describe('artifact transaction budgets', () => {
             commit,
             put,
         } = fixture()
-        const previous = { version: 1, blobHash: 'old-document' }
-        const next = { version: 2, blobHash: 'new-document' }
+        const previous = {
+            version: 1,
+            blobHash: 'old-document',
+        }
+        const next = {
+            version: 2,
+            blobHash: 'new-document',
+        }
         mocks.getAsset.mockResolvedValue({
             organizationId: 'org',
             states: { lifecycle: 'active' },

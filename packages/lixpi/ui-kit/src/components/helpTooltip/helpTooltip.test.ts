@@ -171,10 +171,16 @@ describe('helpTooltip', () => {
         expect(enter.defaultPrevented).toBe(true)
         expect(content.classList.contains('is-visible')).toBe(true)
 
-        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+        trigger.dispatchEvent(new KeyboardEvent('keydown', {
+            key: ' ',
+            bubbles: true,
+        }))
         expect(content.classList.contains('is-visible')).toBe(false)
 
-        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+        trigger.dispatchEvent(new KeyboardEvent('keydown', {
+            key: ' ',
+            bubbles: true,
+        }))
         expect(content.classList.contains('is-visible')).toBe(true)
 
         trigger.dispatchEvent(new FocusEvent('focusout'))

@@ -182,7 +182,12 @@ export const createMediaSequenceModule = (dependencies?: MediaSequenceModuleDepe
                 context,
             ),
             Boolean(dependencies.resolveSourceSelection),
-        ).map(tool => ({ ...tool, kind: 'tool' as const })) : [],
+        ).map(
+            tool => ({
+                ...tool,
+                kind: 'tool' as const,
+            }),
+        ) : [],
         tools: [{
             kind: 'tool',
             capabilityId: MEDIA_SEQUENCE_TOOL_ID,

@@ -12,7 +12,11 @@ import {
 const agentTool = (module: CapabilityModuleDefinition, name: string) => {
     const entry = module.agentEntries?.find(item => item.kind === 'tool' && item.name === name)
 
-    if (!entry || entry.kind !== 'tool' || !('execute' in entry))
+    if (
+        !entry
+        || entry.kind !== 'tool'
+        || !('execute' in entry)
+    )
         throw new Error(`Missing executable tool: ${name}`)
 
     return entry
