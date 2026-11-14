@@ -62,7 +62,7 @@ export type MediaPipelineOperationRequest = {
     inputs: Record<string, MediaPipelineSource>
     sourceSnapshots?: MediaPipelineSource[]
     context: MediaPipelineContext
-    inferenceProvider?: 'aws-bedrock'
+    inferenceProvider?: string
 }
 
 export type MediaPipelineOperationReceipt = {

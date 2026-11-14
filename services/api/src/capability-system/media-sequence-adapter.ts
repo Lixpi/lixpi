@@ -154,7 +154,13 @@ export class MediaSequenceAdapter {
                     },
                     document: createMediaSequenceDocument(input.sequence),
                     definition: mediaSequenceArtifactDefinition,
-                    ...(access.origin.kind === 'conversation' ? { fences: () => this.agentFences(access) } : {}),
+                    ...(execution ? {
+                        fences: () => this.agentFences(access),
+                        agentTurn: {
+                            partition: execution.owner.partition,
+                            turnId: execution.turn.turnId,
+                        },
+                    } : {}),
                     additionalOperations: [...references.operations, ...created],
                     retainedBlobs: references.retainedBlobs,
                 })

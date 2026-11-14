@@ -1,12 +1,8 @@
 import { mediaFixtures } from './media-fixtures.ts'
 import {
     CapabilityArtifactFrontendRegistry,
-    actionTimelineFrontendDefinition,
-    actionTimelineArtifactDefinition,
-    buildActionTimelineDocument,
     createMediaPipelineFrontendDefinition,
     mediaSequenceFrontendDefinition,
-    ACTION_TIMELINE_FRONTEND_STYLES,
     MEDIA_SEQUENCE_FRONTEND_STYLES,
 } from '@lixpi/capability-system/frontend'
 import {
@@ -22,46 +18,14 @@ import { html } from '@lixpi/ui-primitives/dom'
 
 export const createArtifactFixtures = () => {
     const shared = new CapabilityArtifactSharedRegistry()
-    shared.register(actionTimelineArtifactDefinition)
     shared.register(mediaPipelineSharedDefinition)
     shared.register(mediaSequenceArtifactDefinition)
     const frontend = new CapabilityArtifactFrontendRegistry()
-    frontend.register(actionTimelineFrontendDefinition)
     frontend.register(
         createMediaPipelineFrontendDefinition(),
     )
     frontend.register(mediaSequenceFrontendDefinition)
 
-    const timeline = buildActionTimelineDocument(
-        {
-            durationMs: 6000,
-            precisionMs: 2000,
-        },
-        [
-            {
-                slotIndex: 0,
-                runs: [
-                    { text: 'Begin with the reference framing ' },
-                    { assetId: 'fixture-image' },
-                ],
-            },
-            {
-                slotIndex: 1,
-                runs: [{ text: 'Continue the movement across the frame.' }],
-            },
-            {
-                slotIndex: 2,
-                runs: [{ text: 'Hold the final composition.' }],
-            },
-        ],
-        new Map([[
-            'fixture-image',
-            {
-                mediaKind: 'image',
-                displayName: 'Canvas study',
-            },
-        ]]),
-    )
     const pipeline: MediaPipeline = {
         schemaVersion: 'media-pipeline-v1',
         pipelineId: 'fixture-pipeline',
@@ -197,7 +161,6 @@ export const createArtifactFixtures = () => {
         frontend,
         shared,
         documents: new Map<string, object>([
-            ['fixture-timeline', timeline],
             ['fixture-pipeline', createMediaPipelineDocument(pipeline)],
             ['fixture-sequence', createMediaSequenceDocument(sequence)],
         ]),
@@ -205,10 +168,10 @@ export const createArtifactFixtures = () => {
 }
 
 export const ensureArtifactStyles = (document: Document): void => {
-    if (document.getElementById('canvas-library-action-timeline-styles'))
+    if (document.getElementById('canvas-library-artifact-styles'))
         return
 
     document.head.append(
-        html`<style id="canvas-library-action-timeline-styles">${ACTION_TIMELINE_FRONTEND_STYLES + MEDIA_SEQUENCE_FRONTEND_STYLES}</style>` as HTMLStyleElement,
+        html`<style id="canvas-library-artifact-styles">${MEDIA_SEQUENCE_FRONTEND_STYLES}</style>` as HTMLStyleElement,
     )
 }

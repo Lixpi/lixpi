@@ -46,8 +46,8 @@ const submittedMessage = {
                 type: 'prompt_reference',
                 attrs: {
                     referenceType: 'capability-module',
-                    moduleId: 'action-timeline',
-                    displayName: 'Action Timeline',
+                    moduleId: 'fixture-artifact',
+                    displayName: 'Fixture Artifact',
                 },
             },
             {
@@ -71,8 +71,8 @@ describe('branch marker prompt content', () => {
                 type: 'capability-module',
                 reference: {
                     referenceType: 'capability-module',
-                    moduleId: 'action-timeline',
-                    displayName: 'Action Timeline',
+                    moduleId: 'fixture-artifact',
+                    displayName: 'Fixture Artifact',
                 },
             },
             {
@@ -81,14 +81,14 @@ describe('branch marker prompt content', () => {
             },
         ])
         expect(getBranchMarkerPromptDisplayText(parts)).toBe(
-            'Create Action Timeline 15s duration 2s gaps with imaginary plot',
+            'Create Fixture Artifact 15s duration 2s gaps with imaginary plot',
         )
 
         const rendered = renderBranchMarkerPromptParts(parts)
         expect(rendered[0]).toBe('Create ')
         expect(rendered[1]).toBeInstanceOf(HTMLSpanElement)
         expect((rendered[1] as HTMLSpanElement).classList.contains('prompt-reference-chip-capability-module')).toBe(true)
-        expect((rendered[1] as HTMLSpanElement).querySelector('.prompt-reference-chip-name')?.textContent).toBe('Action Timeline')
+        expect((rendered[1] as HTMLSpanElement).querySelector('.prompt-reference-chip-name')?.textContent).toBe('Fixture Artifact')
         expect(rendered[2]).toBe(' 15s duration 2s gaps with imaginary plot')
     })
 
@@ -99,10 +99,10 @@ describe('branch marker prompt content', () => {
             previewRenderer: {
                 getNode: () => undefined,
                 getCapabilityModule: async () => ({
-                    moduleId: 'action-timeline',
-                    name: 'Action Timeline',
-                    normalizedName: 'action timeline',
-                    summary: 'Creates an action timeline.',
+                    moduleId: 'fixture-artifact',
+                    name: 'Fixture Artifact',
+                    normalizedName: 'fixture artifact',
+                    summary: 'Creates an fixture artifact.',
                     tags: [],
                     status: 'active',
                     descriptionSheet: {
@@ -140,7 +140,7 @@ describe('branch marker prompt content', () => {
         preview.dispatchEvent(new PointerEvent('pointerenter'))
         await new Promise(resolve => setTimeout(resolve, 0))
 
-        expect(document.body.querySelector('.capability-description-card h2')?.textContent).toBe('Action Timeline')
+        expect(document.body.querySelector('.capability-description-card h2')?.textContent).toBe('Fixture Artifact')
     })
 
     it('preserves normal marker text behavior when no Capability badge exists', () => {
@@ -166,7 +166,7 @@ describe('branch marker prompt content', () => {
         const parts = truncateBranchMarkerPromptParts(getBranchMarkerPromptParts(submittedMessage, ''), 22)
         const rendered = renderBranchMarkerPromptParts(parts)
 
-        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Action Timeline...')
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Fixture Artifact...')
         expect(rendered[0]).toBe('Create ')
         expect(rendered[1]).toBeInstanceOf(HTMLSpanElement)
         expect((rendered[1] as HTMLSpanElement).classList.contains('prompt-reference-chip-capability-module')).toBe(true)

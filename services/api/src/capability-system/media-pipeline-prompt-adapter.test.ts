@@ -67,12 +67,9 @@ const fixture = async () => {
         },
         responseMessageId: 'response',
         continuationEpoch: 0,
-        intent: {
-            intent: 'plan',
-            operationFamilies: [],
-            targetAssetIds: [],
-            confidence: 1,
-            needsClarification: false,
+        permissions: {
+            readOnly: false,
+            allowedOperationFamilies: [],
         },
         createdAssetIds: new Set(),
     }

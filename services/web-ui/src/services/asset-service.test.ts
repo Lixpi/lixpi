@@ -177,7 +177,7 @@ describe('AssetService.create', () => {
         await expect(service.create({
             organizationId: 'organization-1',
             workspaceId: 'workspace-1',
-            title: 'Referenced Action Timeline request',
+            title: 'Referenced Fixture Artifact request',
             primaryCategory: 'conversation',
             assetId: 'conversation-1',
             initialDoc: {
@@ -212,7 +212,7 @@ describe('AssetService.loadWorkspaceAssets', () => {
                         nodeId: 'timeline-node',
                         type: 'capabilityArtifact',
                         assetId: 'timeline-asset',
-                        artifactTypeId: 'action-timeline',
+                        artifactTypeId: 'fixture-artifact',
                         position: {
                             x: 0,
                             y: 0,
@@ -230,10 +230,10 @@ describe('AssetService.loadWorkspaceAssets', () => {
     it('loads lineage source Assets required by persisted Artifact references', async () => {
         const timelineAsset = makeAsset({
             assetId: 'timeline-asset',
-            title: 'Action Timeline',
+            title: 'Fixture Artifact',
             artifact: {
-                artifactTypeId: 'action-timeline',
-                schemaVersion: 'action-timeline-v1',
+                artifactTypeId: 'fixture-artifact',
+                schemaVersion: 'fixture-artifact-v1',
             },
             lineage: { sourceAssetIds: ['shelby-asset', 'train-asset'] },
             states: {
@@ -282,7 +282,7 @@ describe('AssetService.loadWorkspaceAssets', () => {
         const assets = await service.loadWorkspaceAssets('workspace-1')
 
         expect(assets.map(asset => [asset.assetId, asset.title])).toEqual([
-            ['timeline-asset', 'Action Timeline'],
+            ['timeline-asset', 'Fixture Artifact'],
             ['shelby-asset', 'Shelby'],
             ['train-asset', 'Slop Train'],
         ])

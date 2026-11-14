@@ -13,7 +13,7 @@ import {
     type MediaBranchCandidateImage,
     type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
-import { buildActionTimelineDocument } from '@lixpi/capability-system'
+import { createMediaPipelineDocument } from '@lixpi/capability-system/shared'
 
 import * as debugTools from '@lixpi/debug-tools'
 
@@ -166,10 +166,10 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
 // resolve their image URL through Asset -> Blob, which the resolver always
 // hits directly (not via injected deps).
 const assetById: Record<string, Asset> = {
-    'asset-timeline': {
-        assetId: 'asset-timeline',
+    'asset-pipeline': {
+        assetId: 'asset-pipeline',
         organizationId: 'org-1',
-        title: 'Travel Timeline',
+        title: 'Travel Pipeline',
         scope: 'workspace',
         scopeOwnerId: 'workspace-1',
         originWorkspaceId: 'workspace-1',
@@ -177,14 +177,14 @@ const assetById: Record<string, Asset> = {
         primaryCategory: 'capabilityArtifact',
         documents: {
             capabilityArtifact: {
-                blobHash: 'timeline-doc',
+                blobHash: 'pipeline-doc',
                 version: 1,
-                schemaVersion: 'action-timeline@1',
+                schemaVersion: 'media-pipeline-v1',
             },
         },
         artifact: {
-            artifactTypeId: 'action-timeline',
-            schemaVersion: 'action-timeline@1',
+            artifactTypeId: 'media-pipeline',
+            schemaVersion: 'media-pipeline-v1',
         },
         states: {
             lifecycle: 'active',
@@ -488,33 +488,58 @@ const createDeps = (parsedInput: { selections: Array<Record<string, unknown>> } 
     }))
     const loadAssetDocumentSnapshot = vi.fn(async (asset: Asset, role: string) => {
         if (
-            asset.assetId === 'asset-timeline'
+            asset.assetId === 'asset-pipeline'
             && role === 'capabilityArtifact'
         ) {
             return {
-                doc: buildActionTimelineDocument(
-                    {
-                        durationMs: 2000,
-                        precisionMs: 1000,
-                    },
-                    [{
-                        slotIndex: 0,
-                        runs: [{ assetId: 'asset-shelby' }, { text: ' boards the train using ' }, { assetId: 'asset-travel-notes' }],
-                    }, {
-                        slotIndex: 1,
-                        runs: [{ text: 'Continue the journey.' }],
+                doc: createMediaPipelineDocument({
+                    schemaVersion: 'media-pipeline-v1',
+                    pipelineId: 'travel-pipeline',
+                    revision: 1,
+                    requestedOutcome: 'Plan the journey',
+                    constraints: [],
+                    sources: [
+                        {
+                            sourceId: 'portrait',
+                            assetId: 'asset-shelby',
+                            revision: 1,
+                            blobHash: 'shelby-file',
+                            kind: 'image',
+                        },
+                        {
+                            sourceId: 'notes',
+                            assetId: 'asset-travel-notes',
+                            revision: 1,
+                            documentVersion: 1,
+                            kind: 'text',
+                        },
+                    ],
+                    nodes: [{
+                        nodeId: 'assemble',
+                        operationKey: 'sequence.create',
+                        parameters: {},
+                        inputs: [],
+                        outputs: [{
+                            portId: 'result',
+                            kind: 'sequence',
+                            required: true,
+                        }],
                     }],
-                    new Map([
-                        ['asset-shelby', {
-                            mediaKind: 'image' as const,
-                            displayName: 'stale Shelby label',
-                        }],
-                        ['asset-travel-notes', {
-                            mediaKind: 'document' as const,
-                            displayName: 'stale notes label',
-                        }],
-                    ]),
-                ),
+                    edges: [],
+                    executionPolicy: {
+                        maxConcurrency: 1,
+                        maxFanout: 1,
+                    },
+                    outputBindings: [{
+                        outputId: 'result',
+                        nodeId: 'assemble',
+                        portId: 'result',
+                    }],
+                    origin: {
+                        conversationAssetId: 'thread-1',
+                        turnId: 'turn-1',
+                    },
+                }),
             }
         }
 
@@ -784,7 +809,7 @@ describe('resolveWorkspaceContext', () => {
         expect(update.mediaBranchCandidateSnapshot?.candidates).toEqual([])
     })
 
-    it('expands an explicit Action Timeline with canonical names and every cited payload', async () => {
+    it('expands an explicit Media Pipeline with canonical names and every cited payload', async () => {
         const {
             deps,
             callLlm,
@@ -794,11 +819,11 @@ describe('resolveWorkspaceContext', () => {
         const artifactSnapshot: WorkspaceContextSnapshot = {
             ...baseWorkspaceSnapshot,
             nodes: [{
-                nodeId: 'timeline-node',
+                nodeId: 'pipeline-node',
                 type: 'capabilityArtifact',
-                artifactTypeId: 'action-timeline',
-                assetId: 'asset-timeline',
-                title: 'Travel Timeline',
+                artifactTypeId: 'media-pipeline',
+                assetId: 'asset-pipeline',
+                title: 'Travel Pipeline',
                 isExplicitChip: true,
                 isEdgeForced: false,
             }],
@@ -822,15 +847,13 @@ describe('resolveWorkspaceContext', () => {
             : undefined
 
         expect(callLlm).not.toHaveBeenCalled()
-        expect(artifactBlock).toContain('@Shelby')
-        expect(artifactBlock).toContain('@Travel Notes')
-        expect(artifactBlock).not.toContain('asset-shelby')
-        expect(artifactBlock).not.toContain('asset-travel-notes')
+        expect(artifactBlock).toContain('Shelby')
+        expect(artifactBlock).toContain('Travel Notes')
         expect(citedDocumentBlock).toContain('Travel Notes')
         expect(citedDocumentBlock).toContain('Board from platform four.')
         expect(imageBlock?.image_url).toBe(resolvedTinyPngUrl)
         expect(natsService.getObject).toHaveBeenCalled()
-        expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-timeline'], 'capabilityArtifact')
+        expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-pipeline'], 'capabilityArtifact')
         expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-travel-notes'], 'content')
     })
 
@@ -857,11 +880,11 @@ describe('resolveWorkspaceContext', () => {
                 workspaceContextSnapshot: {
                     ...baseWorkspaceSnapshot,
                     nodes: [{
-                        nodeId: 'timeline-node',
+                        nodeId: 'pipeline-node',
                         type: 'capabilityArtifact',
-                        artifactTypeId: 'action-timeline',
-                        assetId: 'asset-timeline',
-                        title: 'Travel Timeline',
+                        artifactTypeId: 'media-pipeline',
+                        assetId: 'asset-pipeline',
+                        title: 'Travel Pipeline',
                         isExplicitChip: true,
                         isEdgeForced: false,
                     }],
@@ -879,7 +902,7 @@ describe('resolveWorkspaceContext', () => {
         expect(textBlocks.some(text => text.includes('Shelby'))).toBe(false)
     })
 
-    it('fails closed when an explicitly selected Action Timeline is unavailable', async () => {
+    it('fails closed when an explicitly selected Media Pipeline is unavailable', async () => {
         const {
             deps,
             callLlm,
@@ -892,21 +915,21 @@ describe('resolveWorkspaceContext', () => {
                 workspaceContextSnapshot: {
                     ...baseWorkspaceSnapshot,
                     nodes: [{
-                        nodeId: 'timeline-node',
+                        nodeId: 'pipeline-node',
                         type: 'capabilityArtifact',
-                        artifactTypeId: 'action-timeline',
-                        assetId: 'asset-timeline',
+                        artifactTypeId: 'media-pipeline',
+                        assetId: 'asset-pipeline',
                         isExplicitChip: true,
                         isEdgeForced: false,
                     }],
                 },
             }),
             deps,
-        )).rejects.toThrow('WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-timeline')
+        )).rejects.toThrow('WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-pipeline')
 
         expect(callLlm).not.toHaveBeenCalled()
         expect(publisher.contextRelevanceError).toHaveBeenCalledWith(
-            'WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-timeline',
+            'WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-pipeline',
         )
     })
 

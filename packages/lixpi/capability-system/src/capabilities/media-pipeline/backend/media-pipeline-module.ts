@@ -226,7 +226,19 @@ export const createMediaPipelineModule = (dependencies: MediaPipelineModuleDepen
             capabilityId: 'global.save-pipeline',
             kind: 'tool',
         },
-        agentTools: [{
+        agentEntries: [{
+            kind: 'expert',
+            name: 'media-pipeline-expert',
+            description: 'Plan, revise, and execute media dependency graphs using the installed pipeline operations.',
+            operationFamilies: ['image'],
+            runtime: {
+                kind: 'agent',
+                instructions: 'You own the delegated media-pipeline task. Read the pipeline planning Skill. Inspect installed operations and existing revisions before drafting. Preserve the accepted request and authorized sources. Save drafts without submitting them unless execution was requested. Use the existing pipeline tools for execution and report their durable results. Do not invent unsupported operations, model routes, or completed outputs.',
+                toolNames: ['list_pipeline_operations', ...MEDIA_PIPELINE_TOOLS.map(tool => tool.name)],
+                skillIds: ['global.media-pipeline-planning'],
+            },
+        }, {
+            kind: 'tool',
             name: 'list_pipeline_operations',
             description: 'List installed pipeline operation keys, input and output ports, parameter schemas, and usable Bedrock model routes before drafting a pipeline.',
             schema: {
@@ -246,6 +258,7 @@ export const createMediaPipelineModule = (dependencies: MediaPipelineModuleDepen
             },
         }, ...MEDIA_PIPELINE_TOOLS.map(
             tool => ({
+                kind: 'tool' as const,
                 name: tool.name,
                 description: tool.description,
                 schema: tool.schema,

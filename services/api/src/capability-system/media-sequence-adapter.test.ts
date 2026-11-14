@@ -150,12 +150,9 @@ describe('selected media source probes', () => {
             continuationEpoch: 0,
             responseMessageId: 'response',
             createdAssetIds: new Set(),
-            intent: {
-                intent: 'execute',
-                operationFamilies: ['sequence-edit'],
-                targetAssetIds: [],
-                confidence: 1,
-                needsClarification: false,
+            permissions: {
+                readOnly: false,
+                allowedOperationFamilies: ['sequence-edit'],
             },
         }, async () => {
             await adapter.reportEdit({

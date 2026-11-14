@@ -193,9 +193,9 @@ describe('promptReferencePickerPlugin', () => {
             referenceId: 'artifact-1',
             assetId: 'artifact-1',
             nodeId: 'node-1',
-            artifactTypeId: 'action-timeline',
+            artifactTypeId: 'fixture-artifact',
             source: 'canvas',
-            title: 'Action Timeline',
+            title: 'Fixture Artifact',
             scope: 'workspace',
             updatedAt: 1,
             displayMetadata: { segmentCount: 3 },
@@ -204,8 +204,8 @@ describe('promptReferencePickerPlugin', () => {
             referenceType: 'capability-artifact',
             assetId: 'artifact-1',
             nodeId: 'node-1',
-            artifactTypeId: 'action-timeline',
-            displayName: 'Action Timeline',
+            artifactTypeId: 'fixture-artifact',
+            displayName: 'Fixture Artifact',
         })
     })
 
@@ -216,9 +216,9 @@ describe('promptReferencePickerPlugin', () => {
             referenceId: 'artifact-1',
             assetId: 'artifact-1',
             nodeId: 'node-1',
-            artifactTypeId: 'action-timeline',
+            artifactTypeId: 'fixture-artifact',
             source: 'canvas',
-            title: 'Action Timeline',
+            title: 'Fixture Artifact',
             scope: 'workspace',
             updatedAt: 1,
             displayMetadata: { segmentCount: 8 },
@@ -267,13 +267,13 @@ describe('promptReferencePickerPlugin', () => {
 
         const row = mount.querySelector('.prompt-reference-picker-item-capability-artifact')
         expect(row?.children).toHaveLength(3)
-        expect(row?.getAttribute('aria-label')).toBe('Action Timeline')
+        expect(row?.getAttribute('aria-label')).toBe('Fixture Artifact')
         expect(row?.getAttribute('data-help-tooltip')).toBe('aria-label')
         expect(row?.getAttribute('title')).toBeNull()
         expect(row?.children[0]?.classList.contains('prompt-reference-picker-glyph')).toBe(true)
         expect(row?.children[0]?.querySelector('svg')).not.toBeNull()
         expect(row?.children[1]?.classList.contains('prompt-reference-picker-artifact-host')).toBe(true)
-        expect(row?.children[1]?.textContent).toContain('Action Timeline · 8 segments')
+        expect(row?.children[1]?.textContent).toContain('Fixture Artifact · 8 segments')
         expect(row?.children[2]?.textContent).toBe('Artifact')
 
         view.destroy()

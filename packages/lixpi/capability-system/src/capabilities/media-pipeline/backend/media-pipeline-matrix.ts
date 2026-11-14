@@ -110,6 +110,11 @@ export const expandMediaPipelineMatrix = (input: MediaPipelineMatrixInput): Medi
     ).size !== input.promptVariants.length)
         throw new Error('PIPELINE_MATRIX_VARIANT_ID_DUPLICATE')
 
+    const references = input.sources?.filter(source => source.kind === 'image') ?? []
+
+    if (references.length > 2)
+        throw new Error('PIPELINE_MATRIX_IMAGE_REFERENCE_LIMIT')
+
     const nodes: MediaPipelineNode[] = []
 
     for (const variant of input.promptVariants)
@@ -128,7 +133,13 @@ export const expandMediaPipelineMatrix = (input: MediaPipelineMatrixInput): Medi
                     prompt: variant.prompt,
                     imageSize: input.imageSize,
                 },
-                inputs: [],
+                inputs: references.map(
+                    (_source, index) => ({
+                        portId: `reference-${index + 1}`,
+                        kind: 'image',
+                        required: false,
+                    }),
+                ),
                 outputs: [{
                     portId: 'image',
                     kind: 'image',
@@ -150,7 +161,17 @@ export const expandMediaPipelineMatrix = (input: MediaPipelineMatrixInput): Medi
                 ? {}
                 : { sources: [] }),
         nodes,
-        edges: [],
+        edges: nodes.flatMap(
+            node => references.map(
+                (source, index) => ({
+                    from: { sourceId: source.sourceId },
+                    to: {
+                        nodeId: node.nodeId,
+                        portId: `reference-${index + 1}`,
+                    },
+                }),
+            ),
+        ),
         executionPolicy: {
             maxConcurrency: input.maxConcurrency,
             maxFanout: 32,

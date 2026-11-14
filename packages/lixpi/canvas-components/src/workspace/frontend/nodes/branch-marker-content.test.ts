@@ -85,8 +85,8 @@ describe('BranchMarkerContent', () => {
         expect(view.element.querySelector('.workspace-branch-marker-message-progress')).toBeNull()
         expect(view.element.getAttribute('aria-label')).toContain('Reasoning: Reasoning <model>')
         const trigger = view.element.querySelector<HTMLElement>('.workspace-branch-marker-reasoning-tooltip-trigger')!
-        trigger.dispatchEvent(new FocusEvent('focusin'))
-        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+        trigger.dispatchEvent(new PointerEvent('pointerenter'))
+        expect(document.body.querySelector('.help-tooltip-content.is-visible')).not.toBeNull()
         view.destroy()
         view.destroy()
         expect(document.body.querySelector('.help-tooltip-content')).toBeNull()

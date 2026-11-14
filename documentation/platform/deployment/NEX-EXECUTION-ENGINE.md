@@ -58,7 +58,7 @@ The container entrypoint ([`services/nex/entrypoint.sh`](../../../services/nex/e
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` and provider-SDK dependencies from the pnpm workspace, the same way the `api` container does.
 2. `nex node up` — connects to the NATS `NEX` account with the node nkey and starts the native nexlet, in the background.
-3. Deploys service workloads — builds each workload start-request and runs `nex workload start`, retrying until the node is accepting auctions.
+3. Starts file conversion through `nex workload start`, retrying until the node is accepting auctions.
 4. Supervises the node in the foreground.
 
 The file-conversion workload ([`workloads/file-conversion/index.ts`](../../../services/nex/workloads/file-conversion/index.ts)) is a NATS responder. It subscribes to:
@@ -99,7 +99,7 @@ NEX 0.4.1 also supports `nats://<bucket>/<object>` Object Store artifacts in the
 ## Two things that surprise people
 
 {% callout type="important" %}
-**The workload does not inherit the container environment.** The native nexlet starts the child process with only the environment declared in the workload's start-request. The entrypoint supplies `NATS_SERVERS`, `HOME`, and `PATH` to both service workloads. File conversion receives `NATS_FILE_CONVERSION_NKEY_SEED`; character fidelity receives `NATS_CHARACTER_FIDELITY_NKEY_SEED`. Each uses its own seed to sign a service JWT through `@lixpi/nats-service`. A committed Nexfile can't carry secrets, so it documents the contract while the entrypoint supplies the values.
+**The workload does not inherit the container environment.** The native nexlet starts the child process with only the environment declared in the workload's start-request. The entrypoint supplies `NATS_SERVERS`, `HOME`, `PATH`, and `NATS_FILE_CONVERSION_NKEY_SEED` to file conversion. The workload uses its seed to sign a service JWT through `@lixpi/nats-service`. A committed Nexfile can't carry secrets, so it documents the contract while the entrypoint supplies the values.
 {% /callout %}
 
 {% callout type="note" %}

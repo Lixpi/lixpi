@@ -345,7 +345,7 @@ describe('resolveMediaBranch', () => {
             callVlm,
         } = createDeps(createParsedResolution())
         const state = createState({ candidates: [] })
-        state.capabilityOutputAssetIds = ['asset-action-timeline']
+        state.capabilityOutputAssetIds = ['asset-fixture-artifact']
         state.capabilityOutputMediaAssetIds = []
         state.enableImageGeneration = false
         state.enableVideoGeneration = false

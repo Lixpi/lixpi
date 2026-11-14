@@ -17,7 +17,7 @@ export const componentCoverage: Record<string, readonly string[]> = {
     'node-lixpi-media-document': ['LixpiWorkspaceCanvas', 'WorkspaceNodeShells', 'WorkspaceDocumentNodes', 'EditorView'],
     'node-lixpi-operation': ['LixpiWorkspaceCanvas', 'WorkspaceNodeShells', 'OperationStatusNode'],
     "node-lixpi-branches": ["LixpiWorkspaceCanvas", "WorkspaceNodeShells", "BranchMarkerContent", "BranchMarkerActions", "BranchReferenceResolution", "BranchMarkerPromptParts", "WorkspaceLineageProjection"],
-    'node-lixpi-artifact': ['LixpiWorkspaceCanvas', 'WorkspaceCapabilityNode', 'actionTimelineFrontendDefinition', 'createMediaPipelineFrontendDefinition', 'mediaSequenceFrontendDefinition'],
+    'node-lixpi-artifact': ['LixpiWorkspaceCanvas', 'WorkspaceCapabilityNode', 'createMediaPipelineFrontendDefinition', 'mediaSequenceFrontendDefinition'],
     'node-lixpi-diagram-branch': ['createWorkspaceDiagramCanvas', 'WorkspaceDiagramCanvas', 'WorkspaceDiagramNodeView', 'createWorkspaceDiagramNodeRegistration', 'layoutWorkspaceDiagram'],
     'engine-connector-matrix': ['ConnectorRenderer', 'computeConnectorDatum', 'computePath'],
     'engine-proximity': ['ConnectionManager', 'checkProximity', 'commitProximityConnection', 'NodeTransformController'],

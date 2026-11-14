@@ -17,6 +17,12 @@ import {
     type CapabilityMediaStrategy,
 } from './capability-media-strategy.ts'
 
+import {
+    CapabilityAgentRegistry,
+    type CapabilityAgentRegistration,
+    type CapabilityAgentEntry,
+} from './capability-agent-registry.ts'
+
 export type CapabilityPackageSeedContext = {
     allowedActions: ReadonlySet<string>
     parentModuleId: string
@@ -57,6 +63,9 @@ export type CapabilityAgentTool = {
     schema: Record<string, unknown>
     intent: 'inspect' | 'plan' | 'execute'
     operationFamilies: string[]
+    retainResults?: boolean
+    permission?: 'operation' | 'private-state'
+    available?: (input: Readonly<Record<string, unknown>>) => Promise<boolean>
     execute: (
         input: Readonly<Record<string, unknown>>,
         context: CapabilityActionAuthorizationContext,
@@ -73,7 +82,7 @@ export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & 
     mediaStrategies?: CapabilityMediaStrategy[]
     routing?: CapabilityModuleRoutingDefinition
     extensions?: Readonly<Record<string, unknown>>
-    agentTools?: CapabilityAgentTool[]
+    agentEntries?: CapabilityAgentRegistration[]
     operationFamilies?: Array<{
         family: string
         description: string
@@ -146,8 +155,51 @@ export class CapabilityModuleCatalog {
         return this.modules.get(moduleId)?.extensions?.[key] as T | undefined
     }
 
+    createAgentRegistry(platform: readonly CapabilityAgentRegistration[] = []): CapabilityAgentRegistry {
+        const entries: CapabilityAgentEntry[] = platform.map(
+            entry => ({
+                ...entry,
+                owner: { kind: 'platform' },
+            }),
+        )
+
+        for (const definition of this.modules.values()) {
+            const owner = {
+                kind: 'module' as const,
+                moduleId: definition.moduleId,
+                capabilityId: definition.entry.capabilityId,
+            }
+            entries.push(...(definition.agentEntries ?? []).map(
+                entry => ({
+                    ...entry,
+                    owner,
+                }),
+            ))
+
+            for (const skill of definition.skills) {
+                if (
+                    !skill.agentSkill
+                    || definition.agentEntries?.some(entry => entry.kind === 'skill' && entry.capabilityId === skill.capabilityId)
+                )
+                    continue
+
+                entries.push({
+                    kind: 'skill',
+                    name: skill.agentSkill.name,
+                    description: definition.summary,
+                    capabilityId: skill.capabilityId,
+                    bundle: skill.agentSkill,
+                    owner,
+                })
+            }
+        }
+
+        return new CapabilityAgentRegistry(entries)
+    }
+
     listAgentTools(): CapabilityAgentTool[] {
-        return [...this.modules.values()].flatMap(definition => definition.agentTools ?? [])
+        return this.createAgentRegistry()
+            .tools().filter((entry): entry is CapabilityAgentEntry & CapabilityAgentTool & { kind: 'tool' } => 'execute' in entry)
     }
 
     listOperationFamilies(): NonNullable<CapabilityModuleDefinition['operationFamilies']> {
@@ -222,6 +274,35 @@ export class CapabilityModuleCatalog {
                 throw new Error(`CAPABILITY_MODULE_DUPLICATE_PACKAGE:${definition.moduleId}:${installer.capabilityId}`)
 
             localIds.add(installer.capabilityId)
+        }
+
+        for (const entry of definition.agentEntries ?? []) {
+            if (
+                entry.kind === 'tool'
+                && entry.permission === 'private-state'
+            )
+                throw new Error(`CAPABILITY_AGENT_PLATFORM_POLICY_REQUIRED:${definition.moduleId}:${entry.name}`)
+
+            if (entry.kind === 'skill') {
+                const installer = definition.skills.find(skill => skill.capabilityId === entry.capabilityId)
+
+                if (
+                    !installer?.agentSkill
+                    || installer.agentSkill.name !== entry.name
+                    || JSON.stringify(installer.agentSkill) !== JSON.stringify(entry.bundle)
+                )
+                    throw new Error(`CAPABILITY_AGENT_SKILL_NOT_OWNED:${definition.moduleId}:${entry.capabilityId}`)
+            }
+
+            if (
+                entry.kind === 'expert'
+                && entry.runtime.kind === 'workflow'
+            ) {
+                const capabilityId = entry.runtime.capabilityId
+
+                if (!definition.tools.some(tool => tool.capabilityId === capabilityId))
+                    throw new Error(`CAPABILITY_AGENT_WORKFLOW_NOT_OWNED:${definition.moduleId}:${entry.name}`)
+            }
         }
 
         const entryMatches = packages.filter(installer => installer.capabilityId === definition.entry.capabilityId)

@@ -82,7 +82,6 @@ describe('Capability module architecture boundaries', () => {
             .sort()
 
         expect(moduleDirectories).toEqual([
-            'action-timeline',
             'character-creator',
             'media-pipeline',
             'media-sequence',

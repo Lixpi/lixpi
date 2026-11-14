@@ -32,6 +32,7 @@ import {
     getMediaGenerationUserEventSubject,
     NATS_SUBJECTS,
     type AiInteractionChatSendMessagePayload,
+    type AiModelId,
     type AssetRequesterContext,
     type CapabilityJsonValue,
     type CanvasGeometryUpdate,
@@ -48,15 +49,8 @@ import {
 } from '@lixpi/constants'
 import { canEditWorkspace } from '../../services/workspace-navigation/access.ts'
 import {
-    ACTION_TIMELINE_ARTIFACT_TYPE_ID,
-    ACTION_TIMELINE_TOOL_ID,
-    resolveCharacterCreatorRouting,
-    restrictMediaRequestToCharacterImages,
-} from '@lixpi/capability-system'
-import {
     resolveCapabilities,
     validateJsonSchemaValue,
-    type CapabilityModuleRoute,
 } from '@lixpi/capability-system/backend'
 import {
     getMediaGenerationOperationNodeId,
@@ -91,7 +85,6 @@ import {
 import PromptReferenceRecentModel from '../../models/prompt-reference-recent.ts'
 import { CapabilityModelResolverStore } from '../../capability-system/capability-runtime-adapters.ts'
 import { capabilityActionRegistry } from '../../capability-system/capability-runtime.ts'
-import { resolveActionTimelineInput } from '../../capability-system/action-timeline-input.ts'
 import { removeMediaGenerationRequestFromCanvas } from '../../services/asset-canvas-projection.ts'
 import {
     createAssetRequesterForWorkspaceUser,
@@ -158,16 +151,6 @@ const normalizeModelOption = (
         return requestedValue
 
     return values[0]
-}
-
-const formatNaturalLanguageList = (values: string[]): string => {
-    if (values.length < 2)
-        return values[0] ?? ''
-
-    if (values.length === 2)
-        return `${values[0]} and ${values[1]}`
-
-    return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`
 }
 
 type SealedMediaReplayTrace = {
@@ -268,70 +251,6 @@ const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
     }
 
     return text
-}
-
-// Text used to route a prompt to a capability module. Prompt-reference atoms
-// contribute their display name to the model-facing prompt, but that name is the
-// title of an Asset the user picked, not something they authored — routing on it
-// makes "Generate a video following <Night encounter action timeline>" look like
-// a request to create a timeline. Reference labels are replaced by a space so the
-// authored words around them stay separated.
-const collectRoutableUserPromptText = (node: ProseMirrorJsonNode): string => {
-    let text = ''
-
-    for (const child of node.content ?? []) {
-        if (child.type === 'text')
-            text += child.text ?? ''
-        else if (child.type === 'hard_break')
-            text += '\n'
-        else if (
-            child.type === PROMPT_REFERENCE_NODE_TYPE
-            || child.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
-        )
-            text += ' '
-        else if (
-            child.type === aiGeneratedImageNodeType
-            || child.type === aiGeneratedVideoNodeType
-        )
-            continue
-        else
-            text += collectRoutableUserPromptText(child)
-    }
-
-    return text
-}
-
-const getClarificationOriginUserMessage = (
-    doc: object,
-    conversationAssetId: string,
-): ProseMirrorJsonNode | undefined => {
-    const root = parseProseMirrorJsonContent(doc)
-    const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
-
-    if (!thread)
-        return undefined
-
-    const messages = (thread.content ?? []).filter(
-        node => (
-            node.type === aiUserMessageNodeType || node.type === aiResponseMessageNodeType
-        ),
-    )
-    const latest = messages.at(-1)
-    const response = messages.at(-2)
-    const origin = messages.at(-3)
-
-    if (
-        latest?.type !== aiUserMessageNodeType
-        || response?.type !== aiResponseMessageNodeType
-        || origin?.type !== aiUserMessageNodeType
-    )
-        return undefined
-
-    const responseContainsGeneratedMedia = (node: ProseMirrorJsonNode): boolean => node.type === aiGeneratedImageNodeType
-        || node.type === aiGeneratedVideoNodeType
-        || (node.content ?? []).some(responseContainsGeneratedMedia)
-
-    return responseContainsGeneratedMedia(response) ? undefined : origin
 }
 
 const buildAuthoritativeConversationMessages = (
@@ -1013,8 +932,9 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                 organizationId?: string
                 enableImageGeneration?: boolean
                 imageSize?: string
-                aiImageModels?: string[]
-                aiVideoModels?: string[]
+                aiReasoningModels: AiModelId[]
+                aiImageModels?: AiModelId[]
+                aiVideoModels?: AiModelId[]
                 videoAspectRatio?: string
                 videoResolution?: string
                 videoDuration?: number | string
@@ -1355,7 +1275,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                 const authoritativeProseMirrorInitialDoc = conversationSnapshot.doc
                 const authoritativeProseMirrorBaseVersion = conversationSnapshot.version
                 const authoritativeMessages = buildAuthoritativeConversationMessages(authoritativeProseMirrorInitialDoc, conversationAssetId)
-                const latestSubmittedPromptReferences = extractLatestUserPromptReferences(authoritativeProseMirrorInitialDoc, conversationAssetId)
+                const submittedPromptReferences = extractLatestUserPromptReferences(authoritativeProseMirrorInitialDoc, conversationAssetId)
                 const latestAuthoritativeUserMessage = [...authoritativeMessages]
                     .reverse().find(message => message.role === 'user')
 
@@ -1363,76 +1283,8 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
 
                 const authoritativePromptText = latestAuthoritativeUserMessage.content
-                const submittedCapabilityInputs = readAuthoritativeCapabilityInputs(authoritativeProseMirrorInitialDoc, conversationAssetId)
+                const capabilityInputs = readAuthoritativeCapabilityInputs(authoritativeProseMirrorInitialDoc, conversationAssetId)
                 const moduleCatalog = getLlmModule().capabilityModuleCatalog
-                // Referencing an existing Action Timeline Artifact is consumption, not
-                // creation: the user wants the timeline's beats and cited Assets to
-                // drive this generation, so the timeline tool must not claim the run
-                // and strip the selected media models.
-                const referencesExistingActionTimeline = latestSubmittedPromptReferences.some(
-                    reference => (
-                        reference.referenceType === 'capability-artifact'
-                        && reference.artifactTypeId === ACTION_TIMELINE_ARTIFACT_TYPE_ID
-                    ),
-                )
-                const routeCapabilityModule = (prompt: string): CapabilityModuleRoute | undefined => {
-                    if (typeof moduleCatalog?.routePrompt !== 'function')
-                        return undefined
-
-                    const route = moduleCatalog.routePrompt(prompt)
-
-                    return route?.capabilityId === ACTION_TIMELINE_TOOL_ID
-                        && referencesExistingActionTimeline
-                        ? undefined
-                        : route
-                }
-                const routableAuthoritativePromptText = collectRoutableUserPromptText(
-                    getLatestAuthoritativeUserMessageNode(authoritativeProseMirrorInitialDoc, conversationAssetId),
-                )
-                const latestRoutedModule = routeCapabilityModule(routableAuthoritativePromptText)
-                const clarificationOrigin = getClarificationOriginUserMessage(authoritativeProseMirrorInitialDoc, conversationAssetId)
-                const clarificationOriginPrompt = clarificationOrigin
-                    ? collectAuthoritativeMessageText(clarificationOrigin).trim()
-                    : ''
-                const routableClarificationOriginPrompt = clarificationOrigin
-                    ? collectRoutableUserPromptText(clarificationOrigin).trim()
-                    : ''
-                const clarificationOriginRoute = !latestRoutedModule
-                    && routableClarificationOriginPrompt
-                    ? routeCapabilityModule(routableClarificationOriginPrompt)
-                    : undefined
-                const clarificationOriginResolution = clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
-                    ? resolveActionTimelineInput({
-                        prompt: clarificationOriginPrompt,
-                        referenceAssetIds: [],
-                        routedInput: clarificationOriginRoute.input,
-                        submittedInput: submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID],
-                    })
-                    : undefined
-                const resumesActionTimelineClarification = !latestSubmittedPromptReferences.some(
-                    reference => (
-                        reference.referenceType === 'capability'
-                    ),
-                )
-                    && clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
-                    && clarificationOriginResolution?.valid === false
-                const submittedPromptReferences = resumesActionTimelineClarification
-                    && clarificationOrigin
-                    ? [
-                        ...latestSubmittedPromptReferences,
-                        ...extractLatestUserPromptReferences(
-                            {
-                                type: 'doc',
-                                content: [{
-                                    type: 'aiChatThread',
-                                    attrs: { threadId: conversationAssetId },
-                                    content: [clarificationOrigin],
-                                }],
-                            },
-                            conversationAssetId,
-                        ),
-                    ]
-                    : latestSubmittedPromptReferences
                 const authorizedPromptReferences = await authorizePromptReferences({
                     references: submittedPromptReferences,
                     requester,
@@ -1453,103 +1305,18 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     ].filter(Boolean).join('\n\n')
                 }
 
-                const routedModule = latestRoutedModule
-                    ?? (resumesActionTimelineClarification ? clarificationOriginRoute : undefined)
-                const routedCapabilityReferences = routedModule
-                    && !authorizedPromptReferences.capabilityReferences.some(
-                        reference => (
-                                reference.kind === routedModule.kind && reference.capabilityId === routedModule.capabilityId
-                            ),
-                    )
-                    ? [
-                        ...authorizedPromptReferences.capabilityReferences,
-                        {
-                            capabilityId: routedModule.capabilityId,
-                            kind: routedModule.kind,
-                        },
-                    ]
-                    : authorizedPromptReferences.capabilityReferences
-                const actionTimelineSelected = routedCapabilityReferences.some(
-                    reference => (
-                        reference.kind === 'tool' && reference.capabilityId === ACTION_TIMELINE_TOOL_ID
-                    ),
-                )
-                const capabilityInputs = { ...submittedCapabilityInputs }
-                let actionTimelineClarificationInstruction: string | undefined
-
-                if (actionTimelineSelected) {
-                    const submittedTiming = submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID] ?? {}
-                    const routedTiming = routedModule?.capabilityId === ACTION_TIMELINE_TOOL_ID
-                        ? routedModule.input
-                        : {}
-                    const actionTimelinePrompt = resumesActionTimelineClarification
-                        ? `${clarificationOriginPrompt}\n\nClarification: ${authoritativePromptText}`
-                        : authoritativePromptText
-                    const resolution = resolveActionTimelineInput({
-                        prompt: actionTimelinePrompt,
-                        referenceAssetIds: authorizedPromptReferences.modelInputs.map(input => input.assetId),
-                        routedInput: routedTiming,
-                        submittedInput: submittedTiming,
-                    })
-
-                    if (!resolution.valid) {
-                        delete capabilityInputs[ACTION_TIMELINE_TOOL_ID]
-                        const missingDetails = resolution.missingInputFields.map(
-                            field => (
-                                field === 'durationMs'
-                                    ? 'the total timeline duration'
-                                    : 'the timing precision or gap interval'
-                            ),
-                        )
-                        actionTimelineClarificationInstruction = [
-                            'The selected Action Timeline capability cannot run yet.',
-                            `Ask the user for ${formatNaturalLanguageList(missingDetails)}.`,
-                            'Do not generate media, execute the capability, or invent the missing values.',
-                            'Keep the reply concise and directly state which details are required.',
-                        ].join(' ')
-                    } else {
-                        capabilityInputs[ACTION_TIMELINE_TOOL_ID] = {
-                            prompt: resolution.input.prompt,
-                            referenceAssetIds: resolution.input.referenceAssetIds,
-                            durationMs: resolution.input.durationMs,
-                            precisionMs: resolution.input.precisionMs,
-                        }
-                    }
-                }
-
-                const executionCapabilityReferences = actionTimelineClarificationInstruction
-                    ? routedCapabilityReferences.filter(
-                        reference => (
-                            reference.capabilityId !== ACTION_TIMELINE_TOOL_ID
-                        ),
-                    )
-                    : routedCapabilityReferences
                 await validateCapabilityInputs({
                     inputs: capabilityInputs,
-                    references: executionCapabilityReferences,
+                    references: authorizedPromptReferences.capabilityReferences,
                     requester,
                     workspaceId,
                     organizationId: workspace.organizationId,
                 })
-                const characterCreatorRouting = resolveCharacterCreatorRouting(authoritativePromptText, executionCapabilityReferences)
-                const canonicalMediaGenerationRequest = mediaGenerationRequest
+                const routedMediaGenerationRequest = mediaGenerationRequest
                     ? {
                         ...mediaGenerationRequest,
                         ...(resolvedRegeneration ? { regeneration: resolvedRegeneration } : {}),
                     }
-                    : undefined
-                const routedMediaGenerationRequest = canonicalMediaGenerationRequest
-                    ? actionTimelineSelected
-                        ? {
-                            ...canonicalMediaGenerationRequest,
-                            useMultipleImageModels: false,
-                            useMultipleVideoModels: false,
-                            imageModelIds: [],
-                            videoModelIds: [],
-                        }
-                        : characterCreatorRouting.isCharacterCreator
-                            ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
-                            : canonicalMediaGenerationRequest
                     : undefined
                 const scalarMediaModelSelection = routedMediaGenerationRequest
                     ? {
@@ -1558,11 +1325,8 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     }
                     : resolveScalarMediaModelSelection({
                         prompt: authoritativePromptText,
-                        imageModelId: actionTimelineSelected ? undefined : aiImageModel,
-                        videoModelId: actionTimelineSelected
-                            || characterCreatorRouting.isCharacterCreator
-                            ? undefined
-                            : aiVideoModel,
+                        imageModelId: aiImageModel,
+                        videoModelId: aiVideoModel,
                         hasVideoSource: Boolean(resolvedVideoSourceForExtension),
                     })
                 const routedAiImageModel = scalarMediaModelSelection.imageModelId
@@ -1809,29 +1573,6 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     authorizedPromptReferences.modelInputs,
                 )
 
-                if (actionTimelineClarificationInstruction) {
-                    const latestProviderUserMessage = [...providerMessages]
-                        .reverse().find(message => message.role === 'user')
-
-                    if (!latestProviderUserMessage)
-                        throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
-
-                    latestProviderUserMessage.content = [
-                        latestProviderUserMessage.content,
-                        `[Lixpi capability state: ${actionTimelineClarificationInstruction}]`,
-                    ].filter(Boolean).join('\n\n')
-                }
-
-                if (characterCreatorRouting.isCharacterCreator) {
-                    info(
-                        '[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video',
-                        {
-                            reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,
-                            imageModelIds: routedMediaGenerationRequest?.imageModelIds ?? aiImageModels,
-                        },
-                    )
-                }
-
                 const providerPromptText = providerSafeMediaIntent?.safePrompt ?? authoritativePromptText
                 resolvedMediaBranchCandidateSnapshot = mergePromptReferenceMediaCandidates({
                     snapshot: resolvedMediaBranchCandidateSnapshot,
@@ -2056,14 +1797,17 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                             await runWithLease(
                                 async () =>
                                     await getLlmModule().processMediaGenerationMatrix({
-                                        ...data,
-                                        aiImageModels: actionTimelineSelected ? [] : aiImageModels,
-                                        aiVideoModels: actionTimelineSelected
-                                            || characterCreatorRouting.isCharacterCreator
-                                            ? []
-                                            : aiVideoModels,
+                                        aiReasoningModels,
+                                        aiImageModels,
+                                        aiVideoModels,
+                                        enableImageGeneration,
+                                        imageSize,
+                                        videoAspectRatio,
+                                        videoResolution,
+                                        videoDuration,
+                                        canvasVisibleArea,
                                         messages: providerMessages,
-                                        capabilityReferences: characterCreatorRouting.capabilityReferences,
+                                        capabilityReferences: authorizedPromptReferences.capabilityReferences,
                                         capabilityInputs,
                                         promptReferenceAssetIds: authorizedPromptReferences.assetIds,
                                         mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
@@ -2075,16 +1819,11 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                                         assetLeaseHolderId: leaseHolderId,
                                         proseMirrorInitialDoc: authoritativeProseMirrorInitialDoc,
                                         proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
-                                        videoSourceForExtension: characterCreatorRouting.isCharacterCreator
-                                            ? undefined
-                                            : resolvedVideoSourceForExtension,
-                                        videoSourceDurationSeconds: characterCreatorRouting.isCharacterCreator
-                                            ? undefined
-                                            : resolvedVideoSourceDurationSeconds,
+                                        videoSourceForExtension: resolvedVideoSourceForExtension,
+                                        videoSourceDurationSeconds: resolvedVideoSourceDurationSeconds,
                                         mediaGenerationRequest: {
                                             ...routedMediaGenerationRequest,
-                                            ...(!characterCreatorRouting.isCharacterCreator
-                                                && routedMediaGenerationRequest.videoOptions
+                                            ...(routedMediaGenerationRequest.videoOptions
                                                 ? {
                                                     videoOptions: {
                                                         ...routedMediaGenerationRequest.videoOptions,
@@ -2239,7 +1978,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                                             organizationId,
                                             assetLeaseId: lease.leaseId,
                                             assetLeaseHolderId: leaseHolderId,
-                                            enableImageGeneration: actionTimelineSelected ? false : enableImageGeneration,
+                                            enableImageGeneration,
                                             imageSize,
                                             videoAspectRatio: routedAiVideoModel ? normalizedVideoAspectRatio : undefined,
                                             videoResolution: routedAiVideoModel ? normalizedVideoResolution : undefined,
@@ -2253,7 +1992,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                                             videoSourceDurationSeconds: routedAiVideoModel
                                                 ? resolvedVideoSourceDurationSeconds
                                                 : undefined,
-                                            capabilityReferences: characterCreatorRouting.capabilityReferences,
+                                            capabilityReferences: authorizedPromptReferences.capabilityReferences,
                                             capabilityInputs,
                                             promptReferenceAssetIds: authorizedPromptReferences.assetIds,
                                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,

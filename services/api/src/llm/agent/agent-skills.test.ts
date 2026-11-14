@@ -1,14 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { createSkillsMiddleware } from 'deepagents'
-import { type CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
+import {
+    CapabilityAgentRegistry,
+    type CapabilityModuleCatalog,
+    type CapabilityAgentEntry,
+} from '@lixpi/capability-system/backend'
 import { AgentSkills } from './agent-skills.ts'
+import { AgentRegistry } from './agent-registry.ts'
 import { AgentScopedBackend } from './agent-harness.ts'
 import { AgentScratchStore } from './agent-scratch-store.ts'
 import { createConversationExecutionFixture } from './conversation-test-support.ts'
 
 const fixture = vi.hoisted(() => ({
     authorized: true,
+    moduleAuthorized: true,
     installed: true,
     instructions: '---\nname: test-skill\ndescription: Test sealed instructions.\n---\nUse the original sealed instructions.',
     bundle: {
@@ -24,7 +30,10 @@ const fixture = vi.hoisted(() => ({
 }))
 
 vi.mock('../../models/capability.ts', () => ({
-    getAuthorizedCapabilityRecords: async () => new Map(fixture.authorized ? [['test-skill', { capabilityId: 'test-skill' }]] : []),
+    getAuthorizedCapabilityRecords: async () => new Map([
+        ...(fixture.authorized ? [['test-skill', { capabilityId: 'test-skill' }]] as const : []),
+        ...(fixture.moduleAuthorized ? [['test-module', { capabilityId: 'test-module' }]] as const : []),
+    ]),
     readAuthorizedCapabilityManifestSnapshot: async () => {
         fixture.manifestReads()
 
@@ -46,18 +55,19 @@ vi.mock('../../models/capability.ts', () => ({
 }))
 
 const catalog = {
-    listModuleIds: () => fixture.installed ? ['test-module'] : [],
-    getModule: () => ({
-        agentTools: [{ name: 'test-tool' }],
-        skills: [{
-            capabilityId: 'test-skill',
-            agentSkill: fixture.bundle,
-        }],
-    }),
+    createAgentRegistry: () => new CapabilityAgentRegistry(fixture.installed ? [{
+        kind: 'skill',
+        name: 'test-skill',
+        description: 'Test sealed instructions.',
+        capabilityId: 'test-skill',
+        bundle: fixture.bundle,
+        owner: { kind: 'module', moduleId: 'test-module', capabilityId: 'test-module' },
+    } as CapabilityAgentEntry] : []),
 } as unknown as CapabilityModuleCatalog
 
 beforeEach(() => {
     fixture.authorized = true
+    fixture.moduleAuthorized = true
     fixture.installed = true
     fixture.instructions = '---\nname: test-skill\ndescription: Test sealed instructions.\n---\nUse the original sealed instructions.'
     fixture.bundle = {
@@ -81,6 +91,26 @@ describe('sealed conversation Skills', () => {
         expect([...resumed]).toEqual([...original])
         expect(fixture.manifestReads).toHaveBeenCalledTimes(1)
         expect(fixture.resourceReads).toHaveBeenCalledTimes(1)
+    })
+
+    it('hides a newly installed Skill and dependent expert from a resumed older snapshot', async () => {
+        const { repository, payloads, owner } = await createConversationExecutionFixture()
+        const skills = new AgentSkills(catalog, repository, payloads)
+        fixture.installed = false
+        await skills.load(owner)
+        fixture.installed = true
+        const files = await skills.load(owner)
+        const registered = new CapabilityAgentRegistry([...catalog.createAgentRegistry().list(), {
+            kind: 'expert', name: 'new-expert', description: 'Requires the newly installed Skill.', operationFamilies: ['image'],
+            runtime: { kind: 'agent', instructions: 'Use the Skill.', toolNames: [], skillIds: ['test-skill'] },
+            owner: { kind: 'module', moduleId: 'test-module', capabilityId: 'test-module' },
+        }])
+        const registry = new AgentRegistry(registered, owner, false, new Set([...files.keys()].map(path => decodeURIComponent(path.split('/')[2]))))
+        await registry.refresh()
+        expect(files.size).toBe(0)
+        expect(registry.view().skills()).toEqual([])
+        expect(registry.view().experts()).toEqual([])
+        expect(registered.experts()).toHaveLength(1)
     })
 
     it('recovers a committed snapshot after a lost transaction acknowledgement', async () => {
@@ -110,6 +140,22 @@ describe('sealed conversation Skills', () => {
         fixture.authorized = true
         fixture.installed = false
         await expect(skills.load(owner)).rejects.toThrow('AGENT_CAPABILITY_UNAVAILABLE')
+    })
+
+    it('skips a Skill when its owning module package is unavailable', async () => {
+        const { repository, payloads, owner } = await createConversationExecutionFixture()
+        fixture.moduleAuthorized = false
+        expect(await new AgentSkills(catalog, repository, payloads).load(owner)).toEqual(new Map())
+        expect(fixture.resourceReads).not.toHaveBeenCalled()
+    })
+
+    it('rejects sealed Skill recovery when its owning module access is revoked', async () => {
+        const { repository, payloads, owner } = await createConversationExecutionFixture()
+        const skills = new AgentSkills(catalog, repository, payloads)
+        const files = await skills.load(owner)
+        fixture.moduleAuthorized = false
+        await expect(skills.load(owner)).rejects.toThrow('AGENT_CAPABILITY_UNAVAILABLE')
+        await expect(skills.assertCurrent(owner, files)).rejects.toThrow('AGENT_CAPABILITY_UNAVAILABLE')
     })
 
     it('rejects oversized instructions before persisting a Skill snapshot', async () => {

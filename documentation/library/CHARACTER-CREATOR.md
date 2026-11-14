@@ -5,6 +5,8 @@ description: How Character Creator plans configurable identity-focused shots, pu
 
 # Character Creator
 
+This module is disabled and unplugged from application registration. Its source is retained for later retirement. The implementation described below is not available through the current app or conversation agent.
+
 Character Creator is the built-in Capability module for character design, model-sheet, and turnaround requests. It uses the selected reasoning and image-model matrix. It does not choose a hidden model or bypass normal Asset settlement and lineage.
 
 The Tool produces a provider-neutral `CharacterSheetRenderPlan`. Its package-owned backend runtime renders isolated shots, compares them with structured source evidence, and uses deterministic Sharp code to assemble one 3840x2560 PNG. Each provider request renders one shot; the provider never renders the sheet layout, typography, or metadata.

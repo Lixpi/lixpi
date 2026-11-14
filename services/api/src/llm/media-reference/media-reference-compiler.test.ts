@@ -206,10 +206,10 @@ describe('media reference matching and compilation', () => {
                         type: 'prompt_reference',
                         attrs: {
                             referenceType: 'capability-artifact',
-                            artifactTypeId: 'action-timeline',
+                            artifactTypeId: 'fixture-artifact',
                             assetId: 'timeline-asset',
                             nodeId: 'timeline-node',
-                            displayName: 'Night encounter action timeline',
+                            displayName: 'Night encounter fixture artifact',
                         },
                     },
                 ],
@@ -224,12 +224,12 @@ describe('media reference matching and compilation', () => {
         expect(segmentMediaPrompt(prompt)).toContainEqual({
             kind: 'non-media-reference',
             referenceType: 'capability-artifact',
-            displayName: 'Night encounter action timeline',
+            displayName: 'Night encounter fixture artifact',
             from: 21,
-            to: 52,
+            to: 53,
         })
         expect(compiled.unresolvedBindings).toEqual([])
-        expect(compiled.intent.safePrompt).toBe('Generate a video for Night encounter action timeline')
+        expect(compiled.intent.safePrompt).toBe('Generate a video for Night encounter fixture artifact')
     })
 
     it('does not treat descriptive Asset metadata or unmatched public-figure text as an Asset identity', () => {

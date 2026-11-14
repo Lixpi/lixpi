@@ -55,7 +55,7 @@ export const conversationDocument = {
                     type: 'paragraph',
                     content: [{
                         type: 'text',
-                        text: 'The reference, timeline, pipeline, and sequence are ready for review. This conversation is a local fixture.',
+                        text: 'The reference, pipeline, and sequence are ready for review. This conversation is a local fixture.',
                     }],
                 }],
             },
@@ -166,11 +166,7 @@ export class WorkspaceFixtures {
         )
 
         for (const [assetId, doc] of this.artifacts.documents) {
-            const artifactTypeId = assetId.replace('fixture-', '') === 'timeline'
-                ? 'action-timeline'
-                : assetId.replace('fixture-', '') === 'pipeline'
-                    ? 'media-pipeline'
-                    : 'media-sequence'
+            const artifactTypeId = assetId === 'fixture-pipeline' ? 'media-pipeline' : 'media-sequence'
             const definition = this.artifacts.shared.require(artifactTypeId)
             const asset = this.addAsset(
                 assetId,

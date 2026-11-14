@@ -237,7 +237,7 @@ afterAll(() => {
 // =============================================================================
 
 describe('NavigationSidePanel — mounting', () => {
-    it('mounts the panel, enabled side-panel surfaces, and the new-workspace button into the host pane', () => {
+    it('mounts the panel and enabled side-panel surfaces into the host pane', () => {
         const {
             paneEl,
             instance,
@@ -247,7 +247,6 @@ describe('NavigationSidePanel — mounting', () => {
         expect(paneEl.querySelector('.navigation-side-panel-header')).not.toBeNull()
         expect(paneEl.querySelector('.navigation-side-panel-list')).not.toBeNull()
         expect(paneEl.querySelector('.navigation-side-panel-footer')).not.toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-new-workspace-button')).not.toBeNull()
         expect(paneEl.querySelector('.navigation-side-panel-resize-handle')).not.toBeNull()
         expect(paneEl.querySelector('.navigation-side-panel-toggle')).not.toBeNull()
         expect(paneEl.querySelector('.side-panel-overlay')).toBeNull()
@@ -734,17 +733,11 @@ describe('NavigationSidePanel — navigation and creation', () => {
         vi.useRealTimers()
     })
 
-    it('creates a root workspace from the header button and opens a created workspace', async () => {
-        const {
-            paneEl,
-            instance,
-        } = mount()
+    it('opens a workspace the tree creates', () => {
+        const { instance } = mount()
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-new-workspace-button')?.click()
-        await Promise.resolve()
         ports().onWorkspaceCreated({ workspaceId: 'ws-new' })
 
-        expect(mocks.navigation.createWorkspace).toHaveBeenCalledExactlyOnceWith({})
         expect(mocks.navigateTo).toHaveBeenLastCalledWith('/workspace/:workspaceId', {
             params: { workspaceId: 'ws-new' },
             shouldFetchData: true,

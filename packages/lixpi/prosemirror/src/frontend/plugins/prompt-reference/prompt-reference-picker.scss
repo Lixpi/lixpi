@@ -137,15 +137,6 @@
     }
 }
 
-.prompt-reference-picker-artifact-host .action-timeline-reference {
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    color: inherit;
-    font: 800 13px/1.3 system-ui, sans-serif;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 
 .prompt-reference-picker-badge {
     color: #{themeScope.token("components-composer-references-picker-badge-base-foreground", themePalette.$roles)};

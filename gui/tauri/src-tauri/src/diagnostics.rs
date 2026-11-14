@@ -41,8 +41,10 @@ pub(crate) const CAPTURE_SCRIPT: &str = r"
   const buffer = window.__lixpiDiagnostics = []
   const describe = value => {
     try {
+      // WebKit's stack lists only the frames, unlike Chrome's, so the name
+      // and message lead and the stack follows.
       if (value instanceof Error)
-        return value.stack || `${value.name}: ${value.message}`
+        return value.stack ? `${value.name}: ${value.message}\n${value.stack}` : `${value.name}: ${value.message}`
 
       return typeof value === 'object' ? JSON.stringify(value) : String(value)
     } catch {

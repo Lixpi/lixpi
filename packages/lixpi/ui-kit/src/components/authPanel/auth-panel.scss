@@ -8,7 +8,10 @@
 .auth-panel {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    min-height: 100dvh;
+    // The page around the panel doesn't scroll, so a window shorter than the
+    // form scrolls the panel itself.
+    height: 100dvh;
+    overflow-y: auto;
     width: 100%;
     color: #{themeScope.token("components-auth-panel-auth-panel-base-foreground", themePalette.$roles)};
     background: #{themeScope.token("components-auth-panel-auth-panel-base-background", themePalette.$roles)};

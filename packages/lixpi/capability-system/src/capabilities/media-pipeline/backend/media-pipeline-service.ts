@@ -90,11 +90,30 @@ export class MediaPipelineService {
         let patch: MediaPipelinePatch
 
         try {
-            patch = expandMediaPipelineMatrix(input)
+            let sources = input.sources
+
+            if (
+                input.pipelineId
+                && sources === undefined
+            ) {
+                if (!(await this.authorize(
+                    context,
+                    'plan',
+                    input.pipelineId,
+                )))
+                    return denied()
+
+                sources = (await this.ports.readArtifact(context, input.pipelineId))?.pipeline.sources
+            }
+
+            patch = expandMediaPipelineMatrix({
+                ...input,
+                ...(sources ? { sources } : {}),
+            })
         } catch (error) {
             return failure(
                 error instanceof Error ? error.message : 'PIPELINE_MATRIX_INVALID',
-                'The matrix must have unique prompt variants and at most 32 output combinations.',
+                'The matrix must have unique prompt variants, at most 32 output combinations, and at most two explicitly bound image sources.',
             )
         }
 
@@ -169,6 +188,13 @@ export class MediaPipelineService {
         const constraints = input.constraints
             ?? existing?.pipeline.constraints
             ?? []
+
+        if (sources.filter(source => source.kind === 'image').length > 2)
+            return failure(
+                'PIPELINE_MATRIX_IMAGE_REFERENCE_LIMIT',
+                'The installed image operation accepts at most two source images. Narrow the source selection before preparing the matrix.',
+            )
+
         const sourceIssues = await this.ports.recheckSources(context, sources)
 
         if (sourceIssues.length)
@@ -223,6 +249,7 @@ export class MediaPipelineService {
             context,
             {
                 ...matrix,
+                sources,
                 constraints: [...constraints, `Prompt variants prepared with reasoning models: ${input.reasoningModelIds.join(', ')}.`],
                 promptVariants,
             },
@@ -244,7 +271,7 @@ export class MediaPipelineService {
                     ...operation,
                     modelIds: catalog.modelRoutes.filter(
                         route =>
-                            route.operationKeys.includes(operation.operationKey) && route.inferenceProviderCalledByThePlatform === 'aws-bedrock' && route.adapterReady && route.credentialsReady && route.regionReady && route.pricingReady,
+                            route.operationKeys.includes(operation.operationKey) && Boolean(route.inferenceProviderCalledByThePlatform) && route.adapterReady && route.credentialsReady && route.regionReady && route.pricingReady,
                     ).map(route => route.modelId),
                 })
         }
@@ -813,8 +840,12 @@ export class MediaPipelineService {
                     node: pipeline.nodes.find(candidate => candidate.nodeId === node.nodeId)!,
                     inputs,
                     context,
-                    sourceSnapshots: pipeline.sources,
-                    ...(operation.execution === 'inference' ? { inferenceProvider: 'aws-bedrock' as const } : {}),
+                    sourceSnapshots: pipeline.sources.filter(
+                        source => source.kind !== 'image' || !pipeline.edges.some(
+                            edge => 'sourceId' in edge.from && edge.from.sourceId === source.sourceId,
+                        ),
+                    ),
+                    ...(operation.execution === 'inference' ? { inferenceProvider: catalog.modelRoutes.find(route => route.modelId === node.modelId)?.inferenceProviderCalledByThePlatform } : {}),
                 })
                 assertReceiptIdentity(
                     receipt,

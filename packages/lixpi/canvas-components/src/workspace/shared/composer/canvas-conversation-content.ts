@@ -1,5 +1,6 @@
 import {
     type CapabilityJsonValue,
+    type ConversationModelPreferences,
     type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 import {
@@ -41,6 +42,38 @@ export type AiPromptComposerSubmitData = {
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
+}
+
+export const buildCanvasConversationModelPreferences = (data: AiPromptComposerSubmitData): ConversationModelPreferences => {
+    const modelIds = (values: string[]): Array<`${string}:${string}`> =>
+        values.map(value => {
+            const separator = value.indexOf(':')
+
+            if (
+                separator <= 0
+                || separator === value.length - 1
+            )
+                throw new Error('Select a valid model before sending.')
+
+            return value as `${string}:${string}`
+        })
+
+    return {
+        reasoningModelIds: modelIds(data.aiReasoningModels),
+        imageModelIds: modelIds(data.imageOptions?.aiImageModels ?? []),
+        videoModelIds: modelIds(data.videoOptions?.aiVideoModels ?? []),
+        ...(data.reasoningOptions ? { reasoningOptions: data.reasoningOptions } : {}),
+        ...(data.imageOptions ? { imageOptions: {
+            imageSize: data.imageOptions.imageGenerationSize as NonNullable<ConversationModelPreferences['imageOptions']>['imageSize'],
+            ...(data.imageOptions.configGroups ? { configGroups: data.imageOptions.configGroups } : {}),
+        } } : {}),
+        ...(data.videoOptions ? { videoOptions: {
+            ...(data.videoOptions.videoAspectRatio ? { aspectRatio: data.videoOptions.videoAspectRatio } : {}),
+            ...(data.videoOptions.videoResolution ? { resolution: data.videoOptions.videoResolution } : {}),
+            ...(data.videoOptions.videoDuration ? { duration: data.videoOptions.videoDuration } : {}),
+            ...(data.videoOptions.configGroups ? { configGroups: data.videoOptions.configGroups } : {}),
+        } } : {}),
+    }
 }
 
 export const buildCanvasConversationContent = (

@@ -1,34 +1,15 @@
-import type NatsService from '@lixpi/nats-service'
-import {
-    CapabilityModuleCatalog,
-    createActionTimelineModule,
-    createCharacterCreatorModule,
-    createStyleExtractionModule,
-    type CharacterCreatorRuntimePorts,
-} from '@lixpi/capability-system/backend'
+import { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
 
 import {
     type ProviderUsageClient,
 } from '@lixpi/usage-reporter'
 import {
-    type ImageRouter,
-} from './llm/tools/image-router.ts'
-import {
     seedBuiltInCapability,
     storeCapabilityResource,
 } from './models/capability.ts'
-import {
-    createCapabilityStructuredModelPort,
-    resolveCapabilityModelInputs,
-} from './capability-system/capability-model-input-adapter.ts'
-import { persistActionTimelineArtifact } from './capability-system/action-timeline-persistence-adapter.ts'
-import { createStyleExtractionRuntimePort } from './capability-system/style-extraction-runtime/style-extraction-actions.ts'
 import { installMediaWorkspace } from './installed-media-workspace.ts'
 
 export type InstalledCapabilityDependencies = {
-    natsService: NatsService
-    imageRouter: ImageRouter
-    characterCreatorRuntime: CharacterCreatorRuntimePorts
     providerUsage?: ProviderUsageClient
 }
 
@@ -38,40 +19,12 @@ export const createDefaultCapabilityModuleCatalog = (dependencies: InstalledCapa
         storeResource: storeCapabilityResource,
         seedBuiltInCapability,
     }
-    catalog.registerModule(
-        createCharacterCreatorModule({
-            capabilityStorage,
-            runtime: dependencies.characterCreatorRuntime,
-        }),
-    )
-    catalog.registerModule(
-        createStyleExtractionModule({
-            runtime: createStyleExtractionRuntimePort({
-                runImageRouter: state => dependencies.imageRouter.execute(state),
-            }),
-            capabilityStorage,
-        }),
-    )
-    catalog.registerModule(
-        createActionTimelineModule({
-            resolveModelInputs: resolveCapabilityModelInputs,
-            model: createCapabilityStructuredModelPort(),
-            persistArtifact: persistActionTimelineArtifact,
-            capabilityStorage,
-        }),
-    )
 
-    const mediaWorkspace = installMediaWorkspace(
+    installMediaWorkspace(
         catalog,
-        dependencies.natsService,
         capabilityStorage,
         dependencies.providerUsage,
     )
-    const sequenceModule = catalog.getModule('media-sequence')!
-    sequenceModule.extensions = {
-        ...sequenceModule.extensions,
-        platform: mediaWorkspace,
-    }
 
     return catalog
 }

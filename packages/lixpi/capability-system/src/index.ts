@@ -1,7 +1,4 @@
 export * from './shared/index.ts'
-export * from './capabilities/action-timeline/settings.ts'
-export * from './capabilities/action-timeline/shared/index.ts'
-export * from './capabilities/action-timeline/frontend/index.ts'
 export * from './capabilities/character-creator/settings.ts'
 export * from './capabilities/character-creator/shared/character-creator-routing.ts'
 export * from './capabilities/character-creator/shared/character-sheet-layout.ts'

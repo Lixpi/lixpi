@@ -841,10 +841,10 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
 // =============================================================================
 
 describe('buildWorkspaceContextSnapshot', () => {
-    const actionTimelineNode = {
+    const fixtureArtifactNode = {
         nodeId: 'timeline-node',
         type: 'capabilityArtifact',
-        artifactTypeId: 'action-timeline',
+        artifactTypeId: 'fixture-artifact',
         assetId: 'timeline-asset',
         position: {
             x: 0,
@@ -862,7 +862,7 @@ describe('buildWorkspaceContextSnapshot', () => {
         uploadedVideoNode,
         cubistDocNode,
         threadContextNode,
-        actionTimelineNode,
+        fixtureArtifactNode,
     ]
 
     it('indexes every explicitly attached context-bearing node without pixel data', () => {
@@ -989,7 +989,7 @@ describe('buildWorkspaceContextSnapshot', () => {
 
         expect(snapshot.nodes.find((node) => node.nodeId === 'timeline-node')).toMatchObject({
             type: 'capabilityArtifact',
-            artifactTypeId: 'action-timeline',
+            artifactTypeId: 'fixture-artifact',
             assetId: 'timeline-asset',
             title: 'Train Timeline',
             isExplicitChip: true,

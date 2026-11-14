@@ -42,12 +42,9 @@ const fixture = async () => {
     const scope: AgentExecution = {
         owner: test.owner,
         turn: test.turn,
-        intent: {
-            intent: 'execute',
-            operationFamilies: ['image'],
-            targetAssetIds: [],
-            confidence: 1,
-            needsClarification: false,
+        permissions: {
+            readOnly: false,
+            allowedOperationFamilies: ['image'],
         },
         responseMessageId: 'response',
         continuationEpoch: 0,
@@ -202,6 +199,20 @@ describe('durable Stability pipeline executor', () => {
         expect(JSON.stringify(events)).not.toContain('inline')
     })
 
+    it('rejects bound image inputs before provider authorization', async () => {
+        const f = await fixture()
+        f.request.inputs = { 'reference-1': {
+            sourceId: 'source',
+            assetId: 'source-image',
+            kind: 'image',
+            revision: 1,
+            blobHash: 'source-hash',
+        } }
+        await AgentExecutionScope.run(f.scope, async () => await expect(f.handler.ensure(f.request)).rejects.toThrow('STABILITY_PIPELINE_REFERENCE_CONTROL_UNAVAILABLE'))
+        expect(f.metrics.authorizeRequest).not.toHaveBeenCalled()
+        expect(mocks.invoke).not.toHaveBeenCalled()
+    })
+
     it('records an unknown outcome and never repeats a disconnected request', async () => {
         const f = await fixture()
         mocks.invoke.mockRejectedValue(new Error('SOCKET_CLOSED'))
@@ -255,17 +266,17 @@ describe('durable Stability pipeline executor', () => {
         expect(f.metrics.recordUsage).toHaveBeenCalledWith(expect.objectContaining({ usage: { imageCount: 0 } }))
     })
 
-    it('refuses a direct route and an ungranted intent before authorization', async () => {
+    it('refuses a direct route and a read-only execution before authorization', async () => {
         const f = await fixture()
         mocks.model.mockResolvedValue({ inferenceProviderCalledByThePlatform: 'stability' })
         await AgentExecutionScope.run(f.scope, async () => await expect(f.handler.ensure(f.request)).rejects.toThrow('STABILITY_PIPELINE_ROUTE_UNAVAILABLE'))
         await AgentExecutionScope.run({
             ...f.scope,
-            intent: {
-                ...f.scope.intent,
-                intent: 'chat',
+            permissions: {
+                ...f.scope.permissions,
+                readOnly: true,
             },
-        }, async () => await expect(f.handler.ensure(f.request)).rejects.toThrow('AGENT_INTENT_DOES_NOT_AUTHORIZE_OPERATION'))
+        }, async () => await expect(f.handler.ensure(f.request)).rejects.toThrow('AGENT_EXECUTION_READ_ONLY'))
         expect(f.metrics.authorizeRequest).not.toHaveBeenCalled()
         expect(mocks.invoke).not.toHaveBeenCalled()
     })

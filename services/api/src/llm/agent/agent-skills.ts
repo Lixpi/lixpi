@@ -2,6 +2,7 @@ import {
     type CapabilityModuleCatalog,
 } from '@lixpi/capability-system/backend'
 import { DynamicStructuredTool } from '@langchain/core/tools'
+import { AgentRegistry } from './agent-registry.ts'
 import {
     getAuthorizedCapabilityRecords,
     readAuthorizedCapabilityManifestSnapshot,
@@ -48,17 +49,12 @@ export class AgentSkills {
             return new Map(entries)
         }
 
-        const skills = this.catalog.listModuleIds().flatMap(moduleId => {
-            const module = this.catalog.getModule(moduleId)!
-
-            return module.agentTools?.length ? module.skills.map(
-                skill => ({
-                    moduleId,
-                    capabilityId: skill.capabilityId,
-                    bundle: skill.agentSkill,
-                }),
-            ) : []
-        })
+        const registry = new AgentRegistry(
+            this.catalog.createAgentRegistry(),
+            owner,
+        )
+        await registry.refresh()
+        const skills = registry.view().skills()
         const requester = {
             userId: owner.job.userId,
             organizationIds: [owner.job.organizationId],
@@ -219,22 +215,18 @@ export class AgentSkills {
         capabilityIds: string[],
     ): Promise<void> {
         await owner.fences()
-        const installed = new Set(
-            this.catalog.listModuleIds().flatMap(moduleId => {
-                const module = this.catalog.getModule(moduleId)!
-
-                return module.agentTools?.length ? module.skills.map(skill => skill.capabilityId) : []
-            }),
+        const registry = new AgentRegistry(
+            this.catalog.createAgentRegistry(),
+            owner,
         )
-        const records = await getAuthorizedCapabilityRecords({
-            capabilityIds,
-            requester: {
-                userId: owner.job.userId,
-                organizationIds: [owner.job.organizationId],
-            },
-        })
+        await registry.refresh()
+        const installed = new Set(
+            registry
+                .view()
+                .skills().map(skill => skill.capabilityId),
+        )
 
-        if (capabilityIds.some(id => !installed.has(id) || !records.has(id)))
+        if (capabilityIds.some(id => !installed.has(id)))
             throw new Error('AGENT_CAPABILITY_UNAVAILABLE')
     }
 

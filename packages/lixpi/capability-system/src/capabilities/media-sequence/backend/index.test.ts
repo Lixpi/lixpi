@@ -5,6 +5,18 @@ import { type CapabilityManifest } from '@lixpi/constants'
 import { validateCapabilityManifest } from '../../../shared/capability-validation.ts'
 import { validateJsonSchemaValue } from '../../../shared/capability-json-schema.ts'
 import { createMediaSequenceModule } from './index.ts'
+import {
+    type CapabilityModuleDefinition,
+} from '../../../backend/capability-module.ts'
+
+const agentTool = (module: CapabilityModuleDefinition, name: string) => {
+    const entry = module.agentEntries?.find(item => item.kind === 'tool' && item.name === name)
+
+    if (!entry || entry.kind !== 'tool' || !('execute' in entry))
+        throw new Error(`Missing executable tool: ${name}`)
+
+    return entry
+}
 
 describe('Media sequence module registration', () => {
     it('resolves a draft source through the original rendition without requiring an invented rendition name', async () => {
@@ -45,7 +57,7 @@ describe('Media sequence module registration', () => {
                 seedBuiltInCapability: vi.fn(),
             },
         })
-        const tool = module.agentTools!.find(tool => tool.name === 'resolve_sequence_source')!
+        const tool = agentTool(module, 'resolve_sequence_source')
         const input = {
             sourceId: 'blue',
             assetId: 'blue-image',
@@ -118,8 +130,8 @@ describe('Media sequence module registration', () => {
                 seedBuiltInCapability: vi.fn(),
             },
         })
-        const patch = module.agentTools!.find(tool => tool.name === 'patch_sequence')!
-        const exporter = module.agentTools!.find(tool => tool.name === 'export_sequence')!
+        const patch = agentTool(module, 'patch_sequence')
+        const exporter = agentTool(module, 'export_sequence')
         const patchInput = {
             sequenceId: 'sequence',
             baseRevision: 1,
@@ -206,6 +218,6 @@ describe('Media sequence module registration', () => {
             video: 'ignore',
             outputMode: 'capability-only',
         })
-        expect(module.agentTools?.find(tool => tool.name === 'resolve_sequence_source')?.intent).toBe('inspect')
+        expect(agentTool(module, 'resolve_sequence_source').intent).toBe('inspect')
     })
 })

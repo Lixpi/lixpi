@@ -10,7 +10,13 @@ export const createMediaPipelineImageHandler = (executor: Omit<MediaPipelineOper
         family: 'image',
         execution: 'inference',
         ready: true,
-        inputPorts: [],
+        inputPorts: [1, 2].map(
+            index => ({
+                portId: `reference-${index}`,
+                kind: 'image',
+                required: false,
+            }),
+        ),
         outputPorts: [{
             portId: 'image',
             kind: 'image',
@@ -66,10 +72,12 @@ export const buildMediaPipelineImageProvenance = (
                 content: [
                     paragraph(`Pipeline ${request.pipelineId}, revision ${request.pipelineRevision}, step ${request.node.nodeId}.`),
                     paragraph(`Operation ${request.operationId}. Input SHA-256 ${request.inputHash}.`),
-                    paragraph(`Model ${request.node.modelId}. Inference provider aws-bedrock. Seed ${output.seed}.`),
+                    paragraph(`Model ${request.node.modelId}. Inference provider ${request.inferenceProvider ?? 'unavailable'}. Seed ${output.seed}.`),
                     paragraph(`Prompt: ${String(request.node.parameters.prompt)}`),
                     ...[...new Map(
-                        [...request.sourceSnapshots ?? [], ...Object.values(request.inputs)].map(source => [source.sourceId, source]),
+                        [...(request.sourceSnapshots ?? []).filter(source => source.kind !== 'image'), ...Object.values(request.inputs)].map(
+                            source => [source.sourceId, source],
+                        ),
                     ).values()].map(
                         source => paragraph(
                             `Source Asset ${source.assetId}, revision ${source.revision}, SHA-256 ${source.blobHash ?? 'document snapshot'}.`,

@@ -7,6 +7,7 @@ mod hot_reload;
 mod keyboard;
 mod local_trust;
 mod origins;
+mod title_bar;
 mod webkit;
 mod window_commands;
 
@@ -15,13 +16,17 @@ use origins::{
     NewWindowAction,
     Origins,
 };
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use tauri::{
     AppHandle,
     WebviewUrl,
     WebviewWindowBuilder,
+    WindowEvent,
     webview::{
         DownloadEvent,
         NewWindowResponse,
+        PageLoadEvent,
     },
 };
 use tauri_plugin_opener::OpenerExt;
@@ -46,6 +51,7 @@ pub fn run() -> tauri::Result<()> {
             let origins = Origins::from_build()?;
             let web_ui = origins.web_ui.clone();
             app.on_menu_event(move |app, event| window_commands::run_menu_item(app, event.id().as_ref(), &web_ui));
+            title_bar::allow_window_dragging(app.handle(), &origins.web_ui)?;
 
             open_main_window(app.handle(), origins)?;
 
@@ -118,18 +124,36 @@ fn open_main_window(
         Some(script) => builder.initialization_script(script),
         None => builder,
     };
+    // web-ui draws the title bar row, and the traffic lights sit over it.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(title_bar::TRAFFIC_LIGHTS)
+        .initialization_script(title_bar::initialization_script());
 
     #[cfg(feature = "diagnostics")]
     let diagnostics = diagnostics::Diagnostics::new(app);
     #[cfg(feature = "diagnostics")]
-    let builder = {
-        let page_loads = std::sync::Arc::clone(&diagnostics);
+    let page_loads = std::sync::Arc::clone(&diagnostics);
+    #[cfg(feature = "diagnostics")]
+    let builder = builder.initialization_script(diagnostics::CAPTURE_SCRIPT);
+    let builder = builder.on_page_load(move |window, payload| {
+        if matches!(payload.event(), PageLoadEvent::Finished) {
+            title_bar::reflect_fullscreen(&window);
+        }
 
-        builder
-            .initialization_script(diagnostics::CAPTURE_SCRIPT)
-            .on_page_load(move |_, payload| page_loads.page_load(&payload))
-    };
+        #[cfg(feature = "diagnostics")]
+        page_loads.page_load(&payload);
+    });
     let window = builder.build()?;
+
+    let resized_window = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Resized(_)) {
+            title_bar::reflect_fullscreen(&resized_window);
+        }
+    });
 
     #[cfg(feature = "diagnostics")]
     diagnostics.watch(window.clone());

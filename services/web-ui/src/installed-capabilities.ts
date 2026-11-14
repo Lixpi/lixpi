@@ -1,17 +1,8 @@
 import {
-    ACTION_TIMELINE_FRONTEND_STYLES,
-    ACTION_TIMELINE_MODULE_ID,
-    ACTION_TIMELINE_TOOL_ID,
     CapabilityArtifactFrontendRegistry,
     CapabilityArtifactSharedRegistry,
-    actionTimelineArtifactDefinition,
-    actionTimelineFrontendDefinition,
-    mediaSequenceFrontendDefinition,
-    mediaSequenceArtifactDefinition,
     createMediaPipelineFrontendDefinition,
     mediaPipelineSharedDefinition,
-    MEDIA_SEQUENCE_FRONTEND_STYLES,
-    MEDIA_SEQUENCE_MODULE_ID,
     type CapabilityPromptControls,
 } from '@lixpi/capability-system/frontend'
 
@@ -19,10 +10,7 @@ import {
     type CapabilityControlsHost,
     type CapabilityControlsView,
 } from '@lixpi/prosemirror/frontend/editor'
-import {
-    createDocumentHtml,
-    html,
-} from '@lixpi/ui-primitives/dom'
+import { html } from '@lixpi/ui-primitives/dom'
 import { orderedListIcon } from '@lixpi/ui-kit/svg'
 
 type InstalledFrontendModule = {
@@ -31,21 +19,13 @@ type InstalledFrontendModule = {
     artifactTypeId: string
 }
 
-const installedModules: InstalledFrontendModule[] = [{
-    moduleId: ACTION_TIMELINE_MODULE_ID,
-    toolId: ACTION_TIMELINE_TOOL_ID,
-    artifactTypeId: actionTimelineFrontendDefinition.artifactTypeId,
-}]
+const installedModules: InstalledFrontendModule[] = []
 
 export const capabilityArtifactFrontendRegistry = new CapabilityArtifactFrontendRegistry()
-capabilityArtifactFrontendRegistry.register(actionTimelineFrontendDefinition)
 capabilityArtifactFrontendRegistry.register(
     createMediaPipelineFrontendDefinition(),
 )
-capabilityArtifactFrontendRegistry.register(mediaSequenceFrontendDefinition)
 export const capabilityArtifactSharedRegistry = new CapabilityArtifactSharedRegistry()
-capabilityArtifactSharedRegistry.register(actionTimelineArtifactDefinition)
-capabilityArtifactSharedRegistry.register(mediaSequenceArtifactDefinition)
 capabilityArtifactSharedRegistry.register(mediaPipelineSharedDefinition)
 
 const capabilityArtifactIcons = {
@@ -53,7 +33,11 @@ const capabilityArtifactIcons = {
 } as const
 
 export const getCapabilityArtifactIcon = (artifactTypeId: string): string => {
-    const definition = capabilityArtifactFrontendRegistry.require(artifactTypeId)
+    const definition = capabilityArtifactFrontendRegistry.get(artifactTypeId)
+
+    if (!definition)
+        return capabilityArtifactIcons['ordered-list']
+
     const icon = capabilityArtifactIcons[definition.iconId as keyof typeof capabilityArtifactIcons]
 
     if (!icon)
@@ -62,26 +46,7 @@ export const getCapabilityArtifactIcon = (artifactTypeId: string): string => {
     return icon
 }
 
-const styledDocuments = new WeakSet<Document>()
-
-export const ensureCapabilityStyles = (document: Document): void => {
-    if (styledDocuments.has(document))
-        return
-
-    const documentHtml = createDocumentHtml(document)
-
-    for (const [moduleId, css] of [
-        [ACTION_TIMELINE_MODULE_ID, ACTION_TIMELINE_FRONTEND_STYLES],
-        [MEDIA_SEQUENCE_MODULE_ID, MEDIA_SEQUENCE_FRONTEND_STYLES],
-    ]) {
-        const style = documentHtml`<style></style>` as HTMLStyleElement
-        style.dataset.capabilityStyles = moduleId
-        style.textContent = css
-        document.head.appendChild(style)
-    }
-
-    styledDocuments.add(document)
-}
+export const ensureCapabilityStyles = (_document: Document): void => {}
 
 export const createInstalledCapabilityControls = (host: CapabilityControlsHost): CapabilityControlsView => {
     const mounted = new Map<string, {

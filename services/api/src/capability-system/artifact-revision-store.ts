@@ -1,6 +1,7 @@
 import {
     NATS_SUBJECTS,
     type Asset,
+    type AssetDocumentPointer,
     type AssetRequesterContext,
 } from '@lixpi/constants'
 import {
@@ -18,6 +19,7 @@ import {
     type ConversationRepository,
 } from '../llm/agent/conversation-repository.ts'
 import { ConversationAdapters } from '../llm/agent/conversation-adapters.ts'
+import { agentArtifactEditKey } from '../llm/agent/agent-execution-scope.ts'
 import {
     AgentPayloadStore,
     type AgentPayload,
@@ -163,6 +165,10 @@ export class ArtifactRevisionStore {
         definition: CapabilityArtifactSharedDefinition
         fences?: () => Promise<TransactOperation[]>
         additionalOperations?: TransactOperation[]
+        agentTurn?: {
+            partition: string
+            turnId: string
+        }
         retainedBlobs?: Array<{
             blobHash: string
             referenceKey: string
@@ -202,7 +208,33 @@ export class ArtifactRevisionStore {
             payload: prepared.payload,
             ...(input.retainedBlobs ? { retainedBlobs: input.retainedBlobs } : {}),
         }
-        const commit = async (assetOperations: TransactOperation[]) => {
+        const commit = async (
+            assetOperations: TransactOperation[],
+            pointer?: AssetDocumentPointer,
+        ) => {
+            const previous = asset?.documents?.capabilityArtifact
+            const edit = input.agentTurn
+                && previous
+                && pointer
+                ? [this.repository.put(
+                    input.agentTurn.partition,
+                    agentArtifactEditKey(
+                        input.agentTurn.turnId,
+                        assetId,
+                        previous.version,
+                    ),
+                    {
+                        previous: {
+                            version: previous.version,
+                            blobHash: previous.blobHash,
+                        },
+                        next: {
+                            version: pointer.version,
+                            blobHash: pointer.blobHash,
+                        },
+                    },
+                )]
+                : []
             const authorized = await new ConversationAdapters(this.repository).authorize(
                 access.workspaceId,
                 access.userId,
@@ -232,6 +264,7 @@ export class ArtifactRevisionStore {
                     { revision: input.revision },
                 ),
                 ...prepared.operations,
+                ...edit,
                 ...input.additionalOperations ?? [],
             ]
 

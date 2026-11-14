@@ -914,7 +914,10 @@ const replaceSystemSnapshot = async ({
     doc: object
     version: number
     title?: string
-    commitWith?: (operations: TransactOperation[]) => Promise<void>
+    commitWith?: (
+        operations: TransactOperation[],
+        pointer: AssetDocumentPointer,
+    ) => Promise<void>
     validateArtifactMutation?: (
         previous: object,
         proposed: object,
@@ -1036,7 +1039,7 @@ const replaceSystemSnapshot = async ({
     )
 
     if (commitWith)
-        await commitWith(operations)
+        await commitWith(operations, pointer)
     else
         await dynamoDBService.transactWrite({
             operations,

@@ -5,6 +5,8 @@ description: The Style Extraction Tool's router, parallel specialists, source ev
 
 # Style Extraction Pipeline
 
+This module is disabled and unplugged from application registration. Its source is retained for later retirement. The workflow below documents that retained implementation and is not available through the current app or conversation agent.
+
 Style Extraction is a built-in Capability module executed through the generic Capability workflow runner. Its self-contained source lives under `packages/lixpi/capability-system/src/capabilities/style-extraction/`. The `tools/` side contains the module-internal entry Tool manifest, schemas, action bindings, input resolver, complete specialist pipeline, and tests. The sibling `skills/` side contains module-internal router, axes, and synthesis Skills, each with its own `SKILL.md` and stable package ID. The manifest owns ordering, conditions, value bindings, and progress labels. Registered TypeScript actions retain the specialist algorithms, validators, Asset authorization, provider calls, sample generation, and persistence rules.
 
 ## Public input

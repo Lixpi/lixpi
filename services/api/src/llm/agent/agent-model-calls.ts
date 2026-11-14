@@ -18,6 +18,7 @@ import {
 type ModelCall = {
     callId: string
     runId?: string
+    invocationId?: string
     revision: number
     inputHash: string
     modelId: string
@@ -31,6 +32,7 @@ type ModelCall = {
 }
 
 export type AgentModelCallInput<T> = {
+    invocationId?: string
     requestKey: string
     modelId: string
     estimatedUnits: number
@@ -60,6 +62,7 @@ export class AgentModelCalls {
         const inputHash = conversationPayloadHash({
             runId: meta.run.runId,
             instructionRevision: meta.run.instructionRevision,
+            ...(input.invocationId ? { invocationId: input.invocationId } : {}),
             requestKey: input.requestKey,
             modelId: input.modelId,
         })
@@ -90,11 +93,14 @@ export class AgentModelCalls {
             throw new Error(receipt.error ?? 'AGENT_MODEL_CALL_FAILED')
         }
 
+        await this.assertNoUncertainCall(meta.run.runId, input.invocationId)
+
         if (!receipt) {
             await this.owner.consumeBudget('modelCalls', this.continuationEpoch)
             receipt = {
                 callId,
                 runId: meta.run.runId,
+                ...(input.invocationId ? { invocationId: input.invocationId } : {}),
                 inputHash,
                 modelId: input.modelId,
                 revision: 1,
@@ -114,6 +120,7 @@ export class AgentModelCalls {
         let usage: MeasuredUsage | undefined
         let providerRequestId: string | undefined
         let authorizationId = receipt.authorizationId
+        let authorizationError: string | undefined
         let invokeStarted = false
         let nonSubmissionRecorded = false
         const settle = AccountRequestContext.prepareCleanup(async () => {
@@ -141,11 +148,20 @@ export class AgentModelCalls {
                     estimatedUnits: input.estimatedUnits,
                 })
 
-                if (
-                    !authorization.authorized
-                    || (this.metrics.enabled && !authorization.authorizationId)
+                if (!authorization.authorized)
+                    authorizationError = authorization.reason === 'authorization_unavailable'
+                        ? 'AGENT_MODEL_AUTHORIZATION_UNAVAILABLE'
+                        : authorization.reason === 'invalid_request'
+                            ? 'AGENT_MODEL_AUTHORIZATION_INVALID_REQUEST'
+                            : 'AGENT_MODEL_CALL_NOT_AUTHORIZED'
+                else if (
+                    this.metrics.enabled
+                    && !authorization.authorizationId
                 )
-                    throw new Error('AGENT_MODEL_CALL_NOT_AUTHORIZED')
+                    authorizationError = 'AGENT_MODEL_AUTHORIZATION_UNAVAILABLE'
+
+                if (authorizationError)
+                    throw new Error(authorizationError)
 
                 authorizationId = authorization.authorizationId
                 receipt = await this.update(
@@ -219,11 +235,11 @@ export class AgentModelCalls {
                             || notSubmitted
                             ? 'failed'
                             : 'unknown',
-                        error: notSubmitted
+                        error: authorizationError ?? (notSubmitted
                             ? 'AGENT_MODEL_CALL_NOT_SUBMITTED'
                             : knownRejection
                                 ? 'AGENT_MODEL_REQUEST_REJECTED'
-                                : 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN',
+                                : 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN'),
                         ...(authorizationId ? { authorizationId } : {}),
                         ...(usage ? { usage } : {}),
                         ...(providerRequestId ? { providerRequestId } : {}),
@@ -249,6 +265,42 @@ export class AgentModelCalls {
         } finally {
             await settle()
         }
+    }
+
+    // A changed prompt has a different request hash. It cannot turn an uncertain
+    // submission into a new paid attempt. Separate experts have independent serial
+    // model loops, so an active call in another invocation does not block this one.
+    private async assertNoUncertainCall(
+        runId: string,
+        invocationId: string | undefined,
+    ): Promise<void> {
+        let after: string | undefined
+
+        do {
+            const page = await this.repository.query<ModelCall>(
+                this.owner.partition,
+                'MODEL#',
+                {
+                    after,
+                    limit: 100,
+                },
+            )
+
+            for (const receipt of page.items) {
+                if (
+                    receipt.runId !== runId
+                    || receipt.invocationId !== invocationId
+                    || !['submitted', 'unknown'].includes(receipt.state)
+                )
+                    continue
+
+                await this.settle(receipt)
+
+                throw new Error('AGENT_MODEL_CALL_OUTCOME_UNKNOWN')
+            }
+
+            after = page.cursor
+        } while (after)
     }
 
     private async update(

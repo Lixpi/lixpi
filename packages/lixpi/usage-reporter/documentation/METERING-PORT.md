@@ -23,7 +23,9 @@ The request and result types live in [provider-usage-contract.ts](../src/provide
 | `METRICS_REQUEST_TIMEOUT_MS` | `3000` | Bounds each request/reply |
 | `METRICS_FAIL_OPEN` | unset | `true` permits execution when authorization is unavailable |
 
-The default policy denies execution when authorization is unavailable. A valid negative decision always denies execution. Disabled integration returns authorization without contacting a responder and discards usage records.
+Only `ENVIRONMENT=local` permits disabled integration or fail-open authorization. Every other environment requires `METRICS_ENABLED=true` and rejects `METRICS_FAIL_OPEN=true` during API startup, before service registration. The timeout must be a positive integer within the platform's timer range. Hosted deployment supplies enabled, closed-on-failure settings explicitly.
+
+The default policy denies execution when authorization is unavailable. A valid negative decision always denies execution. Disabled local integration returns authorization without contacting a responder and discards usage records; it does not provide LocalAuth0 usage tracking. For LocalAuth0, keep the integration enabled and use the responder's [local usage policy](REQUEST-AUTHORIZATION.md), which records actual usage without requiring a balance.
 
 The client validates authorization results and retains only the declared neutral fields. Transport errors are logged without responder error details. The API persists usage and completion messages in its file-backed `PROVIDER_USAGE_OUTBOX` JetStream workqueue before trying request/reply delivery. The durable consumer retries until the responder acknowledges the operation, with no age or delivery limit. Delivery is at least once, so the responder must deduplicate repeated records. Failure to persist a measurement surfaces as an error.
 

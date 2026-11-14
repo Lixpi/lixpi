@@ -126,10 +126,10 @@ describe('AiInteractionService', () => {
     })
 
     it('reports a top-level API rejection to its owner without forwarding a segment', () => {
-        service.onChatMessageResponse({ error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' })
+        service.onChatMessageResponse({ error: 'CAPABILITY_INPUT_NOT_AUTHORIZED:fixture-tool' })
 
         expect(onErrorMock).toHaveBeenCalledOnce()
-        expect(onErrorMock).toHaveBeenCalledWith('ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED')
+        expect(onErrorMock).toHaveBeenCalledWith('CAPABILITY_INPUT_NOT_AUTHORIZED:fixture-tool')
         expect(receiveSegmentMock).not.toHaveBeenCalled()
     })
 
@@ -344,8 +344,8 @@ describe('AiInteractionService', () => {
         const capabilityGenerationTrace = {
             traceVersion: 'capability-generation-trace-v1',
             generationRun,
-            capabilityId: 'action-timeline',
-            capabilityName: 'Action Timeline',
+            capabilityId: 'fixture-artifact',
+            capabilityName: 'Fixture Artifact',
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Anthropic',
             chatModelId: 'Anthropic:claude-haiku-4-5',

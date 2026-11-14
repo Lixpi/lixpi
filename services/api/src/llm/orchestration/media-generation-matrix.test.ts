@@ -430,14 +430,14 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
         vi.spyOn(capabilityStateResolver, 'resolveCapabilitiesForState').mockResolvedValue({})
         vi.spyOn(capabilityStateResolver, 'executeRequiredCapabilitiesForState').mockResolvedValue({
-            capabilityOutputAssetIds: ['asset-action-timeline'],
+            capabilityOutputAssetIds: ['asset-fixture-artifact'],
             capabilityOutputMediaAssetIds: [],
             capabilityToolResults: [{
-                capabilityId: 'global.action-timeline',
-                runId: 'run-action-timeline',
+                capabilityId: 'global.fixture-artifact',
+                runId: 'run-fixture-artifact',
                 output: {
                     outputKind: 'capabilityArtifact',
-                    assetId: 'asset-action-timeline',
+                    assetId: 'asset-fixture-artifact',
                 },
             }],
             enableImageGeneration: false,
@@ -451,13 +451,13 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             aiVideoModels: undefined,
             capabilityReferences: [{
                 kind: 'tool',
-                capabilityId: 'global.action-timeline',
+                capabilityId: 'global.fixture-artifact',
             }],
             enableImageGeneration: false,
             enableVideoGeneration: false,
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
-                generationRequestId: 'request-action-timeline',
+                generationRequestId: 'request-fixture-artifact',
                 reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
                 imageModelIds: [],
                 videoModelIds: [],
@@ -471,7 +471,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(registry.process).toHaveBeenCalledOnce()
         expect(registry.process.mock.calls[0]?.[2]).toMatchObject({
             preflightResolved: true,
-            capabilityOutputAssetIds: ['asset-action-timeline'],
+            capabilityOutputAssetIds: ['asset-fixture-artifact'],
             capabilityOutputMediaAssetIds: [],
             enableImageGeneration: false,
             enableVideoGeneration: false,

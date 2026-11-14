@@ -19,12 +19,9 @@ const fixture = async () => {
         turn: durable.turn,
         responseMessageId: 'response',
         continuationEpoch: 0,
-        intent: {
-            intent: 'execute',
-            operationFamilies: ['sequence-export'],
-            targetAssetIds: ['sequence'],
-            confidence: 1,
-            needsClarification: false,
+        permissions: {
+            readOnly: false,
+            allowedOperationFamilies: ['sequence-export'],
         },
         createdAssetIds: new Set(),
     }
@@ -161,7 +158,7 @@ describe('pipeline sequence export adapter', () => {
 
     it('rejects an export outside the accepted operation family before creating a render', async () => {
         const f = await fixture()
-        f.scope.intent.operationFamilies = ['image']
+        f.scope.permissions.allowedOperationFamilies = ['image']
         await AgentExecutionScope.run(f.scope, async () => void (await expect(f.handler.ensure(f.request)).rejects.toThrow('AGENT_OPERATION_FAMILY_NOT_AUTHORIZED')))
         expect(f.renders.submit).not.toHaveBeenCalled()
     })

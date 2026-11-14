@@ -79,7 +79,7 @@ Generated-candidate rejection is an explicit catalog removal. It releases the ca
 
 Generated outputs are Assets from preflight, before bytes exist. They appear with creating/processing state and settle to ready/degraded/failed/cancelled. Their original and derived renditions are attached to the same Asset identity; no “save generated image to library” copy is required.
 
-Generated Capability Artifacts use the same candidate/accepted/superseded output review contract, but readiness comes from a valid Artifact document plus sealed provenance rather than a media rendition. They appear only in Artifacts. See [Action Timeline](ACTION-TIMELINE.md).
+Generated Capability Artifacts use the same candidate/accepted/superseded output review contract, but readiness comes from a valid Artifact document plus sealed provenance rather than a media rendition. They appear only in Artifacts. The installed Artifact type supplies its validation and presentation through the Capability module.
 
 ## Related code
 

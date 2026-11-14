@@ -32,7 +32,7 @@ Both compilers use two jobs and BuildKit memory mounts for Cargo downloads and i
 
 The public DynamoDB initializer loads the matching account fixture after preparing application tables. It belongs to the `main` and `deploy` profiles, and Compose waits for its successful exit before starting the API. The environment file sets `LOCAL_DYNAMODB_FORCE_RECREATE` to `false`, so repeated setup preserves existing tables. The fixture creates the fixed user, personal organization, owner membership, and `Account-Admission-<ORG_NAME>-<STAGE>` row in one conditional transaction. A coherent older mock account keeps its existing personal organization. Repeated loading validates the records and does not rewrite them. Partial or ambiguous records fail with a repair instruction.
 
-The fixture requires `ENVIRONMENT=local`, both mock flags enabled, the fixed mock issuer, and a local DynamoDB endpoint. Real Auth0 mode skips it; mismatched flags and hosted database endpoints are refused. It creates the admission table only when absent and never recreates tables or deletes records. Hosted admission tables belong to the private provisioner, not the main Pulumi stack.
+The fixture requires `ENVIRONMENT=local`, `MOCK_AUTH0=true`, the fixed mock issuer, and a local DynamoDB endpoint. Real Auth0 mode skips it; nonlocal environments and hosted database endpoints are refused. It creates the admission table only when absent and never recreates tables or deletes records. Hosted admission tables belong to the private provisioner, not the main Pulumi stack.
 
 Build the tooling and mock images through Compose:
 
@@ -50,6 +50,12 @@ docker compose -f infrastructure/docker/utilities/infrastructure/docker-compose.
 For an existing partial mock account, stop application writers, inspect its organization grants, then run `fixture:local repair <existing-organization-id>` through the same container. The selected organization must already grant this fixed user owner access. Repair adds only a missing user association, matching owner membership, or fixed user record. It can replace this fixture's active epoch-1 receipt after an explicitly requested table reset; it refuses conflicting roles, email, blocked/reconciling/superseded receipts, and another epoch or identity. `fixture:local repair new` is allowed only when the fixed user has no organization association, membership, or embedded grant. All writes remain conditional. These commands accept no arbitrary user identity.
 
 For isolated verification, the same image can run on a disposable Docker network against a DynamoDB Local container with network alias `lixpi-dynamodb`, port 8000, and `-inMemory -sharedDb`. Pass the explicit local fixture environment variables and run `pnpm run deploy:local`, followed by `pnpm run fixture:local validate`. Do not attach a persistent database volume to that verification container.
+
+## Provider usage
+
+LocalAuth0 accounts can call providers without a funded balance. Keep usage reporting enabled and run the paired responder with its local policy generated from the selected main environment. The responder verifies the fixture identity and records actual usage and available cost estimates separately from monetary balances; it does not create funds, reserve funds or debit an account. Existing local organization and workspace data remain valid.
+
+Workspace access, model and tool validation, and operation budgets still apply. Hosted accounts retain normal request authorization. The local exemption cannot be selected through a browser request, and nonlocal deployments reject local policy configuration and receipts. See [Provider Request Authorization](../../packages/lixpi/usage-reporter/documentation/REQUEST-AUTHORIZATION.md) for receipt recovery and the security boundary.
 
 ## Web UI
 

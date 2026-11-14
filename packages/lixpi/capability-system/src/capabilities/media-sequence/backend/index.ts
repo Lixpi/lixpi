@@ -169,7 +169,7 @@ export const createMediaSequenceModule = (dependencies?: MediaSequenceModuleDepe
                 : {}),
             renderCompiler: new MediaSequenceRenderCompiler(),
         },
-        agentTools: dependencies ? createMediaSequenceAgentTools(
+        agentEntries: dependencies ? createMediaSequenceAgentTools(
             (
                 action,
                 request,
@@ -182,7 +182,7 @@ export const createMediaSequenceModule = (dependencies?: MediaSequenceModuleDepe
                 context,
             ),
             Boolean(dependencies.resolveSourceSelection),
-        ) : [],
+        ).map(tool => ({ ...tool, kind: 'tool' as const })) : [],
         tools: [{
             kind: 'tool',
             capabilityId: MEDIA_SEQUENCE_TOOL_ID,

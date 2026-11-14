@@ -44,9 +44,10 @@ const definition = {
 } as unknown as CapabilityArtifactSharedDefinition
 const fixture = () => {
     const commit = vi.fn(async (_operations: TransactOperation[]) => {})
+    const put = vi.fn((_pk: string, sk: string, _value: unknown) => operation(sk))
     const repository = {
         commit,
-        put: (_pk: string, sk: string) => operation(sk),
+        put,
     } as unknown as ConversationRepository
     const store = new ArtifactRevisionStore(repository)
     const input = {
@@ -64,6 +65,7 @@ const fixture = () => {
 
     return {
         commit,
+        put,
         store,
         input,
     }
@@ -146,6 +148,41 @@ describe('artifact transaction budgets', () => {
             additionalOperations: operations('source', 72),
         })).rejects.toThrow('ARTIFACT_TRANSACTION_LIMIT')
         expect(commit).not.toHaveBeenCalled()
+    })
+
+    it('records the exact agent-authored Artifact revision in the same transaction as the edit', async () => {
+        const {
+            store,
+            input,
+            commit,
+            put,
+        } = fixture()
+        const previous = { version: 1, blobHash: 'old-document' }
+        const next = { version: 2, blobHash: 'new-document' }
+        mocks.getAsset.mockResolvedValue({
+            organizationId: 'org',
+            states: { lifecycle: 'active' },
+            artifact: { artifactTypeId: 'test' },
+            documents: { capabilityArtifact: previous },
+        })
+        mocks.replaceSnapshot.mockImplementation(async request => request.commitWith([operation('asset')], next))
+        await expect(store.commit({
+            ...input,
+            expectedRevision: 1,
+            revision: 2,
+            agentTurn: {
+                partition: 'conversation',
+                turnId: 'turn',
+            },
+        })).resolves.toBe(true)
+        expect(put).toHaveBeenCalledWith('conversation', 'ARTIFACT_EDIT#turn#sequence#1', {
+            previous,
+            next,
+        })
+        expect(commit).toHaveBeenCalledExactlyOnceWith(expect.arrayContaining([
+            operation('asset'),
+            operation('ARTIFACT_EDIT#turn#sequence#1'),
+        ]))
     })
 
     it('passes the canonical title into the same snapshot and revision transaction', async () => {

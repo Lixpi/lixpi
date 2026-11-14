@@ -84,8 +84,8 @@ describe('AiChatProseMirrorStreamAssembler Capability generation history', () =>
         const trace: CapabilityGenerationTrace = {
             traceVersion: 'capability-generation-trace-v1',
             generationRun,
-            capabilityId: 'action-timeline',
-            capabilityName: 'Action Timeline',
+            capabilityId: 'fixture-artifact',
+            capabilityName: 'Fixture Artifact',
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Google',
             chatModelId: 'Google:gemini-2.5-flash',
@@ -126,7 +126,7 @@ describe('AiChatProseMirrorStreamAssembler Capability generation history', () =>
             status: STREAM_STATUS.STREAMING,
             aiProvider: 'Google',
             generationRun,
-            text: 'The action timeline is ready.',
+            text: 'The fixture artifact is ready.',
         })
         await assembler.finishTextPhase()
         await assembler.flushPendingWork()
@@ -139,14 +139,14 @@ describe('AiChatProseMirrorStreamAssembler Capability generation history', () =>
 
         expect(reasoningSection).toBeDefined()
         expect(traceBlock?.attrs).toMatchObject({
-            title: 'Action Timeline generation details',
+            title: 'Fixture Artifact generation details',
             isStreaming: false,
             capabilityGenerationTrace: expect.objectContaining({
                 capabilityRunId: 'timeline-run',
                 outputAssetIds: ['timeline-asset'],
             }),
         })
-        expect(JSON.stringify(reasoningSection)).toContain('The action timeline is ready.')
+        expect(JSON.stringify(reasoningSection)).toContain('The fixture artifact is ready.')
     })
 
     it('removes unfinished request media while preserving completed media on cancellation', () => {

@@ -4,7 +4,9 @@ Dependency versions in `package.json` are generated from [the version registry](
 
 Provider request authorization, upper-bound usage estimates, measured provider usage, and helpers for inference-provider tariff metadata.
 
-The API calls `ProviderUsageClient.authorizeRequest()` before provider transport and `recordUsage()` after completion. Disabled integration authorizes requests and discards records without network calls. Enabled integration uses the paired NATS responder's neutral authorization and acknowledgement contracts.
+The API calls `ProviderUsageClient.authorizeRequest()` before provider transport and `recordUsage()` after completion. Disabled integration authorizes requests and discards records without network calls. Enabled integration uses the paired NATS responder's neutral authorization and acknowledgement contracts. Authorization preserves the existing `request_denied`, `invalid_request` and `authorization_unavailable` reasons, so an unavailable responder is not reported as an account denial. Transport diagnostics record the error type without logging request credentials.
+
+LocalAuth0 uses the enabled integration with a responder-owned local policy that records usage without checking or changing balances. It requires a verified local fixture and explicit local deployment configuration; client payloads cannot select it. Hosted environments require enabled, closed-on-failure authorization. See [request authorization](documentation/REQUEST-AUTHORIZATION.md) for that boundary.
 
 The API supplies a durable outbox for usage and request completion. `completeRequest()` identifies the measurements that must be recorded before the responder can acknowledge completion. The [port documentation](documentation/METERING-PORT.md) covers delivery, unresolved calls and coordinated rollout.
 
