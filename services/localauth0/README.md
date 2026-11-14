@@ -13,7 +13,7 @@ LocalAuth0 is a zero-configuration Auth0 mock service for local development, ena
 
 ## How It Works
 
-When `VITE_MOCK_AUTH=true` and `MOCK_AUTH0=true` are set in your local environment:
+When `MOCK_AUTH0=true` is set in your local environment (Compose passes the same value to the browser apps):
 
 1. **LocalAuth0 container starts** and generates random RSA keypairs for JWT signing
 2. **The TOML configuration loads**, supplying:
@@ -192,14 +192,14 @@ Check browser console for errors. LocalAuth0 redirect should include `#access_to
 If missing:
 1. Verify redirect URL in `auth0-service.ts` includes `bypass=true`
 2. Check LocalAuth0 logs for authorization errors
-3. Ensure `VITE_MOCK_AUTH=true` is set
+3. Ensure `MOCK_AUTH0=true` is set
 
 ## Production Safety
 
 LocalAuth0 automatically prevents usage in non-local environments:
 
 - **API Service** (`server.ts`): Checks `ENVIRONMENT !== 'local'` and throws fatal error if LocalAuth0 URLs detected
-- **Web-UI** (`main.ts`): Checks `MODE === 'production'` and throws error if `VITE_MOCK_AUTH=true`
+- **Web-UI** (`main.ts`): Checks `MODE === 'production'` and throws error if mock authentication is enabled
 
 These guards reject mock authentication outside the supported local configuration.
 

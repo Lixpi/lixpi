@@ -8,7 +8,7 @@ services:
             dockerfile: services/web-ui/Dockerfile
             context: ../../../..
         environment:
-            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH: ${MOCK_AUTH0}
             VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
             VITE_API_URL: ${VITE_API_URL}
             VITE_AUTH0_LOGIN_URL: ${VITE_AUTH0_LOGIN_URL}
@@ -87,7 +87,7 @@ services:
             dockerfile: services/web-ui-user-portal/Dockerfile
             context: ../../../..
         environment:
-            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH: ${MOCK_AUTH0}
             VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
             VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
             VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}

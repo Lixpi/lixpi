@@ -89,7 +89,7 @@ jobs:
                     - init-config
                     - dev-console
         env:
-            VITE_MOCK_AUTH: "true"
+            MOCK_AUTH0: "true"
             VITE_MOCK_AUTH0_DOMAIN: http://localhost:3000
             VITE_API_URL: http://localhost:3001
             VITE_AUTH0_LOGIN_URL: http://localhost:3000/authorize

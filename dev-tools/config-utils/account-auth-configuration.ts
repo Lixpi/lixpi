@@ -48,7 +48,6 @@ export class LocalAccountAuthConfiguration {
 
         for (const [name, value] of Object.entries({
             MOCK_AUTH0: 'false',
-            VITE_MOCK_AUTH: 'false',
             ACCOUNT_ADMISSION_ENABLED: 'true',
             AUTH0_DOMAIN: `https://${domain}`,
             VITE_AUTH0_DOMAIN: domain,

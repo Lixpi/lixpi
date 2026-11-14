@@ -110,28 +110,48 @@ export const applicationManifest = (
     )
         throw new Error('Local identity provider requires domain and JWKS URL')
 
-    const domain = mock ? `http://${env.MOCK_AUTH0_DOMAIN}` : env.AUTH0_DOMAIN
+    // A local registration signs LocalAuth0 and the real tenant together, so
+    // MOCK_AUTH0 alone selects the active provider and flipping it never needs a new signature.
+    const localIssuer = env.ENVIRONMENT === 'local'
+        && env.MOCK_AUTH0_DOMAIN
+        && env.MOCK_AUTH0_JWKS_URI
+        ? [{
+            issuer: `http://${env.MOCK_AUTH0_DOMAIN.replace(/\/+$/u, '')}/`,
+            jwksUrl: env.MOCK_AUTH0_JWKS_URI,
+            local: true,
+        }]
+        : []
+    const tenant = env.AUTH0_DOMAIN?.replace(/\/+$/u, '')
+    const tenantIssuer = tenant
+        ? [{
+            issuer: `${tenant}/`,
+            jwksUrl: `${tenant}/.well-known/jwks.json`,
+            local: false,
+        }]
+        : []
+    const issuers = [
+        ...localIssuer,
+        ...tenantIssuer,
+    ]
 
     if (
-        !domain
-        || !env.AUTH0_API_IDENTIFIER
+        !env.AUTH0_API_IDENTIFIER
+        || !issuers.some(entry => entry.local === mock)
     )
         throw new Error('Browser registration requires issuer and audience')
 
-    const issuer = `${domain.replace(/\/+$/u, '')}/`
-    const jwksUrl = mock ? env.MOCK_AUTH0_JWKS_URI! : `${issuer}.well-known/jwks.json`
+    for (const entry of issuers)
+        for (const address of [entry.issuer, entry.jwksUrl]) {
+            const url = new URL(address)
 
-    for (const address of [issuer, jwksUrl]) {
-        const url = new URL(address)
-
-        if (
-            url.username
-            || url.password
-            || url.hash
-            || (url.protocol !== 'https:' && !(mock && url.protocol === 'http:'))
-        )
-            throw new Error('Invalid browser verification URL')
-    }
+            if (
+                url.username
+                || url.password
+                || url.hash
+                || (url.protocol !== 'https:' && !(entry.local && url.protocol === 'http:'))
+            )
+                throw new Error('Invalid browser verification URL')
+        }
 
     const expand = (subject: string) => subject.replaceAll('{userIdToken}', '{subjectToken}').replaceAll('{userId}', '{subject}')
     const browserPermissions = normalizePermissions({
@@ -150,18 +170,20 @@ export const applicationManifest = (
         owner: 'lixpi',
         version,
         services,
-        browsers: [{
-            issuer,
-            audience: env.AUTH0_API_IDENTIFIER,
-            jwksUrl,
-            account: 'AUTH',
-            permissions: [browserPermissions],
-            ...(admissionEnabled ? { admission: {
-                subject: ACCOUNT_ADMISSION_CHECK_SUBJECT,
-                claim: ACCOUNT_ADMISSION_CLAIM,
-                stream: env.ACCOUNT_ADMISSION_STREAM,
-            } } : {}),
-        }],
+        browsers: issuers.map(
+            entry => ({
+                issuer: entry.issuer,
+                audience: env.AUTH0_API_IDENTIFIER,
+                jwksUrl: entry.jwksUrl,
+                account: 'AUTH',
+                permissions: [browserPermissions],
+                ...(admissionEnabled ? { admission: {
+                    subject: ACCOUNT_ADMISSION_CHECK_SUBJECT,
+                    claim: ACCOUNT_ADMISSION_CLAIM,
+                    stream: env.ACCOUNT_ADMISSION_STREAM,
+                } } : {}),
+            }),
+        ),
     }
 }
 

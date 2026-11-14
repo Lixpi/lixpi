@@ -129,7 +129,6 @@ describe('shared grouped wizard', () => {
         'PULUMI_CONFIG_PASSPHRASE=""',
         'DYNAMODB_ENDPOINT=http://lixpi-dynamodb:8000',
         'MOCK_AUTH0=true',
-        'VITE_MOCK_AUTH=true',
         'AUTH0_DOMAIN=""',
         'VITE_AUTH0_CLIENT_ID=""',
         'AUTH0_API_IDENTIFIER=http://localhost:3005',
@@ -390,11 +389,11 @@ describe('shared grouped wizard', () => {
             await writeFiles(await collect())
             const after = readRegistration(savedContent())
             expect(after.manifest.version).toBe(before.manifest.version + 1)
-            expect(after.manifest.browsers[0]).toMatchObject({
+            expect(after.manifest.browsers).toContainEqual(expect.objectContaining({
                 issuer: 'https://tenant.us.auth0.com/',
                 jwksUrl: 'https://tenant.us.auth0.com/.well-known/jwks.json',
                 audience: before.env.AUTH0_API_IDENTIFIER,
-            })
+            }))
             expect(after.env.NATS_API_NKEY_SEED).toBe(before.env.NATS_API_NKEY_SEED)
             expect(after.env.NATS_REGISTRATION_AUTHORITY_SEED).toBe(before.env.NATS_REGISTRATION_AUTHORITY_SEED)
         })
@@ -422,7 +421,7 @@ describe('shared grouped wizard', () => {
                 VITE_AUTH0_DOMAIN: 'auth.another-local.example.com',
             })
             expect(after.manifest.version).toBe(before.manifest.version + 1)
-            expect(after.manifest.browsers[0].issuer).toBe('https://auth.another-local.example.com/')
+            expect(after.manifest.browsers.map((browser: { issuer: string }) => browser.issuer)).toContain('https://auth.another-local.example.com/')
         })
 
         it('does not write a partial update when the existing registration cannot be verified', async () => {

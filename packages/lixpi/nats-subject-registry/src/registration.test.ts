@@ -35,6 +35,30 @@ describe('deployment registration signing', () => {
         }, 1)).toThrow('ACCOUNT_ADMISSION_ENABLED')
         expect(enabled.browsers[0].permissions[0].pub.allow?.some(subject => subject.includes('admission'))).toBe(false)
     })
+    it('signs both local identity providers so MOCK_AUTH0 switches login without a new registration', () => {
+        const env = {
+            ...fixture(),
+            AUTH0_DOMAIN: 'https://tenant.example.com/',
+        }
+        const mock = applicationManifest(env, 1)
+        expect(mock.browsers.map(browser => browser.issuer)).toEqual([
+            'http://identity:3000/',
+            'https://tenant.example.com/',
+        ])
+        expect(applicationManifest({
+            ...env,
+            MOCK_AUTH0: 'false',
+        }, 1)).toEqual(mock)
+        expect(applicationManifest({
+            ...env,
+            ENVIRONMENT: 'production',
+            MOCK_AUTH0: 'false',
+        }, 1).browsers.map(browser => browser.issuer)).toEqual(['https://tenant.example.com/'])
+        expect(() => applicationManifest({
+            ...fixture(),
+            MOCK_AUTH0: 'false',
+        }, 1)).toThrow('Browser registration requires issuer and audience')
+    })
     it('signs application permissions and advances the version only when declarations change', () => {
         const env = fixture()
         const generated = registrationEnvironment(env)
