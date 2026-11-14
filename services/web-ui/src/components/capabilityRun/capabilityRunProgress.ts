@@ -106,18 +106,26 @@ export type CapabilityRunProgressInstance = CapabilityRunProgressView
 
 class CapabilityRunProgress implements CapabilityRunProgressInstance {
     readonly element = html`
-        <section
-            className="capability-run-progress"
-            aria-live="polite"
-        ></section>
+        <section className="capability-run-progress"></section>
     ` as HTMLElement
     private readonly timeline: ProgressTimelineInstance
-    private readonly status = html`<span></span>` as HTMLElement
-    private readonly header = html`
-        <header className="capability-run-progress-header">
-            <strong>Tool run</strong>${this.status}
-        </header>
+    private readonly status = html`
+        <span
+            className="capability-run-progress-status"
+            role="status"
+        ></span>
     ` as HTMLElement
+    private readonly label = html`<span className="capability-run-progress-label">Tool activity</span>` as HTMLElement
+    private readonly header = html`
+        <summary className="capability-run-progress-header">
+            ${this.label}${this.status}
+        </summary>
+    ` as HTMLElement
+    private readonly details = html`
+        <details className="capability-run-progress-details">
+            ${this.header}
+        </details>
+    ` as HTMLDetailsElement
     private readonly outputs = html`
         <ul
             className="capability-run-progress-outputs"
@@ -140,11 +148,8 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
             ariaLabel: 'Tool run progress',
             ...createExecutionTraceTimelineDetailAdapter(previewRenderer ? { previewRenderer } : {}),
         })
-        this.element.append(
-            this.header,
-            this.timeline.element,
-            this.outputs,
-        )
+        this.details.append(this.timeline.element)
+        this.element.append(this.details, this.outputs)
     }
 
     async replay(runId: string): Promise<void> {
@@ -246,14 +251,20 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
             }),
         )
         this.timeline.setItems(steps)
-        this.status.textContent = state.status
+        const labels: Record<CapabilityRun['status'], string> = {
+            pending: 'Waiting',
+            running: 'Working',
+            completed: 'Completed',
+            failed: 'Needs attention',
+            cancelled: 'Stopped',
+        }
+        const activeStep = state.steps.find(step => step.status === 'running')
+        this.label.textContent = state.status === 'running' ? (activeStep?.title ?? 'Tool activity') : 'Tool activity'
+        this.status.textContent = labels[state.status]
+        this.element.dataset.state = state.status
 
-        if (this.header.parentElement !== this.element)
-            this.element.replaceChildren(
-                this.header,
-                this.timeline.element,
-                this.outputs,
-            )
+        if (this.details.parentElement !== this.element)
+            this.element.replaceChildren(this.details, this.outputs)
 
         this.renderOutputs(state.outputAssetIds)
     }

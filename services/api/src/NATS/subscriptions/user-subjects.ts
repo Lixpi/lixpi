@@ -3,13 +3,14 @@ import {
     type NatsSubjectSubscription,
 } from '@lixpi/nats-service'
 import { getNatsSubjectPath } from '@lixpi/constants'
+import { parseAccountPreferences } from '../../services/account-preferences.ts'
 
 import User from '../../models/user.ts'
 
 export const userSubjects: NatsSubjectSubscription[] = createNatsSubscriptions(
     'user',
     {
-        [getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.GET_USER)]: async (data, msg) => {
+        [getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.GET_USER)]: async data => {
             const userId = data.user.userId
 
             if (!userId) {
@@ -18,6 +19,11 @@ export const userSubjects: NatsSubjectSubscription[] = createNatsSubscriptions(
             }
 
             return await User.get(userId)
-        }
+        },
+        [getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.UPDATE_PREFERENCES)]: async data =>
+            await User.updatePreferences(
+                data.user.userId,
+                parseAccountPreferences(data.preferences),
+            ),
     },
 )

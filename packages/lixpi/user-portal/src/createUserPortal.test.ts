@@ -43,6 +43,7 @@ const harness = (isRedirecting = () => false) => {
     } })
     const nats = {
         disconnect: vi.fn(),
+        onReconnect: vi.fn(() => vi.fn()),
         request: vi.fn(),
     } as unknown as UserPortalDependencies['nats']
     const dependencies = Promise.withResolvers<UserPortalDependencies>()

@@ -53,6 +53,7 @@ export type WorkspaceConversationEditorIntegration = {
 
 export type WorkspacePromptEditorIntegration = {
     submitOnEnter?: boolean
+    requireReasoningModel?: boolean
     mountMediaModeSwitch: (element: HTMLElement) => void
     mountModelMenuControl: (element: HTMLElement) => void
     promptReferenceCatalog: WorkspacePromptCatalog

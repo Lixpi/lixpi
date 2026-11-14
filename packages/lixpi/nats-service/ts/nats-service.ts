@@ -1225,14 +1225,16 @@ export default class NatsService {
                 while (running.size >= this.maxConcurrentReplies)
                     await Promise.race(running)
 
-                const task: Promise<void> = (async () => {
+                const task = respond(msg, receivedAt)
+                running.add(task)
+
+                void (async () => {
                     try {
-                        await respond(msg, receivedAt)
+                        await task
                     } finally {
                         running.delete(task)
                     }
                 })()
-                running.add(task)
             }
         })()
 

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { err } from '@lixpi/debug-tools'
 import {
     CONVERSATION_RESPONSE_MAX_BYTES,
+    conversationModelPreferencesEqual,
+    type AccountAgentPreferences,
     type AccountWorkContext,
     type ConversationAcknowledgement,
     type ConversationCommandBase,
@@ -70,6 +72,7 @@ export type ConversationServicePorts = {
         userId: string,
         write: boolean,
     ) => Promise<ConversationAccess>
+    getAgentPreferences?: (userId: string) => Promise<AccountAgentPreferences | undefined>
     resolveReferences: (
         access: ConversationAccess,
         references: ConversationReference[],
@@ -231,7 +234,15 @@ export class ConversationService {
         )
             throw new Error('CONVERSATION_IDEMPOTENCY_CONFLICT')
 
-        return await this.snapshot(saved)
+        const snapshot = await this.snapshot(saved)
+
+        if (!saved.delegatedBy)
+            snapshot.settings = {
+                ...snapshot.settings,
+                ...await this.ports.getAgentPreferences?.(userId),
+            }
+
+        return snapshot
     }
 
     async list(
@@ -255,6 +266,7 @@ export class ConversationService {
                 ...(request.cursor ? { after: `CONVERSATION#${request.cursor}` } : {}),
             },
         )
+        const agentPreferences = await this.ports.getAgentPreferences?.(userId)
         const conversations: ConversationSnapshot[] = []
         let bytes = 1024
         let cursor: string | undefined
@@ -270,6 +282,13 @@ export class ConversationService {
                 && meta.workspaceId === request.workspaceId
             ) {
                 const snapshot = await this.snapshot(meta, false)
+
+                if (!meta.delegatedBy)
+                    snapshot.settings = {
+                        ...snapshot.settings,
+                        ...agentPreferences,
+                    }
+
                 const size = Buffer.byteLength(
                     JSON.stringify(snapshot),
                 ) + 1
@@ -310,6 +329,12 @@ export class ConversationService {
             false,
         )
         const snapshot = await this.snapshot(meta)
+
+        if (!meta.delegatedBy)
+            snapshot.settings = {
+                ...snapshot.settings,
+                ...await this.ports.getAgentPreferences?.(userId),
+            }
 
         if (request.clientMessageId) {
             const receipt = await this.repository.read<AcceptedClient>(pk, `CLIENT#${request.clientMessageId}`)
@@ -404,6 +429,16 @@ export class ConversationService {
                     'The conversation already has 32 queued messages. Wait for a turn to finish or remove a queued message.',
                 )
 
+            const agentPreferences = options.delegation ? undefined : await this.ports.getAgentPreferences?.(userId)
+            const settings = {
+                ...meta.settings,
+                ...agentPreferences,
+            }
+            const midRunPolicy = options.delegation
+                ? 'queue'
+                : request.interruptId
+                    ? 'steer'
+                    : agentPreferences?.midRunPolicy ?? request.midRunPolicy ?? settings.midRunPolicy
             const sources = await this.ports.resolveReferences(access, request.references)
             const now = this.ports.now()
             const turnId = this.ports.createId()
@@ -415,12 +450,12 @@ export class ConversationService {
             if (
                 activeTurn
                 && activeTurn.userId !== userId
-                && (request.interruptId || (request.midRunPolicy ?? meta.settings.midRunPolicy) === 'steer')
+                && midRunPolicy === 'steer'
             )
                 return this.reject(
                     request,
                     'CONVERSATION_ACTIVE_AUTHOR_CONFLICT',
-                    'Another collaborator owns the active turn. Queue your message or choose Stop first.',
+                    'Another collaborator owns the active turn. Wait for it to finish or change your running conversation preference in Settings.',
                 )
 
             if (
@@ -450,14 +485,10 @@ export class ConversationService {
                 userId,
                 fragment: request.fragment,
                 references: sources,
-                settings: meta.settings,
+                settings,
                 settingsRevision: meta.settingsRevision,
-                // A delegated turn waits behind a person's running turn.
-                midRunPolicy: options.delegation
-                    ? 'queue'
-                    : request.interruptId
-                        ? 'steer'
-                        : request.midRunPolicy ?? meta.settings.midRunPolicy,
+                midRunPolicy,
+                ...(agentPreferences ? { contextModeSource: 'account' as const } : {}),
                 state: 'queued',
                 createdAt: now,
                 ...(request.interruptId ? { interruptId: request.interruptId } : {}),
@@ -640,13 +671,22 @@ export class ConversationService {
         if (request.expectedRevision !== meta.settingsRevision)
             throw new Error('STALE_CONVERSATION_SETTINGS')
 
+        const settings = {
+            ...meta.settings,
+            ...request.patch,
+        }
+
+        if (
+            settings.contextMode === meta.settings.contextMode
+            && settings.midRunPolicy === meta.settings.midRunPolicy
+            && conversationModelPreferencesEqual(settings.models, meta.settings.models)
+        )
+            return await this.snapshot(meta)
+
         const now = this.ports.now()
         const next = {
             ...meta,
-            settings: {
-                ...meta.settings,
-                ...request.patch,
-            },
+            settings,
             settingsRevision: meta.settingsRevision + 1,
             revision: meta.revision + 1,
             eventSeq: meta.eventSeq + 1,
@@ -672,7 +712,7 @@ export class ConversationService {
                 queue: 'Queue',
             }[next.settings.midRunPolicy]}`)
 
-        if (JSON.stringify(next.settings.models) !== JSON.stringify(meta.settings.models))
+        if (!conversationModelPreferencesEqual(next.settings.models, meta.settings.models))
             descriptions.push('Model preferences updated')
 
         const messageId = `${conversationSequenceKey(meta.commandSeq)}-2-settings-${conversationSequenceKey(next.settingsRevision)}`
@@ -1328,6 +1368,7 @@ export class ConversationService {
                 messageId: row.messageId,
                 turnId: row.turnId,
                 role: row.role,
+                ...(row.failure ? { failure: row.failure } : {}),
                 text: row.text,
                 complete: row.complete,
                 createdAt: row.createdAt,

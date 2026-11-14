@@ -2297,12 +2297,14 @@ export class LixpiWorkspaceCanvas {
                 },
                 mountEditor: this.editors.createPrompt({
                     submitOnEnter: true,
+                    requireReasoningModel: false,
                     mountMediaModeSwitch: switchElement => this.options.mediaModeSwitchMountEl.replaceChildren(switchElement),
                     mountModelMenuControl: controlElement => this.options.modelMenuControlMountEl.replaceChildren(controlElement),
                     promptReferenceCatalog: this.getPromptReferenceCatalogClient(),
                     promptReferencePreviewRenderer: this.context.getPromptReferencePreviewRenderer(),
                 }),
                 onSubmit: data => this.submitCanvasGenerationRun(data),
+                onSubmitError: error => this.agentConversation?.reportSubmissionError(error),
             })
             this.paneEl.appendChild(this.globalCanvasComposer.element)
         }

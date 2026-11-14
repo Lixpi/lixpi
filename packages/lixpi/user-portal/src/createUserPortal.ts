@@ -3,6 +3,11 @@ import {
     type WebClientServiceInstance,
     type WebClientView,
 } from '@lixpi/web-client-service-factory'
+import {
+    createUserService,
+    CurrentUserRefresh,
+} from '@lixpi/auth-client'
+import { ApplicationThemeBinding } from '@lixpi/themes/browser'
 import { createWorkspaceLoadingLayer } from '@lixpi/canvas-components/workspace/loading'
 import { createLixpiCanvasSettings } from '@lixpi/canvas-components/workspace/settings'
 import {
@@ -94,6 +99,22 @@ class UserPortal implements WebClientServiceInstance {
         return createWebClientService<UserPortalDependencies>({
             createDependencies: this.config.createDependencies,
             routing: { routes: this.catalog.routes },
+            createResources: [
+                ({ dependencies: { auth } }) => new ApplicationThemeBinding({
+                    subscribePreference: listener => auth.userStore.subscribe(state => listener(state.data.preferences?.appearance)),
+                }),
+                ({ dependencies: {
+                    auth,
+                    nats,
+                } }) => new CurrentUserRefresh({
+                    user: createUserService({
+                        getToken: auth.getTokenSilently,
+                        requestClient: nats,
+                        store: auth.userStore,
+                    }),
+                    onReconnect: listener => nats.onReconnect(listener),
+                }),
+            ],
             initializeServices: ({
                 dependencies,
                 router,

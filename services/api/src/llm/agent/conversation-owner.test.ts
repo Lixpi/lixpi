@@ -217,6 +217,41 @@ describe('conversation owner', () => {
         })
     })
 
+    it('rejects partial text after a stop wins the owner transaction', async () => {
+        const {
+            database,
+            owner,
+            repository,
+            partition,
+        } = await createConversationExecutionFixture()
+        const meta = await owner.read()
+        database.beforeCommit = () => {
+            database.beforeCommit = undefined
+            database.rows.set(`${partition}|META`, {
+                ...meta,
+                pk: partition,
+                sk: 'META',
+                revision: meta.revision + 1,
+                run: {
+                    ...meta.run!,
+                    state: 'stopping',
+                },
+            })
+        }
+        const message = {
+            messageId: 'late',
+            turnId: meta.run!.turnId,
+            role: 'assistant' as const,
+            text: 'Late chunk',
+            complete: false,
+            createdAt: 1000,
+        }
+
+        await expect(owner.partialMessage(message, message.text, 0, meta.run!.continuationEpoch))
+            .rejects.toThrow('CONVERSATION_CONTINUATION_STOPPED')
+        expect(await repository.read(partition, 'MESSAGE#late')).toBeUndefined()
+    })
+
     it('allows one active owner and rejects stale writes after lease takeover', async () => {
         const fixture = await createConversationExecutionFixture()
         const {

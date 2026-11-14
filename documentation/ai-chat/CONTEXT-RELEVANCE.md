@@ -5,9 +5,9 @@ description: Conversation context modes, immutable source attribution, and direc
 
 # Workspace Context
 
-Conversation settings select Explicit, Discovery, or Mixed context, with Explicit as the default. Explicit admits submitted references, authorized prior conversation context, and outputs created by that conversation. Discovery permits bounded search/read of authorized current-workspace Assets. Mixed combines both while preserving explicit constraints. Canvas proximity and edges never grant access, and other conversations' private state is excluded.
+The account portal's Agent behavior settings select Explicit, Discovery, or Mixed context for messages the user sends. Existing accounts without a saved agent preference use the conversation setting, which defaults to Explicit. Explicit admits submitted references, authorized prior conversation context, and outputs created by that conversation. Discovery permits bounded search/read of authorized current-workspace Assets. Mixed combines both while preserving explicit constraints. Canvas proximity and edges never grant access, and other conversations' private state is excluded.
 
-Every turn freezes source identities, rendition hashes, and document versions. Reads and operation commits reauthorize those bindings. Attaching a sequence admits its declared immutable inputs through the Artifact definition's source-reference contract. Narrowing to Explicit rebuilds active model context without discovered-only source material or summaries derived from it. The visible transcript remains intact.
+Every turn freezes source identities, rendition hashes, and document versions. Reads and operation commits reauthorize those bindings. Attaching a sequence admits its declared immutable inputs through the Artifact definition's source-reference contract. A new turn in Explicit mode excludes discovered-only source material from its model context. The accepted context mode remains fixed for a turn that uses the sending account's preference. The visible transcript remains intact.
 
 The direct-generation path below receives workspace content only through prompt references or context chips. It does not discover unselected canvas nodes or automatically reuse earlier outputs.
 

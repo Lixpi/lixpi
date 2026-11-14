@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+
 // Runs a durable outbox sweep only when there is a reason to: once on start
 // to recover rows a previous process left behind, whenever this process
 // commits a new due row, at the earliest future due time the last sweep saw,
@@ -5,7 +7,7 @@
 export type DueSweep = () => Promise<number | undefined>
 
 export class DueSweepScheduler {
-    private stopped = true
+    private runScheduledSweep?: () => void
     private sweeping = false
     private requested = false
     private timer?: ReturnType<typeof setTimeout>
@@ -18,19 +20,20 @@ export class DueSweepScheduler {
     ) {}
 
     start(): void {
-        this.stopped = false
+        // A wake from an accepted request must not inherit that request's scope.
+        this.runScheduledSweep = AsyncLocalStorage.bind(() => void this.run())
         this.wake()
     }
 
     stop(): void {
-        this.stopped = true
+        this.runScheduledSweep = undefined
         clearTimeout(this.timer)
         this.timer = undefined
         this.armedAt = undefined
     }
 
     wake(dueAt = Date.now()): void {
-        if (this.stopped)
+        if (!this.runScheduledSweep)
             return
 
         if (
@@ -43,7 +46,7 @@ export class DueSweepScheduler {
         clearTimeout(this.timer)
         this.armedAt = dueAt
         this.timer = setTimeout(
-            () => void this.run(),
+            this.runScheduledSweep,
             Math.max(0, dueAt - Date.now()),
         )
         this.timer.unref()

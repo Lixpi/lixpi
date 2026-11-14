@@ -151,7 +151,8 @@ export class DocumentAuthority {
     private subscription: { unsubscribe: () => void } | null = null
     private applyingAuthorityStep = false
     private submitting = false
-    private resumeInProgress = false
+    private resumeInProgress: Promise<void> | null = null
+    private recoveryInProgress: Promise<void> | null = null
     private resumeRequested = false
     private readonly submissionWaiters: Array<() => void> = []
     private disconnected = false
@@ -159,7 +160,47 @@ export class DocumentAuthority {
 
     constructor(private readonly options: DocumentAuthorityOptions) {
         this.localVersion = options.baseVersion ?? 0
-        void this.connect()
+        void this.initialize()
+    }
+
+    private async initialize(): Promise<void> {
+        try {
+            await this.recover()
+        } catch {}
+    }
+
+    get version(): number {
+        return this.localVersion
+    }
+
+    recover(): Promise<void> {
+        if (this.disconnected)
+            return Promise.resolve()
+
+        if (this.recoveryInProgress)
+            return this.recoveryInProgress
+
+        this.recoveryInProgress = this.runRecovery()
+
+        return this.recoveryInProgress
+    }
+
+    private async runRecovery(): Promise<void> {
+        try {
+            await this.recoverConnection()
+        } finally {
+            this.recoveryInProgress = null
+        }
+    }
+
+    private async recoverConnection(): Promise<void> {
+        if (!this.options.transport.isReady())
+            throw new Error('ASSET_DOCUMENT_TRANSPORT_UNAVAILABLE')
+
+        if (!this.subscription)
+            await this.connect()
+        else
+            await this.resume()
     }
 
     submitLocalTransaction(transaction: Transaction): void {
@@ -436,16 +477,35 @@ export class DocumentAuthority {
         }
     }
 
-    private async resume(): Promise<void> {
+    private resume(): Promise<void> {
         if (this.resumeInProgress) {
             this.resumeRequested = true
 
-            return
+            return this.resumeInProgress
         }
 
-        this.resumeInProgress = true
+        this.resumeInProgress = this.runResume()
 
+        return this.resumeInProgress
+    }
+
+    private async requestResume(): Promise<void> {
         try {
+            await this.resume()
+        } catch {}
+    }
+
+    private async runResume(): Promise<void> {
+        try {
+            await this.resumeLoop()
+        } finally {
+            this.resumeInProgress = null
+        }
+    }
+
+    private async resumeLoop(): Promise<void> {
+        do {
+            this.resumeRequested = false
             let hasMore = true
 
             while (
@@ -466,6 +526,9 @@ export class DocumentAuthority {
                     },
                     DOCUMENT_RESUME_TIMEOUT_MS,
                 )
+
+                if (this.disconnected)
+                    return
 
                 if (result.error)
                     throw new Error(result.error)
@@ -490,6 +553,9 @@ export class DocumentAuthority {
                 ) {
                     const snapshot = await this.options.transport.fetchSnapshot(result.snapshot)
 
+                    if (this.disconnected)
+                        return
+
                     if (
                         snapshot.version > this.localVersion
                         && this.pendingLocalSteps.length === 0
@@ -503,22 +569,16 @@ export class DocumentAuthority {
                 this.localStreamSeq = Math.max(this.localStreamSeq, result.currentStreamSeq ?? 0)
                 hasMore = result.hasMore === true
             }
-        } finally {
-            this.resumeInProgress = false
-
-            if (
-                this.resumeRequested
-                && !this.disconnected
-            ) {
-                this.resumeRequested = false
-                await this.resume()
-            }
-        }
+        } while (
+            this.resumeRequested
+            && !this.disconnected
+        )
     }
 
     private handleEvent(event: LoggedEvent): void {
         if (
-            event.organizationId !== this.options.organizationId
+            this.disconnected
+            || event.organizationId !== this.options.organizationId
             || event.assetId !== this.options.assetId
             || event.role !== this.options.role
         )
@@ -537,7 +597,7 @@ export class DocumentAuthority {
 
         if (event.version > this.localVersion + 1) {
             this.pendingRemoteSteps.set(event.version, event)
-            void this.resume()
+            void this.requestResume()
 
             return
         }
@@ -545,7 +605,7 @@ export class DocumentAuthority {
         if (event.clientId === this.clientId)
             this.localVersion = event.version
         else if (!this.applyRemoteStep(event)) {
-            void this.resume()
+            void this.requestResume()
 
             return
         } else
@@ -735,6 +795,9 @@ export class DocumentAuthority {
                         }),
                     ),
                 })
+
+                if (this.disconnected)
+                    return
 
                 if (result.error)
                     throw new Error(result.error)

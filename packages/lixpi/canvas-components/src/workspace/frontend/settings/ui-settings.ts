@@ -9,7 +9,10 @@ import {
     type UiKitSidePanelPlacement,
     type UiKitSlidingDropdownStyles,
 } from '@lixpi/ui-kit'
-import { lixpiLightTheme } from '@lixpi/themes'
+import {
+    lixpiLightTheme,
+    type ApplicationTheme,
+} from '@lixpi/themes'
 import { createLixpiCanvasSettings } from './canvas-settings.ts'
 import {
     type LixpiCanvasSettings,
@@ -270,8 +273,8 @@ export type Settings = LixpiCanvasSettings & {
     contentDescriptor: ContentDescriptorSettings
 }
 
-export const createLixpiUiSettings = (): Settings => {
-    const components = structuredClone(lixpiLightTheme.components)
+export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme): Settings => {
+    const components = structuredClone(theme.components)
     const rightPanel = components.rightPanel.geometry
     const navigation = components.navigation.geometry
 
@@ -322,7 +325,7 @@ export const createLixpiUiSettings = (): Settings => {
         dropdown: {
             errorState: {
                 fallbackTitle: 'Error state',
-                textColor: lixpiLightTheme.feedback.danger,
+                textColor: theme.feedback.danger,
             },
             styles: components.dropdown.popover,
         },
@@ -373,18 +376,18 @@ export const createLixpiUiSettings = (): Settings => {
             },
             typography: {
                 // Screen-pixel size shared by regular messages and generation-trace content.
-                contentFontSize: Number.parseFloat(lixpiLightTheme.typography.panel.fontSize),
+                contentFontSize: Number.parseFloat(theme.typography.panel.fontSize),
                 // Screen-pixel typography for execution-trace tag pills in the sidebar timeline.
-                tagPillFontSize: Number.parseFloat(lixpiLightTheme.typography.control.fontSize),
-                tagPillFontWeight: lixpiLightTheme.typography.control.fontWeight,
+                tagPillFontSize: Number.parseFloat(theme.typography.control.fontSize),
+                tagPillFontWeight: theme.typography.control.fontWeight,
             },
             resizeHandle: {
                 ...components.sidePanel.resizeHandle,
                 styles: {
                     // Background gradient painted on the visible resize-handle line.
-                    gradient: lixpiLightTheme.panel.resizeHandle.gradient,
+                    gradient: theme.panel.resizeHandle.gradient,
                     // Visible line width; this does not change the draggable hit target.
-                    width: lixpiLightTheme.panel.resizeHandle.width,
+                    width: theme.panel.resizeHandle.width,
                 },
             },
             toggle: {
@@ -408,10 +411,10 @@ export const createLixpiUiSettings = (): Settings => {
                 enabled: true,
             },
             styles: {
-                backdropFill: lixpiLightTheme.panel.background,
-                backdropFillOpaque: lixpiLightTheme.panel.opaqueBackground,
-                toggleColor: lixpiLightTheme.panel.toggle.color,
-                toggleHoverColor: lixpiLightTheme.panel.toggle.hover,
+                backdropFill: theme.panel.background,
+                backdropFillOpaque: theme.panel.opaqueBackground,
+                toggleColor: theme.panel.toggle.color,
+                toggleHoverColor: theme.panel.toggle.hover,
             },
         },
 
@@ -434,10 +437,10 @@ export const createLixpiUiSettings = (): Settings => {
                 ...components.sidePanel.resizeHandle,
                 styles: {
                     // Background gradient painted on the visible resize-handle line.
-                    gradient: lixpiLightTheme.panel.resizeHandle.gradient,
+                    gradient: theme.panel.resizeHandle.gradient,
                     // Visible line width; this does not change the draggable hit target.
                     // The theme sets it to zero because the sidebar shadow marks the boundary.
-                    width: lixpiLightTheme.navigation.sidebar.resizeHandleWidth,
+                    width: theme.navigation.sidebar.resizeHandleWidth,
                 },
             },
             toggle: {
@@ -461,10 +464,10 @@ export const createLixpiUiSettings = (): Settings => {
                 enabled: true,
             },
             styles: {
-                backdropFill: lixpiLightTheme.navigation.sidebar.backdrop,
-                backdropFillOpaque: lixpiLightTheme.navigation.sidebar.opaqueBackdrop,
-                toggleColor: lixpiLightTheme.panel.toggle.color,
-                toggleHoverColor: lixpiLightTheme.panel.toggle.hover,
+                backdropFill: theme.navigation.sidebar.backdrop,
+                backdropFillOpaque: theme.navigation.sidebar.opaqueBackdrop,
+                toggleColor: theme.panel.toggle.color,
+                toggleHoverColor: theme.panel.toggle.hover,
             },
         },
 

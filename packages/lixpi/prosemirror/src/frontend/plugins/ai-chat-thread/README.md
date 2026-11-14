@@ -2,13 +2,15 @@
 
 `aiChatThreadPlugin` powers `assetConversation` editors in the panel and read-only `assetProvenance` projections. The thread node is a conversation log and streaming target whose `threadId` equals the conversation Asset ID. Composer UI is provided by `aiPromptInputPlugin`.
 
+All conversation surfaces use the same message NodeViews and `chat-thread.scss`: right-aligned user bubbles on the active theme's neutral surface and full-width assistant prose. Responses follow the preceding visible message by 12px; a new user message starts a turn after 24px. Hidden configuration records do not affect those gaps, and ordinary paragraphs have 12px between them. The outer surface owns available height and scrolling; message styles do not paint a separate panel or duplicate the composer. Configuration messages retain their text and identity in the authoritative document with `conversationRole: 'configuration'`. The shared response NodeView hides those audit records from the transcript without matching their text.
+
 ## Input Flow
 
 1. `aiPromptInputPlugin` owns the composer editor and model controls.
 2. `AiPromptInputController` injects an `aiUserMessage` into the target thread editor.
 3. The controller dispatches `USE_AI_CHAT_META` with `{ threadId, nodePos }`.
 4. `aiChatThreadPlugin` extracts the thread messages and calls `sendAiRequestHandler` with the post-placeholder ProseMirror doc JSON.
-5. The API authors response nodes into the authoritative ProseMirror step stream; the browser applies those steps through `ProseMirrorAuthorityService`.
+5. The API authors response nodes into the authoritative ProseMirror step stream; the browser applies those steps through `DocumentAuthority`.
 
 ## What It Does
 
@@ -25,7 +27,7 @@
 
 ## Runtime Wiring
 
-`ProseMirrorEditor` adds this plugin for `documentType: 'assetConversation'` and `documentType: 'assetProvenance'`. Provenance passes `readOnly: true` and never publishes client steps. Conversational workspace transcripts also mount read-only, but receive document changes through the existing authority subscription. The plugin accepts those authority transactions and blocks local document edits and legacy submission commands.
+`ProseMirrorEditor` adds this plugin for `documentType: 'assetConversation'` and `documentType: 'assetProvenance'`. Provenance passes `readOnly: true` and never publishes client steps. Conversational workspace transcripts also mount read-only, but receive document changes through the existing authority subscription. The plugin accepts those authority transactions and blocks local document edits and legacy submission commands. The mounted document authority exposes its current native version and a coalesced recovery operation. Recovery reactivates the server relay and applies missing native steps to the existing view, including when the API restarted while the browser's broker connection stayed open; it does not remount the editor or rebuild the transcript from command events.
 
 ```ts
 createAiChatThreadPlugin({
@@ -110,7 +112,7 @@ Sent user message bubble inserted by `AiPromptInputController`.
 - Attrs: `id`, `createdAt`, `referenceNodeIds`
 - DOM parse target: `div.ai-user-message`
 - NodeView shell comes from `createAiUserMessageShell()`.
-- Submitted-message bubbles set the same light media-reference and Capability-reference tokens as canvas branch markers, while the shared prompt-reference atom continues to own icon, typography, and spacing.
+- Submitted-message bubbles take their reference colors from the shared light-surface palette, whose roles follow the active theme. The shared prompt-reference atom owns icon, typography and spacing; dark canvas branch markers select their own palette from that same partial.
 - Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available; those tiles re-resolve the current canvas node on hover so late descriptor self-heal metadata appears without rebuilding the message.
 - Scaled projection surfaces can set `renderContext.contextPreview.inlinePopover` so hover cards stay inside the projection's DOM context; unscaled panels omit it and use the default viewport-clamped tooltip.
 
@@ -119,10 +121,11 @@ Sent user message bubble inserted by `AiPromptInputController`.
 Assistant response node created as the request is submitted, then filled by stream events.
 
 - Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
-- Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
+- Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`, `conversationRole`, nullable `failure`
 - Request metadata attrs: `generationRequestId`
 - Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting response stays compact without clipping the spinner.
-- The non-editable `.ai-response-capability-progress` mount hosts the shared sequence-deduplicating `CapabilityRunEvent` projection. Durable conversational operation summaries use that same progress timeline, targeted by their response-message ID and retained until the matching NodeView mounts. Output actions resolve current Asset access before opening the installed editor or media preview.
+- The non-editable `.ai-response-capability-progress` mount hosts the shared sequence-deduplicating `CapabilityRunEvent` projection. Durable conversational operation summaries use that same progress timeline, targeted by their response-message ID and retained until the matching NodeView mounts. The shared progress view starts with its activity disclosure closed and preserves the reader's choice through streamed updates. Output actions remain outside the disclosure and resolve current Asset access before opening the installed editor or media preview.
+- A typed `failure` renders a distinct error state with the existing exclamation icon and a visible, accessible `Response failed` label. Its user-facing explanation stays in the native ProseMirror content slot; diagnostic metadata stays in the attribute. Partial assistant output remains a separate preceding response. Failure nodes do not show receiving or entry animations, and historical errors are labeled groups rather than live alerts.
 - Response nodes in the chat thread do not render an assistant avatar.
 
 ### `aiReasoningSection`

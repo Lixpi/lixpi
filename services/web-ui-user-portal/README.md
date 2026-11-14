@@ -4,9 +4,15 @@ The [version registry](../../dev-tools/versions-registry/README.md) supplies Nod
 
 `web-ui-user-portal` is the account-management SPA served from `user-portal.<domain>`. It uses authentication and user state from `@lixpi/auth-client`, the shared browser runtime and routing from `@lixpi/web-client-service-factory`, and renders its UI with `@lixpi/ui-kit-gentelella`.
 
-The entry point calls `createUserPortal({ modules: [accountPortalModule], ... })` from `@lixpi/user-portal`. The account module contributes the authenticated `/` profile view. The shell combines module links in its Settings navigation.
+The entry point calls `createUserPortal({ modules: [accountPortalModule], ... })` from `@lixpi/user-portal`. The account module contributes the authenticated Profile (`/`) and Preferences (`/preferences`) views. The shell combines module links in its Settings navigation.
 
 Portal startup displays the shared 100px traveling-outline loading layer before authentication or the NATS connection completes. The profile page uses a lease on the same layer while user information is pending. Success or failure releases the relevant lease, while `isRedirecting()` keeps it visible until Auth0 navigation leaves the page. Application teardown disposes the renderer. The portal uses the Lixpi canvas presentation defaults, including the 600 ms lap, through the shared loading package.
+
+## Account preferences
+
+Appearance selects Lixpi Light, One Dark Pro Mariana, or Follow device. The device option follows the operating system's light or dark mode. Both the workspace and portal use the saved appearance. Open pages reread the account when they regain focus or reconnect to NATS.
+
+Agent behavior selects the workspace context scope and how a message enters a conversation with a run in progress. Each new message takes the sending account's saved preferences, including in an existing conversation. Accepted turns retain their context scope. Appearance and agent behavior save independently through the authenticated account API.
 
 ## Module contract
 
@@ -16,7 +22,7 @@ The module context provides the current-user store, authenticated token provider
 
 The account view and its styles live in `packages/lixpi/user-portal`. The public service composes only the account module. Additional build-time compositions supply their own explicit module arrays. Modules own and clean up subscriptions or resources created by their hooks and route views.
 
-The portal shell uses the UI-kit logo, a sage sidebar, system typography and charcoal actions. Its scoped theme styles Gentelella controls without changing unrelated applications. Profile presents the account name, email and membership date without internal user or organization identifiers. At phone widths, navigation moves above the page. The page fills the space beside the sidebar with consistent horizontal padding. Feature modules own their inner content widths and layout.
+The portal shell uses the UI-kit logo and shared application theme roles for its page, sidebar and controls. Profile presents the account name, email and membership date without internal user or organization identifiers. At phone widths, navigation moves above the page. The page fills the space beside the sidebar with consistent horizontal padding. Feature modules own their inner content widths and layout.
 
 Standalone views and dialogs can apply `user-portal-controls` to their root to use the same button and form-control styling outside the shell. Module-specific selectors stay with the module.
 

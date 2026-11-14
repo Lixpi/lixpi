@@ -2,6 +2,9 @@ import {
     type NodeSpec,
 } from 'prosemirror-model'
 import {
+    type ConversationFailure,
+} from '@lixpi/constants'
+import {
     getAiLineageEventLabel,
     normalizeAiLineageEventKind,
     normalizeAiLineageProjectionScope,
@@ -180,11 +183,38 @@ export const aiChatThreadNodeSpec = {
     },
 } as NodeSpec
 
+const parseConversationFailure = (value: string | null): ConversationFailure | null => {
+    if (!value)
+        return null
+
+    try {
+        const failure: unknown = JSON.parse(value)
+
+        if (
+            !failure
+            || typeof failure !== 'object'
+            || !('code' in failure)
+            || typeof failure.code !== 'string'
+            || !('message' in failure)
+            || typeof failure.message !== 'string'
+            || !('recoverable' in failure)
+            || typeof failure.recoverable !== 'boolean'
+        )
+            return null
+
+        return failure as ConversationFailure
+    } catch {
+        return null
+    }
+}
+
 export const aiResponseMessageNodeType = 'aiResponseMessage'
 
 export const aiResponseMessageNodeSpec = {
     attrs: {
         id: { default: '' },
+        conversationRole: { default: 'assistant' },
+        failure: { default: null },
         style: { default: '' },
         isInitialRenderAnimation: { default: false },
         isReceivingAnimation: { default: false },
@@ -207,6 +237,10 @@ export const aiResponseMessageNodeSpec = {
                     id: dom.getAttribute('id'),
                     style: dom.getAttribute('style'),
                     aiProvider: dom.getAttribute('data-ai-provider'),
+                    conversationRole: dom.getAttribute('data-conversation-role') || 'assistant',
+                    failure: parseConversationFailure(
+                        dom.getAttribute('data-conversation-failure'),
+                    ),
                     generationRequestId: dom.getAttribute('data-generation-request-id') || '',
                     reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
                     mediaRunId: dom.getAttribute('data-media-run-id') || '',
@@ -223,6 +257,8 @@ export const aiResponseMessageNodeSpec = {
             style: node.attrs.style,
             class: 'ai-response-message',
             'data-ai-provider': node.attrs.aiProvider,
+            'data-conversation-role': node.attrs.conversationRole,
+            'data-conversation-failure': node.attrs.failure ? JSON.stringify(node.attrs.failure) : null,
             'data-generation-request-id': node.attrs.generationRequestId,
             'data-reasoning-run-id': node.attrs.reasoningRunId,
             'data-media-run-id': node.attrs.mediaRunId,

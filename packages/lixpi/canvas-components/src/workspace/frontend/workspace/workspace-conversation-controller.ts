@@ -1,4 +1,5 @@
 import {
+    conversationModelPreferencesEqual,
     type ConversationAcknowledgement,
     type ConversationCreateRequest,
     type ConversationEvent,
@@ -52,8 +53,6 @@ export class WorkspaceConversationController {
     submitting = false
     selecting = false
     loadingEarlier = false
-    nextMessagePolicy?: ConversationSettings['midRunPolicy']
-    steeringPending = false
     readonly operations = new Map<string, ConversationOperationSummary>()
     pendingSubmission?: ConversationSubmitRequest
     private readonly listeners = new Set<() => void>()
@@ -260,16 +259,12 @@ export class WorkspaceConversationController {
 
         const generation = ++this.generation
 
-        if (!forSubmission)
-            this.nextMessagePolicy = undefined
-
         this.selecting = true
         this.subscription?.()
         this.subscription = undefined
         this.buffered.clear()
         this.operations.clear()
         this.snapshotNeeded = false
-        this.steeringPending = false
         this.replaying = undefined
         this.loadingEarlier = false
         this.error = ''
@@ -354,6 +349,10 @@ export class WorkspaceConversationController {
         this.emit()
     }
 
+    reportSubmissionError(error: Error): void {
+        this.fail(error)
+    }
+
     async submit(
         fragment: ConversationMessageNode,
         references: ConversationReference[],
@@ -384,11 +383,9 @@ export class WorkspaceConversationController {
                 throw new Error(this.error || 'A conversation could not be created.')
 
             const conversationAssetId = this.current.conversationAssetId
-            const running = this.current.run && !['completed', 'stopped', 'failed'].includes(this.current.run.state)
-            this.steeringPending = Boolean(running && (this.nextMessagePolicy ?? this.current.settings.midRunPolicy) === 'steer')
 
             // Preferences are settings only. They never pre-create generation work.
-            if (JSON.stringify(models) !== JSON.stringify(this.current.settings.models))
+            if (!conversationModelPreferencesEqual(models, this.current.settings.models))
                 await this.changeSettings({ models })
 
             const request: ConversationSubmitRequest = {
@@ -399,7 +396,6 @@ export class WorkspaceConversationController {
                 fragment: structuredClone(fragment),
                 references: structuredClone(references),
                 settingsRevision: this.current.settingsRevision,
-                ...(this.nextMessagePolicy ? { midRunPolicy: this.nextMessagePolicy } : {}),
                 ...(this.current.run?.state === 'waiting-input'
                     && this.current.run.interruptId
                     ? { interruptId: this.current.run.interruptId }
@@ -440,7 +436,6 @@ export class WorkspaceConversationController {
 
             this.pendingSubmission = undefined
             this.writePending(conversationAssetId)
-            this.nextMessagePolicy = undefined
 
             try {
                 await this.refresh(conversationAssetId)
@@ -706,13 +701,6 @@ export class WorkspaceConversationController {
 
                 if (
                     !this.current.run
-                    || event.payload.instructionRevision > this.current.run.instructionRevision
-                    || ['completed', 'stopped', 'failed'].includes(event.payload.state)
-                )
-                    this.steeringPending = false
-
-                if (
-                    !this.current.run
                     || event.payload.epoch >= this.current.run.epoch
                 ) {
                     this.current.run = event.payload
@@ -812,12 +800,6 @@ export class WorkspaceConversationController {
             if (overlaps)
                 snapshot.messageCursor = this.current.messageCursor
         }
-
-        if (
-            snapshot.run
-            && (!this.current?.run || snapshot.run.instructionRevision > this.current.run.instructionRevision || ['completed', 'stopped', 'failed'].includes(snapshot.run.state))
-        )
-            this.steeringPending = false
 
         this.current = snapshot
         this.mergeOperations(snapshot.operations ?? [])

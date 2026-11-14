@@ -38,7 +38,7 @@ The conversation controller subscribes before loading its snapshot, then replays
 
 Accepted creation and editing operations appear as action cards inside the assistant response. Each card shows the request, operation status, committed outputs and actionable errors. Pipeline trace expands operation identity, timing, state and output slots. Snapshots and older-message pages include bounded operation summaries, so cards survive reload and pagination. Output buttons recheck Asset access and open the corresponding preview or module editor; media previews also select an existing canvas node when present.
 
-Context mode and model preferences belong to the conversation and are captured for each accepted turn. Settings changes appear as small emphasized entries in the same authoritative conversation document. Explicit mode uses attached sources and authorized conversation outputs; discovery and mixed modes also permit bounded workspace discovery. Changing active context mode rebuilds model context at the next safe boundary while preserving completed work and the visible transcript. Mid-run controls offer Steer, Stop first and Queue, with a one-message override. Stop pauses queued work until Resume queue. A run waiting for necessary input shows Waiting for your answer, and the next message carries its interrupt identity.
+The user portal's Preferences page sets context mode and whether a message should steer a run in progress, stop it and start a new run, or wait in the queue. Each accepted message captures the sending account's saved agent behavior and the conversation's model preferences. Accounts without saved agent behavior use the conversation's stored settings. The chat panel shows the current run and queue. Stop pauses queued work until Resume queue. A run waiting for necessary input shows Waiting for your answer, and the next message carries its interrupt identity.
 
 A necessary-input answer resumes the saved tool result under the original action scope and budget. The server accepts one answer from the active turn's author, and repeated submission of that same message remains idempotent. Completed work is retained across the question and reconnect. A terminal failure stores an assistant explanation and a structured run error; both remain available after reload.
 
@@ -108,6 +108,8 @@ The browser's `DocumentAuthority` from `@lixpi/prosemirror` does this through th
 7. releases it on disconnect.
 
 A mount without the lease is read-only and receives holder/expiry information. There is no force takeover; another workspace waits for the 30-second expiry.
+
+Receive-only conversation views do not acquire edit leases. Their mounted authority exposes its native version and coalesced recovery: it establishes an initially unavailable subscription, reopens the process-local API relay, and replays missing steps into the same view. An API restart can remove that relay without disconnecting the browser from NATS. The conversation panel therefore reactivates it on run identity, epoch and state changes. Its existing recovery tick retries failed activation and checks native version gaps or stalled progress during an active run, without issuing a request for every text delta. Recovery results arriving after disposal are ignored.
 
 ## Delegated conversations
 

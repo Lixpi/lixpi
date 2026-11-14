@@ -57,7 +57,7 @@ describe('theme definitions', () => {
 // =============================================================================
 
 describe('theme registry', () => {
-    it('publishes one TypeScript entrypoint and labels every generated Sass export', () => {
+    it('keeps the browser binding outside the registry and labels every generated Sass export', () => {
         const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as { exports: Record<string, string | {
             types: string
             sass: string
@@ -66,7 +66,10 @@ describe('theme registry', () => {
         }> }
         const entrypoints = Object.entries(manifest.exports).map(([name, target]) => [name, typeof target === 'string' ? target : target.default])
         const typescriptExports = entrypoints.filter(([, path]) => path.endsWith('.ts'))
-        expect(typescriptExports).toEqual([['.', './src/index.ts']])
+        expect(typescriptExports).toEqual([
+            ['.', './src/index.ts'],
+            ['./browser', './src/application-theme-binding.ts'],
+        ])
         const generatedExports = entrypoints.filter(([, path]) => path.startsWith('./dist/scss/'))
         expect(generatedExports.length).toBeGreaterThan(0)
         expect(generatedExports.every(([name]) => name.startsWith('./dist/scss'))).toBe(true)

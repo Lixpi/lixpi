@@ -137,6 +137,15 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
         return this.destroyed ? undefined : this.editor.view.state.doc.toJSON()
     }
 
+    readDocumentVersion(): number | undefined {
+        return this.destroyed ? undefined : this.editor.authority?.version
+    }
+
+    async recoverAuthority(): Promise<void> {
+        if (!this.destroyed)
+            await this.editor.authority?.recover()
+    }
+
     submitPersisted(): void {
         if (
             this.destroyed

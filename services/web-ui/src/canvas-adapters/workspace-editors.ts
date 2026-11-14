@@ -51,6 +51,7 @@ export const createWorkspaceCanvasEditors = ({
             createPromptComposerEditorPort({
                 environment,
                 submitOnEnter: integration.submitOnEnter,
+                requireReasoningModel: integration.requireReasoningModel,
                 controlFactories: {
                     ...createDefaultPromptControlFactories(),
                     mountMediaModeSwitch: integration.mountMediaModeSwitch,

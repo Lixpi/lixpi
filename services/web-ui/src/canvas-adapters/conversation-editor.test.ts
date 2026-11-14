@@ -46,9 +46,14 @@ const setup = (version = 7, readOnly = false) => {
         dom: document.createElement('div'),
     } as unknown as EditorView
     const destroy = vi.fn()
+    const authority = {
+        version,
+        recover: vi.fn(async () => {}),
+    }
     mocks.mount.mockReturnValue({
         view,
         destroy,
+        authority,
     })
     const unregister = vi.fn()
     const register = vi.fn(() => unregister)
@@ -77,6 +82,7 @@ const setup = (version = 7, readOnly = false) => {
     return {
         editor,
         view,
+        authority,
         dispatch,
         destroy,
         register,
@@ -88,6 +94,19 @@ const setup = (version = 7, readOnly = false) => {
 beforeEach(() => vi.resetAllMocks())
 
 describe('canvas conversation editor adapter', () => {
+    it('forwards recovery to the mounted document authority and stops after disposal', async () => {
+        const fixture = setup(7, true)
+        expect(fixture.editor.readDocumentVersion?.()).toBe(7)
+        await fixture.editor.recoverAuthority?.()
+        expect(fixture.authority.recover).toHaveBeenCalledOnce()
+        expect(mocks.mount).toHaveBeenCalledOnce()
+        expect(fixture.dispatch).not.toHaveBeenCalled()
+        fixture.editor.destroy()
+        await fixture.editor.recoverAuthority?.()
+        expect(fixture.editor.readDocumentVersion?.()).toBeUndefined()
+        expect(fixture.authority.recover).toHaveBeenCalledOnce()
+    })
+
     it('mounts an agent transcript read-only and cannot submit through the legacy editor command', () => {
         const fixture = setup(7, true)
         expect(mocks.mount.mock.calls[0][0].readOnly).toBe(true)

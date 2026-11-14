@@ -1,7 +1,8 @@
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
-
+import { chevronDownIcon } from '@lixpi/ui-kit/svg'
+import { BubbleMenu } from '@lixpi/ui-kit/components/bubble-menu'
 import {
-    type ConversationSettings,
+    type ConversationRunState,
 } from '@lixpi/constants'
 import {
     type WorkspaceConversationController,
@@ -13,14 +14,11 @@ import {
     type WorkspaceConversationOutputPorts,
 } from './canvas-conversation-run.ts'
 
-// Opens a conversation in another workspace, such as the parent conversation
-// whose agent started this one.
 export type OpenWorkspaceConversation = (
     workspaceId: string,
     conversationAssetId: string,
 ) => void
 
-// How a delegated conversation names the agent that started it.
 export const delegatedOriginLabel = (workspaceName: string): string => `Started by ${workspaceName || 'parent workspace'} agent`
 
 export type WorkspaceConversationTranscriptPorts = {
@@ -28,30 +26,69 @@ export type WorkspaceConversationTranscriptPorts = {
     mount: (request: CanvasConversationEditorMount) => CanvasConversationEditor
 }
 
+const runLabels: Record<ConversationRunState, string> = {
+    queued: 'Waiting to start',
+    running: 'Working',
+    'waiting-tools': 'Working with tools',
+    'waiting-input': 'Waiting for your answer',
+    stopping: 'Stopping',
+    stopped: 'Stopped',
+    completed: '',
+    failed: 'The response could not complete.',
+    'needs-reauthentication': 'Sign in again to continue',
+}
+
+const conversationFailureLabel = (
+    message: string,
+    code?: string,
+): string => {
+    if (
+        code === 'AGENT_MODEL_CALL_NOT_AUTHORIZED'
+        || message.includes('AGENT_MODEL_CALL_NOT_AUTHORIZED')
+    )
+        return 'The response could not start. Check your account settings.'
+
+    if (/^[A-Z][A-Z0-9_]{3,}$/u.test(
+        message.trim(),
+    ))
+        return 'The response could not complete.'
+
+    return message
+}
+
 export class WorkspaceConversationPanel {
     readonly element: HTMLElement
+    private readonly footer: HTMLElement
+    private readonly historyTrigger: HTMLButtonElement
+    private readonly historyMenu: BubbleMenu
     private readonly picker: HTMLSelectElement
     private readonly title: HTMLInputElement
+    private readonly rename: HTMLElement
+    private readonly create: HTMLButtonElement
+    private readonly collapse: HTMLButtonElement
     private readonly messages: HTMLElement
     private readonly state: HTMLElement
-    private readonly context: HTMLSelectElement
-    private readonly policy: HTMLSelectElement
-    private readonly override: HTMLSelectElement
     private readonly newMessages: HTMLButtonElement
     private readonly queue: HTMLElement
     private readonly stop: HTMLButtonElement
     private readonly origin: HTMLElement
     private readonly unsubscribe: () => void
     private lastSelected = ''
+    private pickerSignature = ''
     private readonly timer: number
     private readonly listTimer: number
     private renderedConversation = ''
     private transcript?: CanvasConversationEditor
     private transcriptLoading = false
     private transcriptGeneration = 0
+    private authorityRecovery?: Promise<void>
+    private authorityRetry = false
+    private authorityRunKey?: string
+    private observedAuthorityVersion?: number
     private transcriptError = ''
     private destroyed = false
     private followBottom = true
+    private collapsedScroll?: number
     private readonly html: ReturnType<typeof createDocumentHtml>
 
     constructor(
@@ -71,48 +108,62 @@ export class WorkspaceConversationPanel {
         ` as HTMLElement
         this.picker = this.html`
             <select
-                aria-label="Conversation"
-                onchange=${() => void controller.select(this.picker.value)}
+                class="workspace-conversation-picker"
+                aria-label="Conversation history"
+                onchange=${() => {
+                    this.historyMenu.hide()
+                    void controller.select(this.picker.value)
+                }}
             ></select>
         ` as HTMLSelectElement
         this.title = this.html`
             <input
+                class="workspace-conversation-title"
                 type="text"
                 aria-label="Conversation title"
                 maxlength="200"
-                onchange=${() => void controller.rename(this.title.value)}
+                onchange=${() => {
+                    void controller.rename(this.title.value)
+                    this.historyMenu.hide()
+                }}
+                onkeydown=${(event: KeyboardEvent) => {
+                    if (event.key === 'Escape') {
+                        this.title.value = controller.current?.title ?? ''
+                        this.historyMenu.hide()
+                        this.historyTrigger.focus()
+                    }
+
+                    if (event.key === 'Enter') {
+                        event.preventDefault()
+                        this.title.blur()
+                    }
+
+                    event.stopPropagation()
+                }}
             />
         ` as HTMLInputElement
+        this.rename = this.html`
+            <label class="workspace-conversation-menu-field">
+                <span>Conversation name</span>
+                ${this.title}
+            </label>
+        ` as HTMLElement
         this.messages = this.html`
             <div
                 class="workspace-conversation-messages"
                 role="log"
                 aria-live="off"
                 aria-label="Conversation messages"
+                onwheel=${(event: WheelEvent) => event.stopPropagation()}
             ></div>
         ` as HTMLElement
         this.state = this.html`
             <div
                 class="workspace-conversation-state"
                 role="status"
+                hidden
             ></div>
         ` as HTMLElement
-        this.context = this.select(
-            'Context mode',
-            ['explicit', 'discovery', 'mixed'],
-            value => this.settings({ contextMode: value as ConversationSettings['contextMode'] }),
-        )
-        this.policy = this.select(
-            'Messages during a run',
-            ['steer', 'stop-first', 'queue'],
-            value => this.settings({ midRunPolicy: value as ConversationSettings['midRunPolicy'] }),
-        )
-        this.override = this.select(
-            'Next message policy',
-            ['conversation-default', 'steer', 'stop-first', 'queue'],
-            value =>
-                void (controller.nextMessagePolicy = value === 'conversation-default' ? undefined : (value as ConversationSettings['midRunPolicy'])),
-        )
         this.newMessages = this.html`
             <button
                 type="button"
@@ -125,47 +176,114 @@ export class WorkspaceConversationPanel {
                 }}
             >New messages</button>
         ` as HTMLButtonElement
-        const collapse = this.html`
+        this.collapse = this.html`
             <button
                 type="button"
+                class="workspace-conversation-menu-action"
+                aria-label="Collapse conversation"
                 aria-expanded="true"
                 onclick=${() => {
                     const collapsed = this.element.dataset.collapsed !== 'true'
+
+                    if (collapsed)
+                        this.collapsedScroll = this.messages.scrollTop
+
                     this.element.dataset.collapsed = String(collapsed)
-                    collapse.textContent = collapsed ? 'Expand' : 'Collapse'
-                    collapse.setAttribute(
-                        'aria-expanded',
-                        String(!collapsed),
-                    )
+                    this.collapse.textContent = collapsed ? 'Show conversation' : 'Hide conversation'
+                    this.collapse.ariaLabel = collapsed ? 'Expand conversation' : 'Collapse conversation'
+                    this.collapse.ariaExpanded = String(!collapsed)
+                    this.historyMenu.hide()
+                    this.renderState()
+
+                    if (!collapsed) {
+                        this.messages.scrollTop = this.followBottom ? this.messages.scrollHeight : (this.collapsedScroll ?? this.messages.scrollTop)
+                        this.collapsedScroll = undefined
+                    }
                 }}
-            >Collapse</button>
+            >Hide conversation</button>
+        ` as HTMLButtonElement
+        this.create = this.html`
+            <button
+                type="button"
+                class="workspace-conversation-menu-action"
+                aria-label="New conversation"
+                onclick=${() => {
+                    this.historyMenu.hide()
+                    void controller.create()
+                }}
+            >New conversation</button>
         ` as HTMLButtonElement
         this.queue = this.html`<div class="workspace-conversation-queue"></div>` as HTMLElement
         this.stop = this.html`
             <button
                 type="button"
+                class="workspace-conversation-text-action"
+                aria-label="Stop response"
+                hidden
                 onclick=${() => void controller.stop()}
             >Stop</button>
         ` as HTMLButtonElement
+        this.historyTrigger = this.html`
+            <button
+                type="button"
+                class="workspace-conversation-history"
+                aria-label="Conversation history and actions"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                onclick=${() => this.toggleHistory()}
+            >
+                <span>History</span>
+                <span
+                    class="workspace-conversation-history-icon"
+                    aria-hidden="true"
+                    innerHTML=${chevronDownIcon}
+                ></span>
+            </button>
+        ` as HTMLButtonElement
+        this.footer = this.html`
+            <div class="workspace-conversation-footer">
+                ${this.historyTrigger}${this.state}${this.stop}
+            </div>
+        ` as HTMLElement
         this.element = this.html`
             <section
                 class="workspace-conversation-panel nopan"
-                aria-label="Workspace conversation"
+                aria-label="Conversation with Lixpi"
+                onpointerdown=${(event: PointerEvent) => event.stopPropagation()}
             >
-                <header>
-                    ${this.picker}${this.title}
-                    <button
-                        type="button"
-                        onclick=${() => void controller.create()}
-                    >New conversation</button>
-                    ${this.stop}${collapse}
-                </header>
-                ${this.origin}
-                ${this.messages}${this.newMessages}
-                <div class="workspace-conversation-settings">${this.context}${this.policy}${this.override}</div>
-                ${this.queue}${this.state}
+                ${this.origin}${this.messages}${this.newMessages}${this.queue}${this.footer}
             </section>
         ` as HTMLElement
+        const menuContent = this.html`
+            <div class="workspace-conversation-menu-content">
+                <label class="workspace-conversation-menu-field">
+                    <span>Conversation</span>
+                    ${this.picker}
+                </label>
+                ${this.rename}
+                <div class="workspace-conversation-menu-actions">
+                    ${this.create}${this.collapse}
+                </div>
+            </div>
+        ` as HTMLElement
+        this.historyMenu = new BubbleMenu({
+            parentEl: this.element,
+            label: 'Conversation history and actions',
+            items: [{
+                element: menuContent,
+                context: ['conversation'],
+            }],
+            onShow: () => void (this.historyTrigger.ariaExpanded = 'true'),
+            onHide: () => void (this.historyTrigger.ariaExpanded = 'false'),
+        })
+        this.historyMenu.element.classList.add('workspace-conversation-menu', 'nopan')
+        this.historyMenu.element.role = 'dialog'
+        document.addEventListener(
+            'pointerdown',
+            this.closeHistoryOutside,
+            true,
+        )
+        document.addEventListener('keydown', this.closeHistoryOnEscape)
         this.unsubscribe = controller.onChange(() => {
             this.render()
             const id = controller.current?.conversationAssetId ?? ''
@@ -179,9 +297,15 @@ export class WorkspaceConversationPanel {
                 onSelected(id)
             }
         })
-        this.timer = document.defaultView!.setInterval(() => void controller.recover(), 2500)
+        this.timer = document.defaultView!.setInterval(() => {
+            void controller.recover()
+            this.recoverTranscript(true)
+        }, 2500)
         this.listTimer = document.defaultView!.setInterval(() => void controller.refreshList(), 10000)
         this.messages.addEventListener('scroll', () => {
+            if (this.element.dataset.collapsed === 'true')
+                return
+
             if (this.renderedConversation)
                 controller.saveScroll(this.renderedConversation, this.messages.scrollTop)
 
@@ -198,8 +322,15 @@ export class WorkspaceConversationPanel {
         this.element.ownerDocument.defaultView?.clearInterval(this.listTimer)
 
         if (this.renderedConversation)
-            this.controller.saveScroll(this.renderedConversation, this.messages.scrollTop)
+            this.controller.saveScroll(this.renderedConversation, this.collapsedScroll ?? this.messages.scrollTop)
 
+        this.element.ownerDocument.removeEventListener(
+            'pointerdown',
+            this.closeHistoryOutside,
+            true,
+        )
+        this.element.ownerDocument.removeEventListener('keydown', this.closeHistoryOnEscape)
+        this.historyMenu.destroy()
         this.unsubscribe()
         this.destroyed = true
         this.transcriptGeneration += 1
@@ -208,35 +339,41 @@ export class WorkspaceConversationPanel {
         this.element.remove()
     }
 
-    private select(
-        label: string,
-        values: string[],
-        change: (value: string) => void,
-    ): HTMLSelectElement {
-        const options = values.map(value => this.html`<option value=${value}>${value}</option>`)
+    private toggleHistory(): void {
+        if (this.historyMenu.isVisible) {
+            this.historyMenu.hide()
 
-        return this.html`
-            <select
-                aria-label=${label}
-                onchange=${(event: Event) => change((event.target as HTMLSelectElement).value)}
-            >${options}</select>
-        ` as HTMLSelectElement
-    }
-
-    private settings(patch: Partial<ConversationSettings>): void {
-        void this.updateSettings(patch)
-    }
-
-    private async updateSettings(patch: Partial<ConversationSettings>): Promise<void> {
-        try {
-            await this.controller.changeSettings(patch)
-        } catch (error) {
-            this.state.textContent = error instanceof Error ? error.message : 'Settings could not be saved.'
+            return
         }
+
+        this.historyMenu.show(
+            'conversation',
+            {
+                targetRect: this.historyTrigger.getBoundingClientRect(),
+                placement: 'above',
+                clampToParent: false,
+                animateOnShow: false,
+            },
+        )
     }
 
-    // A conversation another workspace's agent started names that agent and,
-    // when the host can open it, links back to the parent conversation.
+    private closeHistoryOutside = (event: PointerEvent): void => {
+        if (!this.element.contains(event.target as Node))
+            this.historyMenu.hide()
+    }
+
+    private closeHistoryOnEscape = (event: KeyboardEvent): void => {
+        if (
+            event.key !== 'Escape'
+            || !this.historyMenu.isVisible
+        )
+            return
+
+        event.preventDefault()
+        this.historyMenu.hide()
+        this.historyTrigger.focus()
+    }
+
     private renderOrigin(delegatedBy: NonNullable<WorkspaceConversationController['current']>['delegatedBy']): void {
         this.origin.hidden = !delegatedBy
 
@@ -261,92 +398,96 @@ export class WorkspaceConversationPanel {
         )
     }
 
-    private render(): void {
-        const current = this.controller.current
-        const options = this.controller.conversations.map(item => {
+    private renderPicker(): void {
+        const conversations = this.controller.conversations.map(item => {
             const active = item.run && !['completed', 'stopped', 'failed'].includes(item.run.state)
             const origin = item.delegatedBy ? ` · ${delegatedOriginLabel(item.delegatedBy.workspaceName)}` : ''
-            const label = `${item.title || 'Conversation'}${origin}${active ? ` · ${item.run!.state}` : ''}${this.controller.isUnread(item) ? ' · Unread' : ''}`
+            const label = `${item.title || 'Conversation'}${origin}${active ? ` · ${runLabels[item.run!.state]}` : ''}${this.controller.isUnread(item) ? ' · Unread' : ''}`
 
-            return this.html`<option value=${item.conversationAssetId}>${label}</option>` as HTMLOptionElement
+            return {
+                id: item.conversationAssetId,
+                label,
+            }
         })
-        this.picker.replaceChildren(...options)
+        const signature = JSON.stringify(conversations)
 
-        if (!this.controller.conversations.length)
-            this.picker.append(this.html`<option value="">New conversation</option>` as HTMLOptionElement)
+        if (signature !== this.pickerSignature) {
+            this.pickerSignature = signature
+            this.picker.replaceChildren(...conversations.map(item => this.html`<option value=${item.id}>${item.label}</option>` as HTMLOptionElement))
 
-        this.picker.value = current?.conversationAssetId ?? ''
+            if (!conversations.length)
+                this.picker.append(this.html`<option value="">New conversation</option>` as HTMLOptionElement)
+        }
+
+        this.picker.value = this.controller.current?.conversationAssetId ?? ''
+        this.picker.disabled = this.controller.submitting || this.controller.selecting
+    }
+
+    private render(): void {
+        const current = this.controller.current
+        const hasMessages = Boolean(current?.messages.length || current?.documentRevision)
+        const hasHistory = this.controller.conversations.some(item => item.messages.length || item.documentRevision)
+        const activeRun = Boolean(current?.run && !['completed', 'stopped', 'failed'].includes(current.run.state))
+        this.renderPicker()
         this.renderOrigin(current?.delegatedBy)
 
         if (this.element.ownerDocument.activeElement !== this.title)
             this.title.value = current?.title ?? ''
 
-        this.title.hidden = !this.controller.ports.rename
-        this.title.disabled = !current
-            || !current.documentRevision
-            || this.controller.selecting
-        this.picker.disabled = this.controller.submitting || this.controller.selecting
+        this.rename.hidden = !this.controller.ports.rename || !hasMessages
+        this.title.disabled = !current?.documentRevision || this.controller.selecting
+        this.create.disabled = this.controller.submitting || this.controller.selecting
+        this.create.hidden = !hasMessages
+        this.collapse.hidden = !hasMessages
+        this.historyTrigger.hidden = !hasMessages && !hasHistory
+        this.messages.hidden = !hasMessages
+        this.element.dataset.empty = String(!hasMessages)
         const changedConversation = this.renderedConversation !== (current?.conversationAssetId ?? '')
 
         if (changedConversation) {
             if (this.renderedConversation)
-                this.controller.saveScroll(this.renderedConversation, this.messages.scrollTop)
+                this.controller.saveScroll(this.renderedConversation, this.collapsedScroll ?? this.messages.scrollTop)
 
             this.renderedConversation = current?.conversationAssetId ?? ''
             this.transcriptGeneration += 1
             this.transcript?.destroy()
             this.transcript = undefined
             this.transcriptLoading = false
+            this.authorityRecovery = undefined
+            this.authorityRetry = false
+            this.authorityRunKey = undefined
+            this.observedAuthorityVersion = undefined
             this.transcriptError = ''
             this.messages.replaceChildren()
             this.followBottom = true
+            this.collapsedScroll = undefined
             this.newMessages.hidden = true
+            this.historyMenu.hide()
         }
 
-        if (
-            current?.messages.length
-            || current?.documentRevision
-        )
+        if (hasMessages)
             void this.mountTranscript()
-        else if (!this.messages.firstChild)
-            this.messages.append(
-                this.html`<p class="workspace-conversation-empty">Discuss a plan, inspect an Asset, or ask for an edit.</p>` as HTMLElement,
-            )
 
         this.transcript?.renderOperations?.([...this.controller.operations.values()], this.outputPorts)
-
-        this.state.textContent = this.transcriptError
-            || this.controller.error
-            || current?.run?.error?.message
-            || (this.controller.selecting
-                ? 'Loading conversation…'
-                : this.controller.submitting
-                    ? 'Sending…'
-                    : this.controller.steeringPending
-                        ? 'Steering pending'
-                        : current?.run
-                            ? current.run.state === 'waiting-input'
-                                ? 'Waiting for your answer'
-                                : current.run.state
-                            : 'Ready')
-        this.context.value = current?.settings.contextMode ?? 'explicit'
-        this.policy.value = current?.settings.midRunPolicy ?? 'steer'
-        this.override.value = this.controller.nextMessagePolicy ?? 'conversation-default'
-        this.override.disabled = this.controller.submitting || this.controller.selecting
-        this.context.disabled = !current
-            || this.controller.submitting
-            || this.controller.selecting
-        this.policy.disabled = !current
-            || this.controller.submitting
-            || this.controller.selecting
-        this.stop.disabled = !current?.run || ['completed', 'stopped', 'failed'].includes(current.run.state)
+        this.recoverTranscript()
+        this.renderState()
+        this.footer.hidden = !hasMessages
+            && !hasHistory
+            && !activeRun
+            && this.state.hidden
+        this.stop.hidden = !activeRun
+        this.stop.disabled = !activeRun || current?.run?.state === 'stopping'
         this.queue.replaceChildren(
             ...(current?.queuedTurns ?? []).filter(turn => !turn.interruptId).map(
                 turn => this.html`
-                    <div>Queued message <button
+                    <div class="workspace-conversation-queued-message">
+                        <span>Message queued</span>
+                        <button
                             type="button"
+                            class="workspace-conversation-text-action"
                             onclick=${() => void this.controller.queue('cancel-message', [turn.turnId])}
-                        >Cancel</button></div>
+                        >Cancel</button>
+                    </div>
                 ` as HTMLElement,
             ),
         )
@@ -356,10 +497,54 @@ export class WorkspaceConversationPanel {
                 this.html`
                     <button
                         type="button"
+                        class="workspace-conversation-text-action"
                         onclick=${() => void this.controller.queue('resume')}
-                    >Resume queue</button>
+                    >Resume queued messages</button>
                 ` as HTMLElement,
             )
+
+        this.element.hidden = !hasMessages
+            && !hasHistory
+            && this.state.hidden
+            && !this.queue.childElementCount
+    }
+
+    private renderState(): void {
+        const current = this.controller.current
+        const projectedFailureIds = new Set(
+            this.element.dataset.collapsed !== 'true'
+                && current?.run?.state === 'failed'
+                ? Array.from(
+                    this.messages.querySelectorAll<HTMLElement>('[data-message-id][data-failure-code]'),
+                    element => element.dataset.messageId,
+                )
+                : [],
+        )
+        const runFailureVisible = current?.messages.some(
+            message =>
+                Boolean(message.failure)
+                && message.turnId === current.run?.turnId
+                && projectedFailureIds.has(message.messageId),
+        )
+        const error = this.transcriptError
+            || this.controller.error
+            || (!runFailureVisible ? current?.run?.error?.message : '')
+        const errorLabel = error
+            ? conversationFailureLabel(error, this.transcriptError
+                || this.controller.error
+                ? undefined
+                : current?.run?.error?.code)
+            : ''
+        this.state.textContent = this.controller.selecting
+            ? 'Loading conversation...'
+            : errorLabel || (this.controller.submitting
+                ? 'Sending...'
+                : current?.run
+                    && !runFailureVisible
+                    ? runLabels[current.run.state]
+                    : '')
+        this.state.hidden = !this.state.textContent
+        this.state.dataset.error = String(!this.controller.selecting && Boolean(error || current?.run?.state === 'failed'))
     }
 
     private async mountTranscript(): Promise<void> {
@@ -388,7 +573,7 @@ export class WorkspaceConversationPanel {
                 return
 
             this.messages.replaceChildren()
-            const mount = this.html`<div class="ai-chat-thread-node-editor"></div>` as HTMLElement
+            const mount = this.html`<div class="workspace-conversation-transcript"></div>` as HTMLElement
             this.messages.append(mount)
             const onStreaming = (): void => {
                 if (
@@ -398,6 +583,7 @@ export class WorkspaceConversationPanel {
                     return
 
                 this.transcript?.renderOperations?.([...this.controller.operations.values()], this.outputPorts)
+                this.renderState()
                 this.updateScroll()
             }
             this.transcript = this.transcriptPorts.mount({
@@ -413,11 +599,16 @@ export class WorkspaceConversationPanel {
                 onSegment: () => {},
             })
             this.transcript.activate()
+            this.observedAuthorityVersion = this.transcript.readDocumentVersion?.()
+            this.recoverTranscript()
             this.transcriptError = ''
+            this.renderState()
             const saved = this.controller.readScroll(conversationAssetId)
+            const collapsed = this.element.dataset.collapsed === 'true'
+            this.collapsedScroll = collapsed ? saved : undefined
             this.messages.scrollTop = saved ?? this.messages.scrollHeight
             this.followBottom = saved === undefined
-                || this.messages.scrollHeight - this.messages.scrollTop - this.messages.clientHeight < 80
+                || (!collapsed && this.messages.scrollHeight - this.messages.scrollTop - this.messages.clientHeight < 80)
             onStreaming()
         } catch (error) {
             if (
@@ -425,7 +616,7 @@ export class WorkspaceConversationPanel {
                 && generation === this.transcriptGeneration
             ) {
                 this.transcriptError = error instanceof Error ? error.message : 'Conversation could not be loaded.'
-                this.state.textContent = this.transcriptError
+                this.renderState()
             }
         } finally {
             if (generation === this.transcriptGeneration)
@@ -433,10 +624,80 @@ export class WorkspaceConversationPanel {
         }
     }
 
+    private recoverTranscript(onRecoveryTick = false): void {
+        const editor = this.transcript
+        const current = this.controller.current
+
+        if (
+            this.destroyed
+            || !editor?.recoverAuthority
+            || !current
+            || this.authorityRecovery
+        )
+            return
+
+        const version = editor.readDocumentVersion?.()
+        const run = current.run
+        const runKey = run ? `${run.runId}:${run.epoch}:${run.state}` : ''
+        const active = run && !['completed', 'stopped', 'failed'].includes(run.state)
+        const stalled = onRecoveryTick
+            && active
+            && version !== undefined
+            && version === this.observedAuthorityVersion
+
+        if (onRecoveryTick)
+            this.observedAuthorityVersion = version
+
+        if (
+            this.authorityRetry
+            && !onRecoveryTick
+        )
+            return
+
+        const behind = version !== undefined && version < current.documentRevision
+
+        if (
+            this.authorityRunKey === runKey
+            && !behind
+            && !stalled
+            && !(onRecoveryTick && this.authorityRetry)
+        )
+            return
+
+        const generation = this.transcriptGeneration
+        this.authorityRunKey = runKey
+        this.authorityRetry = false
+        this.authorityRecovery = this.waitForAuthorityRecovery(
+            editor.recoverAuthority(),
+            generation,
+        )
+    }
+
+    private async waitForAuthorityRecovery(
+        recovery: Promise<void>,
+        generation: number,
+    ): Promise<void> {
+        try {
+            await recovery
+        } catch {
+            if (
+                !this.destroyed
+                && generation === this.transcriptGeneration
+            )
+                this.authorityRetry = true
+        } finally {
+            if (
+                !this.destroyed
+                && generation === this.transcriptGeneration
+            )
+                this.authorityRecovery = undefined
+        }
+    }
+
     private updateScroll(): void {
-        if (this.followBottom)
-            this.messages.scrollTop = this.messages.scrollHeight
-        else
+        if (!this.followBottom)
             this.newMessages.hidden = false
+        else if (this.element.dataset.collapsed !== 'true')
+            this.messages.scrollTop = this.messages.scrollHeight
     }
 }

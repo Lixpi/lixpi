@@ -69,6 +69,37 @@ describe('current user service', () => {
         )
     })
 
+    it('ignores a refresh that overlaps a newer settings write or store reset', async () => {
+        const store = createUserStore()
+        store.setDataValues({ userId: 'user-1' })
+        const reply = Promise.withResolvers<unknown>()
+        const service = createUserService({
+            getToken: async () => 'token',
+            store,
+            requestClient: {
+                request: async subject => subject === NATS_SUBJECTS.USER_SUBJECTS.GET_USER
+                    ? await reply.promise
+                    : { appearance: 'one-dark-pro-mariana' },
+            },
+        })
+        const refreshing = service.refreshUser()
+        await service.updatePreferences({ appearance: 'one-dark-pro-mariana' })
+        reply.resolve({
+            userId: 'user-1',
+            preferences: { appearance: 'lixpi-light' },
+        })
+        await refreshing
+
+        expect(store.getData('preferences')).toEqual({ appearance: 'one-dark-pro-mariana' })
+
+        const afterLogout = service.refreshUser()
+        store.resetStore()
+        await afterLogout
+
+        expect(store.getData('userId')).toBe('')
+        expect(store.getData('preferences')).toBeUndefined()
+    })
+
     it('discards a user reply received after session rejection', async () => {
         const store = createUserStore()
         let active = true

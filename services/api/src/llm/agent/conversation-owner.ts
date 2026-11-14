@@ -772,6 +772,7 @@ export class ConversationOwner {
         message: ConversationMessage,
         text: string,
         offset: number,
+        continuationEpoch?: number,
     ): Promise<void> {
         await this.event(
             'message.delta',
@@ -780,13 +781,24 @@ export class ConversationOwner {
                 text,
                 offset,
             },
-            () => [
-                this.repository.replace(
+            meta => {
+                if (continuationEpoch !== undefined) {
+                    this.abort.signal.throwIfAborted()
+
+                    if (
+                        meta.run?.continuationEpoch !== continuationEpoch
+                        || meta.run.turnId !== message.turnId
+                        || !['running', 'waiting-tools'].includes(meta.run.state)
+                    )
+                        throw new Error('CONVERSATION_CONTINUATION_STOPPED')
+                }
+
+                return [this.repository.replace(
                     this.partition,
                     `MESSAGE#${message.messageId}`,
                     message,
-                ),
-            ],
+                )]
+            },
         )
     }
 

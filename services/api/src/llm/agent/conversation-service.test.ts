@@ -333,6 +333,46 @@ describe('durable conversation acceptance', () => {
         expect(meta?.settings.contextMode).toBe('discovery')
     })
 
+    it('applies the sending account’s preferences to a new turn in an existing conversation', async () => {
+        await service.submit(submit(), 'user-1')
+        const getAgentPreferences = vi.fn(async () => ({
+            contextMode: 'mixed' as const,
+            midRunPolicy: 'queue' as const,
+        }))
+        const accountService = new ConversationService(
+            repository,
+            {
+                ...ports,
+                getAgentPreferences,
+            },
+        )
+        const second = {
+            ...submit('message-2'),
+            midRunPolicy: 'stop-first' as const,
+        }
+
+        await expect(accountService.submit(second, 'user-1')).resolves.toMatchObject({ status: 'accepted' })
+        await expect(accountService.submit(second, 'user-1')).resolves.toMatchObject({ status: 'duplicate' })
+
+        const partition = conversationPartition('org-1', conversationAssetId)
+        expect(getAgentPreferences).toHaveBeenCalledExactlyOnceWith('user-1')
+        await expect(repository.read(partition, 'TURN#id-1')).resolves.toMatchObject({
+            settings: { contextMode: 'explicit' },
+            midRunPolicy: 'steer',
+        })
+        await expect(repository.read(partition, 'TURN#id-2')).resolves.toMatchObject({
+            settings: { contextMode: 'mixed' },
+            contextModeSource: 'account',
+            midRunPolicy: 'queue',
+        })
+        await expect(repository.read(partition, 'META')).resolves.toMatchObject({
+            settings: {
+                contextMode: 'explicit',
+                midRunPolicy: 'steer',
+            },
+        })
+    })
+
     it('commits one configuration entry with settings and schedules projection without creating a turn', async () => {
         await service.submit(submit(), 'user-1')
         const request = {
@@ -366,6 +406,36 @@ describe('durable conversation acceptance', () => {
         ]))
         await expect(service.settings(request, 'user-1')).rejects.toThrow('STALE_CONVERSATION_SETTINGS')
         expect((await repository.query(pk, 'MESSAGE#')).items).toHaveLength(2)
+    })
+
+    it('does not revise or publish equivalent settings after model object keys are reordered', async () => {
+        await service.submit(submit(), 'user-1')
+        const pk = conversationPartition('org-1', conversationAssetId)
+        const meta = await repository.read<ConversationMeta>(pk, 'META')
+        const commits = database.commits.length
+        vi.mocked(ports.publish).mockClear()
+        vi.mocked(ports.dispatchScheduled).mockClear()
+        const snapshot = await service.settings({
+            protocolVersion: 1,
+            workspaceId: 'workspace-1',
+            conversationAssetId,
+            expectedRevision: meta!.settingsRevision,
+            patch: {
+                contextMode: meta!.settings.contextMode,
+                midRunPolicy: meta!.settings.midRunPolicy,
+                models: {
+                    videoModelIds: meta!.settings.models.videoModelIds,
+                    imageModelIds: meta!.settings.models.imageModelIds,
+                    reasoningModelIds: meta!.settings.models.reasoningModelIds,
+                },
+            },
+        }, 'user-1')
+        expect(snapshot.settingsRevision).toBe(meta!.settingsRevision)
+        expect(snapshot.eventSeq).toBe(meta!.eventSeq)
+        expect(database.commits).toHaveLength(commits)
+        expect(ports.publish).not.toHaveBeenCalled()
+        expect(ports.dispatchScheduled).not.toHaveBeenCalled()
+        expect(snapshot.messages.filter(message => message.role === 'configuration')).toEqual([])
     })
 
     it('retains configuration before activation without dispatching an uncreated conversation', async () => {

@@ -18,6 +18,7 @@ import  { type ConversationMediaOperations } from './agent-pending-tools.ts'
 
 const fixture = vi.hoisted(() => ({
     respond: vi.fn(),
+    afterStreamBlock: vi.fn(),
     profile: {
         provider: 'anthropic',
         model: 'test-model',
@@ -115,6 +116,8 @@ vi.mock('./agent-bedrock-model.ts', async importOriginal => {
                                         index,
                                         content_block: block,
                                     } as RawMessageStreamEvent
+
+                                await fixture.afterStreamBlock(request, index)
                             }
 
                             yield {
@@ -250,6 +253,7 @@ const runtimeFixture = async (tools: CapabilityAgentTool[] = [], operations?: Co
 
 beforeEach(() => {
     fixture.respond.mockReset()
+    fixture.afterStreamBlock.mockReset()
     vi.spyOn(ConversationProjector.prototype, 'project').mockResolvedValue()
     vi.spyOn(AgentSkills.prototype, 'load').mockResolvedValue(new Map())
     vi.spyOn(AgentSkills.prototype, 'assertCurrent').mockResolvedValue()
@@ -258,6 +262,80 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('conversation runtime with durable ownership and checkpoints', () => {
+    it('projects the first provider chunk and a short timed tail before the provider finishes', async () => {
+        const first = Promise.withResolvers<void>()
+        const finish = Promise.withResolvers<void>()
+        const chunks = ['Hello', ' there']
+        fixture.respond.mockImplementation(async (request: MessageCreateParamsNonStreaming) => isClassifier(request)
+            ? intent()
+            : response(chunks.map(text => ({
+                type: 'text',
+                text,
+            }))))
+        fixture.afterStreamBlock.mockImplementation(async (request: MessageCreateParamsNonStreaming, index: number) => {
+            if (!isClassifier(request))
+                await (index === 0 ? first.promise : finish.promise)
+        })
+        const test = await runtimeFixture()
+        const projected: string[] = []
+        vi.mocked(ConversationProjector.prototype.project).mockImplementation(async () => {
+            const { items } = await test.repository.query<ConversationMessage>(test.partition, 'MESSAGE#')
+            const partial = items.find(message => message.role === 'assistant' && !message.complete)
+
+            if (partial)
+                projected.push(partial.text)
+        })
+        const accepted = await test.service.submit(test.request('streaming'), 'user')
+        const run = test.runtime.execute(await test.dispatch(accepted))
+
+        try {
+            await vi.waitFor(() => expect(projected).toEqual(['Hello']))
+            expect((await test.meta()).run?.state).toBe('running')
+
+            first.resolve()
+            await vi.waitFor(() => expect(projected).toEqual(['Hello', 'Hello there']))
+            expect((await test.meta()).run?.state).toBe('running')
+        } finally {
+            first.resolve()
+            finish.resolve()
+            await run
+        }
+
+        expect((await test.meta()).run?.state).toBe('completed')
+    })
+
+    it('uses the configured agent model for a saved incompatible media reasoning choice', async () => {
+        fixture.respond.mockImplementation(async (request: MessageCreateParamsNonStreaming) => isClassifier(request) ? intent() : answer())
+        const test = await runtimeFixture()
+        const request = test.request('message')
+        const models = {
+            reasoningModelIds: ['OpenAI:gpt-5.6-terra' as const],
+            imageModelIds: [],
+            videoModelIds: [],
+        }
+        const settings = await test.service.settings(
+            {
+                protocolVersion: request.protocolVersion,
+                workspaceId: request.workspaceId,
+                conversationAssetId: request.conversationAssetId,
+                expectedRevision: request.settingsRevision,
+                patch: { models },
+            },
+            'user',
+        )
+        request.settingsRevision = settings.settingsRevision
+        const accepted = await test.service.submit(
+            request,
+            'user',
+        )
+        const job = await test.dispatch(accepted)
+
+        expect(await test.runtime.execute(job)).toBe('done')
+        expect((await test.meta()).settings.models).toEqual(models)
+        expect(test.metrics.authorizeRequest).toHaveBeenCalledWith(expect.objectContaining({ model: 'test-version' }))
+        expect(fixture.respond).toHaveBeenCalledTimes(2)
+    })
+
     it('supplies admitted saved-plan requirements before classifying a natural run request', async () => {
         const target = {
             assetId: 'blue-pipeline',
@@ -843,6 +921,11 @@ describe('conversation runtime with durable ownership and checkpoints', () => {
         expect(snapshot.messages).toContainEqual(expect.objectContaining({
             role: 'assistant',
             text: 'The configured model request was not authorized. Review account access before retrying.',
+            failure: {
+                code: 'AGENT_MODEL_CALL_NOT_AUTHORIZED',
+                message: 'The configured model request was not authorized. Review account access before retrying.',
+                recoverable: true,
+            },
             complete: true,
         }))
         expect(fixture.respond).not.toHaveBeenCalled()

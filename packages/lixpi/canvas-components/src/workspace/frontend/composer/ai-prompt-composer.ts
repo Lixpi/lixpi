@@ -17,6 +17,7 @@ export type PromptComposerEditorRequest = {
     threadId: string | null
     signal: AbortSignal
     onSubmit: (data: AiPromptComposerSubmitData) => void | Promise<void>
+    onSubmitError?: (error: Error) => void
     onContentChange: (content: object) => void
 }
 
@@ -33,6 +34,7 @@ export type AiPromptComposerConfig = {
     className?: string
     useGradient?: boolean
     onSubmit: (data: AiPromptComposerSubmitData) => void | Promise<void>
+    onSubmitError?: (error: Error) => void
     onContentChange?: (value: object) => void
 }
 
@@ -91,6 +93,10 @@ class AiPromptComposer implements AiPromptComposerInstance {
                 onContentChange: value => {
                     if (!this.lifetime.signal.aborted)
                         config.onContentChange?.(value)
+                },
+                onSubmitError: error => {
+                    if (!this.lifetime.signal.aborted)
+                        config.onSubmitError?.(error)
                 },
                 onSubmit: data => {
                     if (!this.lifetime.signal.aborted)

@@ -75,13 +75,12 @@ describe('ai-chat-thread.scss', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
         expectSourceToContain(scss, '.ai-user-message-wrapper')
         expectSourceToContain(scss, '.ai-user-message')
-        expectSourceToContain(scss, '@include prompt-reference-chip-on-dark-surface;')
+        expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
         expectSourceToContain(scss, '.ai-submit-button')
     })
 
-    // The user message and the branch marker no longer each declare a palette;
-    // they take the same one from the shared partial, so they cannot drift.
-    it('takes the dark reference palette from the shared partial, declaring no colors of its own', () => {
+    // The shared chip partial owns reference contrast on the neutral bubble.
+    it('takes its reference palette from the shared partial, declaring no colors of its own', () => {
         expectSourceToContain(scss, '@import "../prompt-reference/prompt-reference-colors";')
         expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-color')).toBeUndefined()
         expect(
@@ -96,6 +95,14 @@ describe('ai-chat-thread.scss', () => {
         expectSourceToContain(scss, '.ai-reasoning-section-spinner')
         expectSourceToContain(scss, '.is-empty')
         expectSourceToContain(scss, '.ai-response-message-content')
+    })
+
+    it('separates turns and exposes a themed failure state in the shared stylesheet', () => {
+        expect(getPropertyValue(css, '.ai-chat-thread-wrapper .ai-chat-thread-content > :not([hidden]) ~ .ai-response-message-wrapper {', 'margin-top')).toBe('12px')
+        expect(getPropertyValue(css, '.ai-chat-thread-wrapper .ai-chat-thread-content > :not([hidden]) ~ .ai-user-message-wrapper {', 'margin-top')).toBe('24px')
+        expect(getPropertyValue(css, '.ai-chat-thread-wrapper .ai-chat-thread-content p + p {', 'margin-top')).toBe('12px')
+        expect(getPropertyValue(css, '.ai-response-failure-label[hidden] {', 'display')).toBe('none')
+        expect(getPropertyValue(css, '.ai-response-message-wrapper .ai-response-message.is-failed {', 'background')).toContain('--canvas-danger')
     })
 
     it('keeps materialized lineage icons free of canvas-node shadows', () => void expect(getPropertyValue(css, '.ai-lineage-event-icon {', 'box-shadow')).toBe('none'))

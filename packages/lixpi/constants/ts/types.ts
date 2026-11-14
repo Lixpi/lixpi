@@ -2,6 +2,9 @@ import {
     type AccountWorkContext,
 } from './account-admission.ts'
 import {
+    type AccountPreferences,
+} from './account-preferences.ts'
+import {
     type AssetSubjectIdentity,
     type DepictionMedium,
 } from './asset-types.ts'
@@ -18,6 +21,7 @@ export type User = {
     avatar: string
     recentTags: string[]
     organizations: string[]
+    preferences?: AccountPreferences
     createdAt: number
     updatedAt: number
 }

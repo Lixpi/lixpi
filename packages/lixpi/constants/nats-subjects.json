@@ -4,7 +4,8 @@
 		"MODELS_SYNC_COMPLETED": "aiModels.syncCompleted"
 	},
 	"USER_SUBJECTS": {
-		"GET_USER": "user.get"
+		"GET_USER": "user.get",
+		"UPDATE_PREFERENCES": "user.preferences.update"
 	},
 	"AI_INTERACTION_SUBJECTS": {
 		"CHAT_SEND_MESSAGE": "ai.interaction.chat.sendMessage",
