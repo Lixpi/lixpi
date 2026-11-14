@@ -180,7 +180,7 @@ describe('conversation drafts through the native prompt editor', () => {
             await vi.waitFor(() => expect(selected).toHaveBeenLastCalledWith('hi'))
             await new Promise(resolve => setTimeout(resolve, 10))
             expect(readText()).toBe('')
-            const picker = panel.element.querySelector<HTMLSelectElement>('[aria-label="Conversation"]')!
+            const picker = panel.element.querySelector<HTMLSelectElement>('[aria-label="Conversation history"]')!
             const create = [...panel.element.querySelectorAll('button')].find(button => button.textContent === 'New conversation')!
             create.click()
             await vi.waitFor(() => expect(selected).toHaveBeenLastCalledWith('blue-hold'))
