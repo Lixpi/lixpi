@@ -8,7 +8,7 @@ vi.mock('@lixpi/nats-subject-registry/registration', () => ({ registrationEnviro
     audience: values.AUTH0_API_IDENTIFIER,
     admission: { stream: values.ACCOUNT_ADMISSION_STREAM },
 }] })).toString('base64') }) })) }))
-const source = `# preserve developer settings\nENVIRONMENT=local\nAUTH0_TENANT_DOMAIN=example.us.auth0.com\nDOMAIN_NAME=dev.example.com\nVITE_AUTH0_CLIENT_ID=browser\nNATS_REGISTRATION_AUTHORITY_SEED=private-seed\nNATS_APPLICATION_REGISTRATION=previous\nACCOUNT_ADMISSION_STREAM=ADMISSION_local\nMOCK_AUTH0=true\nVITE_MOCK_AUTH=true\nACCOUNT_ADMISSION_ENABLED=false\nCUSTOM="private-value" # untouched\n`
+const source = `# preserve developer settings\nENVIRONMENT=local\nAUTH0_TENANT_DOMAIN=example.us.auth0.com\nDOMAIN_NAME=dev.example.com\nVITE_AUTH0_CLIENT_ID=browser\nNATS_REGISTRATION_AUTHORITY_SEED=private-seed\nNATS_APPLICATION_REGISTRATION=previous\nACCOUNT_ADMISSION_STREAM=ADMISSION_local\nMOCK_AUTH0=true\nACCOUNT_ADMISSION_ENABLED=false\nCUSTOM="private-value" # untouched\n`
 
 describe('local account authentication cutover configuration', () => {
     afterEach(() => vi.clearAllMocks())
@@ -16,7 +16,6 @@ describe('local account authentication cutover configuration', () => {
         const output = LocalAccountAuthConfiguration.render(source)
         expect(parseEnv(output)).toMatchObject({
             MOCK_AUTH0: 'false',
-            VITE_MOCK_AUTH: 'false',
             ACCOUNT_ADMISSION_ENABLED: 'true',
             AUTH0_DOMAIN: 'https://example.us.auth0.com',
             VITE_AUTH0_DOMAIN: 'example.us.auth0.com',

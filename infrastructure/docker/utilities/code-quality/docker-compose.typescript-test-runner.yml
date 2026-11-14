@@ -18,7 +18,7 @@ services:
             # web-ui source reads these via import.meta.env at module-eval time,
             # including in code paths exercised by tests (e.g. VITE_API_URL in
             # WorkspaceCanvas.ts) — mirrors the lixpi-web-ui service's env block.
-            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH: ${MOCK_AUTH0}
             VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
             VITE_API_URL: ${VITE_API_URL}
             VITE_AUTH0_LOGIN_URL: ${VITE_AUTH0_LOGIN_URL}

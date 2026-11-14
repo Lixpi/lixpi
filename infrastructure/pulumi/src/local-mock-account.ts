@@ -32,14 +32,8 @@ type Configuration = {
 }
 
 export const localMockConfiguration = (env: NodeJS.ProcessEnv): Configuration | null => {
-    if (
-        !['true', 'false'].includes(env.MOCK_AUTH0 ?? '')
-        || !['true', 'false'].includes(env.VITE_MOCK_AUTH ?? '')
-    )
-        throw new Error('Set both MOCK_AUTH0 and VITE_MOCK_AUTH explicitly for local fixture setup')
-
-    if (env.MOCK_AUTH0 !== env.VITE_MOCK_AUTH)
-        throw new Error('Mock authentication flags disagree; no fixture writes were attempted')
+    if (!['true', 'false'].includes(env.MOCK_AUTH0 ?? ''))
+        throw new Error('Set MOCK_AUTH0 explicitly for local fixture setup')
 
     if (env.MOCK_AUTH0 === 'false')
         return null

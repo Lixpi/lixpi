@@ -127,13 +127,13 @@ type CliArgs = {
 
 const fieldVariables: Partial<Record<keyof EnvConfig, string[]>> = {
     developerName: ['STAGE', 'STATE_STORAGE_URL'],
-    environment: ['ENVIRONMENT', 'STAGE', 'STATE_STORAGE_URL', 'NATS_DEBUG_MODE', 'NATS_ALLOWED_ORIGINS', 'ORIGIN_HOST_URL', 'API_HOST_URL', 'VITE_API_URL', 'VITE_AUTH0_LOGIN_URL', 'VITE_AUTH0_REDIRECT_URI', 'VITE_USER_PORTAL_URL', 'VITE_NATS_SERVER', 'SAVE_LLM_RESPONSES_TO_DEBUG_DIR'],
+    environment: ['ENVIRONMENT', 'STAGE', 'STATE_STORAGE_URL', 'NATS_DEBUG_MODE', 'NATS_ALLOWED_ORIGINS', 'ORIGIN_HOST_URL', 'API_HOST_URL', 'VITE_API_URL', 'VITE_AUTH0_LOGIN_URL', 'VITE_AUTH0_REDIRECT_URI', 'VITE_USER_PORTAL_URL', 'VITE_NATS_SERVER', 'SAVE_LLM_RESPONSES_TO_DEBUG_DIR', 'MOCK_AUTH0_DOMAIN', 'MOCK_AUTH0_JWKS_URI', 'VITE_MOCK_AUTH0_DOMAIN'],
     orgName: ['ORG_NAME'],
     domainName: ['DOMAIN_NAME', 'NATS_ALLOWED_ORIGINS', 'ORIGIN_HOST_URL', 'API_HOST_URL', 'VITE_API_URL', 'VITE_AUTH0_LOGIN_URL', 'VITE_AUTH0_REDIRECT_URI', 'VITE_USER_PORTAL_URL', 'VITE_NATS_SERVER'],
     certificateEmail: ['CERTIFICATE_VALIDATION_EMAIL'],
     useLocalDynamoDB: ['DYNAMODB_ENDPOINT'],
     dynamodbEndpoint: ['DYNAMODB_ENDPOINT'],
-    useLocalAuth0Mock: ['MOCK_AUTH0', 'VITE_MOCK_AUTH', 'MOCK_AUTH0_DOMAIN', 'MOCK_AUTH0_JWKS_URI', 'VITE_MOCK_AUTH0_DOMAIN'],
+    useLocalAuth0Mock: ['MOCK_AUTH0'],
     auth0Domain: ['AUTH0_TENANT_DOMAIN', 'AUTH0_DOMAIN', 'VITE_AUTH0_DOMAIN'],
     auth0UseDeveloperKeys: ['AUTH0_USE_DEVELOPER_KEYS', 'AUTH0_DOMAIN', 'VITE_AUTH0_DOMAIN'],
     auth0ClientId: ['VITE_AUTH0_CLIENT_ID'],
@@ -228,9 +228,9 @@ class WizardFields {
 
         if (
             !this.stored.has('useLocalAuth0Mock')
-            && Object.hasOwn(values, 'VITE_MOCK_AUTH')
+            && Object.hasOwn(values, 'MOCK_AUTH0')
         )
-            this.stored.set('useLocalAuth0Mock', values.VITE_MOCK_AUTH)
+            this.stored.set('useLocalAuth0Mock', values.MOCK_AUTH0)
 
         const awsPath = path.join(
             WORKSPACE_DIR,
@@ -1925,8 +1925,8 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{AUTH0_DOMAIN}}': auth0Domain,
         '{{AUTH0_AUDIENCE}}': config.auth0Audience,
         '{{MOCK_AUTH0}}': String(config.useLocalAuth0Mock),
-        '{{MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
-        '{{MOCK_AUTH0_JWKS_URI}}': config.useLocalAuth0Mock ? 'http://lixpi-localauth0:3000/.well-known/jwks.json' : '',
+        '{{MOCK_AUTH0_DOMAIN}}': isLocal ? 'localhost:3000' : '',
+        '{{MOCK_AUTH0_JWKS_URI}}': isLocal ? 'http://lixpi-localauth0:3000/.well-known/jwks.json' : '',
         '{{SAVE_LLM_RESPONSES_TO_DEBUG_DIR}}': String(isLocal),
         '{{METRICS_ENABLED}}': 'false',
         '{{OPENAI_API_KEY}}': config.openaiApiKey,
@@ -1937,8 +1937,7 @@ const generateEnvFileContent = (config: EnvConfig): string => {
         '{{STABLE_DIFFUSION_API_KEY}}': config.stableDiffusionApiKey,
         '{{STABILITY_USE_AWS_BEDROCK_INFERENCE}}': String(config.stabilityUseAwsBedrockInference),
         '{{ARK_API_KEY}}': config.arkApiKey,
-        '{{VITE_MOCK_AUTH}}': String(config.useLocalAuth0Mock),
-        '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'https://localhost:3446' : '',
+        '{{VITE_MOCK_AUTH0_DOMAIN}}': isLocal ? 'https://localhost:3446' : '',
         '{{VITE_API_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
         '{{VITE_AUTH0_LOGIN_URL}}': isLocal ? 'http://localhost:3001/login' : `https://${config.domainName}/login`,
         '{{VITE_AUTH0_DOMAIN}}': auth0Domain.replace('https://', ''),

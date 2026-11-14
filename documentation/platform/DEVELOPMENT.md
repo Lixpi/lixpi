@@ -149,7 +149,7 @@ For the full AWS deployment story (Pulumi, ECS/Fargate, CloudFront, the NATS clu
 
 LocalAuth0 provides zero-config Auth0 mocking for offline development — it generates RS256 keypairs, issues JWTs matching production Auth0's OAuth flows, and persists state in a Docker volume. No Auth0 account or internet connection is required.
 
-- **Configuration:** set `VITE_MOCK_AUTH=true` in your `.env.<stage-name>` file (the default in the local environment).
+- **Configuration:** `MOCK_AUTH0` in your `.env.<stage-name>` file is the only switch. Set it to `true` to sign in with LocalAuth0 (the default in the local environment) or `false` to use the Auth0 tenant in `AUTH0_DOMAIN`, then restart the stack. The API, both browser apps and NATS all follow it, and a local signed NATS registration already covers both providers, so switching never needs the wizard.
 - **Default user:** `test@local.dev` / `local|test-user-001`.
 - **Image / language:** the Rust `public.ecr.aws/primaassicurazioni/localauth0` image (upstream [`primait/localauth0`](https://github.com/primait/localauth0)).
 

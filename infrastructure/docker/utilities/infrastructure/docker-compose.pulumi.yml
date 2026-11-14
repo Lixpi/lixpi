@@ -30,7 +30,6 @@ services:
         restart: always
         environment:
             MOCK_AUTH0: ${MOCK_AUTH0}
-            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
             MOCK_AUTH0_DOMAIN: ${MOCK_AUTH0_DOMAIN}
             # Force color output in the terminal, required for chalk.js to work
             FORCE_COLOR: 1
