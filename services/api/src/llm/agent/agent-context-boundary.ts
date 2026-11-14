@@ -80,6 +80,9 @@ export class AgentContextBoundary {
     }
 
     async load(): Promise<void> {
+        if (this.turn.contextModeSource === 'account')
+            return
+
         this.view = (await this.repository.read<ContextView>(
             this.owner.partition,
             this.key(),
@@ -102,7 +105,9 @@ export class AgentContextBoundary {
     }
 
     async current(): Promise<boolean> {
-        return (await this.owner.read()).settings.contextMode === this.view.contextMode
+        const meta = await this.owner.read()
+
+        return this.turn.contextModeSource === 'account' || meta.settings.contextMode === this.view.contextMode
     }
 
     async assertCurrent(): Promise<void> {
@@ -146,6 +151,9 @@ export class AgentContextBoundary {
     }
 
     async synchronize(messages: BaseMessage[]): Promise<boolean> {
+        if (this.turn.contextModeSource === 'account')
+            return false
+
         const meta = await this.owner.read()
 
         if (meta.settings.contextMode === this.view.contextMode)

@@ -197,6 +197,8 @@ describe('aiResponseMessage — parseDOM spec', () => {
             id: 'msg-parsed-123',
             style: 'color: red',
             aiProvider: 'OpenAI',
+            conversationRole: 'assistant',
+            failure: null,
             generationRequestId: '',
             reasoningRunId: '',
             mediaRunId: '',
@@ -480,5 +482,106 @@ describe('aiResponseMessageNodeView — loading indicator source guard', () => {
         expectSourceNotToContain(threadScss, oldSpinnerClass, 'thread SCSS')
         expectSourceNotToContain(threadScss, oldSpinnerMixin, 'thread SCSS')
         expectSourceNotToContain(animationScss, oldSpinnerMixin, 'shared animations SCSS')
+    })
+})
+
+describe('Configuration records in the shared response renderer', () => {
+    it('preserves the semantic role through DOM serialization and parsing', () => {
+        const node = schema.nodes.aiResponseMessage.create(
+            { conversationRole: 'configuration' },
+            schema.nodes.paragraph.create(null, schema.text('Model preferences updated.')),
+        )
+        const serialized = node.type.spec.toDOM!(node) as [string, Record<string, string>, number]
+        expect(serialized[1]['data-conversation-role']).toBe('configuration')
+        const element = document.createElement('div')
+        element.setAttribute('data-conversation-role', 'configuration')
+        const parseRule = aiResponseMessageNodeSpec.parseDOM![0]
+        expect((parseRule as { getAttrs: (element: HTMLElement) => object }).getAttrs(element)).toMatchObject({
+            conversationRole: 'configuration',
+        })
+        expect(node.textContent).toBe('Model preferences updated.')
+    })
+
+    it('hides configuration audit records and restores a response when its role changes', () => {
+        const {
+            nodeView,
+            node,
+        } = createResponseNodeView({ conversationRole: 'configuration' })
+        expect((nodeView.dom as HTMLElement).hidden).toBe(true)
+        const assistant = node.type.create({
+            ...node.attrs,
+            conversationRole: 'assistant',
+        }, node.content)
+        nodeView.update!(assistant)
+        expect((nodeView.dom as HTMLElement).hidden).toBe(false)
+        expect((nodeView.dom as HTMLElement).dataset.conversationRole).toBe('assistant')
+        nodeView.destroy?.()
+    })
+})
+
+describe('Failure records in the shared response renderer', () => {
+    const failure = {
+        code: 'AGENT_MODEL_CALL_NOT_AUTHORIZED',
+        message: 'Internal authorization diagnostic',
+        recoverable: false,
+    }
+
+    it('round-trips failure metadata and rejects malformed DOM attributes', () => {
+        const node = schema.nodes.aiResponseMessage.create(
+            { failure },
+            schema.nodes.paragraph.create(null, schema.text('Check your account settings.')),
+        )
+        const serialized = node.type.spec.toDOM!(node) as [string, Record<string, string>, number]
+        const element = document.createElement('div')
+        const parseRule = aiResponseMessageNodeSpec.parseDOM![0] as { getAttrs: (element: HTMLElement) => object }
+        element.setAttribute('data-conversation-failure', serialized[1]['data-conversation-failure'])
+        expect(parseRule.getAttrs(element)).toMatchObject({ failure })
+        element.setAttribute('data-conversation-failure', '{"code":"missing-fields"}')
+        expect(parseRule.getAttrs(element)).toMatchObject({ failure: null })
+        element.setAttribute('data-conversation-failure', '{')
+        expect(parseRule.getAttrs(element)).toMatchObject({ failure: null })
+    })
+
+    it('marks a failure visibly and accessibly without replacing the native content slot', () => {
+        const {
+            nodeView,
+            node,
+        } = createResponseNodeView()
+        const content = nodeView.contentDOM as HTMLElement
+        const text = document.createTextNode('Check your account settings.')
+        content.append(text)
+        const failed = node.type.create({
+            ...node.attrs,
+            failure,
+            isReceivingAnimation: true,
+            isInitialRenderAnimation: true,
+        }, node.content)
+        nodeView.update!(failed)
+        const wrapper = nodeView.dom as HTMLElement
+        const message = wrapper.querySelector<HTMLElement>('.ai-response-message')!
+        const label = wrapper.querySelector<HTMLElement>('.ai-response-failure-label')!
+        expect(message.classList.contains('is-failed')).toBe(true)
+        expect(message.getAttribute('role')).toBe('group')
+        expect(message.getAttribute('aria-label')).toBe('Response failed')
+        expect(label.hidden).toBe(false)
+        expect(label.getAttribute('contenteditable')).toBe('false')
+        expect(wrapper.dataset.failureCode).toBe(failure.code)
+        expect(wrapper.textContent).not.toContain(failure.message)
+        expect(nodeView.contentDOM).toBe(content)
+        expect(content.firstChild).toBe(text)
+        expect(content.classList.contains('node-render-animation')).toBe(false)
+        expect(message.classList.contains('is-waiting')).toBe(false)
+        expect(nodeView.ignoreMutation!({
+            type: 'attributes',
+            target: label,
+        } as MutationRecord)).toBe(true)
+
+        nodeView.update!(node)
+        expect(message.classList.contains('is-failed')).toBe(false)
+        expect(label.hidden).toBe(true)
+        expect(message.hasAttribute('role')).toBe(false)
+        expect(wrapper.dataset.failureCode).toBeUndefined()
+        expect(nodeView.contentDOM).toBe(content)
+        nodeView.destroy?.()
     })
 })

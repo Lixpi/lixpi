@@ -25,6 +25,7 @@ import { toEditorPromptReferencePreview } from '$src/editor/editor-services.ts'
 export type PromptComposerEditorOptions = {
     environment: WebUiEditorEnvironment
     submitOnEnter?: boolean
+    requireReasoningModel?: boolean
     controlFactories?: PromptControlFactories
     promptReferenceCatalog?: WorkspacePromptCatalog
     promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
@@ -54,7 +55,9 @@ class PromptComposerEditorAdapter implements PromptComposerEditor {
                     },
                     prompt: {
                         onSubmit: request.onSubmit,
+                        onSubmitError: request.onSubmitError,
                         submitOnEnter: options.submitOnEnter,
+                        requireReasoningModel: options.requireReasoningModel,
                         controls: options.controlFactories ?? createDefaultPromptControlFactories(),
                     },
                 },

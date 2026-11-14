@@ -101,6 +101,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 | Page | What it covers |
 |------|----------------|
 | [Workspace Composer & Generated Output Details](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | Conversation Assets, detached streaming authority, the canvas composer, and the persisted unified generated-output details panel |
+| [Agent Intent and Execution](../services/api/src/llm/README.md#intent-classification-and-agent-execution) | Diagram of Lixpi's preliminary intent classification, clarification and recovery, followed by the Deep Agents model/tool loop |
 | [Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Explicit, Discovery, and Mixed conversation context; prompt references, source authorization, and direct-generation media candidates |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 | [Markdown Rendering](ai-chat/MARKDOWN-RENDERING.md) | The one-parser rule and the editable and non-editable rendering paths |

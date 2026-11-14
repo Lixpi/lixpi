@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import {
     afterEach,
     beforeEach,
@@ -28,6 +29,37 @@ describe('DueSweepScheduler', () => {
 
         expect(sweep).toHaveBeenCalledTimes(1)
         scheduler.stop()
+    })
+
+    it('runs sweeps in the startup context when a request wakes the scheduler', async () => {
+        vi.useRealTimers()
+        const context = new AsyncLocalStorage<string>()
+        const observed: Array<string | undefined> = []
+        const scheduler = new DueSweepScheduler(
+            async () => {
+                observed.push(context.getStore())
+
+                return undefined
+            },
+            1000,
+            () => {},
+        )
+
+        try {
+            context.run(
+                'service',
+                () => scheduler.start(),
+            )
+            await vi.waitFor(() => expect(observed).toEqual(['service']))
+
+            context.run(
+                'request',
+                () => scheduler.wake(),
+            )
+            await vi.waitFor(() => expect(observed).toEqual(['service', 'service']))
+        } finally {
+            scheduler.stop()
+        }
     })
 
     it('sweeps when woken and at the next due time the sweep reported', async () => {

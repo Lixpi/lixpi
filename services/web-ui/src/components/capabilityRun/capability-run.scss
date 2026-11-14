@@ -28,7 +28,71 @@
     color: #{themeScope.token("components-capability-run-form-errors-base-foreground", themePalette.$roles)};
 }
 
+.capability-run-progress {
+    margin: 8px 0;
+    color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
+}
+
 .capability-run-progress-header {
+    padding: 5px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.capability-run-progress-header::marker {
+    color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
+}
+
+.capability-run-progress-header:focus-visible {
+    outline: 2px solid var(--canvas-accent, #{themeScope.token("accent", themePalette.$roles)});
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.capability-run-progress-label {
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+}
+
+.capability-run-progress-status {
+    margin-left: 8px;
+    font-size: 12px;
+}
+
+.capability-run-progress[data-state="failed"] .capability-run-progress-status {
+    color: var(--canvas-danger, #{themeScope.token("danger", themePalette.$roles)});
+}
+
+.capability-run-progress-details[open] > .progress-timeline {
+    margin-top: 8px;
+}
+
+.capability-run-progress-outputs {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin: 4px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.capability-run-progress-outputs[hidden] {
+    display: none;
+}
+
+.capability-run-progress-outputs button {
+    padding: 3px 0;
+    border: 0;
+    background: transparent;
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+    font: inherit;
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.capability-run-progress-outputs button:disabled {
+    opacity: 0.5;
+    cursor: default;
 }

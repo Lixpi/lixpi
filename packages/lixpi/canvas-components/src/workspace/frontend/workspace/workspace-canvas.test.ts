@@ -508,7 +508,7 @@ describe('LixpiWorkspaceCanvas composition', () => {
         await vi.advanceTimersByTimeAsync(1)
         f.owner.render(state(), [], [])
         const panel = f.paneEl.querySelector('.workspace-conversation-panel')!
-        const create = [...panel.querySelectorAll('button')].find(button => button.textContent === 'New conversation')!
+        const create = panel.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')!
         create.click()
         await vi.advanceTimersByTimeAsync(1)
         promptDocument = {
@@ -524,7 +524,7 @@ describe('LixpiWorkspaceCanvas composition', () => {
                 }],
             }],
         }
-        const picker = panel.querySelector<HTMLSelectElement>('[aria-label="Conversation"]')!
+        const picker = panel.querySelector<HTMLSelectElement>('[aria-label="Conversation history"]')!
         picker.value = 'hi'
         picker.dispatchEvent(new Event('change'))
         await vi.advanceTimersByTimeAsync(1)

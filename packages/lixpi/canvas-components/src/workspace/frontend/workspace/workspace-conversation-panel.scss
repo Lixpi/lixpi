@@ -1,0 +1,262 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@import "@lixpi/ui-primitives/styles/transitions";
+
+// The fixed composer keeps its input and reference tray in place while the
+// conversation consumes only the space remaining above them.
+.workspace-canvas-global-composer-host.has-conversation {
+    max-height: calc(100% - 48px);
+}
+
+.workspace-canvas-global-composer-host.has-conversation > .workspace-canvas-global-composer {
+    flex-shrink: 0;
+}
+
+.workspace-conversation-panel {
+    position: relative;
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    max-height: calc(100dvh - 160px);
+    border: 0;
+    border-radius: #{themeScope.token("components-composer-workspace-workspace-conversation-panel-base-border-radius", themePalette.$roles)};
+    background: color-mix(in srgb, var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)}) 88%, transparent);
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+    backdrop-filter: #{themeScope.token("components-composer-input-input-wrapper-base-backdrop-filter", themePalette.$roles)};
+    -webkit-backdrop-filter: #{themeScope.token("components-composer-input-input-wrapper-base-backdrop-filter", themePalette.$roles)};
+    font: var(--canvas-font-size, 15px) / var(--canvas-line-height, 1.5) var(--canvas-font-family, #{themeScope.token("font-family", themePalette.$roles)});
+    pointer-events: auto;
+}
+
+.workspace-canvas-global-composer-host > .workspace-conversation-panel {
+    max-height: none;
+}
+
+.workspace-conversation-panel[data-empty="true"],
+.workspace-conversation-panel[data-collapsed="true"] {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.workspace-conversation-panel[hidden],
+.workspace-conversation-panel [hidden] {
+    display: none;
+}
+
+.workspace-conversation-footer {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 2px 20px 6px;
+    color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
+    font-size: 12px;
+}
+
+.workspace-conversation-history {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.workspace-conversation-history-icon {
+    display: flex;
+    width: 12px;
+    height: 12px;
+}
+
+.workspace-conversation-history-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.workspace-conversation-history:hover,
+.workspace-conversation-text-action:hover {
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+}
+
+.workspace-conversation-panel :focus-visible {
+    outline: 2px solid var(--canvas-accent, #{themeScope.token("accent", themePalette.$roles)});
+    outline-offset: 2px;
+}
+
+.workspace-conversation-menu {
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+}
+
+.workspace-conversation-menu > .bubble-menu-content {
+    padding: 12px;
+    border-radius: 12px;
+    border-color: var(--canvas-border, #{themeScope.token("border", themePalette.$roles)});
+    background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
+}
+
+.workspace-conversation-menu-content {
+    display: grid;
+    gap: 12px;
+    width: 240px;
+    max-width: calc(100vw - 72px);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.workspace-conversation-menu-field {
+    display: grid;
+    gap: 4px;
+}
+
+.workspace-conversation-picker,
+.workspace-conversation-title {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--canvas-border, #{themeScope.token("border", themePalette.$roles)});
+    border-radius: 6px;
+    background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+    font: inherit;
+    box-sizing: border-box;
+}
+
+.workspace-conversation-picker {
+    cursor: pointer;
+}
+
+.workspace-conversation-menu-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.workspace-conversation-menu-action {
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.workspace-conversation-menu-action:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.workspace-conversation-menu-action:disabled,
+.workspace-conversation-picker:disabled {
+    opacity: var(--canvas-disabled-opacity, 0.5);
+    cursor: default;
+}
+
+.workspace-conversation-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 6px 20px 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+    scrollbar-width: thin;
+}
+
+.workspace-conversation-transcript,
+.workspace-conversation-transcript .editor,
+.workspace-conversation-transcript .ProseMirror {
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+}
+
+.workspace-conversation-transcript {
+    cursor: text;
+    user-select: text;
+}
+
+.workspace-conversation-queue,
+.workspace-conversation-origin {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 6px 20px 10px;
+    color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
+    font-size: 12px;
+}
+
+.workspace-conversation-state {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 36em;
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+.workspace-conversation-state[data-error="true"] {
+    color: var(--canvas-danger, #{themeScope.token("danger", themePalette.$roles)});
+}
+
+.workspace-conversation-queue:empty {
+    display: none;
+}
+
+.workspace-conversation-origin,
+.workspace-conversation-queued-message {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.workspace-conversation-origin-link,
+.workspace-conversation-text-action {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.workspace-conversation-new-messages {
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0 12px 10px;
+    padding: 5px 12px;
+    border: 1px solid var(--canvas-border, #{themeScope.token("border-subtle", themePalette.$roles)});
+    border-radius: 999px;
+    background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: hoverTransition(background);
+}
+
+.workspace-conversation-new-messages:hover {
+    background: var(--canvas-surface-hover, #{themeScope.token("surface-hover", themePalette.$roles)});
+}
+
+.workspace-conversation-panel[data-collapsed="true"] .workspace-conversation-messages,
+.workspace-conversation-panel[data-collapsed="true"] .workspace-conversation-origin,
+.workspace-conversation-panel[data-collapsed="true"] .workspace-conversation-new-messages {
+    display: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .workspace-conversation-panel {
+        background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}

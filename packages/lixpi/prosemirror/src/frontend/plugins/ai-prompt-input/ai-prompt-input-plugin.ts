@@ -53,12 +53,14 @@ type SubmitHandler = (data: {
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
-}) => void
+}) => void | Promise<void>
 
 export type AiPromptInputPluginOptions = {
     services: Parameters<typeof createAiPromptInputNodeView>[0]['services']
     onSubmit: SubmitHandler
+    onSubmitError?: (error: Error) => void
     submitOnEnter?: boolean
+    requireReasoningModel?: boolean
     createContextTray?: Parameters<typeof createAiPromptInputNodeView>[0]['createContextTray']
     mountMediaModeSwitch?: Parameters<typeof createAiPromptInputNodeView>[0]['mountMediaModeSwitch']
     mountModelMenuControl?: Parameters<typeof createAiPromptInputNodeView>[0]['mountModelMenuControl']
@@ -287,8 +289,16 @@ export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): 
 
         const attrs = getInputAttrs(view.state)
 
-        if (!attrs.aiReasoningModels[0])
+        if (
+            options.requireReasoningModel !== false
+            && !attrs.aiReasoningModels[0]
+        ) {
+            options.onSubmitError?.(
+                new Error('Choose a reasoning model before sending.'),
+            )
+
             return
+        }
 
         const submittedDocument = view.state.doc
         submitting = true
@@ -310,8 +320,8 @@ export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): 
                 && view.state.doc.eq(submittedDocument)
             )
                 clearInputContent(view)
-        } catch {
-            // The caller presents transport/rejection details. The draft remains.
+        } catch (error) {
+            options.onSubmitError?.(error instanceof Error ? error : new Error('The message could not be sent.'))
         } finally {
             submitting = false
         }
@@ -440,8 +450,16 @@ export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): 
                 if (contentJSON) {
                     const attrs = getInputAttrs(newState)
 
-                    if (!attrs.aiReasoningModels[0])
+                    if (
+                        options.requireReasoningModel !== false
+                        && !attrs.aiReasoningModels[0]
+                    ) {
+                        options.onSubmitError?.(
+                            new Error('Choose a reasoning model before sending.'),
+                        )
+
                         return null
+                    }
 
                     onSubmit(
                         buildSubmitPayload(contentJSON, attrs),

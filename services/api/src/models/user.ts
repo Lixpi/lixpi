@@ -2,6 +2,7 @@ import { err as debugError } from '@lixpi/debug-tools'
 import * as process from 'process'
 import {
     getDynamoDbTableStageName,
+    type AccountPreferences,
     type User,
 } from '@lixpi/constants'
 
@@ -12,15 +13,58 @@ const {
 
 export default {
     get: async (userId: string): Promise<User | undefined> => {
-        return await dynamoDBService.getItem({
+        const item = await dynamoDBService.getItem({
             tableName: getDynamoDbTableStageName(
                 'USERS',
                 ORG_NAME,
                 STAGE,
             ),
             key: { userId },
+            consistentRead: true,
             origin: `model::User->get( ${userId} )`,
         })
+
+        if (!item)
+            return undefined
+
+        const {
+            appearancePreference,
+            agentPreferences,
+            ...profile
+        } = item
+
+        return {
+            ...profile,
+            preferences: {
+                ...(appearancePreference !== undefined ? { appearance: appearancePreference } : {}),
+                ...(agentPreferences !== undefined ? { agent: agentPreferences } : {}),
+            },
+        } as User
+    },
+
+    updatePreferences: async (userId: string, preferences: AccountPreferences): Promise<AccountPreferences> => {
+        const {
+            appearance,
+            agent,
+        } = preferences
+        const updates = {
+            ...(appearance !== undefined ? { appearancePreference: appearance } : {}),
+            ...(agent !== undefined ? { agentPreferences: agent } : {}),
+        }
+
+        await updateAccountItem({
+            tableName: getDynamoDbTableStageName(
+                'USERS',
+                ORG_NAME,
+                STAGE,
+            ),
+            key: { userId },
+            updates,
+            conditionExpression: 'attribute_exists(userId)',
+            origin: 'model::User->updatePreferences()',
+        })
+
+        return preferences
     },
 
     create: async (user: Partial<User>): Promise<User | undefined> => {

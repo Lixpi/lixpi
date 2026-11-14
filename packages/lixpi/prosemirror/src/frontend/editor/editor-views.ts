@@ -74,11 +74,13 @@ export type EditorChatOptions = {
 
 // The prompt input's model, size, submit and Capability controls, which the
 // host builds from its own components.
-export type PromptControlFactories = Omit<AiPromptInputPluginOptions, 'services' | 'onSubmit' | 'submitOnEnter' | 'placeholderText'>
+export type PromptControlFactories = Omit<AiPromptInputPluginOptions, 'services' | 'onSubmit' | 'onSubmitError' | 'submitOnEnter' | 'requireReasoningModel' | 'placeholderText'>
 
 export type EditorPromptOptions = {
     onSubmit: AiPromptInputPluginOptions['onSubmit']
+    onSubmitError?: AiPromptInputPluginOptions['onSubmitError']
     submitOnEnter?: boolean
+    requireReasoningModel?: boolean
     controls: PromptControlFactories
     placeholderText?: string
 }
@@ -184,7 +186,9 @@ export const aiPromptInputFeature: DocumentViewFeature<EditorViewContext> = {
                     ...prompt.controls,
                     services: context.services,
                     onSubmit: prompt.onSubmit,
+                    onSubmitError: prompt.onSubmitError,
                     submitOnEnter: prompt.submitOnEnter,
+                    requireReasoningModel: prompt.requireReasoningModel,
                     placeholderText: prompt.placeholderText ?? 'Talk to me...',
                 }),
             ],

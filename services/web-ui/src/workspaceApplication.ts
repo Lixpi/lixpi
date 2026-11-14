@@ -1,4 +1,5 @@
 import { configureUiKit } from '@lixpi/ui-kit'
+import { ApplicationThemeBinding } from '@lixpi/themes/browser'
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import { createHelpTooltipProvider } from '@lixpi/ui-kit/components/help-tooltip'
@@ -10,6 +11,8 @@ import {
 } from '@lixpi/canvas-components/loading'
 import {
     AccessRecovery,
+    createUserService,
+    CurrentUserRefresh,
     type AuthClientInstance,
     type AuthClientSession,
 } from '@lixpi/auth-client'
@@ -25,7 +28,12 @@ import {
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 
-import { settings } from '$src/settings.ts'
+import {
+    createLixpiCanvasThemeFromPreset,
+    createLixpiUiSettings,
+    settings,
+} from '$src/settings.ts'
+import { canvasThemeStore } from './canvas-adapters/canvas-theme.ts'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/ui-kit/styles/bubble-menu'
 import '@lixpi/ui-kit/styles/canvas-node-footer'
@@ -59,7 +67,6 @@ export const createWorkspaceApplication = (config: {
     onReady: () => void
     onError: (error: unknown) => void
 }) => {
-    configureUiKit(settings)
     const application = createWebClientService<WebUiDependencies>({
         createDependencies: async () => {
             const {
@@ -96,11 +103,35 @@ export const createWorkspaceApplication = (config: {
             }
         },
         routing: workspaceRouting,
-        createResources: [() => createHelpTooltipProvider({
-            showDelayMs: settings.helpTooltip.providerShowDelayMs,
-            root: document,
-            shouldShow: trigger => trigger.getAttribute('aria-expanded') !== 'true',
-        })],
+        createResources: [
+            ({ dependencies: { auth } }) => new ApplicationThemeBinding({
+                subscribePreference: listener => auth.userStore.subscribe(state => listener(state.data.preferences?.appearance)),
+                onChange: preset => {
+                    configureUiKit(
+                        createLixpiUiSettings(preset),
+                    )
+                    canvasThemeStore.set(
+                        createLixpiCanvasThemeFromPreset(preset),
+                    )
+                },
+            }),
+            ({ dependencies: {
+                auth,
+                nats,
+            } }) => new CurrentUserRefresh({
+                user: createUserService({
+                    getToken: auth.getTokenSilently,
+                    requestClient: nats,
+                    store: auth.userStore,
+                }),
+                onReconnect: listener => nats.onReconnect(listener),
+            }),
+            () => createHelpTooltipProvider({
+                showDelayMs: settings.helpTooltip.providerShowDelayMs,
+                root: document,
+                shouldShow: trigger => trigger.getAttribute('aria-expanded') !== 'true',
+            }),
+        ],
         createView: ({
             dependencies: { auth },
             router,

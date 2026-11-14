@@ -35,11 +35,16 @@ describe('prompt-reference-picker.scss', () => {
     // Typography and chip colors come from theme tokens, so value checks read
     // what the default theme renders. The source keeps the structural checks.
     let css = ''
-    let darkSurfaceCss = ''
+    let chatSurfaceCss = ''
 
     beforeAll(async () => {
         css = await compileThemedStylesheet(resolve(composerDirectory, 'prompt-reference-picker.scss'))
-        darkSurfaceCss = await compileThemedStylesheet(resolve(composerDirectory, "../ai-chat-thread/chat-thread.scss"))
+        chatSurfaceCss = await compileThemedStylesheet(
+            resolve(
+                composerDirectory,
+                '../ai-chat-thread/chat-thread.scss',
+            ),
+        )
     })
 
     it('uses the default app and browser scrollbar appearance', () => {
@@ -109,13 +114,9 @@ describe('prompt-reference-picker.scss', () => {
 
     // Chip color has exactly one owner. Every surface reads these custom
     // properties; no stylesheet may restate a chip color literal of its own.
-    it('reads its palette from the shared partial and emits the light defaults once', () => {
+    it('shares the theme palette between the picker and neutral chat bubbles', () => {
         expectSourceToContain(scss, '@import "./prompt-reference-colors";')
         expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
-
-        // The light palette renders in the picker and the dark one in the chat
-        // thread, both from the shared partial.
-        const partial = `${css}\n${darkSurfaceCss}`
 
         for (
             const declaration of [
@@ -123,11 +124,18 @@ describe('prompt-reference-picker.scss', () => {
                 '--prompt-reference-capability-module-color: #a55324;',
                 '--prompt-reference-tool-color: #39766f;',
                 '--prompt-reference-skill-color: #6d4fb2;',
-                '--prompt-reference-color: #d7e6ff;',
-                '--prompt-reference-capability-module-color: #eca983;',
             ]
         ) {
-            expectSourceToContain(partial, declaration, 'prompt-reference chip palette')
+            expectSourceToContain(
+                css,
+                declaration,
+                'picker reference palette',
+            )
+            expectSourceToContain(
+                chatSurfaceCss,
+                declaration,
+                'neutral chat reference palette',
+            )
         }
     })
 })

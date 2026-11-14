@@ -111,9 +111,25 @@ beforeEach(() => {
 })
 
 describe('createAiPromptComposer', () => {
+    it('forwards submission errors without changing the input surface', () => {
+        const onSubmitError = vi.fn()
+        const composer = createComposer({ onSubmitError })
+        const report = getLastEditor().options.context.prompt.onSubmitError
+        const error = new Error('Choose a reasoning model before sending.')
+        report(error)
+        expect(onSubmitError).toHaveBeenCalledWith(error)
+        composer.destroy()
+        report(error)
+        expect(onSubmitError).toHaveBeenCalledOnce()
+    })
+
     it('enables Enter submission only when the workspace requests conversation behavior', () => {
-        createComposer({ submitOnEnter: true })
+        createComposer({
+            submitOnEnter: true,
+            requireReasoningModel: false,
+        })
         expect(getLastEditor().options.context.prompt.submitOnEnter).toBe(true)
+        expect(getLastEditor().options.context.prompt.requireReasoningModel).toBe(false)
         createComposer()
         expect(getLastEditor().options.context.prompt.submitOnEnter).toBeUndefined()
     })

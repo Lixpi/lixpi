@@ -11,6 +11,7 @@ import NATS_Service from '@lixpi/nats-service'
 import { PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
 import { canEditWorkspace } from '../../services/workspace-navigation/access.ts'
 import Workspace from '../../models/workspace.ts'
+import User from '../../models/user.ts'
 import AssetModel, {
     publishAssetEvent,
     getAssetRecord,
@@ -64,6 +65,14 @@ export class ConversationAdapters {
                     : undefined
             },
             authorize: this.authorize,
+            getAgentPreferences: async userId => {
+                const user = await User.get(userId)
+
+                if (!user)
+                    throw new Error('CURRENT_USER_UNAVAILABLE')
+
+                return user.preferences?.agent
+            },
             resolveReferences: this.resolveReferences,
             retainReferences: async (
                 access,

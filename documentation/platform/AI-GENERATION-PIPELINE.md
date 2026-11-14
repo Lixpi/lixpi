@@ -9,7 +9,7 @@ The enabled conversation workspace uses Deep Agents for discussion and planning,
 
 ## Conversational execution
 
-An accepted message enters its existing conversation without allocating media nodes. A metered Bedrock intent call distinguishes discussion, inspection, planning, and execution. Server-side tool guards enforce the resulting scope. Selecting an image/video model is a preference for a future requested action and does not authorize generation.
+An accepted message enters its existing conversation without allocating media nodes. Lixpi makes a separate, metered intent-classification call before the Deep Agents model/tool loop. The [intent classification diagram and contract](../../services/api/src/llm/README.md#intent-classification-and-agent-execution) explain its inputs, the four intent categories, clarification, recovery and authorization boundaries. Selecting an image/video model is a preference for a future requested action and does not authorize generation.
 
 The `media-pipeline` Capability owns validated dependency plans; `media-sequence` owns the multitrack sequence document and deterministic render compiler. The conversation agent edits sequences through revisioned patch validation. NEX renders frozen sequence revisions from authorized media inputs and returns an output descriptor for API settlement. Unsupported generation routes fail before media admission, while editing and exporting existing media remain available.
 

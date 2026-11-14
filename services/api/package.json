@@ -28,6 +28,7 @@
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/nats-subject-registry": "workspace:*",
         "@lixpi/prosemirror": "workspace:*",
+        "@lixpi/themes": "workspace:*",
         "@lixpi/usage-reporter": "workspace:*",
         "@lixpi/markdown-stream-parser": "0.0.3-34",
         "cookie-parser": "1.4.7",

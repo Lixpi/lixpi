@@ -218,7 +218,7 @@ describe('capability run progress — execution traces', () => {
         expect(state.steps[0]?.trace).toEqual(trace)
     })
 
-    it('renders the traced model call inline while its step is still running', () => {
+    it('retains the traced model call inside activity while its step is running', () => {
         const progress = createCapabilityRunProgress()
         progress.render(run, [
             event({
@@ -274,7 +274,7 @@ describe('capability run progress — execution traces', () => {
         progress.destroy()
     })
 
-    it('renders a failed step trace immediately, without waiting for disclosure', () => {
+    it('keeps a failed step trace available inside the activity disclosure', () => {
         const progress = createCapabilityRunProgress()
         progress.render(run, [
             event({
@@ -294,5 +294,69 @@ describe('capability run progress — execution traces', () => {
         expect(progress.element.querySelector('.execution-trace')).not.toBeNull()
         expect(progress.element.textContent).toContain('Provider refused')
         progress.destroy()
+    })
+})
+
+describe('CapabilityRunProgress activity disclosure', () => {
+    it('starts collapsed and preserves the reader choice through streamed updates', () => {
+        const progress = createCapabilityRunProgress()
+
+        try {
+            progress.render(run, [
+                event({
+                    sequence: 1,
+                    eventType: 'STEP_STARTED',
+                    stepId: 'inspect',
+                    stepTitle: 'Inspect experiment',
+                    stepStatus: 'running',
+                }),
+            ])
+            const details = progress.element.querySelector<HTMLDetailsElement>('details')!
+            expect(details.open).toBe(false)
+            expect(details.querySelector('summary')?.textContent).toContain('Inspect experiment')
+            details.open = true
+            progress.applyEvent(event({
+                sequence: 2,
+                eventType: 'STEP_COMPLETED',
+                stepId: 'inspect',
+                stepStatus: 'completed',
+                runStatus: 'completed',
+            }))
+            expect(progress.element.querySelector('details')).toBe(details)
+            expect(details.open).toBe(true)
+            expect(details.querySelector('[role="status"]')?.textContent).toBe('Completed')
+        } finally {
+            progress.destroy()
+        }
+    })
+
+    it('keeps authorized output actions outside collapsed activity and reuses them during updates', async () => {
+        const ports = {
+            resolve: vi.fn(async () => ({ title: 'Experiment comparison' })),
+            open: vi.fn(async () => {}),
+        }
+        const progress = createCapabilityRunProgress(undefined, undefined, ports)
+        const completed = {
+            ...run,
+            status: 'completed' as const,
+            outputAssetIds: ['comparison'],
+        }
+
+        try {
+            progress.render(completed, [])
+            await vi.waitFor(() => expect(progress.element.querySelector('.capability-run-progress-outputs button')).not.toBeNull())
+            const details = progress.element.querySelector<HTMLDetailsElement>('details')!
+            const output = progress.element.querySelector<HTMLButtonElement>('.capability-run-progress-outputs button')!
+            expect(details.open).toBe(false)
+            expect(details.contains(output)).toBe(false)
+            expect(output.textContent).toContain('Experiment comparison')
+            progress.render(completed, [])
+            expect(progress.element.querySelector('.capability-run-progress-outputs button')).toBe(output)
+            output.click()
+            await vi.waitFor(() => expect(ports.open).toHaveBeenCalledWith('comparison'))
+            expect(ports.resolve).toHaveBeenCalledTimes(2)
+        } finally {
+            progress.destroy()
+        }
     })
 })

@@ -9,10 +9,10 @@
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
 4. `getInputAttrs()` reads the explicit image/video mode, reasoning and media model rows, configuration-matrix selections, and multi-model attrs from the input node.
 5. `onSubmit()` receives `{ contentJSON, mediaGenerationMode, aiReasoningModels, reasoningOptions, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`. `reasoningOptions.configGroups` carries the API-authored reasoning settings. `imageOptions.aiImageModels` and `videoOptions.aiVideoModels` are ordered arrays, and only the media options for `mediaGenerationMode` are included. Prompt wording never changes the selected media type. The three multi-model booleans are derived from the corresponding row count. Each selected reasoning or active media model keeps its own configuration selection. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
-6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
+6. Keyboard and button submission await the host acknowledgement before clearing an unchanged draft. Missing model selection and submission failures reach the optional `onSubmitError` callback; the host presents those errors and the draft remains available.
 7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker. Capability-module atoms remain in the stored user message, and the marker renders them through the same `prompt-reference-chip-capability-module` factory used by the editable composer.
 
-The plugin boundary is the submit callback surface. Run cancellation belongs to the branch-lineage marker projected from the submitted user message, not to the composer.
+The plugin boundary consists of the submit callback and its error-reporting port. Workspace composers forward errors into the existing conversation status, without changing the input surface. Run cancellation belongs to the branch-lineage marker projected from the submitted user message, not to the composer.
 
 ## Runtime Wiring
 
@@ -235,3 +235,5 @@ Settings hooks:
 - `../ai-chat-thread/`: thread log and streaming response plugin.
 - `@lixpi/canvas-components/workspace`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
 - `../../editor/editor-views.ts`: the `aiPromptInput` view definition, which runs the `@` and `/` pickers and this plugin ahead of the shared editing features.
+
+The workspace conversation sets the shared editor's `requireReasoningModel` option to `false`: an empty selection reaches the server's configured conversation default. Other prompt editors retain the explicit-model validation. Button and Enter submissions use the same acknowledgement and error callback path.

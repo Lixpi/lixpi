@@ -2,19 +2,22 @@
 @use "@lixpi/ui-kit-gentelella/styles/theme";
 @use "@lixpi/ui-kit-gentelella/styles/application-shell";
 @use "@lixpi/ui-primitives/styles/transitions" as *;
+@use "@lixpi/themes/dist/scss";
 @use "@lixpi/themes/scope" as themeScope;
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 
 .user-portal-shell {
     --sidebar-w: 224px;
-    --body-bg: #fff;
-    --text-primary: #202124;
-    --text-secondary: #686b70;
-    --text-muted: #686b70;
-    --border-color: #e9e9eb;
+    --body-bg: var(--theme-background);
+    --bg-surface: var(--theme-surface);
+    --text: var(--theme-text);
+    --text-primary: var(--theme-heading);
+    --text-secondary: var(--theme-text-secondary);
+    --text-muted: var(--theme-text-muted);
+    --border-color: var(--theme-border);
     min-height: 100dvh;
-    color: #202124;
-    background: #fff;
+    color: var(--theme-text);
+    background: var(--theme-background);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 14px;
     line-height: 1.5;
@@ -39,7 +42,7 @@
     width: 26px;
     height: 26px;
     background: transparent;
-    color: #34383c;
+    color: var(--theme-text-strong);
     border-radius: 0;
 }
 .user-portal-shell .user-portal-logo,
@@ -54,7 +57,7 @@
     font-size: 20px;
     font-weight: 600;
     letter-spacing: -0.6px;
-    color: #202124;
+    color: var(--theme-heading);
 }
 .user-portal-shell .sidebar-nav {
     padding-block: #{themeScope.token("components-navigation-list-base-padding-block", themePalette.$roles)};
@@ -104,7 +107,7 @@
 }
 .user-portal-shell .main {
     min-width: 0;
-    background: #fff;
+    background: var(--theme-background);
 }
 .user-portal-shell .page-wrapper {
     width: 100%;
@@ -115,11 +118,11 @@
 .user-portal-shell .page-header {
     margin: 0 0 28px;
     padding: 0 0 20px;
-    border-bottom: 1px solid #ececee;
+    border-bottom: 1px solid var(--theme-divider);
 }
 .user-portal-shell .page-title {
     margin: 0;
-    color: #202124;
+    color: var(--theme-heading);
     font-size: 23px;
     font-weight: 600;
     line-height: 1.3;
@@ -130,10 +133,10 @@
 .user-portal-controls .btn {
     min-height: 38px;
     padding: 8px 14px;
-    border: 1px solid #dedee1;
+    border: 1px solid var(--theme-border);
     border-radius: 7px;
-    background: #fff;
-    color: #282a2e;
+    background: var(--theme-surface);
+    color: var(--theme-text);
     font-family: inherit;
     font-size: 14px;
     font-weight: 500;
@@ -145,11 +148,11 @@
         hoverTransition(border-color);
 
     &:hover:not(:disabled) {
-        background: #f4f4f5;
-        border-color: #c5c5c9;
+        background: var(--theme-surface-hover);
+        border-color: var(--theme-divider);
     }
     &:focus-visible {
-        outline: 2px solid #54575d;
+        outline: 2px solid var(--theme-accent);
         outline-offset: 3px;
     }
     &:disabled {
@@ -162,23 +165,23 @@
 }
 .user-portal-shell .btn-primary,
 .user-portal-controls .btn-primary {
-    background: #202124;
-    border-color: #202124;
-    color: #fff;
+    background: var(--theme-button-background);
+    border-color: var(--theme-button-background);
+    color: var(--theme-button-text);
 
     &:hover:not(:disabled) {
-        background: #383a3e;
-        border-color: #383a3e;
+        background: var(--theme-button-hover);
+        border-color: var(--theme-button-hover);
     }
 }
 .user-portal-shell .form-control,
 .user-portal-controls .form-control {
     min-height: 46px;
     padding: 11px 13px;
-    border: 1px solid #d7d7da;
+    border: 1px solid var(--theme-border);
     border-radius: 8px;
-    background: #fff;
-    color: #202124;
+    background-color: var(--theme-surface);
+    color: var(--theme-text);
     font: inherit;
     font-size: 16px;
     box-shadow: none;
@@ -187,8 +190,8 @@
         hoverTransition(box-shadow);
 
     &:focus {
-        border-color: #777b80;
-        box-shadow: 0 0 0 2px rgb(40 45 50 / 8%);
+        border-color: var(--theme-accent);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent), transparent 80%);
         outline: none;
     }
 }
@@ -202,7 +205,7 @@
     gap: 22px;
     padding: 32px;
     border-radius: 16px;
-    background: #f0f4eb;
+    background: var(--theme-navigation-backdrop-opaque);
 }
 .user-portal-avatar {
     display: grid;
@@ -210,10 +213,10 @@
     width: 72px;
     height: 72px;
     flex-shrink: 0;
-    border: 1px solid #d6e1ce;
+    border: 1px solid var(--theme-border-subtle);
     border-radius: 50%;
-    background: #e2ebda;
-    color: #42583c;
+    background: var(--theme-navigation-active);
+    color: var(--theme-heading);
     font-size: 28px;
     font-weight: 500;
 }
@@ -226,7 +229,7 @@
 }
 .user-portal-profile-heading p {
     margin: 0;
-    color: #63705f;
+    color: var(--theme-text-secondary);
     font-size: 14px;
     overflow-wrap: anywhere;
 }
@@ -246,7 +249,7 @@
 }
 .user-portal-section-description {
     margin: 0;
-    color: #686b70;
+    color: var(--theme-text-muted);
 }
 .user-portal-user-grid {
     display: grid;
@@ -259,20 +262,65 @@
 }
 .user-portal-user-term {
     margin-bottom: 7px;
-    color: #6a6d72;
+    color: var(--theme-text-muted);
     font-size: 13px;
 }
 .user-portal-user-value {
     margin: 0;
-    color: #292b2f;
+    color: var(--theme-text);
     font-size: 15px;
     overflow-wrap: anywhere;
 }
 .user-portal-state {
     padding: 20px;
-    border: 1px solid #e9e9eb;
+    border: 1px solid var(--theme-border-subtle);
     border-radius: 8px;
-    color: #686b70;
+    color: var(--theme-text-muted);
+}
+
+.user-portal-preferences {
+    max-width: 680px;
+}
+.user-portal-preference-form {
+    display: grid;
+    gap: 20px;
+    padding-block: 0 26px;
+    margin-block-end: 24px;
+    border-bottom: 1px solid var(--theme-divider);
+
+    &[hidden] {
+        display: none;
+    }
+}
+.user-portal-preference-form h2 {
+    margin: 0;
+    color: var(--theme-heading);
+    font-size: 17px;
+    font-weight: 600;
+}
+.user-portal-preference-field {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    color: var(--theme-text);
+    font-weight: 500;
+}
+.user-portal-preference-field [id],
+.user-portal-preference-status {
+    color: var(--theme-text-muted);
+    font-weight: 400;
+}
+.user-portal-preference-field select {
+    max-width: 340px;
+}
+.user-portal-preference-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+.user-portal-preference-status {
+    margin: 0;
 }
 
 @media (max-width: 760px) {
@@ -282,7 +330,7 @@
         height: auto;
         transform: none;
         border-right: 0;
-        border-bottom: 1px solid #e9e9eb;
+        border-bottom: 1px solid var(--theme-border-subtle);
     }
     .user-portal-shell .sidebar-brand {
         min-height: 64px;

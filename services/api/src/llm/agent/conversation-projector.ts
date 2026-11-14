@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 import {
+    type ConversationEvent,
+    type ConversationFailure,
     type ConversationMessage,
     type ConversationMessageNode,
     type ConversationTurn,
@@ -85,6 +87,7 @@ export class ConversationProjector {
             previousNodes.map(node => [String(node.attrs?.id ?? ''), node]),
         )
         const content: ConversationMessageNode[] = []
+        let failures: Map<string, ConversationFailure> | undefined
         let after: string | undefined
 
         do {
@@ -97,20 +100,12 @@ export class ConversationProjector {
             for (const message of page.items) {
                 const existing = byId.get(message.messageId)
 
-                if (
-                    existing
-                    && (message.role === 'user' || (message.complete !== false && existing.attrs?.isReceivingAnimation === false))
-                ) {
-                    content.push(existing)
-
-                    continue
-                }
-
                 if (message.role === 'configuration') {
                     content.push({
                         type: aiResponseMessageNodeType,
                         attrs: {
                             id: message.messageId,
+                            conversationRole: 'configuration',
                             isInitialRenderAnimation: false,
                             isReceivingAnimation: false,
                         },
@@ -123,6 +118,31 @@ export class ConversationProjector {
                             }],
                         }],
                     })
+
+                    continue
+                }
+
+                let failure = message.failure
+
+                // Older runtimes emitted a separate, reserved failure identity
+                // without tagging the message. Recover its type from the durable
+                // error event, then retain it in the projected document.
+                if (
+                    !failure
+                    && !existing?.attrs?.failure
+                    && message.role === 'assistant'
+                    && message.messageId.endsWith('-failure')
+                ) {
+                    failures ??= await this.readFailures(owner, meta.eventSeq)
+                    failure = failures.get(message.turnId)
+                }
+
+                if (
+                    existing
+                    && (!failure || JSON.stringify(existing.attrs?.failure) === JSON.stringify(failure))
+                    && (message.role === 'user' || (message.complete !== false && existing.attrs?.isReceivingAnimation === false))
+                ) {
+                    content.push(existing)
 
                     continue
                 }
@@ -166,8 +186,9 @@ export class ConversationProjector {
                         attrs: {
                             ...response.attrs,
                             id: message.messageId,
+                            failure: failure ?? existing?.attrs?.failure ?? null,
                             isInitialRenderAnimation: false,
-                            isReceivingAnimation: message.complete === false,
+                            isReceivingAnimation: message.complete === false && !['completed', 'failed', 'stopped'].includes(turn.state),
                         },
                     })
                 }
@@ -248,6 +269,34 @@ export class ConversationProjector {
             },
         })
         await this.drain(owner)
+    }
+
+    private async readFailures(
+        owner: ConversationOwner,
+        eventSeq: number,
+    ): Promise<Map<string, ConversationFailure>> {
+        const failures = new Map<string, ConversationFailure>()
+        let after: string | undefined
+
+        do {
+            const page = await this.repository.query<ConversationEvent>(
+                owner.partition,
+                'EVENT#',
+                { after },
+            )
+
+            for (const event of page.items)
+                if (
+                    event.type === 'error'
+                    && event.turnId
+                    && event.eventSeq <= eventSeq
+                )
+                    failures.set(event.turnId, event.payload)
+
+            after = page.cursor
+        } while (after)
+
+        return failures
     }
 
     private async drain(owner: ConversationOwner): Promise<void> {

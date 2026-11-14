@@ -41,6 +41,29 @@ export type ConversationModelPreferences = Pick<AiInteractionMediaGenerationRequ
     | 'imageOptions'
     | 'videoOptions'>
 
+const orderedPreferenceValue = (
+    _key: string,
+    value: unknown,
+): unknown => {
+    if (
+        !value
+        || typeof value !== 'object'
+        || Array.isArray(value)
+    )
+        return value
+
+    return Object.fromEntries(
+        Object.entries(value).sort(([left], [right]) => left.localeCompare(right)),
+    )
+}
+
+// Object order may change across transport and storage. Model and row order
+// remain significant, so arrays retain their original ordering.
+export const conversationModelPreferencesEqual = (
+    left: ConversationModelPreferences,
+    right: ConversationModelPreferences,
+): boolean => JSON.stringify(left, orderedPreferenceValue) === JSON.stringify(right, orderedPreferenceValue)
+
 export type ConversationSettings = {
     contextMode: ConversationContextMode
     midRunPolicy: ConversationMidRunPolicy
@@ -172,6 +195,7 @@ export type ConversationTurn = {
     settings: ConversationSettings
     settingsRevision: number
     midRunPolicy: ConversationMidRunPolicy
+    contextModeSource?: 'account'
     state: ConversationRunState
     createdAt: number
     interruptId?: string
@@ -267,6 +291,7 @@ export type ConversationMessage = {
     messageId: string
     turnId: string
     role: 'user' | 'assistant' | 'configuration'
+    failure?: ConversationFailure
     text: string
     clientMessageId?: string
     // Set when a workspace agent, not a person, wrote a user-side message.

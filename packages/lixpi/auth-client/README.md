@@ -2,7 +2,7 @@
 
 Dependency versions in `package.json` are generated from [the version registry](../../../dev-tools/versions-registry/README.md). Edit the central entry and synchronize before rebuilding a consuming service.
 
-`@lixpi/auth-client` contains browser authentication and current-user loading for Lixpi web clients. Each client instance owns its Auth0 or LocalAuth0 adapter, auth and user Nano Stores, authenticated session, and `users.get` request flow.
+`@lixpi/auth-client` contains browser authentication and current-user loading for Lixpi web clients. Each client instance owns its Auth0 or LocalAuth0 adapter, auth and user Nano Stores, authenticated session, and `user.get` request flow.
 
 The package does not start a browser application, connect to NATS, or mount UI automatically. A service composition root maps its transport-neutral auth session into its own connection dependency, then injects that dependency into `@lixpi/web-client-service-factory`. Its optional `AuthenticationFailure` view displays a branded UI-kit page with one Sign in button. Consumers import `@lixpi/ui-kit/styles/auth-panel` once at their application root. The button starts the configured Auth0 or LocalAuth0 flow without checking whether an email or account exists. Auth0 owns registration; automatic email signup depends on the deployed connection policy.
 
@@ -45,6 +45,8 @@ authClient.userStore.subscribe(renderCurrentUser)
 ```
 
 `features.auth` and `features.currentUser` default to `true`. Disable either operation in the auth-client configuration when a browser application does not use it. When `features.auth` is `false`, omit the `auth` configuration entirely.
+
+The current-user service updates account preferences through `user.preferences.update`. `CurrentUserRefresh` refreshes an already loaded account on browser focus or transport reconnection, preserving signed-in data through transient failures and discarding a stale reply after a store reset or intervening update.
 
 Read [Using the Auth Client](documentation/USING-AUTH-CLIENT.md) for the runtime contract, stores, and feature injection.
 

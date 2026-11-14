@@ -71,6 +71,8 @@ export type CanvasConversationThread = {
 export type CanvasConversationEditor = {
     activate: () => void
     readContent: () => object | undefined
+    readDocumentVersion?: () => number | undefined
+    recoverAuthority?: () => Promise<void>
     submitPersisted: () => void
     renderOperations?: (
         operations: ConversationOperationSummary[],

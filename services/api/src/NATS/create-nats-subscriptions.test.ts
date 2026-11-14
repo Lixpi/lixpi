@@ -7,9 +7,19 @@ import {
 import { createNatsSubscriptions, composeApiSubscriptions } from './create-nats-subscriptions.ts'
 import { activeContractGroups } from '@lixpi/nats-subject-registry'
 
+const userReadId = getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.GET_USER)
+const preferenceUpdateId = getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.UPDATE_PREFERENCES)
+
 describe('contract handler bindings', () => {
     it('binds behavior without accepting permission overrides', async () => {
-        const [subscription] = createNatsSubscriptions('user', { [getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.GET_USER)]: async () => 'result' })
+        const [subscription, preferenceUpdate] = createNatsSubscriptions(
+            'user',
+            {
+                [userReadId]: async () => 'result',
+                [preferenceUpdateId]: async () => ({}),
+            },
+        )
+        expect(preferenceUpdate.queue).toBe('userPreferenceWrites')
         expect(subscription.subject).toBe('user.get')
         expect(subscription.permissions?.pub?.allow).toEqual([subscription.subject])
         expect(await subscription.handler({}, {} as never)).toBe('result')
@@ -26,7 +36,13 @@ describe('contract handler bindings', () => {
     it('rejects missing and extra handlers at runtime', () => {
         expect(() => createNatsSubscriptions('user', {} as never)).toThrow('bindings')
         expect(() => createNatsSubscriptions('user', { wrong: () => null } as never)).toThrow('bindings')
-        expect(() => createNatsSubscriptions('user', { [getNatsSubjectPath(subjects => subjects.USER_SUBJECTS.GET_USER)]: undefined } as never)).toThrow('Missing')
+        expect(() => createNatsSubscriptions(
+            'user',
+            {
+                [userReadId]: undefined,
+                [preferenceUpdateId]: () => null,
+            } as never,
+        )).toThrow('Missing')
     })
     it('rejects incomplete or substituted active groups', () => {
         const groups = Object.fromEntries(Object.entries(activeContractGroups).map(([name, contracts]) => [
@@ -41,7 +57,7 @@ describe('contract handler bindings', () => {
         })).toThrow('Incomplete')
         expect(() => composeApiSubscriptions({
             ...groups,
-            user: groups['organization-membership'],
+            user: [groups.user[0]!, ...groups['organization-membership']],
         })).toThrow('Mismatched')
     })
 })

@@ -23,6 +23,19 @@ const settingsOverrides: SettingsOverrides = {
         // The workspace list takes its own space and the canvas shrinks beside
         // it. Set `overlay` to float the list over the canvas instead.
         placement: 'push',
+        resizeHandle: {
+            ...sharedSettings.navigationSidePanel.resizeHandle,
+            styles: {
+                gradient: 'var(--theme-panel-resize-handle-gradient)',
+                width: 'var(--theme-navigation-resize-handle-width)',
+            },
+        },
+        styles: {
+            backdropFill: 'var(--theme-navigation-backdrop)',
+            backdropFillOpaque: 'var(--theme-navigation-backdrop-opaque)',
+            toggleColor: 'var(--theme-panel-toggle-color)',
+            toggleHoverColor: 'var(--theme-panel-toggle-hover)',
+        },
         overlay: {
             ...sharedSettings.navigationSidePanel.overlay,
             // The list stays open when the user clicks the canvas. Set `true`

@@ -464,6 +464,7 @@ export type AgentHarnessOptions = {
     maxGraphSteps: number
     assertCurrent: () => Promise<void>
     beforeModel?: (messages: BaseMessage[]) => Promise<BaseMessage[]>
+    beforeTool?: () => Promise<void>
     authorizeTool: (
         name: string,
         args: Record<string, unknown>,
@@ -561,6 +562,7 @@ export const createAgentHarness = (options: AgentHarnessOptions) => {
             createMiddleware({
                 name: 'LixpiActionScope',
                 wrapToolCall: async (request, handler) => {
+                    await options.beforeTool?.()
                     await options.assertCurrent()
 
                     if (

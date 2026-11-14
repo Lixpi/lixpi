@@ -26,6 +26,7 @@ export const aiResponseMessageNodeView = (
     const loadingElement = responseShell.loadingEl
     const responseMessageContent = responseShell.contentEl
     const capabilityProgressElement = responseShell.capabilityProgressEl
+    const failureLabelElement = responseShell.failureLabelEl
 
     // // Create an accept button
     // const acceptButton = document.createElement('button')
@@ -41,10 +42,34 @@ export const aiResponseMessageNodeView = (
 
     // The only response animation is the one-shot content reveal on first render.
     // Receiving state is conveyed by the loading indicator.
-    const updateAnimation = () => void responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
+    const updateAnimation = () => void responseMessageContent.classList.toggle(
+        'node-render-animation',
+        node.attrs.isInitialRenderAnimation && !node.attrs.failure,
+    )
 
     const updateLoadingState = () => {
-        const isWaitingForContent = node.childCount === 0 && node.attrs.isReceivingAnimation
+        parentWrapper.hidden = node.attrs.conversationRole === 'configuration'
+        parentWrapper.dataset.conversationRole = node.attrs.conversationRole ?? 'assistant'
+        const failure = node.attrs.failure
+        failureLabelElement.hidden = !failure
+        aiResponseMessageContainer.classList.toggle(
+            'is-failed',
+            Boolean(failure),
+        )
+
+        if (failure) {
+            parentWrapper.dataset.failureCode = failure.code
+            aiResponseMessageContainer.setAttribute('role', 'group')
+            aiResponseMessageContainer.setAttribute('aria-label', 'Response failed')
+        } else {
+            delete parentWrapper.dataset.failureCode
+            aiResponseMessageContainer.removeAttribute('role')
+            aiResponseMessageContainer.removeAttribute('aria-label')
+        }
+
+        const isWaitingForContent = !failure
+            && node.childCount === 0
+            && node.attrs.isReceivingAnimation
 
         aiResponseMessageContainer.classList.toggle('is-waiting', isWaitingForContent)
         aiResponseMessageContainer.classList.toggle('is-empty', isWaitingForContent)
@@ -64,6 +89,8 @@ export const aiResponseMessageNodeView = (
             if (
                 mutation.target === capabilityProgressElement
                 || capabilityProgressElement.contains(mutation.target)
+                || mutation.target === failureLabelElement
+                || failureLabelElement.contains(mutation.target)
             )
                 return true
 

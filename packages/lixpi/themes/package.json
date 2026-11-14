@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./browser": "./src/application-theme-binding.ts",
     "./scope": {
       "types": "./src/projections/scss.d.ts",
       "sass": "./src/projections/scope.scss",

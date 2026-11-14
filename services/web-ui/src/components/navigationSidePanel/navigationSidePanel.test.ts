@@ -1,4 +1,5 @@
 import {
+    afterAll,
     afterEach,
     beforeEach,
     describe,
@@ -217,6 +218,18 @@ afterEach(() => {
     router.destroy()
     consoleErrorSpy?.mockRestore()
     consoleErrorSpy = null
+})
+
+afterAll(() => {
+    // Unmount the persistent store before the test environment removes window.
+    vi.useFakeTimers()
+
+    try {
+        navigationSidePanelStore.get()
+        vi.runOnlyPendingTimers()
+    } finally {
+        vi.useRealTimers()
+    }
 })
 
 // =============================================================================

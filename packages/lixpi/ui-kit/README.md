@@ -64,9 +64,9 @@ SlidingSwitch and SlidingTabsSwitch expose `setAppearance(Partial<SlidingSwitchA
 
 ## Application themes
 
-The standalone `@lixpi/themes` package owns theme values. Web UI and the canvas library use its `lixpi-light` preset; [One Dark Pro Mariana](../themes/src/presets/one-dark-pro-mariana/README.md) uses the same complete template. UI-kit consumes these values for its controls and styles.
+The standalone `@lixpi/themes` package owns theme values. Web UI, the user portal and the canvas library start with its `lixpi-light` preset. [One Dark Pro Mariana](../themes/src/presets/one-dark-pro-mariana/README.md) uses the same complete template. UI-kit consumes these values for its controls and styles.
 
-All TypeScript consumers import from `@lixpi/themes`. That entrypoint owns the preset registry: `themePresets` and `themeNames` enumerate it, `getTheme(name)` returns the registered native preset, and `getThemeStylesheet(name)` returns its CSS projection. Unknown names throw instead of selecting another theme. The entrypoint has no browser component, editor, or Node tooling dependencies.
+Theme values and validation are available from `@lixpi/themes`. That entry point owns the preset registry: `themePresets` and `themeNames` enumerate it, `getTheme(name)` returns the registered native preset, and `getThemeStylesheet(name)` returns its CSS projection. Unknown names throw instead of selecting another theme. The entry point has no browser component, editor, or Node tooling dependencies. The workspace and user portal use `ApplicationThemeBinding` from `@lixpi/themes/browser` to apply the signed-in account's preference to the document. Follow device selects the registered light or dark preset as the operating system setting changes. The workspace also applies the resolved preset to UI-kit settings and its live canvas theme store.
 
 ```typescript
 import { lixpiLightTheme } from '@lixpi/themes'

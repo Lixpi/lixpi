@@ -15,6 +15,43 @@ vi.mock('./conversation-adapters.ts', () => ({ ConversationAdapters: class {
 } }))
 
 describe('active conversation context boundary', () => {
+    it('keeps account context pinned while checking the conversation owner', async () => {
+        const fixture = await createConversationExecutionFixture()
+        const turn = {
+            ...fixture.turn,
+            contextModeSource: 'account' as const,
+            settings: {
+                ...fixture.turn.settings,
+                contextMode: 'discovery' as const,
+            },
+        }
+        const boundary = new AgentContextBoundary(
+            fixture.repository,
+            fixture.payloads,
+            fixture.owner,
+            turn,
+            new Set(),
+        )
+        const meta = await fixture.owner.read()
+
+        expect(meta.settings.contextMode).toBe('explicit')
+        await boundary.load()
+        await expect(boundary.assertCurrent()).resolves.toBeUndefined()
+        await expect(boundary.synchronize([])).resolves.toBe(false)
+        expect(boundary.effectiveTurn().settings.contextMode).toBe('discovery')
+
+        await fixture.repository.commit([fixture.repository.replace(
+            fixture.owner.partition,
+            'META',
+            {
+                ...meta,
+                leaseOwner: 'new-owner',
+                revision: meta.revision + 1,
+            },
+        )])
+        await expect(boundary.assertCurrent()).rejects.toThrow('CONVERSATION_OWNER_LOST')
+    })
+
     it('retains paired action receipts while excluding discovered inputs, tool arguments, and old scratch summaries', async () => {
         const f = await createConversationExecutionFixture()
         const turn = {

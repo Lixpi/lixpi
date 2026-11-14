@@ -136,6 +136,7 @@ describe('conversation transcript projection', () => {
         const configuration = engine.doc.firstChild!.lastChild!
         expect(configuration.type.name).toBe('aiResponseMessage')
         expect(configuration.attrs.id).toBe('0001-2-settings-2')
+        expect(configuration.attrs.conversationRole).toBe('configuration')
         expect(configuration.textContent).toBe('Context: Explicit. During a run: Queue.')
         expect(configuration.firstChild!.firstChild!.marks.map(mark => mark.type.name)).toEqual(['em'])
         const replay = new HeadlessProseMirrorEngine({
@@ -150,6 +151,126 @@ describe('conversation transcript projection', () => {
         expect(fixture.events).toHaveLength(2)
         await fixture.projector.project(fixture.owner)
         expect(fixture.events).toHaveLength(2)
+    })
+
+    it('backfills the semantic role on a previously projected configuration record', async () => {
+        const fixture = await projectionFixture()
+        await fixture.owner.message({
+            messageId: '0001-2-settings-2',
+            turnId: 'settings-2',
+            role: 'configuration',
+            text: 'Model preferences updated.',
+            complete: true,
+            createdAt: 1001,
+        })
+        await fixture.projector.project(fixture.owner)
+        const saved = await fixture.document()
+        const legacy = structuredClone(saved!.doc) as {
+            content: Array<{ content: Array<{ attrs: Record<string, unknown> }> }>
+        }
+        delete legacy.content[0].content.at(-1)!.attrs.conversationRole
+        await fixture.repository.commit([fixture.repository.replace(fixture.partition, 'TEST_DOCUMENT', {
+            doc: legacy,
+            version: saved!.version,
+        })])
+        const count = fixture.events.length
+        await fixture.projector.project(fixture.owner)
+        const corrected = await fixture.document()
+        const engine = new HeadlessProseMirrorEngine({
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            doc: corrected!.doc,
+        })
+        expect(engine.doc.firstChild!.lastChild!.attrs.conversationRole).toBe('configuration')
+        expect(engine.doc.firstChild!.lastChild!.textContent).toBe('Model preferences updated.')
+        expect(fixture.events.length).toBeGreaterThan(count)
+        const updatedCount = fixture.events.length
+        await fixture.projector.project(fixture.owner)
+        expect(fixture.events).toHaveLength(updatedCount)
+    })
+
+    it.each([false, true])('projects a failure separately from retained assistant text, legacy record: %s', async legacy => {
+        const fixture = await projectionFixture()
+        const failure = {
+            code: 'AGENT_MODEL_CALL_NOT_AUTHORIZED',
+            message: 'Review account access before retrying.',
+            recoverable: true,
+        }
+        await fixture.owner.message({
+            messageId: '0001-1-response',
+            turnId: 'turn',
+            role: 'assistant',
+            text: 'Saved progress before the request failed.',
+            complete: true,
+            createdAt: 1001,
+        })
+        await fixture.owner.event('error', failure)
+        await fixture.owner.message({
+            messageId: '0001-1-response-failure',
+            turnId: 'turn',
+            role: 'assistant',
+            text: failure.message,
+            ...(legacy ? {} : { failure }),
+            complete: true,
+            createdAt: 1002,
+        })
+        await fixture.projector.project(fixture.owner)
+
+        if (legacy) {
+            const saved = await fixture.document()
+            const document = structuredClone(saved!.doc) as {
+                content: Array<{ content: Array<{ attrs: Record<string, unknown> }> }>
+            }
+            delete document.content[0].content.at(-1)!.attrs.failure
+            await fixture.repository.commit([fixture.repository.replace(fixture.partition, 'TEST_DOCUMENT', {
+                doc: document,
+                version: saved!.version,
+            })])
+            await fixture.projector.project(fixture.owner)
+        }
+
+        const saved = await fixture.document()
+        const engine = new HeadlessProseMirrorEngine({
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            doc: saved!.doc,
+        })
+        const thread = engine.doc.firstChild!
+        expect(thread.childCount).toBe(3)
+        expect(thread.child(1).attrs.failure).toBeNull()
+        expect(thread.child(1).textContent).toBe('Saved progress before the request failed.')
+        expect(thread.lastChild!.attrs.failure).toEqual(failure)
+        expect(thread.lastChild!.textContent).toBe(failure.message)
+        const count = fixture.events.length
+        await fixture.projector.project(fixture.owner)
+        expect(fixture.events).toHaveLength(count)
+    })
+
+    it.each(['failed', 'stopped'] as const)('retains partial prose without a receiving state after the turn is %s', async state => {
+        const fixture = await projectionFixture()
+        const message = {
+            messageId: '0001-1-response',
+            turnId: 'turn',
+            role: 'assistant' as const,
+            text: 'A partial answer.',
+            complete: false,
+            createdAt: 1001,
+        }
+        await fixture.owner.partialMessage(message, message.text, 0)
+        await fixture.projector.project(fixture.owner)
+        await fixture.owner.finish(state)
+        await fixture.projector.project(fixture.owner)
+        const saved = await fixture.document()
+        const engine = new HeadlessProseMirrorEngine({
+            registry: createCoreDocumentKindRegistry(),
+            kindId: DOCUMENT_TYPE.ASSET_CONVERSATION,
+            doc: saved!.doc,
+        })
+        expect(engine.doc.firstChild!.lastChild!.textContent).toBe(message.text)
+        expect(engine.doc.firstChild!.lastChild!.attrs.isReceivingAnimation).toBe(false)
+        const count = fixture.events.length
+        await fixture.projector.project(fixture.owner)
+        expect(fixture.events).toHaveLength(count)
     })
 
     it('streams partial Markdown through native steps and replays the exact persisted document', async () => {

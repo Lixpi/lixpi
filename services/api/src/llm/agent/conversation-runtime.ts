@@ -28,6 +28,7 @@ import {
 import { ConversationOwner } from './conversation-owner.ts'
 import { ConversationAdapters } from './conversation-adapters.ts'
 import { ConversationProjector } from './conversation-projector.ts'
+import { ConversationTextBatch } from './conversation-text-batch.ts'
 import { ConversationCheckpointSaver } from './conversation-checkpoint-saver.ts'
 import { AgentPayloadStore } from './agent-payload-store.ts'
 import {
@@ -412,31 +413,23 @@ export class ConversationRuntime {
                                             : code.includes('SOURCE')
                                                 ? 'A referenced source changed or became unavailable. Review the references and send again.'
                                                 : 'The turn could not finish. Your accepted message is saved.'
-                        await owner.event(
-                            'error',
-                            {
-                                code,
-                                message,
-                                recoverable: code !== 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN',
-                            },
-                        )
+                        const failure = {
+                            code,
+                            message,
+                            recoverable: code !== 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN',
+                        }
+                        await owner.event('error', failure)
                         const response = await this.repository.read<{ responseMessageId: string }>(owner.partition, `INPUT_RESPONSE#${turn.turnId}`)
                         await owner.message({
                             messageId: `${response?.responseMessageId ?? this.projector.responseId(turn)}-failure`,
                             turnId: turn.turnId,
                             role: 'assistant',
+                            failure,
                             text: message,
                             complete: true,
                             createdAt: Date.now(),
                         })
-                        await owner.finish(
-                            'failed',
-                            {
-                                code,
-                                message,
-                                recoverable: code !== 'AGENT_MODEL_CALL_OUTCOME_UNKNOWN',
-                            },
-                        )
+                        await owner.finish('failed', failure)
                     }
                 }
 
@@ -502,7 +495,13 @@ export class ConversationRuntime {
             throw new Error('AGENT_BEDROCK_ROUTE_DISABLED')
 
         const available = await AiModel.getAvailableAiModels()
-        const selected = turn.settings.models.reasoningModelIds[0] ?? available.defaultModels.reasoning
+        const preferred = turn.settings.models.reasoningModelIds[0]
+        const preferredMeta = available.models.find(model => `${model.provider}:${model.model}` === preferred)
+        const selected = preferred
+            && preferredMeta?.provider.toLowerCase() === 'anthropic'
+            && preferredMeta.inferenceProviderCalledByThePlatform === 'aws-bedrock'
+            ? preferred
+            : available.defaultModels.reasoning
         const selectedMeta = available.models.find(model => `${model.provider}:${model.model}` === selected)
 
         if (
@@ -613,13 +612,7 @@ export class ConversationRuntime {
 
         const savedResponse = await this.repository.read<ConversationMessage>(owner.partition, `MESSAGE#${responseMessageId}`)
         let streamedText = savedResponse?.text ?? ''
-        let pendingText = ''
-        const flushText = async () => {
-            if (!pendingText)
-                return
-
-            const text = pendingText
-            pendingText = ''
+        const textBatch = new ConversationTextBatch(owner.abort.signal, async text => {
             await owner.fences(execution.continuationEpoch)
             await owner.partialMessage(
                 {
@@ -632,6 +625,7 @@ export class ConversationRuntime {
                 },
                 text,
                 streamedText.length,
+                execution.continuationEpoch,
             )
             streamedText += text
 
@@ -644,7 +638,7 @@ export class ConversationRuntime {
                     { message: error instanceof Error ? error.message.slice(0, 400) : 'Projection unavailable' },
                 )
             }
-        }
+        })
         const model = new AgentBedrockModel({
             ...resolveAgentReasoningOptions(
                 profile,
@@ -664,12 +658,7 @@ export class ConversationRuntime {
                 this.metrics,
                 execution.continuationEpoch,
             ).execute(input) },
-            onTextDelta: async text => {
-                pendingText += text
-
-                if (pendingText.length >= 128)
-                    await flushText()
-            },
+            onTextDelta: text => textBatch.append(text),
         })
         const pendingSteer = async (): Promise<ConversationTurn | undefined> => {
             const queued = await this.repository.query<{ turnId: string }>(
@@ -865,7 +854,7 @@ export class ConversationRuntime {
                 },
                 answer: interruptId => this.inputAnswer(owner, interruptId),
                 question: async question => {
-                    await flushText()
+                    await textBatch.flush()
                     await owner.message({
                         messageId: responseMessageId,
                         turnId: turn.turnId,
@@ -880,7 +869,7 @@ export class ConversationRuntime {
                     if (messageId <= responseMessageId)
                         return
 
-                    await flushText()
+                    await textBatch.flush()
                     responseMessageId = messageId
                     execution.responseMessageId = messageId
                     streamedText = (await this.repository.read<ConversationMessage>(owner.partition, `MESSAGE#${messageId}`))?.text ?? ''
@@ -1077,7 +1066,9 @@ export class ConversationRuntime {
             multiStep: ['plan', 'execute'].includes(execution.intent.intent),
             maxGraphSteps: this.configuration.maxModelCalls * 4,
             assertCurrent,
+            beforeTool: () => textBatch.flush(),
             beforeModel: async messages => {
+                await textBatch.flush()
                 const steering = await pendingSteer()
 
                 if (steering)
@@ -1157,7 +1148,7 @@ export class ConversationRuntime {
             const error = unwrapAgentError(caught)
 
             if (error instanceof AgentContextChanged) {
-                await flushText()
+                await textBatch.flush()
 
                 return await this.runTurn(
                     owner,
@@ -1166,17 +1157,20 @@ export class ConversationRuntime {
                 )
             }
 
-            if (
-                error instanceof AgentToolsPending
-                || error instanceof AgentInputPending
-                || (error instanceof Error && error.message.startsWith('AGENT_BUDGET'))
-            )
-                await flushText()
+            if (error instanceof ConversationSteerBoundary)
+                await textBatch.flush()
+            else {
+                if (
+                    error instanceof AgentToolsPending
+                    || error instanceof AgentInputPending
+                    || (error instanceof Error && error.message.startsWith('AGENT_BUDGET'))
+                )
+                    await textBatch.flush()
+                else
+                    await textBatch.discard()
 
-            if (!(error instanceof ConversationSteerBoundary))
                 throw error
-
-            await flushText()
+            }
 
             if (streamedText)
                 await owner.message({
@@ -1198,7 +1192,7 @@ export class ConversationRuntime {
             )
         }
 
-        await flushText()
+        await textBatch.flush()
         const messages = result.messages as BaseMessage[]
         const answer = [...messages].reverse().find(message => message.getType() === 'ai' && !(message as AIMessage).tool_calls?.length)
         const text = answer?.text

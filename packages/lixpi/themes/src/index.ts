@@ -58,6 +58,9 @@ export const getThemeStylesheet = (name: string): ThemeStylesheet => {
 
 export const getTheme = (name: string): ApplicationTheme => getThemeStylesheet(name).theme
 
+export const isThemePreference = (value: unknown): value is string => typeof value === 'string'
+    && (value === 'system' || registrationsByName.has(value))
+
 export {
     lixpiLightTheme,
     oneDarkProMarianaTheme,

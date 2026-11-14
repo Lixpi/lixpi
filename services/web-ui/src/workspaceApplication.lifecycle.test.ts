@@ -6,6 +6,12 @@ import {
     vi,
 } from 'vitest'
 import { createUserStore } from '@lixpi/auth-client'
+import {
+    lixpiLightTheme,
+    oneDarkProMarianaTheme,
+} from '@lixpi/themes'
+import { uiKitSettings } from '@lixpi/ui-kit'
+import { canvasThemeStore } from './canvas-adapters/canvas-theme.ts'
 import { createWorkspaceApplication } from './workspaceApplication.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -17,7 +23,7 @@ const mocks = vi.hoisted(() => ({
     loadRoute: vi.fn(async () => {}),
 }))
 vi.mock('@lixpi/nats-service', () => ({ default: { init: async () => ({
-    onReconnect: vi.fn(),
+    onReconnect: vi.fn(() => vi.fn()),
     request: vi.fn(),
     disconnect: mocks.disconnect,
 }) } }))
@@ -54,6 +60,7 @@ describe('workspace identity before private editor state', () => {
         const pendingUser = new Promise<void>(resolve => void (finishUser = resolve))
         const auth = {
             features: { currentUser: true },
+            getTokenSilently: async () => 'token',
             userStore,
             loadCurrentUser: vi.fn(async () => {
                 await pendingUser
@@ -64,6 +71,7 @@ describe('workspace identity before private editor state', () => {
                 userStore.setDataValues({
                     userId: 'authenticated-user',
                     organizations: ['organization'],
+                    preferences: { appearance: oneDarkProMarianaTheme.name },
                 })
             }),
         }
@@ -91,6 +99,9 @@ describe('workspace identity before private editor state', () => {
             onAuthRequired: vi.fn(),
             onError,
         })
+        const root = document.documentElement
+        const previousTheme = root.dataset.colorTheme
+        const previousScheme = root.dataset.theme
         const starting = application.start()
 
         try {
@@ -108,11 +119,25 @@ describe('workspace identity before private editor state', () => {
                 expect(mountedUserIds).toEqual(['authenticated-user'])
                 expect(mocks.loadRoute).toHaveBeenCalledOnce()
                 expect(onError).not.toHaveBeenCalled()
+                expect(root.dataset.colorTheme).toBe(oneDarkProMarianaTheme.name)
+                expect(root.dataset.theme).toBe('dark')
+                expect(canvasThemeStore.value.name).toBe(oneDarkProMarianaTheme.name)
+                expect(uiKitSettings.dropdown.errorState.textColor).toBe(oneDarkProMarianaTheme.feedback.danger)
+
+                userStore.setDataValues({ preferences: { appearance: lixpiLightTheme.name } })
+
+                expect(root.dataset.colorTheme).toBe(lixpiLightTheme.name)
+                expect(root.dataset.theme).toBe('light')
+                expect(canvasThemeStore.value.name).toBe(lixpiLightTheme.name)
+                expect(uiKitSettings.dropdown.errorState.textColor).toBe(lixpiLightTheme.feedback.danger)
             }
         } finally {
             finishUser()
             await starting
             await application.destroy()
         }
+
+        expect(root.dataset.colorTheme).toBe(previousTheme)
+        expect(root.dataset.theme).toBe(previousScheme)
     })
 })

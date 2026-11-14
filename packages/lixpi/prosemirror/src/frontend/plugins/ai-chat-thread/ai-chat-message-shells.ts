@@ -1,4 +1,5 @@
 import { html } from '@lixpi/ui-primitives/dom'
+import { exclamationIcon } from '@lixpi/ui-kit/svg'
 
 export type AiUserMessageShell = {
     wrapper: HTMLElement
@@ -14,6 +15,7 @@ export type AiResponseMessageShell = {
     messageEl: HTMLElement
     contentEl: HTMLElement
     loadingEl: HTMLElement | null
+    failureLabelEl: HTMLElement
     capabilityProgressEl: HTMLElement
     setMessageId: (messageId: string) => void
 }
@@ -73,6 +75,18 @@ export const createAiResponseMessageShell = (options: ResponseMessageShellOption
         >
             <div className="ai-response-message">
                 ${loadingIndicator}
+                <div
+                    className="ai-response-failure-label"
+                    contenteditable="false"
+                    hidden
+                >
+                    <span
+                        className="ai-response-failure-icon"
+                        aria-hidden="true"
+                        innerHTML=${exclamationIcon}
+                    ></span>
+                    <span>Response failed</span>
+                </div>
                 <div className="ai-response-message-content"></div>
                 <div
                     className="ai-response-capability-progress"
@@ -87,6 +101,7 @@ export const createAiResponseMessageShell = (options: ResponseMessageShellOption
         messageEl: wrapper.querySelector('.ai-response-message') as HTMLElement,
         contentEl: wrapper.querySelector('.ai-response-message-content') as HTMLElement,
         loadingEl: wrapper.querySelector('.ai-response-loading-spinner') as HTMLElement | null,
+        failureLabelEl: wrapper.querySelector('.ai-response-failure-label') as HTMLElement,
         capabilityProgressEl: wrapper.querySelector('.ai-response-capability-progress') as HTMLElement,
         setMessageId: (messageId: string) => void (wrapper.dataset.messageId = messageId),
     }

@@ -638,6 +638,123 @@ describe('DocumentAuthority', () => {
         service.disconnect()
     })
 
+
+    it('recovers delayed readiness and a rejected relay request without replacing the subscription or view', async () => {
+        const { view } = createView()
+        const service = new DocumentAuthority({
+            ...dependencies,
+            ...coordinate,
+            receiveOnly: true,
+            getView: () => view,
+        })
+        await expect(service.recover()).rejects.toThrow('ASSET_DOCUMENT_TRANSPORT_UNAVAILABLE')
+        const nats = createNats()
+        const unsubscribe = vi.fn()
+        nats.subscribe.mockReturnValue({ unsubscribe })
+        nats.request.mockRejectedValueOnce(new Error('Relay unavailable'))
+        nats.request.mockResolvedValue({
+            currentVersion: 1,
+            currentStreamSeq: 1,
+            liveSubject: eventSubject,
+            events: [createEvent({
+                kind: 'STEP',
+                version: 1,
+                step: { stepType: 'replace' },
+                streamSequence: 1,
+            })],
+        })
+        mocks.connection = nats
+
+        try {
+            await expect(service.recover()).rejects.toThrow('Relay unavailable')
+            const recovery = service.recover()
+            expect(service.recover()).toBe(recovery)
+            await recovery
+            expect(nats.subscribe).toHaveBeenCalledOnce()
+            expect(nats.request).toHaveBeenCalledTimes(2)
+            expect(nats.request.mock.calls[1][1]).toMatchObject({
+                localVersion: 0,
+                activateLiveRelay: true,
+            })
+            expect(view.dispatch).toHaveBeenCalledOnce()
+            expect(service.version).toBe(1)
+            expect(mocks.acquireLease).not.toHaveBeenCalled()
+        } finally {
+            service.disconnect()
+        }
+
+        expect(unsubscribe).toHaveBeenCalledOnce()
+    })
+
+    it('ignores an in-flight resume response and later recovery calls after disconnect', async () => {
+        const nats = createNats()
+        const pending = createDeferred<unknown>()
+        nats.subscribe.mockReturnValue({ unsubscribe: vi.fn() })
+        nats.request.mockReturnValue(pending.promise)
+        mocks.connection = nats
+        const { view } = createView()
+        const service = new DocumentAuthority({
+            ...dependencies,
+            ...coordinate,
+            receiveOnly: true,
+            getView: () => view,
+        })
+        const recovery = service.recover()
+        service.disconnect()
+        pending.resolve({
+            currentVersion: 1,
+            currentStreamSeq: 1,
+            liveSubject: eventSubject,
+            events: [createEvent({
+                kind: 'STEP',
+                version: 1,
+                step: { stepType: 'replace' },
+            })],
+        })
+        await recovery
+        await service.recover()
+        expect(view.dispatch).not.toHaveBeenCalled()
+        expect(nats.subscribe).toHaveBeenCalledOnce()
+        expect(nats.request).toHaveBeenCalledOnce()
+        expect(service.version).toBe(0)
+    })
+
+    it('does not replace a disposed document when a delayed snapshot download finishes', async () => {
+        const nats = createNats()
+        nats.subscribe.mockReturnValue({ unsubscribe: vi.fn() })
+        nats.request.mockResolvedValue({
+            currentVersion: 2,
+            currentStreamSeq: 2,
+            snapshot: { version: 2 },
+            liveSubject: eventSubject,
+            events: [],
+        })
+        const snapshot = createDeferred<unknown>()
+        mocks.fetchDocumentSnapshot.mockReturnValue(snapshot.promise)
+        mocks.connection = nats
+        const { view } = createView()
+        const service = new DocumentAuthority({
+            ...dependencies,
+            ...coordinate,
+            receiveOnly: true,
+            getView: () => view,
+        })
+        const recovery = service.recover()
+        await flushPromises()
+        expect(mocks.fetchDocumentSnapshot).toHaveBeenCalledOnce()
+        service.disconnect()
+        snapshot.resolve({
+            version: 2,
+            doc: {
+                type: 'doc',
+                content: [],
+            },
+        })
+        await recovery
+        expect(view.dispatch).not.toHaveBeenCalled()
+        expect(service.version).toBe(0)
+    })
+
     it('releases the lease and unsubscribes on disconnect, preventing further submission', async () => {
         vi.useFakeTimers()
         const nats = createNats()

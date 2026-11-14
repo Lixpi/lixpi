@@ -27,15 +27,14 @@ $aiChatThreadMediaMaxWidth: 500px;
     opacity: 1;
 }
 
-// User message bubble colors
-$userMessageBubbleColor: var(--canvas-lixpi-chat-user-background, #{themeScope.token("components-chat-thread-user-message-bubble-color", themePalette.$roles)});
-$userMessageBubbleSolidColor: var(--canvas-lixpi-chat-user-tail, #{themeScope.token("components-chat-thread-user-message-bubble-solid-color", themePalette.$roles)}); // Solid fallback for the tail
-$userMessageTextColor: var(--canvas-lixpi-chat-user-text, #{themeScope.token("components-chat-thread-user-message-text-color", themePalette.$roles)});
+// Conversation bubbles use the same neutral surfaces as the active theme.
+$userMessageBubbleColor: color-mix(in srgb, var(--canvas-text, #{themeScope.token("text", themePalette.$roles)}) 8%, var(--canvas-surface-hover, #{themeScope.token("surface-hover", themePalette.$roles)}));
+$userMessageTextColor: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
 
 // Names the workspace agent that wrote a delegated instruction.
 .ai-user-message-author {
     margin-left: auto;
-    margin-right: 1rem;
+    margin-right: 0;
     margin-bottom: 4px;
     max-width: 85%;
     text-align: right;
@@ -55,7 +54,7 @@ $userMessageTextColor: var(--canvas-lixpi-chat-user-text, #{themeScope.token("co
     gap: 6px;
     max-width: 85%;
     margin-left: auto;
-    margin-right: 1rem;
+    margin-right: 0;
     margin-bottom: 8px;
 }
 
@@ -148,8 +147,10 @@ $userMessageTextColor: var(--canvas-lixpi-chat-user-text, #{themeScope.token("co
 // ========== AI CHAT THREAD WRAPPER ==========
 .ai-chat-thread-wrapper {
     position: relative;
-    margin-top: 2rem;
+    margin-top: 0;
     min-height: $aiChatThreadMinHeight;
+    font-size: calc(var(--canvas-font-size, 15px) * 14 / 15);
+    line-height: var(--canvas-line-height, 1.5);
 
     // ===== THREAD CONTENT =====
     .ai-chat-thread-content {
@@ -171,31 +172,26 @@ $userMessageTextColor: var(--canvas-lixpi-chat-user-text, #{themeScope.token("co
 
     // ===== USER MESSAGE (SENT) =====
     .ai-user-message-wrapper {
-        display: block;
-        margin: 0.6rem 0;
+        display: flow-root;
+        margin: 0;
     }
 
     .ai-user-message {
-        @include prompt-reference-chip-on-dark-surface;
+        @include prompt-reference-chip-on-light-surface;
 
-        display: table;
-        max-width: 85%;
+        display: block;
+        width: fit-content;
+        max-width: min(85%, 36rem);
+        box-sizing: border-box;
         margin-left: auto;
-        margin-right: 1rem;
-        padding: 0.6rem 1rem;
+        margin-right: 0;
+        padding: 6px 10px;
         background: $userMessageBubbleColor;
         color: $userMessageTextColor;
         border-radius: #{themeScope.token("components-chat-thread-user-message-base-border-radius", themePalette.$roles)};
-        box-shadow: 0 1px 2px color-mix(in srgb, var(--canvas-lixpi-chat-ink, #{themeScope.token("components-chat-thread-ink", themePalette.$roles)}) 10%, transparent);
-        line-height: #{themeScope.token("components-chat-thread-user-message-base-line-height", themePalette.$roles)};
-        word-wrap: break-word;
-
-        @include speechBubbleTail(
-            (
-                position: "right",
-                bubbleColor: $userMessageBubbleSolidColor
-            )
-        );
+        box-shadow: none;
+        line-height: inherit;
+        overflow-wrap: anywhere;
     }
 
     .ai-user-message-content {
@@ -299,12 +295,34 @@ $userMessageTextColor: var(--canvas-lixpi-chat-user-text, #{themeScope.token("co
     }
 }
 
+.ai-chat-thread-wrapper .ai-chat-thread-content p {
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.ai-chat-thread-wrapper .ai-chat-thread-content p + p {
+    margin-top: 12px;
+}
+
+.ai-chat-thread-wrapper .ai-chat-thread-content > :not([hidden]) ~ .ai-response-message-wrapper {
+    margin-top: 12px;
+}
+
+.ai-chat-thread-wrapper .ai-chat-thread-content > :not([hidden]) ~ .ai-user-message-wrapper {
+    margin-top: 24px;
+}
+
+.ai-response-message-wrapper[hidden] {
+    display: none;
+}
+
 $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
 // ========== AI RESPONSE MESSAGE WRAPPER ==========
 .ai-response-message-wrapper {
+    display: flow-root;
     margin: 0;
-    padding: 0.8rem 0 0.7rem;
+    padding: 0;
     position: relative;
 
     .ai-generated-media-run-pill {
@@ -1012,4 +1030,42 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
 .workspace-media-generation-progress .progress-timeline-item[data-item-id="lineage:media-generation-prompt"] > .progress-timeline-content > .progress-timeline-details > .progress-timeline-summary {
     @include ai-generation-prompt-surface;
+}
+
+.ai-response-message-wrapper .ai-response-message.is-failed {
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--canvas-danger, #{themeScope.token("danger", themePalette.$roles)}) 28%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--canvas-danger, #{themeScope.token("danger", themePalette.$roles)}) 5%, transparent);
+}
+
+.ai-response-failure-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--canvas-danger, #{themeScope.token("danger", themePalette.$roles)});
+    font-weight: 600;
+}
+
+.ai-response-failure-label[hidden] {
+    display: none;
+}
+
+.ai-response-failure-icon {
+    display: flex;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.ai-response-failure-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.ai-response-message.is-failed .ai-response-message-content {
+    margin-top: 6px;
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
 }

@@ -9,7 +9,7 @@ import {
     type AiPromptComposerInstance,
 } from './ai-prompt-composer.ts'
 
-export type WorkspacePromptComposerOptions = Pick<AiPromptComposerConfig, 'document' | 'appearance' | 'mountEditor' | 'onSubmit'> & {
+export type WorkspacePromptComposerOptions = Pick<AiPromptComposerConfig, 'document' | 'appearance' | 'mountEditor' | 'onSubmit' | 'onSubmitError'> & {
     workspaceId: string
     userId?: string
     conversationAssetId?: string
@@ -67,6 +67,7 @@ export class WorkspacePromptComposer {
                 initialContent: this.readDraft(),
                 onContentChange: content => this.writeDraft(content),
                 onSubmit: options.onSubmit,
+                onSubmitError: options.onSubmitError,
             })
             this.lifetime.own(() => this.input.destroy())
             this.element.append(tray.element, this.input.element)
