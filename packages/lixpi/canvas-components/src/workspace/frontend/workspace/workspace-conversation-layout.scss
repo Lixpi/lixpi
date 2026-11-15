@@ -46,6 +46,10 @@ $workspace-conversation-content-inset: 20px;
     cursor: grabbing;
 }
 
+.workspace-conversation-layout-resize > .side-panel-resize-handle-line {
+    opacity: 0;
+}
+
 .workspace-conversation-layout-move[hidden],
 .workspace-conversation-layout-resize[hidden] {
     display: none;

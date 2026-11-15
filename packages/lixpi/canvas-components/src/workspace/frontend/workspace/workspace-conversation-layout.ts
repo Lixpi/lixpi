@@ -193,7 +193,7 @@ export class WorkspaceConversationLayout {
         options.element.prepend(this.header)
         options.element.append(this.controls)
         options.element.addEventListener('pointerdown', this.stopPropagation)
-        options.element.addEventListener('wheel', this.stopPropagation)
+        options.element.addEventListener('wheel', this.handleWheel)
         this.window.addEventListener('storage', this.onStorage)
         this.window.addEventListener(changeEvent, this.readGlobalChange)
 
@@ -484,6 +484,12 @@ export class WorkspaceConversationLayout {
         this.persist()
     }
 
+    private handleWheel = (event: WheelEvent): void => {
+        // Trackpad pinch uses Ctrl+wheel; ordinary wheel input belongs to the chat.
+        if (!event.ctrlKey)
+            event.stopPropagation()
+    }
+
     private stopPropagation = (event: Event): void => void event.stopPropagation()
 
     private readState(): LayoutState {
@@ -555,7 +561,7 @@ export class WorkspaceConversationLayout {
         this.window.removeEventListener('storage', this.onStorage)
         this.window.removeEventListener(changeEvent, this.readGlobalChange)
         this.options.element.removeEventListener('pointerdown', this.stopPropagation)
-        this.options.element.removeEventListener('wheel', this.stopPropagation)
+        this.options.element.removeEventListener('wheel', this.handleWheel)
         this.selector.destroy()
         this.toolbar.destroy()
 
