@@ -17,6 +17,13 @@ const getImportPosition = (specifier: string): number => {
 }
 
 describe('web-ui stylesheet order', () => {
+    it('loads shared action panel styles before the canvas placement rules', () => {
+        const actionPanelPosition = getImportPosition('@lixpi/ui-kit/styles/action-panel')
+
+        expect(actionPanelPosition < getImportPosition('$src/routes.ts')).toBe(true)
+        expect(actionPanelPosition < getImportPosition('$src/views/layouts/layout.ts')).toBe(true)
+    })
+
     it('loads shared side-panel styles before view-specific overrides', () => {
         const sharedStylePosition = getImportPosition('@lixpi/ui-kit/styles/side-panel')
         const routesPosition = getImportPosition('$src/routes.ts')

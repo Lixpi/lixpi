@@ -123,32 +123,27 @@ describe('settings - grouped configuration', () => {
         expect(Object.keys(rightToggle).sort()).toEqual(Object.keys(sharedRightToggle).sort())
     })
 
-    it('keeps the shared navigation toggle position and motion in a browser', () => {
-        const sharedToggle = createLixpiUiSettings().navigationSidePanel.toggle
+    it('slides the navigation toggle to just outside the open panel', () => {
         const toggle = settings.navigationSidePanel.toggle
         const browser = '* (1 - var(--window-title-bar-active, 0))'
         const titleBar = '* var(--window-title-bar-active, 0))'
-        const outsidePanel = '(var(--workspace-navigation-side-panel-width, 0px) + 12px)'
+        const margin = 'var(--window-title-bar-control-top, 0px)'
+        const outsidePanel = 'calc(var(--workspace-navigation-side-panel-width, 0px) + 12px)'
+        const closed = `calc(${margin} ${browser} + var(--window-title-bar-toggle-left, 0px) ${titleBar}`
 
-        expect(toggle.motion).toBe(sharedToggle.motion)
-        expect(toggle.top).toBe(`calc(${sharedToggle.top} ${browser} + ((var(--window-title-bar-height, 0px) - ${sharedToggle.size}) / 2) ${titleBar}`)
-        expect(toggle.openOffset).toBe(`calc(${sharedToggle.openOffset} ${browser} + ${outsidePanel} ${titleBar}`)
-        expect(toggle.closedTravel).toBe(`calc(0px ${browser} + (${outsidePanel} - var(--window-controls-inset, 0px)) ${titleBar}`)
+        expect(toggle.motion).toBe('slide')
+        expect(toggle.top).toBe(margin)
+        expect(toggle.openOffset).toBe(outsidePanel)
+        expect(toggle.closedTravel).toBe(`calc(${outsidePanel} - ${closed})`)
     })
 
-    it('gives the right toggle the navigation toggle size, centred where the shared toggle was', () => {
-        const shared = createLixpiUiSettings()
-        const navigationToggle = shared.navigationSidePanel.toggle
-        const sharedToggle = shared.rightSidePanel.toggle
+    it('keeps the right toggle at the same top and edge margin as the navigation toggle', () => {
+        const sharedToggle = createLixpiUiSettings().rightSidePanel.toggle
         const toggle = settings.rightSidePanel.toggle
-        const shift = `((${sharedToggle.size} - ${navigationToggle.size}) / 2)`
 
-        expect(toggle.size).toBe(navigationToggle.size)
-        expect(toggle.openOffset).toBe(`calc(${sharedToggle.openOffset} + ${shift})`)
-        expect(toggle.top).toBe(
-            `calc(calc(${sharedToggle.top} + ${shift}) * (1 - var(--window-title-bar-active, 0)) + ((var(--window-title-bar-height, 0px) - ${navigationToggle.size}) / 2) * var(--window-title-bar-active, 0))`,
-        )
-        expect(toggle.closedTravel).toBe(sharedToggle.closedTravel)
+        expect(toggle.top).toBe(settings.navigationSidePanel.toggle.top)
+        expect(toggle.openOffset).toBe(sharedToggle.openOffset)
+        expect(toggle.closedTravel).toBe(`calc(${sharedToggle.openOffset} - var(--window-title-bar-control-top, 0px))`)
     })
 
     it('exposes the navigation side panel placement and outside-close switch', () => {

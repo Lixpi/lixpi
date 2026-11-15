@@ -11,6 +11,10 @@ import {
     imageIcon,
 } from '@lixpi/ui-kit/svg'
 import {
+    createActionPanel,
+    type ActionPanelInstance,
+} from '@lixpi/ui-kit/components/action-panel'
+import {
     type LixpiCanvasPalette,
 } from '../settings/index.ts'
 
@@ -27,8 +31,6 @@ export type WorkspaceCanvasControlsSettings = {
         styles: {
             backdropFill: string
             backdropFillOpaque: string
-            toggleColor: string
-            toggleHoverColor: string
         }
     }
     modelMenuHoverBackground: string
@@ -57,12 +59,9 @@ export class WorkspaceCanvasControls {
         left: HTMLElement
         right: HTMLElement
     }
-    readonly glassTargets: readonly {
-        id: string
-        element: HTMLElement
-    }[]
     private readonly html: ReturnType<typeof createDocumentHtml>
     private readonly promptControls: WorkspacePromptControlRail
+    private readonly actions: ActionPanelInstance | null
     private readonly imageWrapper: HTMLDivElement | null
     private readonly imageButton: HTMLButtonElement | null
     private readonly fileInput: HTMLInputElement | null
@@ -93,8 +92,8 @@ export class WorkspaceCanvasControls {
             this.fileInput = null
             this.imageButton = null
             this.imageWrapper = null
+            this.actions = null
             this.element = html`<div className="workspace-canvas">${this.pane}</div>` as HTMLElement
-            this.glassTargets = []
             this.applySettings(settings)
 
             return
@@ -109,30 +108,27 @@ export class WorkspaceCanvasControls {
                 onchange=${this.onFileChange}
             />
         ` as HTMLInputElement
-        this.imageButton = html`
-            <button
-                className="workspace-floating-toolbar-button"
-                aria-label="Add Image"
-                data-help-tooltip="aria-label"
-                onclick=${this.toggleUploadMenu}
-                innerHTML=${imageIcon}
-            ></button>
-        ` as HTMLButtonElement
+        const actions = createActionPanel({
+            document: ports.document,
+            className: 'workspace-canvas-action-panel-left',
+        })
+        this.actions = actions
+        this.imageButton = actions.createButton({
+            iconSvg: imageIcon,
+            ariaLabel: 'Add Image',
+            onClick: this.toggleUploadMenu,
+        })
         this.imageWrapper = html`<div className="workspace-floating-toolbar-image-wrapper">${this.imageButton}</div>` as HTMLDivElement
-        const actions = html`
-            <div className="workspace-canvas-action-panel workspace-canvas-action-panel-left">
-                <button
-                    className="workspace-floating-toolbar-button"
-                    aria-label="New Document"
-                    data-help-tooltip="aria-label"
-                    onclick=${() => void this.invoke(ports.createDocument)}
-                    innerHTML=${createNewFileIcon}
-                ></button>
-                ${this.imageWrapper}
-            </div>
-        ` as HTMLDivElement
+        actions.element.append(
+            actions.createButton({
+                iconSvg: createNewFileIcon,
+                ariaLabel: 'New Document',
+                onClick: () => void this.invoke(ports.createDocument),
+            }),
+            this.imageWrapper,
+        )
         const controls = this.promptControls.element
-        const leftControls = html`<div className="workspace-canvas-left-control-rail">${actions}</div>` as HTMLDivElement
+        const leftControls = html`<div className="workspace-canvas-left-control-rail">${actions.element}</div>` as HTMLDivElement
         this.conversationControls = {
             left: leftControls,
             right: controls,
@@ -143,16 +139,6 @@ export class WorkspaceCanvasControls {
                 ${controls}${this.fileInput}${this.zoomIndicator}${this.pane}
             </div>
         ` as HTMLElement
-        this.glassTargets = [
-            {
-                id: 'workspace-action-panel-left',
-                element: actions,
-            },
-            {
-                id: 'workspace-right-control-rail',
-                element: controls,
-            },
-        ]
         this.applySettings(settings)
         this.setZoom(1)
     }
@@ -187,6 +173,7 @@ export class WorkspaceCanvasControls {
 
         this.disposed = true
         this.promptControls.destroy()
+        this.actions?.destroy()
         this.releaseOutsideClick?.()
         this.releaseOutsideClick = null
         this.element.remove()
@@ -208,8 +195,6 @@ export class WorkspaceCanvasControls {
             '--workspace-right-sidebar-tag-pill-font-weight': String(panel.typography.tagPillFontWeight),
             '--side-panel-backdrop-fill': panel.styles.backdropFill,
             '--side-panel-backdrop-fill-opaque': panel.styles.backdropFillOpaque,
-            '--side-panel-toggle-color': panel.styles.toggleColor,
-            '--side-panel-toggle-hover-color': panel.styles.toggleHoverColor,
             '--workspace-controls-steel-blue': palette.steelBlue,
             '--workspace-controls-night-blue': palette.nightBlue,
             '--workspace-controls-off-white': palette.offWhite,

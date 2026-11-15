@@ -50,7 +50,7 @@
 // The right panel's toggle shows the navigation panel's outline icon, mirrored
 // so its bar sits on the panel's side. It stays mirrored whether the panel is
 // open or closed, unlike the shared toggle's flipping chevron.
-.side-panel-toggle.workspace-ai-chat-panel-toggle svg {
+.side-panel-toggle.workspace-ai-chat-panel-toggle .side-panel-toggle-button svg {
     fill: none;
     stroke: currentColor;
     transform: scaleX(-1);

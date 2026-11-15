@@ -10,6 +10,7 @@ import {
     createSidePanel,
     type SidePanelConfig,
 } from './sidePanel.ts'
+import { ActionPanelRegistry } from '../actionPanel/actionPanel.ts'
 import { uiKitSettings } from '../../runtime-settings.ts'
 
 it('restores body styles after overlapping panel drags are disposed out of order', () => {
@@ -435,9 +436,39 @@ describe('SidePanel', () => {
         expect(panel.style.transform).toBe('translate3d(0, 0, 0)')
         expect(sidePanel.backdropElement.style.transform).toBe('translate3d(0, 0, 0)')
         expect(sidePanel.toggleElement?.style.transform).toBe('translate3d(0, 0, 0)')
-        expect(sidePanel.toggleElement?.ariaLabel).toBe('Collapse panel')
+        expect(sidePanel.toggleButtonElement?.ariaLabel).toBe('Collapse panel')
 
         sidePanel.destroy()
+    })
+
+    it('renders the toggle as an action panel with one registered button', () => {
+        const onToggle = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            toggle: {
+                iconSvg: '<svg></svg>',
+                openAriaLabel: 'Collapse panel',
+                closedAriaLabel: 'Open panel',
+                top: '12px',
+                onToggle,
+            },
+        }))
+        const registry = ActionPanelRegistry.for(document)
+        const toggle = sidePanel.toggleElement as HTMLDivElement
+
+        expect(toggle.matches('.action-panel.side-panel-toggle.side-panel-toggle-right')).toBe(true)
+        expect(toggle.style.top).toBe('12px')
+        expect([...toggle.children]).toEqual([sidePanel.toggleButtonElement])
+        expect(sidePanel.toggleButtonElement?.matches('.action-panel-button.side-panel-toggle-button')).toBe(true)
+        expect(sidePanel.toggleButtonElement?.ariaLabel).toBe('Open panel')
+        expect(registry.list().some(target => target.element === toggle)).toBe(true)
+
+        sidePanel.toggleButtonElement?.click()
+
+        expect(onToggle).toHaveBeenCalledTimes(1)
+
+        sidePanel.destroy()
+
+        expect(registry.list().some(target => target.element === toggle)).toBe(false)
     })
 
     it('prepares panel, backdrop, and toggle in the off-edge start position', () => {
@@ -458,7 +489,7 @@ describe('SidePanel', () => {
         expect(sidePanel.backdropElement.style.transform).toBe('translate3d(100%, 0, 0)')
         expect(sidePanel.toggleElement?.style.getPropertyValue('--side-panel-toggle-closed-travel')).toBe('64px')
         expect(sidePanel.toggleElement?.style.transform).toBe(RIGHT_CLOSED_TOGGLE_TRANSFORM)
-        expect(sidePanel.toggleElement?.ariaLabel).toBe('Collapse panel')
+        expect(sidePanel.toggleButtonElement?.ariaLabel).toBe('Collapse panel')
 
         sidePanel.destroy()
     })
@@ -570,7 +601,7 @@ describe('SidePanel', () => {
                     onToggle: vi.fn(),
                 },
             }))
-            const toggle = sidePanel.toggleElement as HTMLButtonElement
+            const toggle = sidePanel.toggleElement as HTMLDivElement
 
             // Fixed toggles start without the 'none' transition guard the sliding
             // default applies, and their closed transform is the identity.

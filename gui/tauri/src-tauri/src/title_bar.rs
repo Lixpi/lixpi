@@ -21,18 +21,23 @@ use crate::MAIN_WINDOW;
 const START_DRAGGING: &str = "core:window:allow-start-dragging";
 const TOGGLE_MAXIMIZE: &str = "core:window:allow-internal-toggle-maximize";
 
-// Height of the row the page draws at the top of the window.
+// Height of the row the page draws at the top of the window. The page wraps
+// the traffic lights in a 34 point oval 9 points below the window's top edge,
+// which keeps the glass rim around it clear of the edge. The buttons are
+// centred in the row, so the row is the oval plus that offset above and below.
 #[cfg(any(target_os = "macos", test))]
-const TITLE_BAR_HEIGHT: f64 = 40.0;
+const TITLE_BAR_HEIGHT: f64 = 52.0;
 
 // AppKit draws the buttons' centres this much higher than the `y` they are
-// placed at, so the position adds it back to line them up with the page's
-// controls centred in the row.
+// placed at. tao grows the native title bar container by `y` and the buttons
+// keep their offset from its bottom, so their centres follow `y` point for
+// point; this is the offset measured in the running app, with the buttons
+// centred on the page's oval.
 #[cfg(any(target_os = "macos", test))]
-const TRAFFIC_LIGHTS_RAISE: f64 = 1.5;
+const TRAFFIC_LIGHTS_RAISE: f64 = 2.0;
 
 // The close button's left edge is at `x`, and the buttons are centred
-// vertically in the row.
+// vertically in the row, on the page's oval around them.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) const TRAFFIC_LIGHTS: LogicalPosition<f64> = LogicalPosition {
     x: 16.0,
@@ -130,7 +135,7 @@ mod tests {
 
         for expected in [
             "titleBar = 'overlay'",
-            "'--window-title-bar-height', '40px'",
+            "'--window-title-bar-height', '52px'",
             "'--window-controls-inset', '96px'",
         ] {
             assert!(script.contains(expected), "{expected}");

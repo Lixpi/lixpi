@@ -35,30 +35,9 @@
     background: var(--canvas-background, transparent);
 }
 
-// Bottom action panels — flank the centered "Talk to me" composer pill.
-// A panel is a perfect circle when it holds a single icon and stretches into a
-// pill-shaped oval when it holds multiple icons. Panels are smaller than the
-// composer and vertically centered on it.
-.workspace-canvas-action-panel {
-    position: absolute;
-    // Vertically center the panel on the composer pill.
-    bottom: calc(var(--workspace-canvas-action-panel-bottom) + (var(--workspace-canvas-composer-pill-height) - var(--workspace-canvas-action-panel-size)) / 2);
-    z-index: 9991;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    height: var(--workspace-canvas-action-panel-size);
-    padding: 0 4px;
-    background: var(--canvas-lixpi-switch-surface, var(--canvas-surface-raised, rgba(255, 255, 255, 0.9)));
-    backdrop-filter: blur(10px);
-    border-radius: var(--canvas-lixpi-rail-radius, var(--canvas-control-radius, 9999px));
-    box-shadow: var(--canvas-shadow, 0 4px 24px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1));
-    user-select: none;
-    -webkit-user-select: none;
-}
-
+// Bottom action panels flank the centered "Talk to me" composer pill. They are
+// the shared ui-kit action panel, smaller than the composer and vertically
+// centered on it; these rules only place them.
 .workspace-canvas-left-control-rail {
     position: absolute;
     right: calc(50% + min(380px, (100% - 48px) / 2) + var(--workspace-canvas-action-panel-gap));
@@ -71,10 +50,7 @@
     pointer-events: auto;
 }
 
-.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left {
-    position: relative;
-    right: auto;
-    bottom: auto;
+.workspace-canvas-action-panel-left {
     flex: 0 0 auto;
 }
 
@@ -99,6 +75,7 @@
     box-shadow: none;
 }
 
+// Loads after the shared action panel styles, so these placement rules win.
 .workspace-canvas-right-control-rail {
     position: absolute;
     left: calc(50% + min(380px, (100% - 48px) / 2) + var(--workspace-canvas-action-panel-gap));
@@ -109,7 +86,6 @@
     gap: 2px;
     height: var(--workspace-canvas-action-panel-size);
     padding: 0;
-    border-radius: var(--canvas-lixpi-rail-radius, var(--canvas-control-radius, 9999px));
     pointer-events: auto;
     isolation: isolate;
 }
@@ -153,38 +129,6 @@
 .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,
 .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {
     background: transparent;
-}
-
-.workspace-floating-toolbar-button {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(var(--workspace-canvas-action-panel-size) - 8px);
-    height: calc(var(--workspace-canvas-action-panel-size) - 8px);
-    padding: 0;
-    border: none;
-    // Circular hover target, matching the input panel's icon buttons.
-    border-radius: 50%;
-    background: transparent;
-    cursor: pointer;
-    transition: hoverTransition(background, $defaultHoverTransitionDuration);
-    -webkit-tap-highlight-color: transparent;
-
-    svg {
-        width: 18px;
-        height: 18px;
-        fill: var(--canvas-text-muted, var(--workspace-controls-steel-blue));
-    }
-
-    &:hover,
-    &.active {
-        background: var(--canvas-surface-hover, #eef0f4);
-
-        svg {
-            fill: var(--canvas-text, var(--workspace-controls-night-blue));
-        }
-    }
 }
 
 .workspace-floating-toolbar-image-wrapper {

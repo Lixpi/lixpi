@@ -116,8 +116,6 @@ const semanticProperties = (): Record<`--${string}`, string> => ({
     '--canvas-lixpi-navigation-backdrop-opaque': 'var(--canvas-surface-raised)',
     '--canvas-panel-resize-handle-gradient': 'linear-gradient(var(--canvas-border), var(--canvas-border))',
     '--canvas-panel-resize-handle-width': '3px',
-    '--canvas-panel-toggle-color': 'var(--canvas-text-muted)',
-    '--canvas-panel-toggle-hover': 'var(--canvas-text)',
     '--canvas-lixpi-panel-backdrop': 'var(--canvas-surface-raised)',
     '--canvas-lixpi-panel-backdrop-opaque': 'var(--canvas-surface-raised)',
 })
@@ -233,8 +231,6 @@ export const createLixpiLightCanvasTheme = (preset: ApplicationTheme = lixpiLigh
                     '--canvas-lixpi-navigation-backdrop-opaque': preset.navigation.sidebar.opaqueBackdrop,
                     '--canvas-panel-resize-handle-gradient': preset.panel.resizeHandle.gradient,
                     '--canvas-panel-resize-handle-width': preset.panel.resizeHandle.width,
-                    '--canvas-panel-toggle-color': preset.panel.toggle.color,
-                    '--canvas-panel-toggle-hover': preset.panel.toggle.hover,
                     '--canvas-lixpi-panel-backdrop': preset.panel.background,
                     '--canvas-lixpi-panel-backdrop-opaque': preset.panel.opaqueBackground,
                 },

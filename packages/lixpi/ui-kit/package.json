@@ -85,6 +85,7 @@
             "default": "./styles/block-card-tiles-list.scss"
         },
         "./components/bubble-menu": "./src/components/bubbleMenu/index.ts",
+        "./components/action-panel": "./src/components/actionPanel/index.ts",
         "./components/side-panel": "./src/components/sidePanel/index.ts",
         "./components/help-tooltip": "./src/components/helpTooltip/index.ts",
         "./components/video-controls": "./src/components/videoControls/index.ts",
@@ -98,6 +99,12 @@
             "sass": "./styles/bubble-menu.scss",
             "style": "./styles/bubble-menu.scss",
             "default": "./styles/bubble-menu.scss"
+        },
+        "./styles/action-panel": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/action-panel.scss",
+            "style": "./styles/action-panel.scss",
+            "default": "./styles/action-panel.scss"
         },
         "./styles/side-panel": {
             "types": "./src/styles.d.ts",

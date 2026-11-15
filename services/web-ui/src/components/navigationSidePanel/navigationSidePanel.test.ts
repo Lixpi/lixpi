@@ -278,8 +278,6 @@ describe('NavigationSidePanel — mounting', () => {
 
         expect(paneEl.style.getPropertyValue('--side-panel-backdrop-fill')).toBe(settings.navigationSidePanel.styles.backdropFill)
         expect(paneEl.style.getPropertyValue('--side-panel-backdrop-fill-opaque')).toBe(settings.navigationSidePanel.styles.backdropFillOpaque)
-        expect(paneEl.style.getPropertyValue('--side-panel-toggle-color')).toBe(settings.navigationSidePanel.styles.toggleColor)
-        expect(paneEl.style.getPropertyValue('--side-panel-toggle-hover-color')).toBe(settings.navigationSidePanel.styles.toggleHoverColor)
 
         instance.destroy()
     })
@@ -1016,11 +1014,11 @@ describe('NavigationSidePanel — open/close toggle', () => {
         } = mount()
         expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
+        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')?.click()
 
         expect(navigationSidePanelStore.getData('isOpen')).toBe(false)
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
+        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')?.click()
 
         expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
 
@@ -1036,7 +1034,7 @@ describe('NavigationSidePanel — open/close toggle', () => {
                 paneEl,
                 instance,
             } = mount()
-            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')
+            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')
             const openWidth = `${settings.navigationSidePanel.defaultDimensions.width}px`
             expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
             expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
@@ -1070,7 +1068,7 @@ describe('NavigationSidePanel — open/close toggle', () => {
                 paneEl,
                 instance,
             } = mount()
-            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')
+            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')
 
             toggle?.click()
             toggle?.click()
@@ -1095,7 +1093,7 @@ describe('NavigationSidePanel — open/close toggle', () => {
         expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe(openInset)
         expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle')?.click()
+        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')?.click()
 
         expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
 

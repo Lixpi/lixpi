@@ -2384,7 +2384,6 @@ export class LixpiWorkspaceCanvas {
 
         void controller.initialize(this.currentCanvasState?.lastActiveConversationAssetId)
         this.canvasMediaLayer?.setGlassTargets([
-            ...(this.options.glassTargets ?? []),
             ...(composer ? [{
                 id: "workspace-global-composer",
                 element: composer.input.element,

@@ -38,6 +38,7 @@ import {
     type GlassBorderStyle,
     type GlassMaterialStyle,
 } from '@lixpi/canvas-components/effects/glass'
+import { ActionPanelRegistry } from '@lixpi/ui-kit/components/action-panel'
 import {
     getWorkspaceLoadingPresentation,
     type WorkspaceLoadingSettings,
@@ -126,6 +127,7 @@ export class WorkspaceMediaLayer {
     private targets = new Map<string, GeneratingMediaOutlineOptions>()
     private readonly liveBounds = new Map<string, CanvasEngineRect>()
     private glassTargets: readonly DomGlassTarget[] = []
+    private ownGlassTargets: readonly DomGlassTarget[] = []
     private destroyed = false
 
     constructor(private readonly options: WorkspaceMediaLayerOptions) {
@@ -224,6 +226,13 @@ export class WorkspaceMediaLayer {
                     glass.glassMaterial,
                 ).bake(),
             })
+            // Every action panel on the page gets the glass rim, so a panel
+            // over this canvas looks the same whichever component placed it.
+            const actionPanels = ActionPanelRegistry.for(options.paneEl.ownerDocument)
+            this.lifetime.own(
+                actionPanels.subscribe(() => this.syncGlassTargets()),
+            )
+            this.syncGlassTargets()
             this.marquee = new RectangleOverlay({
                 surface: this.drawing,
                 stroke: options.selectionColors.marqueeStroke,
@@ -606,8 +615,19 @@ export class WorkspaceMediaLayer {
     ): void {
         this.selection.setBounds(bounds, options.fill !== false)
     }
+    // Targets this canvas owns beyond the shared action panels, such as the composer input.
     setGlassTargets(targets: readonly DomGlassTarget[]): void {
-        this.glassTargets = [...targets]
+        this.ownGlassTargets = [...targets]
+        this.syncGlassTargets()
+    }
+    private syncGlassTargets(): void {
+        if (this.destroyed)
+            return
+
+        this.glassTargets = [
+            ...ActionPanelRegistry.for(this.options.paneEl.ownerDocument).list(),
+            ...this.ownGlassTargets,
+        ]
         this.glass.setTargets(this.glassTargets)
     }
     renderNow(): void {

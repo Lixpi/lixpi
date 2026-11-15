@@ -1829,7 +1829,7 @@ describe('Right side panel — TS infrastructure', () => {
 
     it('raises the global composer above its action panels only while a reference picker is visible', () => {
         const scss = loadScss()
-        const actionPanel = extractBlock(scss, '.workspace-canvas-action-panel')
+        const actionPanel = extractBlock(scss, '.workspace-canvas-left-control-rail')
         const composerScss = loadWorkspaceComposerStyles()
         const composerHost = extractBlock(composerScss, '.workspace-canvas-global-composer-host')
         const composerHostWithPicker = extractBlock(
@@ -1837,7 +1837,7 @@ describe('Right side panel — TS infrastructure', () => {
             '.workspace-canvas-global-composer-host:has(.prompt-reference-picker-visible)',
         )
 
-        expectExcerptToContain(actionPanel, 'z-index: 9991;', '.workspace-canvas-action-panel')
+        expectExcerptToContain(actionPanel, 'z-index: 9991;', '.workspace-canvas-left-control-rail')
         expectExcerptToContain(composerHost, 'z-index: 9990;', '.workspace-canvas-global-composer-host')
         expectExcerptToContain(composerHostWithPicker, 'z-index: 9992;', 'visible picker composer host')
         expectSourceNotToContain(ts, "zIndex: '9990',")
@@ -1849,10 +1849,7 @@ describe('Right side panel — TS infrastructure', () => {
         const workspaceCanvasViewSource = loadWorkspaceCanvasView()
         const railSource = loadWorkspacePromptControlRail()
         const canvasMediaLayer = loadPixiMediaLayer()
-        const leftRailItems = extractBlockContainingSelector(
-            scss,
-            '.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left',
-        )
+        const leftRailItems = extractBlock(scss, '.workspace-canvas-action-panel-left')
         const rightRail = extractBlock(scss, '.workspace-canvas-right-control-rail')
         const modelMenuHoverBackground = extractBlock(scss, '.workspace-canvas-model-menu-hover-background')
         const modelMenuPanel = extractBlock(scss, '.workspace-canvas-model-menu-panel')
@@ -1864,11 +1861,8 @@ describe('Right side panel — TS infrastructure', () => {
             scss,
             '.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background',
         )
-        const rightRailStart = railSource.indexOf(
-            '<div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">',
-        )
+        const rightRailStart = railSource.indexOf("className: 'workspace-canvas-right-control-rail'")
         const rightRailMarkup = railSource
-        const screenGlassTargets = workspaceCanvasViewSource
 
         expectSourceNotToContain(
             workspaceCanvasViewSource,
@@ -1882,19 +1876,16 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel-right')
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-media-mode-panel-right')
         expect(rightRailStart).toBeGreaterThan(-1)
-        expect(rightRailMarkup.indexOf('${this.mediaModeSwitchMount}')).toBeLessThan(
-            rightRailMarkup.indexOf('${this.modelMenuControlMount}'),
+        expect(rightRailMarkup.indexOf('this.mediaModeSwitchMount,')).toBeLessThan(
+            rightRailMarkup.indexOf('this.modelMenuControlMount,'),
         )
+        expectSourceToContain(railSource, 'createActionPanel({')
 
-        expectSourceToContain(
-            scss,
-            '.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left',
-        )
-        expectExcerptToContain(leftRailItems, 'right: auto;', 'left control rail')
+        expectExcerptToContain(leftRailItems, 'flex: 0 0 auto;', 'left action panel')
         expectExcerptToContain(rightRail, 'left: calc(', 'right control rail')
         expectExcerptToContain(rightRail, 'display: flex;', 'right control rail')
         expectExcerptToContain(rightRail, 'gap: 2px;', 'right control rail')
-        expectExcerptToContain(rightRail, 'border-radius: var(--canvas-lixpi-rail-radius, var(--canvas-control-radius, 9999px));', 'right control rail')
+        expectExcerptToContain(rightRail, 'padding: 0;', 'right control rail')
         expectExcerptToContain(modelMenuHoverBackground, 'position: absolute;', 'model menu hover background')
         expectExcerptToContain(modelMenuHoverBackground, 'inset: 0;', 'model menu hover background')
         expectExcerptToContain(modelMenuHoverBackground, 'pointer-events: none;', 'model menu hover background')
@@ -1910,9 +1901,7 @@ describe('Right side panel — TS infrastructure', () => {
             '.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,\n.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {\n    background: transparent;\n}',
         )
         expectSourceNotToContain(scss, '.workspace-floating-toolbar-tooltip')
-        expectSourceToContain(screenGlassTargets, "id: 'workspace-right-control-rail'")
-        expectSourceNotToContain(screenGlassTargets, "id: 'workspace-media-mode-panel'")
-        expectSourceNotToContain(screenGlassTargets, "id: 'workspace-model-menu-panel'")
+        expectSourceToContain(canvasMediaLayer, 'ActionPanelRegistry.for(this.options.paneEl.ownerDocument).list()')
 
         expectSourceToContain(ts, 'modelMenuControlMountEl: HTMLDivElement')
         expectSourceToContain(
@@ -1923,8 +1912,6 @@ describe('Right side panel — TS infrastructure', () => {
             ts,
             'mountModelMenuControl: controlElement => this.options.modelMenuControlMountEl.replaceChildren(controlElement),',
         )
-        expectSourceNotToContain(screenGlassTargets, "id: 'workspace-media-library-panel'")
-        expectSourceNotToContain(screenGlassTargets, "id: 'workspace-action-panel-right'")
     })
 
     it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {

@@ -24,4 +24,14 @@ fi
 
 LIXPI_DESKTOP_TARGET="${LIXPI_CONSOLE_OPTION_TARGET:-aarch64-apple-darwin}" LIXPI_DESKTOP_DIAGNOSTICS="${LIXPI_CONSOLE_OPTION_DEBUG:-false}" LIXPI_DESKTOP_HOT_RELOAD="${LIXPI_CONSOLE_OPTION_HOT_RELOAD:-true}" "${COMPOSE[@]}" run --rm lixpi-tauri-macos-builder
 
-echo "Open it with: open gui/tauri/dist/Lixpi.app"
+# The container can't replace a bundle that has been launched, because macOS
+# keeps programs without App Management access from changing it. The host
+# swaps the freshly assembled bundle into place instead.
+staged=gui/tauri/dist/staging/Lixpi.app
+installed=gui/tauri/dist/Lixpi.app
+[[ -d "${staged}" ]] || { echo "The build did not assemble ${staged}." >&2; exit 1; }
+rm -rf "${installed}"
+mv "${staged}" "${installed}"
+rmdir gui/tauri/dist/staging
+
+echo "Open it with: open ${installed}"

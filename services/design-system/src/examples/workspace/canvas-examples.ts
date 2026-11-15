@@ -171,7 +171,6 @@ export class FullWorkspaceExample {
                     viewportEl: this.controls.viewportMount,
                     mediaModeSwitchMountEl: this.controls.mediaModeSwitchMount,
                     modelMenuControlMountEl: this.controls.modelMenuControlMount,
-                    glassTargets: this.controls.glassTargets,
                     workspaceId,
                     canvasState: this.state,
                     documents: this.fixtures.documents,

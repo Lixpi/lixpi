@@ -71,7 +71,7 @@ The component owns the panel width state, clamps it through the configured const
 - `grabWidth`: screen-pixel width of the invisible drag hit target.
 - `className`: optional extra class so a specific panel's resize handle can be styled separately.
 - `styles`: optional `gradient` and `width` overrides for the resize-handle line.
-- `toggle`: optional component-owned open/collapse button config: SVG markup, ARIA labels, positioning offsets, travel distance, motion mode, class name, and `onToggle()`. `motion: 'slide'` is the default; `motion: 'fixed'` keeps the toggle anchored while panel surfaces open under it.
+- `toggle`: optional component-owned open/collapse button config: SVG markup, ARIA labels, positioning offsets, travel distance, motion mode, class name, and `onToggle()`. The action panel sets its size. `motion: 'slide'` is the default; `motion: 'fixed'` keeps the toggle anchored while panel surfaces open under it.
 - `animation`: optional per-panel override of `durationMs`, `openEasing`, `closeEasing`, and a two-direction `easing`. Omitted fields use `uiKitSettings.sidePanel.animation`.
 - `overlay`: optional overlay and outside-close config. `enabled` controls the visual overlay element; `fill`, `fillOpaque`, `opacity`, and `className` style that element; `closeOnPointerDown` controls outside click/tap close.
 - `drag`: optional swipe-to-close config. `enabled` turns the gesture on for this panel. `closeThreshold`, `velocityThreshold`, `pointerSwipeStartThreshold`, and `touchSwipeStartThreshold` are overrides; omitted values use `uiKitSettings.sidePanel.drag`.
@@ -88,7 +88,8 @@ The component owns the panel width state, clamps it through the configured const
 - `element`: the resize handle root element, appended by the host.
 - `backdropElement`: the glass backdrop element, appended by the host behind the panel.
 - `overlayElement`: optional background overlay element, appended by the host behind the panel before `backdropElement`.
-- `toggleElement`: optional component-owned open/collapse button, appended once by the host into the pane.
+- `toggleElement`: optional component-owned open/collapse control, appended once by the host into the pane. It is an [action panel](../actionPanel/actionPanel.ts) holding one button, the same oval as the controls beside the prompt input, so a canvas glass renderer draws its rim too.
+- `toggleButtonElement`: the button inside `toggleElement`, which carries the open or closed ARIA label.
 - `getWidth()`: resolved, clamped current width (always a number).
 - `getRawWidth()`: stored width — `null` until the user resizes.
 - `getState()`: the persistable `{ width }` snapshot.
@@ -110,7 +111,7 @@ The component owns the panel width state, clamps it through the configured const
 Base presentation lives in [`side-panel.scss`](side-panel.scss):
 
 - The resize handle: `.side-panel-resize-handle` and `.side-panel-resize-handle-line`, driven by `--side-panel-resize-handle-gradient` and `--side-panel-resize-handle-width`. The line spans the full panel height.
-- The toggle: `.side-panel-toggle` (+ `.side-panel-toggle-left` / `.side-panel-toggle-right` / `.side-panel-toggle-open`), driven by `--side-panel-toggle-closed-travel` only when the toggle motion is `slide`.
+- The toggle: `.side-panel-toggle` (+ `.side-panel-toggle-left` / `.side-panel-toggle-right` / `.side-panel-toggle-open`) on the action panel, driven by `--side-panel-toggle-closed-travel` only when the toggle motion is `slide`. Its `.side-panel-toggle-button` fills the oval with no padding around it. The action panel owns the surface and button paint; a host changes the toggle's size through `--action-panel-size`.
 - The glass backdrop: `.side-panel-backdrop` (+ `.side-panel-backdrop-left` / `.side-panel-backdrop-right`). Width comes from `--side-panel-backdrop-width`, the tint from `--side-panel-backdrop-fill` / `--side-panel-backdrop-fill-opaque`. `--side-panel-backdrop-bottom-outset` and `--side-panel-backdrop-inline-outset` extend it beyond the host edges when the host reserves padding; both default to zero.
 - The background overlay: `.side-panel-overlay` (+ `.side-panel-overlay-left` / `.side-panel-overlay-right` / `.side-panel-overlay-open`), driven by `--side-panel-overlay-fill` / `--side-panel-overlay-fill-opaque` and a lower-intensity blur/saturate glass filter.
 - Swipe-to-close state: `.side-panel-touch-drag` and `.side-panel-touch-dragging`.

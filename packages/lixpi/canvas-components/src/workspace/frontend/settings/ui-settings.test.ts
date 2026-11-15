@@ -25,7 +25,6 @@ describe(
                 motion: 'fixed',
                 openOffset: '20px',
                 top: '20px',
-                size: '20px',
             })
             expect(rightSidePanel.defaultDimensions.width).toBe(494)
             expect(rightSidePanel.dimensions).toEqual({
@@ -36,7 +35,6 @@ describe(
                 openOffset: 'calc(var(--workspace-right-side-panel-width) + 5px)',
                 closedTravel: 'calc(var(--workspace-right-side-panel-width) - 10px)',
                 top: '15px',
-                size: '15px',
             })
 
             const geometry = lixpiLightTheme.components.sidePanel

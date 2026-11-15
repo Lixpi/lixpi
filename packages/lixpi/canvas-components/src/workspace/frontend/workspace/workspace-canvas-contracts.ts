@@ -85,10 +85,6 @@ export type WorkspaceCanvasOptions = {
         left: HTMLElement
         right: HTMLElement
     }
-    glassTargets?: readonly {
-        id: string
-        element: HTMLElement
-    }[]
     workspaceId: string
     canvasState: CanvasState | null
     documents: WorkspaceCanvasDocument[]

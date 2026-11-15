@@ -65,30 +65,11 @@
     --side-panel-resize-handle-width: #{themeScope.token("navigation-resize-handle-width", themePalette.$roles)};
 }
 
-.navigation-side-panel-toggle svg {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
+// The navigation icon is an outline drawing, so the action panel button's
+// color strokes it instead of filling it.
+.navigation-side-panel-toggle .side-panel-toggle-button svg {
     fill: none;
     stroke: currentColor;
-}
-
-.navigation-side-panel-toggle {
-    border-radius: #{themeScope.token("components-navigation-toggle-base-border-radius", themePalette.$roles)};
-    background: transparent;
-    transition:
-        var(--side-panel-slide-transition),
-        #{hoverTransition(color, 150ms)};
-}
-
-.navigation-side-panel-toggle::before {
-    content: "";
-    position: absolute;
-    inset: #{themeScope.token("components-navigation-toggle-underlay-base-inset", themePalette.$roles)};
-    border-radius: #{themeScope.token("components-navigation-toggle-underlay-base-border-radius", themePalette.$roles)};
-    background: transparent;
-    transition: #{hoverTransition(background, 150ms)};
 }
 
 .navigation-side-panel-header {
@@ -121,16 +102,6 @@
     border-radius: #{themeScope.token("components-navigation-header-overlay-base-border-radius", themePalette.$roles)};
     background: var(--navigation-side-panel-section-separator-gradient);
     pointer-events: none;
-}
-
-.navigation-side-panel-toggle:hover::before,
-.navigation-side-panel-toggle:focus-visible::before {
-    background: #{themeScope.token("navigation-hover", themePalette.$roles)};
-}
-
-.navigation-side-panel-toggle:focus-visible {
-    color: var(--side-panel-toggle-hover-color, #{themeScope.token("panel-toggle-hover", themePalette.$roles)});
-    outline: none;
 }
 
 .navigation-side-panel-list {

@@ -85,10 +85,18 @@ describe('WindowTitleBar', () => {
         expect(invoke).not.toHaveBeenCalled()
     })
 
-    it('draws the backdrop behind the traffic lights', () => {
+    it('wraps the traffic lights in an action panel oval painted by the canvas theme', () => {
         mountOverlay()
+        const panel = document.body.querySelector<HTMLElement>('.action-panel.window-controls-panel')
 
-        expect(document.body.querySelector('.window-title-bar-backdrop')?.getAttribute('aria-hidden')).toBe('true')
+        expect(panel?.ariaHidden).toBe('true')
+        expect(panel?.hasAttribute('data-canvas-theme')).toBe(true)
+        expect(panel?.children).toHaveLength(0)
+
+        titleBar?.destroy()
+        titleBar = null
+
+        expect(panel?.isConnected).toBe(false)
     })
 
     it('drags the window from an empty spot in the row and keeps the press from the page', () => {
@@ -155,7 +163,7 @@ describe('WindowTitleBar', () => {
         expect(invoke).not.toHaveBeenCalled()
     })
 
-    it('stops listening and removes the backdrop on destroy', () => {
+    it('stops listening and removes the traffic light oval on destroy', () => {
         mountOverlay()
         titleBar?.destroy()
         titleBar = null

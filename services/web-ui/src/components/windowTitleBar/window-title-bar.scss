@@ -8,6 +8,18 @@
 // toggle settings do. `--window-title-bar-inset` is the row's height while it
 // shows, for content that must start below it.
 :root {
+    // The traffic lights the desktop app places: three 14px buttons with 9px
+    // between them, from 16px to 76px in.
+    --window-controls-start: 16px;
+    --window-controls-width: 60px;
+    --window-controls-button-size: 14px;
+    // Every oval along the top: the traffic light oval and the panel toggles.
+    --window-title-bar-control-size: 34px;
+    // Space between every top oval and the window's top edge, in the desktop
+    // app and in a browser. The canvas glass rim reaches about 6px outside
+    // an oval, so this keeps it clear of the edge. The desktop app sizes its
+    // row so the traffic lights it centres sit in the oval at this offset.
+    --window-title-bar-control-top: 9px;
     --window-title-bar-active: 0;
     --window-title-bar-inset: 0px;
 }
@@ -22,21 +34,41 @@
     --window-title-bar-inset: 0px;
 }
 
-// Below the navigation panel's surface, so the open panel hides it, and above
-// the main pane. The solid centre covers the traffic lights and the
-// navigation toggle after them, and the edge fades into the content to the
-// right and below.
-.window-title-bar-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: calc(var(--window-controls-inset) + var(--window-title-bar-height) * 1.5);
-    height: calc(var(--window-title-bar-height) * 1.6);
-    z-index: 10025;
-    pointer-events: none;
-    background: radial-gradient(farthest-side at top left, var(--theme-background) 65%, transparent);
+// The traffic light oval and the panel toggles share one fixed size, in the
+// desktop app and in a browser alike. The compound selectors outrank the
+// shared action panel rules whatever order the stylesheets load in.
+.action-panel.window-controls-panel,
+.action-panel.side-panel-toggle {
+    --action-panel-size: var(--window-title-bar-control-size);
+    // The toggle icon keeps its proportion to the oval: 18px in a 30px oval.
+    --window-title-bar-icon-size: calc(var(--action-panel-size) * 0.6);
+    // The oval's inline padding matches the buttons' vertical padding in it.
+    --window-controls-panel-padding: calc((var(--action-panel-size) - var(--window-controls-button-size)) / 2);
+    // The closed navigation toggle sits this far in: after the oval, with the
+    // gap the controls beside the prompt input keep between their ovals.
+    --window-title-bar-toggle-left: calc(var(--window-controls-start) + var(--window-controls-width) + var(--window-controls-panel-padding) + 20px);
 }
 
-:root[data-window-fullscreen] .window-title-bar-backdrop {
+// The traffic lights sit in an action panel, the same oval as the panel
+// toggles beside them. Above the navigation panel's surface and below the
+// toggles. It holds no buttons of its own: the native buttons draw on top.
+// The compound selector outranks the shared action panel rules whatever order
+// the stylesheets load in.
+.action-panel.window-controls-panel {
+    position: fixed;
+    top: var(--window-title-bar-control-top);
+    left: calc(var(--window-controls-start) - var(--window-controls-panel-padding));
+    width: calc(var(--window-controls-width) + 2 * var(--window-controls-panel-padding));
+    padding: 0;
+    z-index: 10035;
+    pointer-events: none;
+}
+
+:root[data-window-fullscreen] .window-controls-panel {
     display: none;
+}
+
+.action-panel.side-panel-toggle .side-panel-toggle-button svg {
+    width: var(--window-title-bar-icon-size);
+    height: var(--window-title-bar-icon-size);
 }

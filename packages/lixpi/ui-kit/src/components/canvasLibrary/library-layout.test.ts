@@ -37,7 +37,7 @@ describe('canvas library panel surfaces', () => {
         expect(navigation.toggleElement?.matches('.navigation-side-panel-toggle')).toBe(true)
         expect(navigation.toggleElement?.style.left).toBe('20px')
         expect(navigation.toggleElement?.style.top).toBe('20px')
-        expect(navigation.toggleElement?.style.width).toBe('20px')
+        expect(navigation.toggleElement?.matches('.action-panel')).toBe(true)
         expect(root.style.getPropertyValue('--canvas-library-sidebar-width')).toBe('280px')
 
         expect(parameters.getWidth()).toBe(416)
@@ -46,7 +46,7 @@ describe('canvas library panel surfaces', () => {
         for (const panel of [parameters, theme]) {
             expect(panel.toggleElement?.matches('.side-panel-toggle-right')).toBe(true)
             expect(panel.toggleElement?.matches('.navigation-side-panel-toggle')).toBe(false)
-            expect(panel.toggleElement?.style.width).toBe('15px')
+            expect(panel.toggleElement?.matches('.action-panel')).toBe(true)
             panel.destroy()
         }
 

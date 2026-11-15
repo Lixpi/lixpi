@@ -77,7 +77,7 @@ export type CanvasEffectsTheme = {
 export const createCanvasEffectsTheme = (palette: Partial<CanvasEffectsPalette> = {}): CanvasEffectsTheme => ({
     glassBorder: {
         enabled: true,
-        widthPx: 10,
+        widthPx: 8,
         displacementScalePx: 34,
         displacementMapMaxDimensionPx: 1600,
         edgeRefractionStrength: 0.95,

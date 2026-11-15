@@ -113,7 +113,6 @@ export type RightSidePanelSettings = {
         openOffset: string
         closedTravel?: string
         top: string
-        size: string
     }
     overlay: {
         enabled: boolean
@@ -129,8 +128,6 @@ export type RightSidePanelSettings = {
     styles: {
         backdropFill: string
         backdropFillOpaque: string
-        toggleColor: string
-        toggleHoverColor: string
     }
 }
 
@@ -398,7 +395,6 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
                 // Travel distance used when the panel is closed.
                 closedTravel: `calc(var(--workspace-right-side-panel-width) - ${rightPanel.toggle.closedTravelInset}px)`,
                 top: rightPanel.toggle.top,
-                size: rightPanel.toggle.size,
             },
             overlay: {
                 // Full-canvas dark glass tint layer behind the side panel.
@@ -413,8 +409,6 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
             styles: {
                 backdropFill: theme.panel.background,
                 backdropFillOpaque: theme.panel.opaqueBackground,
-                toggleColor: theme.panel.toggle.color,
-                toggleHoverColor: theme.panel.toggle.hover,
             },
         },
 
@@ -449,7 +443,8 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
                 // Keep the navigation toggle anchored; the panel opens underneath
                 // it instead of pushing the button to the panel edge.
                 motion: 'fixed',
-                ...navigation.toggle,
+                openOffset: navigation.toggle.openOffset,
+                top: navigation.toggle.top,
             },
             overlay: {
                 // The visual overlay is disabled so the workspace list does not dim
@@ -466,8 +461,6 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
             styles: {
                 backdropFill: theme.navigation.sidebar.backdrop,
                 backdropFillOpaque: theme.navigation.sidebar.opaqueBackdrop,
-                toggleColor: theme.panel.toggle.color,
-                toggleHoverColor: theme.panel.toggle.hover,
             },
         },
 

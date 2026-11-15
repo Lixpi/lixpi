@@ -11,6 +11,7 @@ import {
     type WorkspaceCanvasControlsPorts,
     type WorkspaceCanvasControlsSettings,
 } from './workspace-canvas-controls.ts'
+import { ActionPanelRegistry } from '@lixpi/ui-kit/components/action-panel'
 
 const owners: WorkspaceCanvasControls[] = []
 const setup = (palette = {
@@ -32,8 +33,6 @@ const setup = (palette = {
             styles: {
                 backdropFill: '#fff',
                 backdropFillOpaque: '#fff',
-                toggleColor: '#111',
-                toggleHoverColor: '#222',
             },
         },
         modelMenuHoverBackground: '#abc',
@@ -82,9 +81,14 @@ describe('workspace canvas controls', () => {
         expect(owner.pane.contains(owner.viewportMount)).toBe(true)
         expect(owner.element.contains(owner.mediaModeSwitchMount)).toBe(true)
         expect(owner.element.contains(owner.modelMenuControlMount)).toBe(true)
-        expect(owner.glassTargets).toHaveLength(2)
+        const panels = ActionPanelRegistry.for(document).list().filter(target => owner.element.contains(target.element))
 
-        for (const target of owner.glassTargets) expect(owner.element.contains(target.element)).toBe(true)
+        expect(panels.map(target => target.element.className)).toEqual([
+            'action-panel workspace-canvas-right-control-rail',
+            'action-panel workspace-canvas-action-panel-left',
+        ])
+        expect(button('New Document').matches('.action-panel-button')).toBe(true)
+        expect(button('Add Image').matches('.action-panel-button')).toBe(true)
 
         button('New Document').click()
         expect(ports.createDocument).toHaveBeenCalledOnce()
@@ -158,11 +162,12 @@ describe('workspace canvas controls', () => {
         await vi.advanceTimersByTimeAsync(0)
         owner.pane.click()
         expect(owner.element.querySelector('.workspace-image-submenu')).toBeNull()
-        button('Add Image').click()
+        const imageButton = button('Add Image')
+        imageButton.click()
         owner.destroy()
         expect(vi.getTimerCount()).toBe(0)
         expect(document.body.contains(owner.element)).toBe(false)
-        button('Add Image').click()
+        imageButton.click()
         expect(vi.getTimerCount()).toBe(0)
     })
 
@@ -191,7 +196,7 @@ describe('workspace canvas controls visibility option', () => {
     it('omits controls while keeping public mounts detached and methods safe', () => {
         const { owner } = setup(undefined, false)
 
-        expect(owner.glassTargets).toHaveLength(0)
+        expect(ActionPanelRegistry.for(document).list().some(target => owner.element.contains(target.element))).toBe(false)
         expect(owner.element.querySelector('.workspace-canvas-left-control-rail')).toBeNull()
         expect(owner.element.querySelector('.workspace-canvas-right-control-rail')).toBeNull()
         expect(owner.element.querySelector('input[type="file"]')).toBeNull()

@@ -68,10 +68,6 @@ export type WorkspaceCanvasRendererOptions = {
         left: HTMLElement
         right: HTMLElement
     }
-    glassTargets: readonly {
-        id: string
-        element: HTMLElement
-    }[]
     workspaceId: string
     canvasState: CanvasState | null
     documents: WorkspaceCanvasDocument[]
@@ -277,7 +273,6 @@ export class WorkspaceCanvasSurface {
                 mediaModeSwitchMountEl: this.controls.mediaModeSwitchMount,
                 modelMenuControlMountEl: this.controls.modelMenuControlMount,
                 conversationControls: this.controls.conversationControls,
-                glassTargets: this.controls.glassTargets,
                 workspaceId: this.snapshot.workspaceId,
                 canvasState: this.canvasState,
                 documents: this.documents,

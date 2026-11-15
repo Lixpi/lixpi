@@ -121,4 +121,70 @@ describe('DomGlassBorder', () => {
         expect(borders[0].destroy).toHaveBeenCalledOnce()
         expect(observers[0].disconnect).toHaveBeenCalledTimes(2)
     })
+
+    it('redraws every frame while a target slides and stops when its transitions settle', () => {
+        vi.stubGlobal(
+            'ResizeObserver',
+            class {
+                observe = vi.fn()
+                disconnect = vi.fn()
+            },
+        )
+        const frames: FrameRequestCallback[] = []
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => frames.push(callback))
+        const root = document.createElement('div')
+        const target = document.createElement('div')
+        const child = document.createElement('button')
+        target.append(child)
+        root.append(target)
+        document.body.append(root)
+        const invalidate = vi.fn()
+        const surface = {
+            signal: new AbortController().signal,
+            invalidate,
+        } as unknown as CanvasDrawingSurface
+        const border = new DomGlassBorder({
+            root,
+            surface,
+        } as DomGlassBorderOptions)
+        border.setTargets([{
+            id: 'toggle',
+            element: target,
+        }])
+        invalidate.mockClear()
+        const transition = (
+            element: HTMLElement,
+            type: string,
+            propertyName: string,
+        ): void => {
+            const event = new Event(type, { bubbles: true })
+            Object.defineProperty(event, 'propertyName', { value: propertyName })
+            element.dispatchEvent(event)
+        }
+
+        transition(child, 'transitionrun', 'background-color')
+
+        expect(frames).toHaveLength(0)
+
+        transition(target, 'transitionrun', 'transform')
+        transition(target, 'transitionrun', 'opacity')
+        frames.shift()?.(0)
+
+        expect(invalidate).toHaveBeenCalledTimes(1)
+        expect(frames).toHaveLength(1)
+
+        transition(target, 'transitionend', 'transform')
+        frames.shift()?.(0)
+
+        expect(invalidate).toHaveBeenCalledTimes(3)
+        expect(frames).toHaveLength(1)
+
+        transition(target, 'transitioncancel', 'opacity')
+        frames.shift()?.(0)
+
+        expect(invalidate).toHaveBeenCalledTimes(4)
+        expect(frames).toHaveLength(0)
+
+        border.destroy()
+    })
 })

@@ -90,9 +90,15 @@ echo "Building ${product_name} ${version} for ${target}, opening ${LIXPI_WEB_UI_
 cargo tauri build --ci --no-bundle --target "${target}" --runner cargo-zigbuild "${features[@]}" -- --locked
 
 binary="${CARGO_TARGET_DIR}/${target}/release/lixpi-desktop"
-app="${project_dir}/dist/${product_name}.app"
+# macOS stops any program without App Management access, Docker's file
+# sharing included, from changing an app bundle once it has been launched. The
+# container therefore never touches dist/${product_name}.app: it assembles the
+# bundle in a staging folder nobody opens, and the dev console's host action
+# swaps it into place.
+staging="${project_dir}/dist/staging"
+app="${staging}/${product_name}.app"
 
-rm -rf "${app}"
+rm -rf "${staging}"
 mkdir -p "${app}/Contents/MacOS" "${app}/Contents/Resources"
 cp "${binary}" "${app}/Contents/MacOS/${product_name}"
 cp icons/icon.icns "${app}/Contents/Resources/${product_name}.icns"
@@ -145,4 +151,4 @@ PLIST
 # the app on the Mac that built it.
 rcodesign sign "${app}"
 
-echo "Built gui/tauri/dist/${product_name}.app"
+echo "Assembled gui/tauri/dist/staging/${product_name}.app"

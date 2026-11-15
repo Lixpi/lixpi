@@ -36,8 +36,6 @@ const settings: WorkspaceCanvasControlsSettings & { insertionWidth: number } = {
         styles: {
             backdropFill: '#fff',
             backdropFillOpaque: '#fff',
-            toggleColor: '#111',
-            toggleHoverColor: '#222',
         },
     },
     modelMenuHoverBackground: '#abc',
