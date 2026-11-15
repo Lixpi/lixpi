@@ -41,7 +41,7 @@ describe('context-preview.scss', () => {
         expectRuleToContain(triggerRule, 'overflow: visible;', '.context-preview-inline-label .context-preview-inline-trigger')
     })
 
-    it('keeps canvas-inline popovers above local node chrome', () => {
+    it('keeps canvas-inline popovers above local node controls', () => {
         const popoverRule = extractFlatRule(scss, '.context-preview-inline-popover')
         const portaledRule = extractFlatRule(scss, '.context-preview-inline-popover-portaled')
 

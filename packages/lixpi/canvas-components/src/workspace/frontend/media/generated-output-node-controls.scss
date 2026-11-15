@@ -1,7 +1,7 @@
 @use "@lixpi/canvas-components/styles/node-shell";
 @import "@lixpi/ui-primitives/styles/transitions";
 
-.workspace-generated-media-chrome {
+.workspace-generated-media-controls {
     position: absolute;
     display: flex;
     flex-direction: column;
@@ -115,7 +115,7 @@
     gap: 4px;
     pointer-events: auto;
 }
-.workspace-generated-media-chrome-layer,
+.workspace-generated-media-controls-layer,
 .workspace-generated-media-pending-icon-layer {
     position: absolute;
     inset: 0;

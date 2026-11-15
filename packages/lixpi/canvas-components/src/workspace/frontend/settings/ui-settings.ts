@@ -509,7 +509,7 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
         // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.
         videoControls: {
             // Screen-pixel height of the control bar and host. Shared with the API collision boxes via @lixpi/constants.
-            height: mediaGenerationLayoutSettings.generatedMediaChrome.videoControlsHeight,
+            height: mediaGenerationLayoutSettings.generatedMediaControls.videoControlsHeight,
             // Canvas video-node mount geometry.
             canvas: {
                 // Horizontal inset for normal-width video nodes.
@@ -519,7 +519,7 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
                 // Node width below which the compact horizontal inset is used.
                 compactWidthThreshold: 260,
                 // Vertical gap between the video node edge and the external controls strip. Shared with the API collision boxes via @lixpi/constants.
-                bottomInset: mediaGenerationLayoutSettings.generatedMediaChrome.videoControlsBottomInset,
+                bottomInset: mediaGenerationLayoutSettings.generatedMediaControls.videoControlsBottomInset,
                 // Bounded zoom scaling for the canvas control strip.
                 zoomScaling: { minZoom: 1.2 },
             },

@@ -87,7 +87,7 @@ export const applyMediaModelBadgeStyleProperties = (
     properties: MediaModelBadgeStyleProperties,
 ): void => {
     host.style.setProperty('--canvas-node-footer-icon-size', properties.iconSize)
-    host.style.setProperty('--workspace-generated-media-chrome-top-gap', properties.topGap)
+    host.style.setProperty('--workspace-generated-media-controls-top-gap', properties.topGap)
     host.style.setProperty('--workspace-media-model-badge-icon-gap', properties.iconGap)
     host.style.setProperty('--workspace-media-model-badge-provider-color', properties.providerColor)
     host.style.setProperty('--workspace-media-model-badge-model-color', properties.modelColor)

@@ -25,7 +25,7 @@ export const createCanvasConnectorSettings = (colors: { lineDefaultColor: string
             },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
-            // Lower zoom breakpoint for connector chrome. Runtime call sites opt
+            // Lower zoom breakpoint for connector controls. Runtime call sites opt
             // this config into the shared adaptive low-zoom curve, which defaults
             // to 0.45 unless this object provides `lowZoomPower`.
             zoomScaling: { minZoom: 0.4 },

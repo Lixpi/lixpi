@@ -32,7 +32,7 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(panelSource, 'mountInto(hostEl: HTMLElement): void')
         // No browse-scope filter control — the panel always shows everything available.
         expectSourceNotToContain(panelSource, 'media-library-scope-select')
-        // No standalone modal chrome, category tab strip, or backdrop.
+        // No standalone modal controls, category tab strip, or backdrop.
         expectSourceNotToContain(panelSource, 'MEDIA_LIBRARY_CATEGORY')
         expectSourceNotToContain(panelSource, 'media-library-category-tabs')
         expectSourceNotToContain(panelSource, 'media-library-backdrop')
@@ -99,8 +99,8 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(canvasSource, 'libraries: this.libraries,')
     })
 
-    it('keeps the Media Library toggle out of the package chrome', () => {
-        expectSourceToContain(workspaceCanvasViewSource, 'new WorkspaceCanvasChrome(settings, {')
+    it('keeps the Media Library toggle out of the package controls', () => {
+        expectSourceToContain(workspaceCanvasViewSource, 'new WorkspaceCanvasControls(settings, {')
         expectSourceNotToContain(workspaceCanvasViewSource, 'toggleMediaLibrary:')
     })
 

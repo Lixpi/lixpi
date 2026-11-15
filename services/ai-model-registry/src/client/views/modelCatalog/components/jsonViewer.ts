@@ -1,6 +1,6 @@
 // A read-only JSON document, highlighted by CodeMirror. Same setup as the web-ui
 // code block: an EditorView composed from the extensions the document actually
-// needs, with the theme supplying both the editor chrome and the highlight
+// needs, with the theme supplying both the editor controls and the highlight
 // style for the tokens. The theme contributes colours only: the block keeps the
 // page's own background, which is why the highlight style is used without the
 // editor theme beside it. Which one is used comes from settings.ts.

@@ -60,9 +60,9 @@ describe('WorkspaceCanvasAssets', () => {
         expect(owner.getArtifactProvenance(artifact)).toEqual({ input: { prompt: 'draw' } })
     })
 
-    it('upserts successful metadata updates and refreshes chrome', async () => {
+    it('upserts successful metadata updates and refreshes controls', async () => {
         const upsert = vi.fn()
-        const refreshChrome = vi.fn()
+        const refreshControls = vi.fn()
         const updated = {
             assetId: 'asset-1',
             revision: 2,
@@ -84,7 +84,7 @@ describe('WorkspaceCanvasAssets', () => {
             document,
             editors: { mountAsset: vi.fn() },
             getWorkspaceId: () => 'workspace-1',
-            refreshChrome,
+            refreshControls,
             reportError: vi.fn(),
         } as WorkspaceCanvasAssetsPorts)
         const ports = owner.createViewPorts()
@@ -93,6 +93,6 @@ describe('WorkspaceCanvasAssets', () => {
         ports.onChanged()
 
         expect(upsert).toHaveBeenCalledWith(updated)
-        expect(refreshChrome).toHaveBeenCalledOnce()
+        expect(refreshControls).toHaveBeenCalledOnce()
     })
 })

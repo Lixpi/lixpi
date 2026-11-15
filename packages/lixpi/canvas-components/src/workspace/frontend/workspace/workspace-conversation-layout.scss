@@ -1,0 +1,99 @@
+$workspace-conversation-content-inset: 20px;
+
+.workspace-conversation-layout > .workspace-canvas-global-composer {
+    width: auto;
+    margin-inline: calc(#{$workspace-conversation-content-inset} - var(--ai-prompt-input-ring-width));
+}
+
+.workspace-conversation-layout > .workspace-canvas-global-context-chips {
+    margin-bottom: 0;
+}
+
+.workspace-conversation-layout,
+.workspace-conversation-layout.workspace-conversation-panel {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 8px;
+}
+
+.workspace-conversation-layout:not([data-conversation-layout="detached"]) > .workspace-conversation-panel {
+    flex: 1 1 auto;
+}
+
+.workspace-conversation-layout:not([data-conversation-layout="detached"]) > .workspace-conversation-layout-header {
+    margin-bottom: auto;
+}
+
+.workspace-conversation-layout-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 28px;
+    padding: 0 16px;
+    gap: 8px;
+}
+
+.workspace-conversation-layout-move {
+    margin-right: auto;
+    cursor: grab;
+    touch-action: none;
+}
+
+.workspace-conversation-layout-move:active {
+    cursor: grabbing;
+}
+
+.workspace-conversation-layout-move[hidden],
+.workspace-conversation-layout-resize[hidden] {
+    display: none;
+}
+
+.workspace-conversation-layout-controls {
+    display: contents;
+}
+
+.workspace-conversation-layout-controls > .workspace-canvas-left-control-rail,
+.workspace-conversation-layout-controls > .workspace-canvas-right-control-rail {
+    bottom: calc((var(--workspace-canvas-composer-pill-height) - var(--workspace-canvas-action-panel-size)) / 2);
+}
+
+.workspace-conversation-layout-controls > .workspace-canvas-left-control-rail {
+    left: auto;
+    right: calc(100% + var(--workspace-canvas-action-panel-gap));
+}
+
+.workspace-conversation-layout-controls > .workspace-canvas-right-control-rail {
+    max-width: none;
+    left: calc(100% + var(--workspace-canvas-action-panel-gap));
+    right: auto;
+}
+
+.workspace-conversation-layout[data-conversation-layout="left"] > .workspace-conversation-layout-controls,
+.workspace-conversation-layout[data-conversation-layout="right"] > .workspace-conversation-layout-controls {
+    position: absolute;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--workspace-canvas-action-panel-gap);
+    bottom: calc((var(--workspace-canvas-composer-pill-height) - var(--workspace-canvas-action-panel-size)) / 2);
+}
+
+.workspace-conversation-layout[data-conversation-layout="left"] > .workspace-conversation-layout-controls {
+    left: calc(100% + var(--workspace-canvas-action-panel-gap));
+}
+
+.workspace-conversation-layout[data-conversation-layout="right"] > .workspace-conversation-layout-controls {
+    right: calc(100% + var(--workspace-canvas-action-panel-gap));
+}
+
+.workspace-conversation-layout[data-conversation-layout="left"] > .workspace-conversation-layout-controls > .workspace-canvas-left-control-rail,
+.workspace-conversation-layout[data-conversation-layout="left"] > .workspace-conversation-layout-controls > .workspace-canvas-right-control-rail,
+.workspace-conversation-layout[data-conversation-layout="right"] > .workspace-conversation-layout-controls > .workspace-canvas-left-control-rail,
+.workspace-conversation-layout[data-conversation-layout="right"] > .workspace-conversation-layout-controls > .workspace-canvas-right-control-rail {
+    position: relative;
+    flex: 0 0 auto;
+    inset: auto;
+}

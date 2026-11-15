@@ -190,8 +190,8 @@ Inline generation trace block.
 - Content: `(paragraph | block)*`
 - Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
 - Used for image and video generation details.
-- Renders generation details as one continuous response block. Prompt, final prompt, references, and resolver audit are separated by subsection titles instead of collapsible chrome.
-- Trace rendering is shared through `image-generation-trace-details.ts`; reference thumbnails resolve authenticated Asset rendition URLs, collapse historical duplicate candidate IDs by Asset identity while retaining the strongest reference role, and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded. Reference labels use ARIA and the application-level ui-kit help-tooltip provider instead of native `title` tooltips.
+- Renders generation details as one continuous response block. Prompt, final prompt, references, and resolver audit are organized under subsection titles.
+- Trace rendering is shared through `image-generation-trace-details.ts`; reference thumbnails resolve authenticated Asset rendition URLs, collapse historical duplicate candidate IDs by Asset identity while retaining the strongest reference role, and render an unavailable state instead of the browser's broken-image placeholder when a rendition cannot be loaded. Reference labels use ARIA and the application-level ui-kit help-tooltip provider instead of native `title` tooltips.
 - Generated prompt text uses the same left-border output treatment as extraction-stage model output.
 - The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
 

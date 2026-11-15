@@ -1,4 +1,4 @@
-.workspace-media-chrome-viewport {
+.workspace-media-controls-viewport {
     position: absolute;
     top: 0;
     left: 0;
@@ -8,7 +8,7 @@
     z-index: 3;
 }
 
-.workspace-video-chrome {
+.workspace-video-controls-node {
     position: absolute;
     pointer-events: none;
 }

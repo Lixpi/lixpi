@@ -648,11 +648,11 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     }
 }
 
-.ai-generated-media-model-chrome.ai-generated-media-run-meta {
+.ai-generated-media-model-controls.ai-generated-media-run-meta {
     justify-content: flex-start;
     min-width: 0;
     width: 100%;
-    margin-top: var(--workspace-generated-media-chrome-top-gap, 8px);
+    margin-top: var(--workspace-generated-media-controls-top-gap, 8px);
     min-height: var(--canvas-node-footer-icon-size, 34px);
 }
 

@@ -139,7 +139,7 @@ export const createLixpiLightCanvasTheme = (preset: ApplicationTheme = lixpiLigh
     const appearance = preset.components
     const menu = settings.aiPromptInput.modelMenu.styles
     const modeSwitch = settings.aiPromptInput.mediaModeSwitch.styles
-    const badge = settings.mediaNode.generatedMediaChrome.styles
+    const badge = settings.mediaNode.generatedMediaControls.styles
     const outline = settings.mediaNode.inProgressOutlineAnimation
     const controls = preset.control
 
@@ -159,7 +159,7 @@ export const createLixpiLightCanvasTheme = (preset: ApplicationTheme = lixpiLigh
                     overlayFill: settings.selection.styles.overlayBackgroundColor,
                 },
                 effects: {
-                    glassBorder: settings.canvasChrome.glassBorder,
+                    glassBorder: settings.canvasControls.glassBorder,
                     circularGlass: settings.mediaBranchLineage.mediaModelCircle.glass,
                     generationOutline: {
                         radius: outline.radius,

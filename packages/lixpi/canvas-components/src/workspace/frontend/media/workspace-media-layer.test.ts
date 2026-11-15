@@ -153,7 +153,7 @@ const settings = (): WorkspaceMediaLayerOptions['settings'] => {
                 },
             },
         },
-        canvasChrome: { glassBorder: {
+        canvasControls: { glassBorder: {
             enabled: false,
             materialColors: ['#ffffff'],
             materialTailAlpha: 0.1,

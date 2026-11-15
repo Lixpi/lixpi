@@ -137,7 +137,7 @@ export const getMediaModelBadgeMeta = (config: MediaModelBadgeConfig): MediaMode
     const modelTitle = modelMeta?.title ?? model
     const label = providerTitle
         && modelTitle
-        ? `${providerTitle}${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}${modelTitle}`
+        ? `${providerTitle}${settings.mediaNode.generatedMediaControls.modelBadgeSeparator}${modelTitle}`
         : providerTitle || modelTitle
     const icon = config.monochromeIcon
         ? (getAiProviderIcon(providerTitle) ?? getAiProviderIcon(providerKey))
@@ -168,7 +168,7 @@ export const resolveMediaModelBadgeConfig = (config: MediaModelBadgeConfig): Sha
         modelTitle,
         icon,
         label,
-        separator: settings.mediaNode.generatedMediaChrome.modelBadgeSeparator,
+        separator: settings.mediaNode.generatedMediaControls.modelBadgeSeparator,
         iconOnly: config.iconOnly,
     }
 }
@@ -177,21 +177,21 @@ export const applyMediaModelBadgeStyleProperties = (
     host: HTMLElement,
     options: MediaModelBadgeStyleOptions = {},
 ): void => {
-    const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
+    const generatedMediaControlsStyles = settings.mediaNode.generatedMediaControls.styles
     const scale = normalizeScale(options.scale)
     applySharedMediaModelBadgeStyleProperties(
         host,
         {
-            iconSize: `${settings.mediaNode.generatedMediaChrome.iconSize * scale}px`,
-            topGap: `${settings.mediaNode.generatedMediaChrome.gap * scale}px`,
-            iconGap: scaleCssLength(generatedMediaChromeStyles.modelBadgeIconGap, scale),
-            providerColor: generatedMediaChromeStyles.modelBadgeProviderColor,
-            modelColor: generatedMediaChromeStyles.modelBadgeModelColor,
-            nameFontSize: scaleCssLength(generatedMediaChromeStyles.modelBadgeNameFontSize, scale),
-            nameFontWeight: String(generatedMediaChromeStyles.modelBadgeNameFontWeight),
-            nameLineHeight: String(generatedMediaChromeStyles.modelBadgeNameLineHeight),
+            iconSize: `${settings.mediaNode.generatedMediaControls.iconSize * scale}px`,
+            topGap: `${settings.mediaNode.generatedMediaControls.gap * scale}px`,
+            iconGap: scaleCssLength(generatedMediaControlsStyles.modelBadgeIconGap, scale),
+            providerColor: generatedMediaControlsStyles.modelBadgeProviderColor,
+            modelColor: generatedMediaControlsStyles.modelBadgeModelColor,
+            nameFontSize: scaleCssLength(generatedMediaControlsStyles.modelBadgeNameFontSize, scale),
+            nameFontWeight: String(generatedMediaControlsStyles.modelBadgeNameFontWeight),
+            nameLineHeight: String(generatedMediaControlsStyles.modelBadgeNameLineHeight),
         },
     )
-    host.style.setProperty('--canvas-node-footer-color', generatedMediaChromeStyles.infoButtonColor)
-    host.style.setProperty('--canvas-node-footer-hover-color', generatedMediaChromeStyles.infoButtonHoverColor)
+    host.style.setProperty('--canvas-node-footer-color', generatedMediaControlsStyles.infoButtonColor)
+    host.style.setProperty('--canvas-node-footer-hover-color', generatedMediaControlsStyles.infoButtonHoverColor)
 }

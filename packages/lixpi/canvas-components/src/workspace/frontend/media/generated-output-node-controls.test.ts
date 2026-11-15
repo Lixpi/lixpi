@@ -7,17 +7,17 @@ import {
     vi,
 } from 'vitest'
 import {
-    GeneratedOutputNodeChrome,
-    type GeneratedOutputChromeState,
-    type GeneratedOutputNodeChromeOptions,
-} from './generated-output-node-chrome.ts'
+    GeneratedOutputNodeControls,
+    type GeneratedOutputControlsState,
+    type GeneratedOutputNodeControlsOptions,
+} from './generated-output-node-controls.ts'
 
-const owners: GeneratedOutputNodeChrome[] = []
-const fixture = (state: Partial<GeneratedOutputChromeState> = {}, kind: 'media' | 'artifact' = 'media') => {
+const owners: GeneratedOutputNodeControls[] = []
+const fixture = (state: Partial<GeneratedOutputControlsState> = {}, kind: 'media' | 'artifact' = 'media') => {
     const badge = document.createElement('div')
     badge.className = 'model-badge-fixture'
     const titleCleanup = vi.fn()
-    const options: GeneratedOutputNodeChromeOptions = {
+    const options: GeneratedOutputNodeControlsOptions = {
         document,
         nodeId: 'node',
         kind,
@@ -45,13 +45,13 @@ const fixture = (state: Partial<GeneratedOutputChromeState> = {}, kind: 'media' 
         onReject: vi.fn(),
         onRegenerate: vi.fn(),
     }
-    const chrome = new GeneratedOutputNodeChrome(options)
-    document.body.appendChild(chrome.element)
-    owners.push(chrome)
-    const button = (selector: string) => chrome.element.querySelector<HTMLButtonElement>(selector)!
+    const controls = new GeneratedOutputNodeControls(options)
+    document.body.appendChild(controls.element)
+    owners.push(controls)
+    const button = (selector: string) => controls.element.querySelector<HTMLButtonElement>(selector)!
 
     return {
-        chrome,
+        controls,
         options,
         titleCleanup,
         button,
@@ -63,11 +63,11 @@ afterEach(() => {
     document.body.replaceChildren()
 })
 
-describe('GeneratedOutputNodeChrome', () => {
+describe('GeneratedOutputNodeControls', () => {
     it.each(['media', 'artifact'] as const)('composes %s review actions and details with one shared footer', kind => {
         const f = fixture({}, kind)
-        expect(f.chrome.element.querySelectorAll('.canvas-node-footer')).toHaveLength(1)
-        expect(f.chrome.element.querySelector('.model-badge-fixture')).not.toBeNull()
+        expect(f.controls.element.querySelectorAll('.canvas-node-footer')).toHaveLength(1)
+        expect(f.controls.element.querySelector('.model-badge-fixture')).not.toBeNull()
         f.button('.media-review-accept').click()
         f.button('.media-review-regenerate').click()
         f.button('.canvas-node-footer-info-button').click()
@@ -79,9 +79,9 @@ describe('GeneratedOutputNodeChrome', () => {
             f.button('.media-review-reject').click()
             expect(f.options.onReject).toHaveBeenCalledOnce()
         } else
-            expect(f.chrome.element.querySelector('.media-review-reject')).toBeNull()
+            expect(f.controls.element.querySelector('.media-review-reject')).toBeNull()
 
-        expect(f.options.mountTitle).toHaveBeenCalledWith(f.chrome.element.querySelector('.workspace-generated-media-title'))
+        expect(f.options.mountTitle).toHaveBeenCalledWith(f.controls.element.querySelector('.workspace-generated-media-title'))
     })
 
     it('leaves pending media with its title, info and progress but hides badge and review actions', () => {
@@ -89,8 +89,8 @@ describe('GeneratedOutputNodeChrome', () => {
             pendingBeforeFrame: true,
             progressActive: true,
         })
-        expect(f.chrome.element.querySelector('.model-badge-fixture')).toBeNull()
-        expect(f.chrome.element.querySelector('.media-review-action')).toBeNull()
+        expect(f.controls.element.querySelector('.model-badge-fixture')).toBeNull()
+        expect(f.controls.element.querySelector('.media-review-action')).toBeNull()
         expect(f.button('.canvas-node-footer-info-button')).not.toBeNull()
         f.button('.canvas-node-footer-progress-button').click()
         expect(f.options.onOpenDetails).toHaveBeenCalledOnce()
@@ -102,7 +102,7 @@ describe('GeneratedOutputNodeChrome', () => {
             ...state,
             rejectable: false,
         })
-        expect(f.chrome.element.querySelector('.media-review-action')).toBeNull()
+        expect(f.controls.element.querySelector('.media-review-action')).toBeNull()
         expect(f.button('.canvas-node-footer-info-button')).not.toBeNull()
     })
 
@@ -111,7 +111,7 @@ describe('GeneratedOutputNodeChrome', () => {
         expect(media.button('.media-review-accept').disabled).toBe(false)
         expect(media.button('.media-review-regenerate').disabled).toBe(false)
         const artifact = fixture({ hasAsset: false }, 'artifact')
-        expect(artifact.chrome.element.querySelector('.media-review-action')).toBeNull()
+        expect(artifact.controls.element.querySelector('.media-review-action')).toBeNull()
     })
 
     it('keeps rejection enabled during generation while acceptance and replay wait for sealing', () => {
@@ -132,7 +132,7 @@ describe('GeneratedOutputNodeChrome', () => {
 
     it('aligns the title to the node top while reserving the playback row below its footer', () => {
         const f = fixture()
-        f.chrome.setGeometry({
+        f.controls.setGeometry({
             x: 100,
             y: 200,
             width: 400,
@@ -142,11 +142,11 @@ describe('GeneratedOutputNodeChrome', () => {
             y: 20,
             zoom: 1,
         }, 48)
-        expect(f.chrome.element.style.left).toBe('110px')
-        expect(parseFloat(f.chrome.element.style.top)).toBeGreaterThanOrEqual(508)
-        const title = f.chrome.element.querySelector('.workspace-generated-media-title') as HTMLElement
-        expect(parseFloat(f.chrome.element.style.top) + parseFloat(title.style.top)).toBe(218)
-        f.chrome.setGeometry({
+        expect(f.controls.element.style.left).toBe('110px')
+        expect(parseFloat(f.controls.element.style.top)).toBeGreaterThanOrEqual(508)
+        const title = f.controls.element.querySelector('.workspace-generated-media-title') as HTMLElement
+        expect(parseFloat(f.controls.element.style.top) + parseFloat(title.style.top)).toBe(218)
+        f.controls.setGeometry({
             x: 100,
             y: 200,
             width: 100,
@@ -156,23 +156,23 @@ describe('GeneratedOutputNodeChrome', () => {
             y: 0,
             zoom: 0.25,
         })
-        expect(f.chrome.element.style.left).toBe('25px')
-        expect(f.chrome.element.style.transform).not.toContain('NaN')
-        expect(parseFloat(f.chrome.element.style.top)).toBeGreaterThanOrEqual(75)
+        expect(f.controls.element.style.left).toBe('25px')
+        expect(f.controls.element.style.transform).not.toContain('NaN')
+        expect(parseFloat(f.controls.element.style.top)).toBeGreaterThanOrEqual(75)
     })
 
     it('updates progress and selection without remounting the title, then disposes action listeners', () => {
         const f = fixture()
         const accept = f.button('.media-review-accept')
         const details = f.button('.canvas-node-footer-info-button')
-        f.chrome.update({
+        f.controls.update({
             progressActive: true,
             selected: true,
         })
         expect(details.getAttribute('aria-expanded')).toBe('true')
         expect(f.button('.canvas-node-footer-progress-button').hidden).toBe(false)
         expect(f.options.mountTitle).toHaveBeenCalledOnce()
-        f.chrome.destroy()
+        f.controls.destroy()
         accept.dispatchEvent(new MouseEvent('click'))
         details.dispatchEvent(new MouseEvent('click'))
         expect(f.options.onAccept).not.toHaveBeenCalled()
@@ -184,7 +184,7 @@ describe('GeneratedOutputNodeChrome', () => {
         const f = fixture()
         let failed: HTMLElement | undefined
         expect(() =>
-            new GeneratedOutputNodeChrome({
+            new GeneratedOutputNodeControls({
                 ...f.options,
                 mountTitle: host => {
                     failed = host.parentElement!

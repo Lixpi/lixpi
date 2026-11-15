@@ -215,6 +215,34 @@ describe('SidePanel', () => {
         sidePanel.destroy()
     })
 
+    it.each(['left', 'right'] as const)('maps signed resize deltas and clamps the %s panel width', side => {
+        const mapResizeDelta = vi.fn((delta: number) => delta * 2)
+        const sidePanel = createSidePanel(buildConfig({
+            side,
+            getMaxWidth: () => 450,
+            mapResizeDelta,
+        }))
+        const direction = side === 'left' ? 1 : -1
+
+        pointerdown(sidePanel.element, 500)
+        move(500 + direction * 20)
+        expect(mapResizeDelta).toHaveBeenLastCalledWith(20)
+        expect(sidePanel.getWidth()).toBe(420)
+
+        move(500 - direction * 20)
+        expect(mapResizeDelta).toHaveBeenLastCalledWith(-20)
+        expect(sidePanel.getWidth()).toBe(340)
+
+        move(500 + direction * 100)
+        expect(sidePanel.getWidth()).toBe(450)
+
+        move(500 - direction * 100)
+        expect(sidePanel.getWidth()).toBe(320)
+
+        pointerup()
+        sidePanel.destroy()
+    })
+
     it('tracks the active touch pointer and ignores unrelated contacts', () => {
         const onResize = vi.fn()
         const sidePanel = createSidePanel(buildConfig({ onResize }))

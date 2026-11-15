@@ -532,7 +532,7 @@ describe('applyBranchTreeLayout', () => {
         })
     })
 
-    it('keeps a single continuation on the media centerline when collision chrome extends below media', () => {
+    it('keeps a single continuation on the media centerline when collision controls extends below media', () => {
         const parent = genMedia('R', 500, 300, {
             createdAt: 1,
             width: 400,
@@ -565,7 +565,7 @@ describe('applyBranchTreeLayout', () => {
         expect(childCenterY).toBe(parentCenterY)
     })
 
-    it('keeps a midpoint marker on the connector centerline when collision chrome extends below media', () => {
+    it('keeps a midpoint marker on the connector centerline when collision controls extends below media', () => {
         const parent = genMedia('R', 500, 300, {
             createdAt: 1,
             width: 400,
@@ -895,7 +895,7 @@ describe('applyBranchTreeLayout', () => {
 })
 
 describe('rebalanceBranchTreesAndResolve', () => {
-    it('separates a generated tree from title chrome above an existing media node', () => {
+    it('separates a generated tree from title controls above an existing media node', () => {
         const titleInset = 72
         const generated = genMedia('generated', 0, 0, {
             createdAt: 1,

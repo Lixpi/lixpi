@@ -43,7 +43,7 @@ export type WorkspaceOperationStatusNodesPorts = {
     syncNode: (node: OperationStatusCanvasNode) => void
     syncGeometry: (nodes: CanvasNode[]) => void
     syncMedia: (state: CanvasState) => void
-    syncChrome: () => void
+    syncControls: () => void
     syncMarkers: () => void
     syncConnections: () => void
     syncProgress: (state: CanvasState) => void
@@ -204,7 +204,7 @@ export class WorkspaceOperationStatusNodes {
             )
 
         this.ports.syncMedia(currentState)
-        this.ports.syncChrome()
+        this.ports.syncControls()
         this.ports.syncMarkers()
         this.ports.syncConnections()
     }

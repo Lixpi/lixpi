@@ -4,13 +4,13 @@ import {
     expect,
 } from 'vitest'
 import {
-    getCanvasChromeScreenLayout,
+    getCanvasControlsScreenLayout,
     getAdaptiveBoundedZoomScalingOptions,
     getAdaptiveZoomMultiplier,
-    scaleCanvasChromeForZoom,
-    scaleCanvasChromeScreenSizeForZoom,
-    scaleCanvasChromeToScreenForZoom,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsForZoom,
+    scaleCanvasControlsScreenSizeForZoom,
+    scaleCanvasControlsToScreenForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
     scaleForZoom,
     getEdgeScaledSizes,
     getResizeHandleScaledSizes,
@@ -104,11 +104,11 @@ describe('scaleForZoom', () => {
 })
 
 // =============================================================================
-// Adaptive bounded canvas chrome scaling
+// Adaptive bounded canvas controls scaling
 // =============================================================================
 
-describe('adaptive bounded canvas chrome scaling', () => {
-    it('adds the canvas-chrome low-zoom power without mutating the plain bounded config', () => {
+describe('adaptive bounded canvas controls scaling', () => {
+    it('adds the canvas-controls low-zoom power without mutating the plain bounded config', () => {
         const adapted = getAdaptiveBoundedZoomScalingOptions(boundedZoomScaling)
 
         expect(adapted).toEqual({
@@ -130,17 +130,17 @@ describe('adaptive bounded canvas chrome scaling', () => {
         })
     })
 
-    it('keeps screen chrome at base pixels at 100% and above', () => {
+    it('keeps screen controls at base pixels at 100% and above', () => {
         for (const zoom of [1, 1.01, 1.5, 2, 5]) {
-            expect(scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)).toBeCloseTo(34, 10)
-            expect(scaleCanvasChromeToScreenForZoom(34, zoom, adaptiveBoundedZoomScaling)).toBeCloseTo(34, 10)
+            expect(scaleCanvasControlsScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)).toBeCloseTo(34, 10)
+            expect(scaleCanvasControlsToScreenForZoom(34, zoom, adaptiveBoundedZoomScaling)).toBeCloseTo(34, 10)
         }
     })
 
-    it('shrinks screen chrome below 100% so low-zoom icons cannot look larger than high-zoom icons', () => {
-        const iconAt200Percent = scaleCanvasChromeScreenSizeForZoom(34, 2, adaptiveBoundedZoomScaling)
-        const iconAt44Percent = scaleCanvasChromeScreenSizeForZoom(34, 0.44, adaptiveBoundedZoomScaling)
-        const iconAt35Percent = scaleCanvasChromeScreenSizeForZoom(34, 0.35, adaptiveBoundedZoomScaling)
+    it('shrinks screen controls below 100% so low-zoom icons cannot look larger than high-zoom icons', () => {
+        const iconAt200Percent = scaleCanvasControlsScreenSizeForZoom(34, 2, adaptiveBoundedZoomScaling)
+        const iconAt44Percent = scaleCanvasControlsScreenSizeForZoom(34, 0.44, adaptiveBoundedZoomScaling)
+        const iconAt35Percent = scaleCanvasControlsScreenSizeForZoom(34, 0.35, adaptiveBoundedZoomScaling)
 
         expect(iconAt200Percent).toBeCloseTo(34, 10)
         expect(iconAt44Percent).toBeCloseTo(34 * expectedAdaptiveBoundedScreenMultiplier(0.44), 10)
@@ -150,10 +150,10 @@ describe('adaptive bounded canvas chrome scaling', () => {
     })
 
     it('decreases monotonically as the viewport zooms out from 100%', () => {
-        let previousScreenSize = scaleCanvasChromeScreenSizeForZoom(34, 1, adaptiveBoundedZoomScaling)
+        let previousScreenSize = scaleCanvasControlsScreenSizeForZoom(34, 1, adaptiveBoundedZoomScaling)
 
         for (const zoom of [0.99, 0.75, 0.5, 0.44, 0.4, 0.25, 0.1]) {
-            const screenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+            const screenSize = scaleCanvasControlsScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
             expect(screenSize).toBeLessThan(previousScreenSize)
             previousScreenSize = screenSize
         }
@@ -161,8 +161,8 @@ describe('adaptive bounded canvas chrome scaling', () => {
 
     it('is intentionally smaller than plain bounded scaling between the lower breakpoint and 100%', () => {
         for (const zoom of [0.4, 0.44, 0.47, 0.5, 0.75, 0.99]) {
-            const plainScreenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, boundedZoomScaling)
-            const adaptiveScreenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+            const plainScreenSize = scaleCanvasControlsScreenSizeForZoom(34, zoom, boundedZoomScaling)
+            const adaptiveScreenSize = scaleCanvasControlsScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
 
             expect(plainScreenSize).toBeCloseTo(34, 10)
             expect(adaptiveScreenSize).toBeLessThan(plainScreenSize)
@@ -171,8 +171,8 @@ describe('adaptive bounded canvas chrome scaling', () => {
 
     it('keeps world-space and screen-space helpers on the same final visual curve', () => {
         for (const zoom of [0.1, 0.25, 0.35, 0.4, 0.44, 0.47, 0.75, 1, 1.57, 2]) {
-            const worldSize = scaleCanvasChromeWorldSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
-            const screenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+            const worldSize = scaleCanvasControlsWorldSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+            const screenSize = scaleCanvasControlsScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
 
             expect(worldSize * zoom).toBeCloseTo(screenSize, 10)
             expect(screenSize).toBeCloseTo(34 * expectedAdaptiveBoundedScreenMultiplier(zoom), 10)
@@ -181,10 +181,10 @@ describe('adaptive bounded canvas chrome scaling', () => {
 })
 
 // =============================================================================
-// getCanvasChromeScreenLayout
+// getCanvasControlsScreenLayout
 // =============================================================================
 
-describe('getCanvasChromeScreenLayout', () => {
+describe('getCanvasControlsScreenLayout', () => {
     const worldPosition = {
         x: 240,
         y: 360,
@@ -200,7 +200,7 @@ describe('getCanvasChromeScreenLayout', () => {
     }
 
     const getLayout = (zoom: number) => {
-        return getCanvasChromeScreenLayout({
+        return getCanvasControlsScreenLayout({
             viewport: {
                 ...viewportBase,
                 zoom,
@@ -212,7 +212,7 @@ describe('getCanvasChromeScreenLayout', () => {
         })
     }
 
-    it('keeps generated-media icon chrome screen scale constant throughout the bounded band', () => {
+    it('keeps generated-media icon controls screen scale constant throughout the bounded band', () => {
         for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
             const zoom = zoomStep / 100
             const layout = getLayout(zoom)
@@ -224,7 +224,7 @@ describe('getCanvasChromeScreenLayout', () => {
         }
     })
 
-    it('thins generated-media icon chrome only below the lower zoom breakpoint', () => {
+    it('thins generated-media icon controls only below the lower zoom breakpoint', () => {
         let previousScale = 0
 
         for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
@@ -260,25 +260,25 @@ describe('getCanvasChromeScreenLayout', () => {
         }
     })
 
-    it('uses the same bounded scaling helper as connector chrome and bubble menus', () => {
+    it('uses the same bounded scaling helper as connector controls and bubble menus', () => {
         for (let zoomStep = 1; zoomStep <= 500; zoomStep += 1) {
             const zoom = zoomStep / 100
             const layout = getLayout(zoom)
 
             expect(layout.screenScale).toBeCloseTo(
-                scaleCanvasChromeToScreenForZoom(1, zoom, boundedZoomScaling),
+                scaleCanvasControlsToScreenForZoom(1, zoom, boundedZoomScaling),
                 10,
             )
             expect(layout.screenGap).toBeCloseTo(
-                scaleCanvasChromeToScreenForZoom(baseGap, zoom, boundedZoomScaling),
+                scaleCanvasControlsToScreenForZoom(baseGap, zoom, boundedZoomScaling),
                 10,
             )
         }
     })
 
-    it('uses the adaptive bounded curve for generated-media chrome when the caller opts in', () => {
+    it('uses the adaptive bounded curve for generated-media controls when the caller opts in', () => {
         for (const zoom of [0.1, 0.35, 0.4, 0.44, 0.47, 0.75, 1, 1.57, 2]) {
-            const layout = getCanvasChromeScreenLayout({
+            const layout = getCanvasControlsScreenLayout({
                 viewport: {
                     ...viewportBase,
                     zoom,
@@ -385,7 +385,7 @@ describe('getEdgeScaledSizes', () => {
         }
     })
 
-    it('renders connector chrome at identical PIXI screen sizes for every zoom percent above the lower threshold', () => {
+    it('renders connector controls at identical PIXI screen sizes for every zoom percent above the lower threshold', () => {
         for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
             const zoom = zoomStep / 100
             const viewport = {
@@ -407,8 +407,8 @@ describe('getEdgeScaledSizes', () => {
         for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
             const zoom = zoomStep / 100
 
-            expect(scaleCanvasChromeToScreenForZoom(2, zoom, boundedZoomScaling)).toBeCloseTo(2, 10)
-            expect(scaleCanvasChromeToScreenForZoom(16, zoom, boundedZoomScaling)).toBeCloseTo(16, 10)
+            expect(scaleCanvasControlsToScreenForZoom(2, zoom, boundedZoomScaling)).toBeCloseTo(2, 10)
+            expect(scaleCanvasControlsToScreenForZoom(16, zoom, boundedZoomScaling)).toBeCloseTo(16, 10)
         }
     })
 
@@ -437,7 +437,7 @@ describe('getEdgeScaledSizes', () => {
 
         for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
             const zoom = zoomStep / 100
-            const stroke = scaleCanvasChromeToScreenForZoom(2, zoom, boundedZoomScaling)
+            const stroke = scaleCanvasControlsToScreenForZoom(2, zoom, boundedZoomScaling)
 
             expect(stroke).toBeCloseTo(2 * zoom / 0.4, 10)
             expect(stroke).toBeLessThan(2)
@@ -472,12 +472,12 @@ describe('getEdgeScaledSizes', () => {
     })
 
     it('keeps adaptive connector screen sizes monotonic as the viewport zooms out', () => {
-        let previousStroke = scaleCanvasChromeToScreenForZoom(2, 1, adaptiveBoundedZoomScaling)
-        let previousArrow = scaleCanvasChromeToScreenForZoom(16, 1, adaptiveBoundedZoomScaling)
+        let previousStroke = scaleCanvasControlsToScreenForZoom(2, 1, adaptiveBoundedZoomScaling)
+        let previousArrow = scaleCanvasControlsToScreenForZoom(16, 1, adaptiveBoundedZoomScaling)
 
         for (const zoom of [0.99, 0.75, 0.5, 0.44, 0.4, 0.25, 0.1]) {
-            const stroke = scaleCanvasChromeToScreenForZoom(2, zoom, adaptiveBoundedZoomScaling)
-            const arrow = scaleCanvasChromeToScreenForZoom(16, zoom, adaptiveBoundedZoomScaling)
+            const stroke = scaleCanvasControlsToScreenForZoom(2, zoom, adaptiveBoundedZoomScaling)
+            const arrow = scaleCanvasControlsToScreenForZoom(16, zoom, adaptiveBoundedZoomScaling)
 
             expect(stroke).toBeLessThan(previousStroke)
             expect(arrow).toBeLessThan(previousArrow)
@@ -491,14 +491,14 @@ describe('getEdgeScaledSizes', () => {
 
         for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
             const zoom = zoomStep / 100
-            expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeCloseTo(baseTitleFontSize, 10)
+            expect(scaleCanvasControlsForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeCloseTo(baseTitleFontSize, 10)
         }
 
         for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
             const zoom = zoomStep / 100
-            expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling)).toBeCloseTo(baseTitleFontSize / 0.4, 10)
-            expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeCloseTo(baseTitleFontSize * zoom / 0.4, 10)
-            expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeLessThan(baseTitleFontSize)
+            expect(scaleCanvasControlsForZoom(baseTitleFontSize, zoom, boundedZoomScaling)).toBeCloseTo(baseTitleFontSize / 0.4, 10)
+            expect(scaleCanvasControlsForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeCloseTo(baseTitleFontSize * zoom / 0.4, 10)
+            expect(scaleCanvasControlsForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeLessThan(baseTitleFontSize)
         }
     })
 

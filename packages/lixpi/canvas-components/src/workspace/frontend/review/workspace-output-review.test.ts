@@ -97,7 +97,7 @@ const setup = (overrides: Partial<WorkspaceOutputReviewPorts> = {}) => {
         refreshAsset: vi.fn(async () => ({})),
         applyGeometry: vi.fn(),
         removeContextChips: vi.fn(),
-        refreshChrome: vi.fn(),
+        refreshControls: vi.fn(),
         refreshMarkers: vi.fn(),
         submit: vi.fn(async () => {}),
         reportError: vi.fn(),
@@ -195,7 +195,7 @@ describe('workspace output review', () => {
         fixture.ports.applyGeometry = () => fixture.owner.clear()
         await fixture.owner.acceptGeneratedOutput('output-node', 'image')
         expect(fixture.ports.removeContextChips).not.toHaveBeenCalled()
-        expect(fixture.ports.refreshChrome).not.toHaveBeenCalled()
+        expect(fixture.ports.refreshControls).not.toHaveBeenCalled()
     })
 
     it('replays a sealed media prompt with its saved lineage, references and configuration', async () => {

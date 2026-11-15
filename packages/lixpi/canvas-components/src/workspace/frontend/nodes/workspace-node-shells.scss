@@ -40,7 +40,7 @@
     }
 
     // The PIXI media layer owns all image pixels and the generating-image border.
-    // The DOM node still owns interaction chrome: drag overlay and resize handles.
+    // The DOM node still owns interaction controls: drag overlay and resize handles.
     // The node shadow/frame may sit behind the PIXI sprite.
 
     &.is-selected {

@@ -1,6 +1,6 @@
 import {
-    PlaybackChrome,
-    type PlaybackChromeOptions,
+    PlaybackControls,
+    type PlaybackControlsOptions,
 } from '@lixpi/canvas-components/media'
 import {
     type VideoCanvasNode,
@@ -8,7 +8,7 @@ import {
 } from '@lixpi/constants'
 
 export type { PlaybackControlsSettings as WorkspaceVideoControlsSettings } from '@lixpi/canvas-components/media'
-export type WorkspaceVideoChromeOptions = PlaybackChromeOptions<VideoCanvasNode | AudioCanvasNode>
+export type WorkspaceVideoControlsOptions = PlaybackControlsOptions<VideoCanvasNode | AudioCanvasNode>
 
 // Workspace nodes provide Asset identity; the reusable player owns all controls and gestures.
-export class WorkspaceVideoChrome extends PlaybackChrome<VideoCanvasNode | AudioCanvasNode> {}
+export class WorkspaceVideoControls extends PlaybackControls<VideoCanvasNode | AudioCanvasNode> {}

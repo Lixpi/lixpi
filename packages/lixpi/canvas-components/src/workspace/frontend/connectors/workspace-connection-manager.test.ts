@@ -17,7 +17,7 @@ import {
 } from './workspace-connection-manager.ts'
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
 } from '@lixpi/canvas-engine/shared'
 import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'
 import { getEdgeAnchorPositions } from '@lixpi/canvas-engine/frontend/connectors'
@@ -397,7 +397,7 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
             } | null
         }>
         const start = getRenderedPixiEdgeStart(onConnectorGeometry, edge.edgeId)
-        const expectedSourceOffsetWorld = scaleCanvasChromeWorldSizeForZoom(
+        const expectedSourceOffsetWorld = scaleCanvasControlsWorldSizeForZoom(
             settings.connector.scaling.markerOffset.source,
             zoom,
             getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling),
@@ -581,7 +581,7 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
         manager.syncEdges([edge])
         manager.render()
 
-        const sourceMarkerOffset = scaleCanvasChromeWorldSizeForZoom(
+        const sourceMarkerOffset = scaleCanvasControlsWorldSizeForZoom(
             settings.connector.scaling.markerOffset.source,
             1,
             getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling),

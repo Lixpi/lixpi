@@ -67,7 +67,7 @@ export const createWebUiEditorServices = (auth: AuthTokenProvider): EditorServic
             ),
             renditionPath: buildAssetRenditionPath,
             modelBadge: {
-                decorate: container => applyMediaModelBadgeStyleProperties(container, { scale: settings.mediaNode.generatedMediaChrome.chatScale }),
+                decorate: container => applyMediaModelBadgeStyleProperties(container, { scale: settings.mediaNode.generatedMediaControls.chatScale }),
                 render: (target, modelId) => renderMediaModelBadge(
                     target,
                     resolveMediaModelBadgeConfig({ modelId }),
@@ -80,7 +80,7 @@ export const createWebUiEditorServices = (auth: AuthTokenProvider): EditorServic
         previews: {
             createReferenceChip: createPromptReferenceChipElement,
         },
-        promptChrome: {
+        promptControls: {
             createMediaModeSwitch: createPromptMediaModeSwitch,
             createModelMenuTrigger: createPromptModelMenuTrigger,
         },

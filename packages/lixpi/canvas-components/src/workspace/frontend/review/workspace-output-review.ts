@@ -87,7 +87,7 @@ export type WorkspaceOutputReviewPorts = {
     ) => Promise<{ error?: string }>
     applyGeometry: (geometry: CanvasGeometryUpdate) => void
     removeContextChips: (nodeIds: string[]) => void
-    refreshChrome: () => void
+    refreshControls: () => void
     refreshMarkers: () => void
     submit: (
         data: AiPromptComposerSubmitData,
@@ -185,7 +185,7 @@ export class WorkspaceOutputReview {
         if (!this.isCurrent(scope))
             return
 
-        this.ports.refreshChrome()
+        this.ports.refreshControls()
 
         if (this.isCurrent(scope))
             this.ports.refreshMarkers()

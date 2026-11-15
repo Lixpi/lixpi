@@ -929,7 +929,7 @@ describe('nested-list drop geometry', () => {
         expect(section.child(3).attrs.entryId).toBe('tail')
     })
 
-    it('uses the full row width with only the label height when hovering right-side chrome', () => {
+    it('uses the full row width with only the label height when hovering right-side controls', () => {
         const handle = sectionScene()
         vi.spyOn(dom(handle, 'a-label'), 'getBoundingClientRect').mockReturnValue(new DOMRect(24, 100, 100, 30))
         pointer(dom(handle, 'b'), 'pointerdown', 40, 200)

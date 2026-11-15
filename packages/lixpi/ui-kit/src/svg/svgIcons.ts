@@ -83,7 +83,7 @@ export const stopIcon = '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" x
 // https://www.flaticon.com/free-icon/right_481141?related_id=484038&origin=search
 export const imageResizeCornerIcon = '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"	 viewBox="0 0 384 384" style="enable-background:new 0 0 384 384;" xml:space="preserve"><g>	<g>		<path d="M373.333,0c-5.896,0-10.667,4.771-10.667,10.667v352h-352C4.771,362.667,0,367.438,0,373.333			C0,379.229,4.771,384,10.667,384h362.667c5.896,0,10.667-4.771,10.667-10.667V10.667C384,4.771,379.229,0,373.333,0z"/>	</g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g></svg>'
 
-// Simple solid glyphs (no enclosing circle — the play-button chrome supplies the
+// Simple solid glyphs (no enclosing circle — the play-button control supplies the
 // circular background) for the canvas video node play/pause overlay.
 export const videoPlayGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/></svg>'
 export const videoPauseGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>'

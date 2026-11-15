@@ -4,7 +4,7 @@ import {
     getGeneratedMediaPreFrameLayoutRect,
     getGeneratedMediaPreFrameRect,
     getGeneratedMediaProgressCollisionRect,
-    getGeneratedOutputChromeCollisionInsets,
+    getGeneratedOutputControlsCollisionInsets,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
     resizeBranchMarkerToDimensions,
@@ -1099,20 +1099,20 @@ const rebalance = (
                     )
                 }
 
-                const chromeInsets = node.type === 'image'
+                const controlsInsets = node.type === 'image'
                     || node.type === 'video'
                     || node.type === 'audio'
                     || node.type === 'capabilityArtifact'
-                    ? getGeneratedOutputChromeCollisionInsets(node.type)
+                    ? getGeneratedOutputControlsCollisionInsets(node.type)
                     : {
                         top: 0,
                         bottom: 0,
                     }
                 const collisionRect = {
                     x: position.x,
-                    y: position.y - chromeInsets.top,
+                    y: position.y - controlsInsets.top,
                     width: node.dimensions.width,
-                    height: chromeInsets.top + node.dimensions.height + chromeInsets.bottom,
+                    height: controlsInsets.top + node.dimensions.height + controlsInsets.bottom,
                 }
 
                 if (

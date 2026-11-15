@@ -11,7 +11,10 @@
 
 @import "@lixpi/ui-primitives/styles/transitions";
 
+$ai-prompt-input-ring-width: 4px;
+
 .ai-prompt-input-floating {
+    --ai-prompt-input-ring-width: #{$ai-prompt-input-ring-width};
     position: absolute;
     z-index: 100;
     pointer-events: auto;
@@ -106,7 +109,7 @@
     }
 
     // Make sure it fills the editor area, leaving a small gap for the gradient to show
-    margin: 4px; // Small margin creates the "border" effect of the gradient
+    margin: var(--ai-prompt-input-ring-width, #{$ai-prompt-input-ring-width}); // Leaves the decorative gradient rim visible
     min-height: 100px;
 
     // Add internal padding for the content

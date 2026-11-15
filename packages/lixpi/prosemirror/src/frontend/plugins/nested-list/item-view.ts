@@ -48,17 +48,17 @@ export class NestedListItemView implements NodeView {
                 aria-hidden="true"
             ></span>
         ` as HTMLElement
-        const chrome = html`
+        const itemControls = html`
             <span
-                className="nested-list-item-chrome"
+                className="nested-list-item-controls"
                 contenteditable="false"
             ></span>
         ` as HTMLElement
-        chrome.append(this.tags, controls)
+        itemControls.append(this.tags, controls)
         this.dom.append(
             underlay,
             this.contentDOM,
-            chrome,
+            itemControls,
         )
         this.refresh()
     }

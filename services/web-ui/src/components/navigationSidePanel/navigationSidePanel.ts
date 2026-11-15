@@ -1,7 +1,7 @@
 // NavigationSidePanel - the workspace tree side panel built on the shared
 // SidePanel component.
 //
-// Renderer: TypeScript `html` DOM for the panel chrome. The workspace tree in
+// Renderer: TypeScript `html` DOM for the panel controls. The workspace tree in
 // the list uses the local workspace adapter; this panel supplies its
 // ports (NATS requests, routing, confirmation, import and export, collapse
 // persistence) and keeps the header, footer and SidePanel shell.

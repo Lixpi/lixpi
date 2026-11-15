@@ -120,7 +120,7 @@ describe('nested list schema and item views', () => {
         const collapse = label.querySelector<HTMLButtonElement>('.nested-list-collapse')!
 
         expect(collapse.previousSibling?.textContent).toBe('Alpha')
-        expect(parent.querySelector(':scope > .nested-list-item-left-chrome')).toBeNull()
+        expect(parent.querySelector(':scope > .nested-list-item-left-controls')).toBeNull()
         parent.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))
         const drag = handle.view.dom.parentElement?.querySelector<HTMLElement>('.nested-list-block-drag-handle')
         expect(drag?.hidden).toBe(false)
@@ -228,16 +228,16 @@ describe('nested list schema and item views', () => {
             },
         })
         const parent = rows(handle)[0]
-        const chrome = parent.querySelector<HTMLElement>(':scope > .nested-list-item-chrome')!
+        const itemControls = parent.querySelector<HTMLElement>(':scope > .nested-list-item-controls')!
         const content = parent.querySelector<HTMLElement>(':scope > .nested-list-item-content')!
         const child = rows(handle)[1]
 
         expect(parent.querySelector(':scope > .nested-list-item-row-underlay')).not.toBeNull()
-        expect(chrome.querySelector('.nested-list-tag')?.textContent).toBe('Review')
-        expect(chrome.contains(badge)).toBe(true)
+        expect(itemControls.querySelector('.nested-list-tag')?.textContent).toBe('Review')
+        expect(itemControls.contains(badge)).toBe(true)
         expect(content.contains(child)).toBe(true)
         expect(parent.children[1]).toBe(content)
-        expect(parent.children[2]).toBe(chrome)
+        expect(parent.children[2]).toBe(itemControls)
         expect(content.querySelector('p:first-child > .nested-list-collapse')).not.toBeNull()
     })
 
@@ -344,7 +344,8 @@ describe('floating block menu', () => {
         expect(focus).not.toHaveBeenCalled()
 
         menuItem('Change current style').click()
-        expect(document.querySelector('.nested-list-block-style-menu')?.classList.contains('is-open')).toBe(true)
+        const styleMenu = document.querySelector('.nested-list-block-toolbar .bubble-menu-vertical')
+        expect(styleMenu?.classList.contains('is-visible')).toBe(true)
         expect(handle.mode).toBe('view')
         expect(handle.view.state.doc.eq(original)).toBe(true)
         expect(focus).not.toHaveBeenCalled()
@@ -399,8 +400,8 @@ describe('floating block menu', () => {
         expect(toggle.querySelector('.dropdown-label svg')).not.toBeNull()
         expect(toggle.getAttribute('aria-expanded')).toBe('false')
         toggle.click()
-        const selector = document.querySelector<HTMLElement>('.nested-list-block-style-menu')!
-        expect(selector.classList.contains('is-open')).toBe(true)
+        const selector = document.querySelector<HTMLElement>('.nested-list-block-toolbar .bubble-menu-vertical')!
+        expect(selector.classList.contains('is-visible')).toBe(true)
         expect([...selector.querySelectorAll<HTMLButtonElement>('.bubble-menu-dropdown-item')]
             .map(button => button.getAttribute('aria-label'))).toEqual([
             'Text',
@@ -433,7 +434,7 @@ describe('floating block menu', () => {
         }))
 
         expect(handle.mode).toBe('view')
-        expect(document.querySelector('.nested-list-block-panel')?.hasAttribute('hidden')).toBe(true)
+        expect(document.querySelector('.nested-list-block-panel')).toBeNull()
         expect(findNestedListEntry(handle.view.state.doc, 'b')!.node.textContent).toContain('draft ')
         expect(changed).toHaveBeenCalledOnce()
     })
@@ -445,17 +446,18 @@ describe('floating block menu', () => {
         vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 280, 200))
         const bubble = document.querySelector<HTMLElement>('.nested-list-block-bubble')!
         vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 170, 40, 28))
-        const panel = document.querySelector<HTMLElement>('.nested-list-block-panel')!
-        Object.defineProperty(panel, 'scrollHeight', {
-            configurable: true,
-            value: 200,
-        })
-
         rows(handle)[0].dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))
         document.querySelector<HTMLButtonElement>('.nested-list-block-trigger')!.click()
         menuItem('Insert new block').click()
-        expect(panel.classList.contains('nested-list-block-panel-above')).toBe(true)
-        expect(panel.style.maxHeight).toBe('166px')
+        const panel = document.querySelector<HTMLElement>('.nested-list-block-panel')!
+        const content = panel.firstElementChild as HTMLElement
+        Object.defineProperty(content, 'scrollHeight', { value: 200 })
+        Object.defineProperty(panel, 'offsetHeight', { value: 166 })
+        document.dispatchEvent(new Event('scroll', { bubbles: true }))
+
+        expect(panel.classList.contains('bubble-menu-vertical')).toBe(true)
+        expect(content.style.getPropertyValue('--bubble-menu-available-height')).toBe('166px')
+        expect(panel.style.top).toBe('-170px')
     })
 
     it('opens the same menu from a focused row with Shift+F10', () => {

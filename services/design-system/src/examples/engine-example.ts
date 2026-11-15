@@ -38,7 +38,7 @@ import {
     type ConnectionSettings,
 } from '@lixpi/canvas-engine/frontend/connectors'
 import { ExampleFrame } from './example-frame.ts'
-import { EnginePlaybackChrome } from './engine-playback-chrome.ts'
+import { EnginePlaybackControls } from './engine-playback-controls.ts'
 import { withNodeShell } from '@lixpi/canvas-components/nodes/shell'
 import { createEngineNodeShellOptions } from './engine-node-shell.ts'
 import shellSlotSource from './engine-node-shell.ts?raw'
@@ -617,7 +617,7 @@ export class EngineExample {
     private muted = true
     private playbackRate = 1
     private readonly playbackElements = new Map<string, HTMLVideoElement | HTMLAudioElement>()
-    private playbackChrome: EnginePlaybackChrome | null = null
+    private playbackControls: EnginePlaybackControls | null = null
     private volume = 1
     private readonly connectionSettings: ConnectionSettings
     private readonly connectorZoomScaling: BoundedZoomScalingOptions
@@ -738,7 +738,7 @@ export class EngineExample {
                             loop: true,
                         },
                         onReady: () => {
-                            this.playbackChrome?.sync()
+                            this.playbackControls?.sync()
 
                             if (
                                 this.metadata
@@ -774,7 +774,7 @@ export class EngineExample {
             },
             interaction: {
                 isInteractiveTarget: element => Boolean(
-                    element.closest(".workspace-video-chrome, .canvas-node-shell-actions"),
+                    element.closest(".workspace-video-controls-node, .canvas-node-shell-actions"),
                 ),
                 onSelectionChange: selected => {
                     if (selected.size)
@@ -811,7 +811,7 @@ export class EngineExample {
         })
 
         if (this.snapshot.nodes.some(node => node.type === 'video' || node.type === 'audio')) {
-            this.playbackChrome = new EnginePlaybackChrome({
+            this.playbackControls = new EnginePlaybackControls({
                 root: this.frame.stage,
                 canvas: this.canvas,
                 theme: this.frame.theme,
@@ -956,11 +956,11 @@ export class EngineExample {
             const playerHeightInput = this.frame.number(
                 "Player control height",
                 {
-                    value: this.playbackChrome?.getControlHeight() ?? 40,
+                    value: this.playbackControls?.getControlHeight() ?? 40,
                 },
                 height => {
                     const theme = getExampleTheme(this.frame.stage)
-                    const currentHeight = this.playbackChrome?.getControlHeight()
+                    const currentHeight = this.playbackControls?.getControlHeight()
 
                     if (
                         !currentHeight
@@ -973,7 +973,7 @@ export class EngineExample {
                 },
             )
             this.frame.onThemeChange(() => {
-                const height = this.playbackChrome?.getControlHeight() ?? 40
+                const height = this.playbackControls?.getControlHeight() ?? 40
                 playerHeightInput.value = String(height)
             })
             this.frame.number(
@@ -1156,7 +1156,7 @@ export class EngineExample {
             createEngineNodeShellOptions<ExampleNodeData>({
                 theme: this.frame.theme,
                 enabled: () => this.metadata,
-                footerOffset: (nodeId, viewport) => this.playbackChrome?.getFooterOffsetScreen(nodeId, viewport) ?? 0,
+                footerOffset: (nodeId, viewport) => this.playbackControls?.getFooterOffsetScreen(nodeId, viewport) ?? 0,
                 select: nodeId => this.canvas.setSelected([nodeId]),
                 remove: nodeId => this.accept({
                     kind: 'delete',
@@ -1313,12 +1313,12 @@ export class EngineExample {
             shellSlotSource.trimEnd(),
             '',
             `let metadataEnabled = ${this.metadata}`,
-            ...(this.playbackChrome ? ['let chrome = null'] : []),
+            ...(this.playbackControls ? ['let controls = null'] : []),
             'const shell = createEngineNodeShellOptions({',
             '    theme,',
             '    enabled: () => metadataEnabled,',
-            this.playbackChrome
-                ? '    footerOffset: (id, viewport) => chrome?.outsideOffsetScreen(id, viewport) ?? 0,'
+            this.playbackControls
+                ? '    footerOffset: (id, viewport) => controls?.outsideOffsetScreen(id, viewport) ?? 0,'
                 : '    footerOffset: () => 0,',
             '    select: id => canvas.setSelected([id]),',
             '    remove: id => onIntent({ kind: "delete", sceneKey: scene.sceneKey, nodeIds: [id], edgeIds: [] }),',
@@ -1340,7 +1340,7 @@ export class EngineExample {
         if (this.mode === 'node-shell')
             return [
                 "import { CanvasController, NodeRegistry } from '@lixpi/canvas-engine/frontend/runtime'",
-                "import { createImageNodeRegistration, createPlaybackNodeRegistration, PlaybackChrome } from '@lixpi/canvas-components/media'",
+                "import { createImageNodeRegistration, createPlaybackNodeRegistration, PlaybackControls } from '@lixpi/canvas-components/media'",
                 '',
                 '// The same decorator wraps every registration in this scene.',
                 'const registry = new NodeRegistry()',
@@ -1371,12 +1371,12 @@ export class EngineExample {
                     4,
                 )}`,
                 'const canvas = new CanvasController({ root, registry, scene, ...mediaPorts, onIntent })',
-                'chrome = new PlaybackChrome({ ...playbackPorts })',
-                'chrome.sync(scene.nodes.filter(node => node.type === "video" || node.type === "audio"))',
+                'controls = new PlaybackControls({ ...playbackPorts })',
+                'controls.sync(scene.nodes.filter(node => node.type === "video" || node.type === "audio"))',
                 `canvas.setViewport(${JSON.stringify(this.canvas.scene.viewport)})`,
                 '// Fit includes screen space for titles, player controls, metadata and actions.',
                 '// Dispose playback controls before the canvas releases its native elements and shell slots.',
-                'chrome.destroy()',
+                'controls.destroy()',
                 'canvas.destroy()',
             ].join('\n')
 
@@ -1476,7 +1476,7 @@ export class EngineExample {
         if (this.mode === 'media-playback')
             return [
                 "import { createPlaybackNodeRegistration } from '@lixpi/canvas-components/media'",
-                "import { PlaybackChrome } from '@lixpi/canvas-components/media'",
+                "import { PlaybackControls } from '@lixpi/canvas-components/media'",
                 "import { createLixpiUiSettings } from '@lixpi/canvas-components/workspace/settings'",
                 "import { createViewportBridge } from '@lixpi/canvas-engine/frontend/viewport'",
                 '',
@@ -1499,16 +1499,16 @@ export class EngineExample {
                 `})${registrationEnd})`,
                 "",
                 "const playerSettings = createLixpiUiSettings().videoControls",
-                `playerSettings.height = ${this.playbackChrome?.getControlHeight() ?? 40}`,
-                `${this.options.metadata !== undefined ? "chrome" : "const chrome"} = new PlaybackChrome({`,
+                `playerSettings.height = ${this.playbackControls?.getControlHeight() ?? 40}`,
+                `${this.options.metadata !== undefined ? "controls" : "const controls"} = new PlaybackControls({`,
                 "    ...ports, settings: playerSettings,",
                 "    // Ports supply native elements, node bounds, viewport and engine gestures.",
                 "})",
-                "host.append(chrome.element)",
-                "createViewportBridge({ viewportEl: chrome.element }).applyViewport(viewport)",
-                "chrome.sync(videoAndAudioNodes)",
+                "host.append(controls.element)",
+                "createViewportBridge({ viewportEl: controls.element }).applyViewport(viewport)",
+                "controls.sync(videoAndAudioNodes)",
                 "// Release controls before the canvas releases its borrowed native elements.",
-                "chrome.destroy()",
+                "controls.destroy()",
             ].join('\n')
 
         const viewport = this.canvas.scene.viewport
@@ -1722,8 +1722,8 @@ export class EngineExample {
         this.disposed = true
         this.fitObserver?.disconnect()
         this.releaseStressMetrics?.()
-        this.playbackChrome?.destroy()
-        this.playbackChrome = null
+        this.playbackControls?.destroy()
+        this.playbackControls = null
         this.canvas.destroy()
         this.frame.destroy()
     }

@@ -108,7 +108,7 @@ export const createTestEditorServices = (overrides: Partial<EditorServices> = {}
                 destroy: vi.fn(),
             }),
         },
-        promptChrome: {
+        promptControls: {
             createMediaModeSwitch: () => ({
                 element: document.createElement('div'),
                 setValue: vi.fn(),

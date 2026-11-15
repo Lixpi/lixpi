@@ -594,7 +594,7 @@ $error-row-selected: color-mix(in srgb, var(--red) 34%, var(--bg-surface));
         padding: 12px 0;
     }
 
-    // The fold markers are chrome, not content, so they stay quiet until the
+    // The fold markers are controls, not content, so they stay quiet until the
     // pointer is on them.
     .cm-gutters {
         border: 0;

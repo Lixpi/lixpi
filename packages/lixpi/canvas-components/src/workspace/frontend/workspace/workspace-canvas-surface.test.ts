@@ -20,10 +20,10 @@ import {
     type WorkspaceCanvasSurfaceSnapshot,
 } from './workspace-canvas-surface.ts'
 import {
-    type WorkspaceCanvasChromeSettings,
-} from './workspace-canvas-chrome.ts'
+    type WorkspaceCanvasControlsSettings,
+} from './workspace-canvas-controls.ts'
 
-const settings: WorkspaceCanvasChromeSettings & { insertionWidth: number } = {
+const settings: WorkspaceCanvasControlsSettings & { insertionWidth: number } = {
     panel: {
         defaultDimensions: { width: 500 },
         dimensions: { maxPaneMargin: 30 },

@@ -1346,7 +1346,7 @@ export type GeneratedOutputVariantMetadata = {
     branchLineNodeId?: string
     lineageParentNodeId?: string
     referenceAssetIds?: string[]
-    // Durable fallback for generated-output chrome when the conversation
+    // Durable fallback for generated-output controls when the conversation
     // document has not resumed yet or its lineage marker is unavailable.
     promptText?: string
 }

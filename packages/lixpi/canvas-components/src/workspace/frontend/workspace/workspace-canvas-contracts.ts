@@ -81,6 +81,10 @@ export type WorkspaceCanvasOptions = {
     viewportEl: HTMLDivElement
     mediaModeSwitchMountEl: HTMLDivElement
     modelMenuControlMountEl: HTMLDivElement
+    conversationControls?: {
+        left: HTMLElement
+        right: HTMLElement
+    }
     glassTargets?: readonly {
         id: string
         element: HTMLElement

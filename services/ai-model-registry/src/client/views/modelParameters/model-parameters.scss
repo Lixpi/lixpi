@@ -77,7 +77,7 @@ $radius-card: 8px;
 }
 
 // Search, filter, counts and save state all share one line. Nothing here grows:
-// the toolbar is chrome, so it stays small and leaves the page to the cards.
+// the toolbar stays compact so the parameter cards have room.
 .toolbar {
     position: sticky;
     top: var(--page-top, 0px);

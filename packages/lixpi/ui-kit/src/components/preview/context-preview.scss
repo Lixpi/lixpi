@@ -327,7 +327,7 @@
 }
 
 // Compact inline trigger. Canvas cards are temporarily moved to the pane-level
-// overlay by contextPreview.ts so they escape clamped node text and sibling chrome.
+// overlay by contextPreview.ts so they escape clamped node text and sibling controls.
 .context-preview-inline {
     --help-tooltip-width: 280px;
     --help-tooltip-max-width: min(280px, calc(100vw - 24px));

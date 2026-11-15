@@ -8,7 +8,7 @@ import {
     buildNodesById,
     computeWorldPosition,
     getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
     type CanvasEngineRect,
     type CanvasViewport,
 } from '@lixpi/canvas-engine/shared'
@@ -89,7 +89,7 @@ export type WorkspaceMediaLayerOptions = Pick<WorkspaceMediaNodesOptions, 'onIma
     onEdgeSelectionChange?: (edgeId: string | null) => void
     settings: WorkspaceLoadingSettings & {
         connector: ConnectionSettings
-        canvasChrome: { glassBorder: Omit<GlassBorderStyle, 'edgeFeatherFraction'> & {
+        canvasControls: { glassBorder: Omit<GlassBorderStyle, 'edgeFeatherFraction'> & {
             glassMaterial: GlassMaterialStyle
             materialColors: string[]
             materialTailAlpha: number
@@ -210,7 +210,7 @@ export class WorkspaceMediaLayer {
                 surface: this.drawing,
                 getStrokeScale: () => this.strokeScale(),
             })
-            const glass = options.settings.canvasChrome.glassBorder
+            const glass = options.settings.canvasControls.glassBorder
             this.glass = new DomGlassBorder({
                 root: options.paneEl,
                 surface: this.drawing,
@@ -383,7 +383,7 @@ export class WorkspaceMediaLayer {
         this.canvas.setConnectionSettings(settings.connector)
         const outline = this.getOutlineAppearance()
         this.outlines.setAppearance(outline.style, outline.texture)
-        const glass = settings.canvasChrome.glassBorder
+        const glass = settings.canvasControls.glassBorder
         this.glass.setTargets(this.glassTargets)
         this.glass.setAppearance(
             {
@@ -511,7 +511,7 @@ export class WorkspaceMediaLayer {
     }
 
     private strokeScale(): number {
-        return scaleCanvasChromeWorldSizeForZoom(
+        return scaleCanvasControlsWorldSizeForZoom(
             1,
             this.viewport.zoom,
             getAdaptiveBoundedZoomScalingOptions(this.options.settings.mediaNode.inProgressOutlineAnimation.zoomScaling),

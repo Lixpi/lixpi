@@ -14,7 +14,7 @@ The core `BubbleMenu` class handles:
 - **Prevent-hide pattern**: `mousedown` + `preventDefault` prevents focus loss when clicking menu buttons
 - **Scroll/resize tracking**: Repositions on scroll and mobile viewport resize
 
-The stylesheet owns the menu's default stacking level and foreground color. Consumers can raise the menu through CSS when a host overlay needs a higher layer. Custom buttons and submenu content that use `color: inherit` receive the same foreground as the menu.
+`settings.ts` owns the shared menu's appearance, sizing, motion, and placement defaults. BubbleMenu exposes them to its stylesheet through CSS custom properties. Colors come from the active theme's `control.bubbleMenu` roles, projected as `--theme-bubble-menu-*` properties. The light preset uses the image/video switch's pale blue background, blue selection, and dark icon palette; Mariana supplies its own dark surfaces and light foregrounds. Hovered and selected icons inherit their button's themed state color. A dropdown trigger with a selected value uses the same active background and foreground as that option in the expanded menu; a trigger without a selected value keeps its neutral appearance. Open toolbars and dropdowns resolve these properties against the nearest Lixpi theme scope and follow theme changes. A host overlay can raise the menu through its own stacking rule.
 
 ## Consumers
 
@@ -26,7 +26,7 @@ The rich-editing `BubbleMenuView` adapts this component for text and image selec
 - Manages ProseMirror-specific interactions (link input panel, mark toggling, image attribute changes)
 - Drives show/hide on every ProseMirror transaction
 
-The shared nested-list editor displays a bare pencil over the hovered block. Clicking it opens a separate `BubbleMenu` with insert and block-style dropdowns plus options supplied by the host. Read-only lists do not mount the pencil.
+The shared nested-list editor displays a bare action trigger over the hovered block. Clicking it opens a `BubbleMenu` with insert and block-style dropdowns plus options supplied by the host. Read-only lists do not mount the trigger. Insert and More use vertical `BubbleMenu` instances for the action options. The nested-list and rich-editing text-style selectors both use `BubbleMenuDropdown`.
 
 ### Workspace Canvas
 
@@ -35,6 +35,8 @@ The `WorkspaceCanvas` creates a `BubbleMenu` for canvas image nodes:
 - Positions below the selected image node element
 - Provides Create Variant, Download, and Delete actions
 - Shows when an image node is selected, hides on deselection/drag/resize
+
+The chat layout control mounts an inline `BubbleMenu` with a `BubbleMenuDropdown` for the layout options.
 
 ## Usage
 
@@ -86,6 +88,10 @@ menu.destroy()
 | Option | Type | Description |
 |--------|------|-------------|
 | `parentEl` | `HTMLElement` | Where to mount the menu DOM |
+| `inline` | `boolean` | Mount in the normal layout and show the first item's context immediately |
+| `orientation` | `'horizontal' \| 'vertical'` | Arrange the controls as a row or column in the shared capsule |
+| `role` | `'toolbar' \| 'menu'` | Accessible role for the controls |
+| `getScale` | `() => number` | Optional coordinate scale when the host already knows its transform |
 | `items` | `BubbleMenuItem[]` | All menu items with context arrays |
 | `panels` | `HTMLElement[]` | Optional secondary panels (e.g., link input) |
 | `getVisualScale` | `() => number` | Optional visual scale applied through `--bubble-menu-visual-scale` before measuring and positioning |
@@ -120,6 +126,9 @@ type BubbleMenuItem = {
     element: HTMLElement
     context: string[]
     update?: () => void
+    hide?: () => void
+    reposition?: () => void
+    destroy?: () => void
 }
 ```
 
@@ -128,7 +137,10 @@ type BubbleMenuItem = {
 ```typescript
 type BubbleMenuPositionRequest = {
     targetRect: DOMRect
-    placement: 'above' | 'below' | 'left' | 'right'
+    placement: 'above' | 'below' | 'left' | 'right' | 'auto'
+    horizontalAlignment?: 'start' | 'center' | 'end'
+    bounds?: DOMRect
+    gap?: number
     clampToParent?: boolean
     animateOnShow?: boolean
 }
@@ -140,11 +152,21 @@ type BubbleMenuPositionRequest = {
 
 `animateOnShow` defaults to `true`. Anchored canvas menus can set it to `false` when a first-show transform transition would make the menu appear to drift away from its target.
 
+### `BubbleMenuDropdown`
+
+Mount `dropdown.element` as a toolbar item. Pass the owner `document`, a trigger `label`, and icon options with `value` and `label`. A `menuLabel` can name the options separately. An absent value displays the optional `fallbackIcon` and leaves every option unchecked.
+
+The options are a vertical `BubbleMenu` attached to the trigger. It opens below when there is room, flips above when that gives it more space, and scrolls when it cannot fit. Pass `getBounds` to set the vertical space the menu can use and `getScale` if the host already knows its transform. Call `reposition()` when a host moves the trigger without a scroll or resize event.
+
+`setValue(value)` updates the trigger icon and checked option. Only a user choice calls `onChange(value)`. `onOpen()` runs when the dropdown opens. `open()`, `toggle()`, and `hide()` control visibility, and `isOpen` reflects the current state. Wire `hide()`, `reposition()`, and `destroy()` into the enclosing BubbleMenu item when that toolbar owns the dropdown's lifecycle.
+
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `BubbleMenu.ts` | Core class with positioning, show/hide, and context switching |
+| `BubbleMenuDropdown.ts` | Icon trigger, checked options, and selection behavior for a vertical BubbleMenu |
+| `settings.ts` | Appearance and positioning defaults for the toolbar and its dropdown |
 | `types.ts` | Shared types (`BubbleMenuItem`, `BubbleMenuOptions`, `BubbleMenuPositionRequest`) |
 | `bubbleMenu.scss` | Styles for menu, buttons, dropdown, link input, separator |
 | `index.ts` | Public exports |
@@ -155,7 +177,7 @@ All styles use the `.bubble-menu-*` prefix and are fully generic:
 
 - `.bubble-menu` — Root container (absolute positioned)
 - `.bubble-menu-content` — Flex row of buttons
-- `.bubble-menu-button` — Individual button (28×28, 40×40 on mobile)
+- `.bubble-menu-button` — Individual icon button
 - `.bubble-menu-separator` — Vertical divider
 - `.bubble-menu-dropdown` — Dropdown wrapper
 - `.bubble-menu-link-input` — Link input panel

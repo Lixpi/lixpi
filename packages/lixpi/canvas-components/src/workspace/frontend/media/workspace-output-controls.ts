@@ -16,7 +16,7 @@ import {
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeToScreenForZoom,
+    scaleCanvasControlsToScreenForZoom,
     type CanvasEngineRect,
     type CanvasViewport,
 } from '@lixpi/canvas-engine/shared'
@@ -30,19 +30,19 @@ import {
     type GeneratedOutputCanvasNode,
 } from '../../shared/index.ts'
 import {
-    GeneratedOutputNodeChrome,
-    type GeneratedOutputNodeChromeOptions,
-} from './generated-output-node-chrome.ts'
+    GeneratedOutputNodeControls,
+    type GeneratedOutputNodeControlsOptions,
+} from './generated-output-node-controls.ts'
 import {
-    type WorkspaceVideoChrome,
-} from './workspace-video-chrome.ts'
+    type WorkspaceVideoControls,
+} from './workspace-video-controls.ts'
 
 type MediaNode = ImageCanvasNode | VideoCanvasNode
 type OutputNode = GeneratedOutputCanvasNode | AudioCanvasNode
 
-export type WorkspaceOutputChromePorts = {
+export type WorkspaceOutputControlsPorts = {
     document: Document
-    settings: GeneratedOutputNodeChromeOptions['settings']
+    settings: GeneratedOutputNodeControlsOptions['settings']
     getState: () => CanvasState | null
     getViewport: () => CanvasViewport
     getBounds: (
@@ -65,7 +65,7 @@ export type WorkspaceOutputChromePorts = {
     isSelected: (nodeId: string) => boolean
     getVideo: (nodeId: string) => HTMLVideoElement | null | undefined
     getAudio?: (nodeId: string) => HTMLAudioElement | null | undefined
-    video: Pick<WorkspaceVideoChrome, 'sync' | 'update' | 'outsideOffsetScreen'>
+    video: Pick<WorkspaceVideoControls, 'sync' | 'update' | 'outsideOffsetScreen'>
     createModelBadge: (options: {
         modelId: string
         modelProvider: string
@@ -91,20 +91,20 @@ export type WorkspaceOutputChromePorts = {
     }) => void
 }
 
-export class WorkspaceOutputChrome {
+export class WorkspaceOutputControls {
     readonly element: HTMLDivElement
     readonly pendingElement: HTMLDivElement
     private readonly lifetime = new Lifetime()
     private content = new Lifetime()
-    private readonly footers = new Map<string, GeneratedOutputNodeChrome>()
+    private readonly footers = new Map<string, GeneratedOutputNodeControls>()
     private readonly pendingIcons = new Map<string, HTMLElement>()
     private syncKey: string | null = null
     private frame: number | null = null
     private frameVersion = 0
 
-    constructor(private readonly ports: WorkspaceOutputChromePorts) {
+    constructor(private readonly ports: WorkspaceOutputControlsPorts) {
         const html = createDocumentHtml(ports.document)
-        this.element = html`<div className="workspace-generated-media-chrome-layer"></div>` as HTMLDivElement
+        this.element = html`<div className="workspace-generated-media-controls-layer"></div>` as HTMLDivElement
         this.pendingElement = html`<div className="workspace-generated-media-pending-icon-layer"></div>` as HTMLDivElement
         this.lifetime.own(() => this.element.remove())
         this.lifetime.own(() => this.pendingElement.remove())
@@ -237,7 +237,7 @@ export class WorkspaceOutputChrome {
             try {
                 this.clear()
             } catch (cleanupError) {
-                throw new AggregateError([error, cleanupError], 'Output chrome mounting failed')
+                throw new AggregateError([error, cleanupError], 'Output controls mounting failed')
             }
 
             throw error
@@ -309,7 +309,7 @@ export class WorkspaceOutputChrome {
 
         if (icon) {
             const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
-            const scale = scaleCanvasChromeToScreenForZoom(
+            const scale = scaleCanvasControlsToScreenForZoom(
                 1,
                 zoom,
                 getAdaptiveBoundedZoomScalingOptions(this.ports.settings.zoomScaling),
@@ -390,7 +390,7 @@ export class WorkspaceOutputChrome {
             nodes: state?.nodes ?? [],
             edges: state?.edges ?? [],
         }
-        const chrome = new GeneratedOutputNodeChrome({
+        const controls = new GeneratedOutputNodeControls({
             document: this.ports.document,
             nodeId: node.nodeId,
             kind: media ? 'media' : 'artifact',
@@ -418,13 +418,13 @@ export class WorkspaceOutputChrome {
             onReject: () => this.ports.onReject(node.nodeId),
             onRegenerate: () => this.ports.onRegenerate(node),
         })
-        this.content.own(() => chrome.destroy())
-        this.footers.set(node.nodeId, chrome)
-        this.element.appendChild(chrome.element)
+        this.content.own(() => controls.destroy())
+        this.footers.set(node.nodeId, controls)
+        this.element.appendChild(controls.element)
     }
 
     private mountAudioFooter(node: AudioCanvasNode): void {
-        const chrome = new GeneratedOutputNodeChrome({
+        const controls = new GeneratedOutputNodeControls({
             document: this.ports.document,
             nodeId: node.nodeId,
             kind: 'media',
@@ -448,9 +448,9 @@ export class WorkspaceOutputChrome {
             onReject: () => {},
             onRegenerate: () => {},
         })
-        this.content.own(() => chrome.destroy())
-        this.footers.set(node.nodeId, chrome)
-        this.element.appendChild(chrome.element)
+        this.content.own(() => controls.destroy())
+        this.footers.set(node.nodeId, controls)
+        this.element.appendChild(controls.element)
     }
 
     private mediaKey(node: MediaNode): string {

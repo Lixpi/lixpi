@@ -15,7 +15,7 @@ import {
     type ResizeHandle,
 } from '@lixpi/canvas-engine/shared'
 import { createViewportBridge } from '@lixpi/canvas-engine/frontend/viewport'
-import { PlaybackChrome } from '@lixpi/canvas-components/media'
+import { PlaybackControls } from '@lixpi/canvas-components/media'
 import { createLixpiUiSettings } from '@lixpi/canvas-components/workspace/settings'
 import { resolveWorkspaceCanvasTheme } from '@lixpi/canvas-components/workspace'
 import '@lixpi/canvas-components/styles/playback-controls'
@@ -25,7 +25,7 @@ type PlaybackSceneNode = Pick<EngineNode, 'nodeId' | 'position' | 'dimensions'> 
 }
 
 type PlaybackElements = ReadonlyMap<string, HTMLVideoElement | HTMLAudioElement>
-type PlaybackChromeOptions = {
+type PlaybackControlsOptions = {
     root: HTMLElement
     canvas: CanvasController
     theme: CanvasThemeSource
@@ -35,19 +35,19 @@ type PlaybackChromeOptions = {
     onError: (error: unknown) => void
 }
 
-export class EnginePlaybackChrome {
+export class EnginePlaybackControls {
     private readonly lifetime = new Lifetime()
     private settings: ReturnType<typeof createLixpiUiSettings>
-    private chrome: PlaybackChrome<PlaybackSceneNode> | null = null
+    private controls: PlaybackControls<PlaybackSceneNode> | null = null
     private signature = ''
     private destroyed = false
 
-    constructor(private readonly options: PlaybackChromeOptions) {
+    constructor(private readonly options: PlaybackControlsOptions) {
         this.settings = resolveWorkspaceCanvasTheme(
             options.theme.value,
             createLixpiUiSettings(),
         )
-        this.lifetime.own(() => this.chrome?.destroy())
+        this.lifetime.own(() => this.controls?.destroy())
         this.lifetime.own(
             options.theme.subscribe(this.refreshTheme),
         )
@@ -64,7 +64,7 @@ export class EnginePlaybackChrome {
         nodeId: string,
         viewport: CanvasViewport,
     ): number {
-        return this.chrome?.outsideOffsetScreen(nodeId, viewport) ?? 0
+        return this.controls?.outsideOffsetScreen(nodeId, viewport) ?? 0
     }
 
     getControlHeight(): number {
@@ -84,8 +84,8 @@ export class EnginePlaybackChrome {
 
         if (signature !== this.signature) {
             this.signature = signature
-            this.chrome?.destroy()
-            this.chrome = new PlaybackChrome<PlaybackSceneNode>({
+            this.controls?.destroy()
+            this.controls = new PlaybackControls<PlaybackSceneNode>({
                 document: this.options.root.ownerDocument,
                 settings: this.settings.videoControls,
                 getVideo: nodeId => {
@@ -121,7 +121,7 @@ export class EnginePlaybackChrome {
                         element.pause()
                 },
             })
-            this.options.root.append(this.chrome.element)
+            this.options.root.append(this.controls.element)
         }
 
         this.sync()
@@ -139,7 +139,7 @@ export class EnginePlaybackChrome {
     sync = (): void => {
         if (
             this.destroyed
-            || !this.chrome
+            || !this.controls
         )
             return
 
@@ -155,8 +155,8 @@ export class EnginePlaybackChrome {
                 }]
                 : [],
         )
-        createViewportBridge({ viewportEl: this.chrome.element }).applyViewport(canvas.scene.viewport)
-        this.chrome.sync(nodes)
+        createViewportBridge({ viewportEl: this.controls.element }).applyViewport(canvas.scene.viewport)
+        this.controls.sync(nodes)
     }
 
     private startDrag = (

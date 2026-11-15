@@ -12,7 +12,7 @@ import {
 import {
     type EditorAppearanceSettings,
     type EditorPreviewPorts,
-    type EditorPromptChromePorts,
+    type EditorPromptControlsPorts,
 } from './editor-host-ports.ts'
 import {
     type CapabilityRunProgressFactory,
@@ -69,7 +69,7 @@ export type EditorServices = {
     media: EditorMedia
     settings: EditorAppearanceSettings
     previews: EditorPreviewPorts
-    promptChrome: EditorPromptChromePorts
+    promptControls: EditorPromptControlsPorts
     models: EditorModelCatalog
     segments: ThreadSegmentSource
     capabilityArtifacts: EditorCapabilityArtifacts

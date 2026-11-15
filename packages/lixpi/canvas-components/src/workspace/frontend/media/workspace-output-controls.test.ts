@@ -16,11 +16,11 @@ import {
     type CapabilityArtifactCanvasNode,
 } from '@lixpi/constants'
 import {
-    WorkspaceOutputChrome,
-    type WorkspaceOutputChromePorts,
-} from './workspace-output-chrome.ts'
+    WorkspaceOutputControls,
+    type WorkspaceOutputControlsPorts,
+} from './workspace-output-controls.ts'
 
-const owners: WorkspaceOutputChrome[] = []
+const owners: WorkspaceOutputControls[] = []
 const image = (nodeId = 'image'): ImageCanvasNode => ({
     nodeId,
     type: 'image',
@@ -58,7 +58,7 @@ const fixture = (nodes: CanvasState['nodes'] = [image()]) => {
     const frames = new Map<number, FrameRequestCallback>()
     const titles = new Map<HTMLElement, ReturnType<typeof vi.fn>>()
     let frameId = 0
-    const ports: WorkspaceOutputChromePorts = {
+    const ports: WorkspaceOutputControlsPorts = {
         document,
         settings: {
             gap: 8,
@@ -104,7 +104,7 @@ const fixture = (nodes: CanvasState['nodes'] = [image()]) => {
         cancelFrame: vi.fn(),
         onError: vi.fn(),
     }
-    const owner = new WorkspaceOutputChrome(ports)
+    const owner = new WorkspaceOutputControls(ports)
     document.body.append(owner.element, owner.pendingElement)
     owners.push(owner)
 
@@ -126,8 +126,8 @@ afterEach(() => {
     vi.restoreAllMocks()
 })
 
-describe('WorkspaceOutputChrome', () => {
-    it('mounts audio title, details and playback chrome after the native source becomes ready', () => {
+describe('WorkspaceOutputControls', () => {
+    it('mounts audio title, details and playback controls after the native source becomes ready', () => {
         const node: AudioCanvasNode = {
             ...image('audio'),
             type: 'audio',
@@ -275,13 +275,13 @@ describe('WorkspaceOutputChrome', () => {
         f.ports.getDescriptor = () => ({
             status: 'ready',
             version: MEDIA_DESCRIPTOR_VERSION - 1,
-        } as ReturnType<WorkspaceOutputChromePorts['getDescriptor']>)
+        } as ReturnType<WorkspaceOutputControlsPorts['getDescriptor']>)
         f.owner.sync()
         expect(f.ports.queueAnalysis).toHaveBeenCalledWith(f.state.nodes[0])
         f.ports.getDescriptor = () => ({
             status: 'ready',
             version: MEDIA_DESCRIPTOR_VERSION,
-        } as ReturnType<WorkspaceOutputChromePorts['getDescriptor']>)
+        } as ReturnType<WorkspaceOutputControlsPorts['getDescriptor']>)
         f.owner.sync()
         expect(f.ports.queueAnalysis).toHaveBeenCalledOnce()
     })

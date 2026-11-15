@@ -258,7 +258,7 @@ The `CHAT_SEND_MESSAGE` payload gains `aiVideoModel`, `videoAspectRatio`, `video
 
 On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the API-declared lineage source or reference group with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. Reference/style/source media can anchor placement and animate while generation prepares, but they do not become connector parents unless the API lineage plan selected an existing generated-media branch member as `parentMediaNodeId` (see [Branch Lineage](BRANCH-LINEAGE.md)). The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams.
 
-Completed playback is **browser-composited**: a finished video plays inline through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer, above the PIXI poster. PIXI owns the poster/placeholder behind the node for stable canvas geometry and initial paint, but playback, seeking, fullscreen, and scrubbing are driven by the browser-composited element. The bubble menu exposes Asset details, extension, connection, download/replace, and deletion actions.
+Completed playback is **browser-composited**: a finished video plays inline through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video controls layer, above the PIXI poster. PIXI owns the poster/placeholder behind the node for stable canvas geometry and initial paint, but playback, seeking, fullscreen, and scrubbing are driven by the browser-composited element. The bubble menu exposes Asset details, extension, connection, download/replace, and deletion actions.
 
 Matrix child video lifecycle events are mirrored onto the live canonical response stream as well as the shared ProseMirror assembler, so `VIDEO_COMPLETE` and `VIDEO_ERROR` reach the canvas before request-group settlement. The video handler records pending-Asset `poster`/`original` 404s; Asset revision or completion invalidates those failed sources, reapplies them immediately with a new source revision, and remounts the same browser `<video>` element. A completed Seedance/VEO Asset therefore becomes playable without a page refresh or an Asset-ID change.
 
@@ -361,7 +361,7 @@ services/web-ui/src/
 packages/lixpi/canvas-components/src/workspace/frontend/
 ├── workspace/workspace-canvas.ts     # product composition and lifecycle
 ├── media/workspace-media-layer.ts    # video state and poster projection
-├── media/workspace-video-chrome.ts   # UI-kit controls on native playback
+├── media/workspace-video-controls.ts   # UI-kit controls on native playback
 └── menus/canvas-bubble-menu-items.ts  # video actions
 
 packages/lixpi/canvas-components/src/frontend/media/
@@ -403,5 +403,5 @@ packages/lixpi/constants/
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the complete stream-event catalog and the browser render path.
 - [Video Player Controls](../../packages/lixpi/ui-kit/docs/VIDEO-PLAYER-CONTROLS.md) — the shared SVG playback control bar and its two mount points.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving and materializing reusable video copies.
-- [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — the PIXI media layer and DOM chrome overlay that render video nodes.
+- [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — the PIXI media layer and DOM controls overlay that render video nodes.
 - [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the VLM analysis descriptor generated videos request from their representative still/poster.

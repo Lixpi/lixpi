@@ -15,6 +15,7 @@ import {
 } from './workspace-canvas-host.ts'
 import { WorkspaceConversationController } from './workspace-conversation-controller.ts'
 import { WorkspaceConversationPanel } from './workspace-conversation-panel.ts'
+import { WorkspaceConversationLayout } from './workspace-conversation-layout.ts'
 import {
     type WorkspacePromptCatalog,
 } from './workspace-canvas-editors.ts'
@@ -91,8 +92,8 @@ import {
 } from '@lixpi/canvas-components/workspace/nodes'
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeToScreenForZoom,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsToScreenForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
     type ViewportSnapshot as Viewport,
     type CanvasEngineRect as Rect,
 } from '@lixpi/canvas-engine/shared'
@@ -142,8 +143,8 @@ import {
 import {
     WorkspaceGenerationHandlers,
     createWorkspaceMediaLayer,
-    WorkspaceVideoChrome,
-    WorkspaceOutputChrome,
+    WorkspaceVideoControls,
+    WorkspaceOutputControls,
     WorkspaceGenerationVisuals,
     type WorkspaceMediaLayer,
     type SelectionColors,
@@ -227,7 +228,7 @@ export class LixpiWorkspaceCanvas {
     private viewportBridge: ViewportBridge | null
     private lastWorkspaceLoadingStatus
     private renderedWorkspaceId: string | null
-    private mediaChromeViewportEl: HTMLDivElement | null
+    private mediaControlsViewportEl: HTMLDivElement | null
     private generatedOutputDetailsRefreshRaf: number | null
     private readonly nodeShells
     private readonly branchMarkerProjectionOverrideNodeIds: Set<string>
@@ -256,6 +257,7 @@ export class LixpiWorkspaceCanvas {
     private globalCanvasComposer: WorkspacePromptComposer | null
     private agentConversation: WorkspaceConversationController | null = null
     private agentConversationPanel: WorkspaceConversationPanel | null = null
+    private conversationLayout: WorkspaceConversationLayout | null = null
     private contextDraftConversationId = 'new'
     private contextDraftInitialized = false
     private readonly DETACHED_CANVAS_PREFLIGHT_REATTACH_WINDOW_MS
@@ -291,8 +293,8 @@ export class LixpiWorkspaceCanvas {
     private readonly outputReview
     private projectionOverrides
     private projectionSceneKey
-    private readonly videoChrome
-    private readonly outputChrome
+    private readonly videoControls
+    private readonly outputControls
     private readonly interactions
     private canvasToastEl: HTMLElement | null
     private readonly nodeGestures
@@ -417,7 +419,7 @@ export class LixpiWorkspaceCanvas {
             this.viewportBridge = null
             this.lastWorkspaceLoadingStatus = this.host.workspace.loadingStatus() as LoadingStatus
             this.renderedWorkspaceId = this.currentCanvasState ? this.workspaceId : null
-            this.mediaChromeViewportEl = null
+            this.mediaControlsViewportEl = null
             this.generatedOutputDetailsRefreshRaf = null
             this.nodeShells = new WorkspaceNodeShells({
                 document: this.paneEl.ownerDocument,
@@ -607,9 +609,9 @@ export class LixpiWorkspaceCanvas {
                 editors: this.editors,
                 context: this.context,
                 getWorkspaceId: () => this.workspaceId,
-                refreshChrome: () => {
-                    this.resetGeneratedMediaChromeSyncKey()
-                    this.scheduleGeneratedMediaChromeSync()
+                refreshControls: () => {
+                    this.resetGeneratedMediaControlsSyncKey()
+                    this.scheduleGeneratedMediaControlsSync()
                 },
                 reportError: (message, error) => console.error(message, error),
             })
@@ -790,7 +792,7 @@ export class LixpiWorkspaceCanvas {
                 selectionColors: this.canvasSelectionColors,
                 onImageIntrinsicSize: this.mediaGeometry.handleImageIntrinsicSize,
                 onVideoIntrinsicSize: this.mediaGeometry.handleVideoIntrinsicSize,
-                onPlaybackReady: () => this.scheduleGeneratedMediaChromeSync(),
+                onPlaybackReady: () => this.scheduleGeneratedMediaControlsSync(),
                 marker: this.connectorIcon,
                 onEdgesChange: edges => {
                     if (this.currentCanvasState)
@@ -1042,7 +1044,7 @@ export class LixpiWorkspaceCanvas {
                     this.syncCanvasMediaLayer(this.currentCanvasState)
                     this.appendCanvasNodeToDOM(node)
                 },
-                refreshChrome: this.scheduleGeneratedMediaChromeSync,
+                refreshControls: this.scheduleGeneratedMediaControlsSync,
                 refreshMarkers: () => this.branchMarkerPresentation.syncAll(),
                 refreshContext: this.context.refresh,
                 setTimer: (callback, delayMs) => {
@@ -1075,7 +1077,7 @@ export class LixpiWorkspaceCanvas {
                 },
                 applyGeometry: this.applyApiCanvasGeometry,
                 removeContextChips: this.context.removeLocal,
-                refreshChrome: this.scheduleGeneratedMediaChromeSync,
+                refreshControls: this.scheduleGeneratedMediaControlsSync,
                 refreshMarkers: () => this.branchMarkerPresentation.syncAll(),
                 submit: this.submitCanvasGenerationRun,
                 reportError: (message, detail) => console.error(message, detail),
@@ -1096,7 +1098,7 @@ export class LixpiWorkspaceCanvas {
                     this.persistAiChatSidebarState()
                 },
                 renderPanel: options => this.rightPanel?.render(options),
-                syncFooters: state => this.outputChrome.updateState(state),
+                syncFooters: state => this.outputControls.updateState(state),
                 getMediaContent: this.getGeneratedMediaHistoryContent,
                 getCapabilityProgressStatus: node => {
                     const generatedBy = node.generatedBy
@@ -1172,7 +1174,7 @@ export class LixpiWorkspaceCanvas {
                     void this.host.workspace.reload(targetWorkspaceId)
                 },
             })
-            this.videoChrome = new WorkspaceVideoChrome({
+            this.videoControls = new WorkspaceVideoControls({
                 document: this.paneEl.ownerDocument,
                 settings: this.host.settings.videoControls,
                 getVideo: nodeId => this.canvasMediaLayer?.playback.getVideoElement(nodeId),
@@ -1190,11 +1192,11 @@ export class LixpiWorkspaceCanvas {
                 startResize: this.handleResizeStart,
                 togglePlayback: nodeId => void this.canvasMediaLayer?.playback.toggle(nodeId),
             })
-            this.mediaChromeViewportEl = this.videoChrome.element
-            this.paneEl.appendChild(this.mediaChromeViewportEl)
-            this.outputChrome = new WorkspaceOutputChrome({
+            this.mediaControlsViewportEl = this.videoControls.element
+            this.paneEl.appendChild(this.mediaControlsViewportEl)
+            this.outputControls = new WorkspaceOutputControls({
                 document: this.paneEl.ownerDocument,
-                settings: this.host.settings.mediaNode.generatedMediaChrome,
+                settings: this.host.settings.mediaNode.generatedMediaControls,
                 getState: () => this.currentCanvasState,
                 getViewport: this.getLiveViewport,
                 getBounds: (node, nodesById) => ({
@@ -1228,7 +1230,7 @@ export class LixpiWorkspaceCanvas {
                 ),
                 getVideo: nodeId => this.canvasMediaLayer?.playback.getVideoElement(nodeId),
                 getAudio: nodeId => this.canvasMediaLayer?.playback.getAudioElement(nodeId),
-                video: this.videoChrome,
+                video: this.videoControls,
                 createModelBadge: options => this.host.models.createBadge(options),
                 mountTitle: (node, host) => this.canvasAssetViews.mountMetadata(
                     node,
@@ -1258,20 +1260,20 @@ export class LixpiWorkspaceCanvas {
                 }),
                 requestFrame: callback => this.window.requestAnimationFrame(callback),
                 cancelFrame: handle => this.window.cancelAnimationFrame(handle),
-                onError: error => console.error('[CANVAS][generated-media-chrome]', error),
+                onError: error => console.error('[CANVAS][generated-media-controls]', error),
                 onSync: event => {
                     if (this.debugLoggingEnabled)
                         console.info(
-                            '[CANVAS][generated-media-chrome]',
+                            '[CANVAS][generated-media-controls]',
                             event.rebuilt ? 'sync-rebuild' : 'sync-skip-same-key',
                             event,
                         )
                 },
             })
-            this.paneEl.append(this.outputChrome.element, this.outputChrome.pendingElement)
+            this.paneEl.append(this.outputControls.element, this.outputControls.pendingElement)
             this.viewportBridge = createViewportBridge({
                 viewportEl: this.viewportEl,
-                viewportOverlayEls: [this.mediaChromeViewportEl],
+                viewportOverlayEls: [this.mediaControlsViewportEl],
                 targets: () => [this.canvasMediaLayer],
             })
 
@@ -1305,8 +1307,8 @@ export class LixpiWorkspaceCanvas {
                 bringToFront: element => this.nodeLayerManager.bringToFront(element),
                 lockPan: () => this.panZoom?.lock() ?? (() => {}),
                 getViewport: this.getLiveViewport,
-                updateChromeTransform: this.updateGeneratedMediaChromeLiveTransform,
-                updateChromeLayout: this.updateGeneratedMediaChromeLayout,
+                updateControlsTransform: this.updateGeneratedMediaControlsLiveTransform,
+                updateControlsLayout: this.updateGeneratedMediaControlsLayout,
                 scheduleEdges: this.scheduleEdgesRender,
                 cancelEdges: this.cancelScheduledEdgesRender,
                 repositionMenu: () => this.selectionController.repositionNodeMenu(),
@@ -1386,7 +1388,7 @@ export class LixpiWorkspaceCanvas {
                 commit: this.commitCanvasState,
                 defaultConnectorCurve: this.host.settings.connector.lineCurve,
                 getMenuVisualScale: () =>
-                    scaleCanvasChromeToScreenForZoom(
+                    scaleCanvasControlsToScreenForZoom(
                         1,
                         this.getCurrentViewportZoom(),
                         getAdaptiveBoundedZoomScalingOptions(this.host.settings.canvasBubbleMenu.zoomScaling),
@@ -1546,7 +1548,7 @@ export class LixpiWorkspaceCanvas {
                 syncNode: this.syncExistingOperationStatusNodeToDOM,
                 syncGeometry: this.syncCanvasNodeDomGeometry,
                 syncMedia: state => this.syncCanvasMediaLayer(state),
-                syncChrome: this.scheduleGeneratedMediaChromeSync,
+                syncControls: this.scheduleGeneratedMediaControlsSync,
                 syncMarkers: () => this.branchMarkerPresentation.syncAll(),
                 syncConnections: this.syncConnectionsAfterManualNodeAppend,
                 syncProgress: this.outputDetails.syncProgress,
@@ -1572,7 +1574,7 @@ export class LixpiWorkspaceCanvas {
             // Guards viewport reporting during startup. Until the persisted viewport
             // has been applied (initializePanZoom or the first render pass), any
             // pan/zoom event is spurious — e.g. a 1px scroll nudge from side-panel
-            // chrome mounting — and reporting it would persist a default viewport
+            // controls mounting — and reporting it would persist a default viewport
             // over the stored one.
             this.persistedViewportApplied = false
             this.panZoomConfig = {
@@ -1589,7 +1591,7 @@ export class LixpiWorkspaceCanvas {
                         this.updateCurrentCanvasViewport(vp)
 
                     this.viewportBridge?.applyViewport(vp)
-                    this.updateGeneratedMediaChromeLayout()
+                    this.updateGeneratedMediaControlsLayout()
 
                     if (zoomChanged) {
                         this.branchMarkerPresentation.updateZoom(
@@ -1634,7 +1636,7 @@ export class LixpiWorkspaceCanvas {
                 ...this.options.panZoomConfig,
             }
             // Every generated output hanging off the marker, regardless of kind. Branch
-            // marker chrome must never vary by what was generated.
+            // marker controls must never vary by what was generated.
             this.lastNodeStructureKey = getNodeStructureKey(this.currentCanvasState)
             this.lastVisualSyncKey = getCanvasVisualSyncKey(this.currentCanvasState)
             this.lastDocumentsKey = this.threadState.getDocumentsKey(this.currentDocuments)
@@ -1700,8 +1702,8 @@ export class LixpiWorkspaceCanvas {
                 syncCanvasLayer: state => this.canvasMediaLayer?.sync(state),
                 scheduleEdges: this.scheduleEdgesRender,
                 syncMedia: this.syncCanvasMediaLayer,
-                syncChrome: this.syncGeneratedMediaChrome,
-                updateChromeLayout: this.updateGeneratedMediaChromeLayout,
+                syncControls: this.syncGeneratedMediaControls,
+                updateControlsLayout: this.updateGeneratedMediaControlsLayout,
                 reattachRuns: this.reattachDetachedCanvasRunListenersForActiveMarkers,
                 createComposer: this.createGlobalCanvasComposer,
                 markPersistedViewportApplied: () => void (this.persistedViewportApplied = true),
@@ -1786,7 +1788,7 @@ export class LixpiWorkspaceCanvas {
                     return
                 }
 
-                this.scheduleGeneratedMediaChromeSync()
+                this.scheduleGeneratedMediaControlsSync()
                 this.branchMarkerPresentation.syncAll()
             })
             this.observedAssetRevisions = new Map<string, number>()
@@ -1819,7 +1821,7 @@ export class LixpiWorkspaceCanvas {
                 if (changedAssetIds.size > 0)
                     this.syncCanvasMediaLayer(this.currentCanvasState)
 
-                this.scheduleGeneratedMediaChromeSync()
+                this.scheduleGeneratedMediaControlsSync()
                 this.branchMarkerPresentation.syncAll()
                 const detailsNode = this.outputDetails.resolveNode(this.aiChatPanelState.generatedOutputDetailsTarget)
                 const detailsAssetId = detailsNode
@@ -1924,7 +1926,7 @@ export class LixpiWorkspaceCanvas {
             if (nodeEl)
                 this.updatePendingGeneratedMediaBeforeFrameClass(nodeEl, node.nodeId)
 
-            this.updateGeneratedMediaChromeLiveTransform(
+            this.updateGeneratedMediaControlsLiveTransform(
                 node.nodeId,
                 position,
                 dimensions,
@@ -1941,7 +1943,7 @@ export class LixpiWorkspaceCanvas {
 
     private findBranchMarkerNodeElForNode = (node: BranchMarkerNode): HTMLElement | null => this.findBranchMarkerNodeEl(node.nodeId)
 
-    private updateGeneratedMediaChromeLiveTransform = (
+    private updateGeneratedMediaControlsLiveTransform = (
         nodeId: string,
         position: {
             x: number
@@ -1953,7 +1955,7 @@ export class LixpiWorkspaceCanvas {
         },
         viewport: Viewport,
     ): void =>
-        void this.outputChrome.update(
+        void this.outputControls.update(
             nodeId,
             {
                 ...position,
@@ -1962,11 +1964,11 @@ export class LixpiWorkspaceCanvas {
             viewport,
         )
 
-    private updateGeneratedMediaChromeLayout = (viewport: Viewport = this.getLiveViewport()): void => void this.outputChrome.layout(viewport)
+    private updateGeneratedMediaControlsLayout = (viewport: Viewport = this.getLiveViewport()): void => void this.outputControls.layout(viewport)
 
-    private destroyGeneratedMediaChromeControls = (): void => {
+    private destroyGeneratedMediaControls = (): void => {
         try {
-            this.outputChrome.clear()
+            this.outputControls.clear()
         } finally {
             this.canvasAssetViews.clear()
         }
@@ -1977,13 +1979,14 @@ export class LixpiWorkspaceCanvas {
         this.mediaGenerationProgressInstances.delete(instanceKey)
     }
 
-    private resetGeneratedMediaChromeSyncKey = (): void => void this.outputChrome.invalidate()
+    private resetGeneratedMediaControlsSyncKey = (): void => void this.outputControls.invalidate()
 
-    private scheduleGeneratedMediaChromeSync = (): void => void this.outputChrome.schedule()
+    private scheduleGeneratedMediaControlsSync = (): void => void this.outputControls.schedule()
 
-    private syncGeneratedOutputNodeFooters = (canvasState: CanvasState | null): void => void this.outputChrome.updateState(canvasState)
+    private syncGeneratedOutputNodeFooters = (canvasState: CanvasState | null): void => void this.outputControls.updateState(canvasState)
 
-    private syncGeneratedMediaChrome = (canvasState: CanvasState | null = this.currentCanvasState): void => void this.outputChrome.sync(canvasState)
+    private syncGeneratedMediaControls = (canvasState: CanvasState | null = this.currentCanvasState): void =>
+        void this.outputControls.sync(canvasState)
 
     private syncGeneratingMediaNodes = (canvasState: CanvasState | null = this.currentCanvasState): void =>
         void this.generationVisuals.sync(canvasState)
@@ -2005,7 +2008,7 @@ export class LixpiWorkspaceCanvas {
     private syncCanvasMediaLayer = (canvasState: CanvasState | null = this.currentCanvasState): void => {
         this.syncGeneratingMediaNodes(canvasState)
         this.canvasMediaLayer?.sync(canvasState)
-        this.syncGeneratedMediaChrome(canvasState)
+        this.syncGeneratedMediaControls(canvasState)
     }
 
     private getInsertionPaneSize = (): {
@@ -2110,7 +2113,7 @@ export class LixpiWorkspaceCanvas {
             return null
 
         const animation = this.host.settings.mediaNode.inProgressOutlineAnimation
-        const outlineStrokeScale = scaleCanvasChromeWorldSizeForZoom(
+        const outlineStrokeScale = scaleCanvasControlsWorldSizeForZoom(
             1,
             this.getCurrentViewportZoom(),
             getAdaptiveBoundedZoomScalingOptions(animation.zoomScaling),
@@ -2134,6 +2137,7 @@ export class LixpiWorkspaceCanvas {
     private syncViewportInteractionState = (viewport: Viewport): void => {
         this.lastTransform = [viewport.x, viewport.y, viewport.zoom]
         this.paneRect = this.paneEl.getBoundingClientRect()
+        this.conversationLayout?.updateViewport()
     }
 
     private updateCurrentCanvasViewport = (viewport: Viewport): void => {
@@ -2367,6 +2371,15 @@ export class LixpiWorkspaceCanvas {
                 composer.mountConversation(this.agentConversationPanel.element)
             else
                 this.paneEl.prepend(this.agentConversationPanel.element)
+
+            this.conversationLayout = new WorkspaceConversationLayout({
+                pane: this.paneEl,
+                element: composer?.element ?? this.agentConversationPanel.element,
+                controls: this.options.conversationControls,
+                storage: this.host.storage,
+                settings: this.host.settings.rightSidePanel,
+                getViewport: this.getLiveViewport,
+            })
         }
 
         void controller.initialize(this.currentCanvasState?.lastActiveConversationAssetId)
@@ -3506,7 +3519,7 @@ export class LixpiWorkspaceCanvas {
             ...this.currentCanvasState,
             nodes,
         })
-        this.scheduleGeneratedMediaChromeSync()
+        this.scheduleGeneratedMediaControlsSync()
     }
 
     private createCapabilityArtifactNode = (node: CapabilityArtifactCanvasNode): HTMLElement => {
@@ -3589,10 +3602,10 @@ export class LixpiWorkspaceCanvas {
     private stopBranchMarkerGeneration = async (node: BranchMarkerNode): Promise<void> => void (await this.branchMarkerGeneration.stop(node))
 
     private getBranchMarkerReviewZoomScale = (zoom: number): number => {
-        return scaleCanvasChromeWorldSizeForZoom(
+        return scaleCanvasControlsWorldSizeForZoom(
             1,
             zoom,
-            getAdaptiveBoundedZoomScalingOptions(this.host.settings.mediaNode.generatedMediaChrome.zoomScaling),
+            getAdaptiveBoundedZoomScalingOptions(this.host.settings.mediaNode.generatedMediaControls.zoomScaling),
         )
     }
 
@@ -3682,6 +3695,8 @@ export class LixpiWorkspaceCanvas {
         this.writeConversationContext()
         this.contextDraftConversationId = 'new'
         this.contextDraftInitialized = false
+        this.conversationLayout?.destroy()
+        this.conversationLayout = null
 
         if (this.agentConversationPanel)
             this.agentConversationPanel.destroy()
@@ -3726,10 +3741,10 @@ export class LixpiWorkspaceCanvas {
         this.detachedAiChatThreadEditors.clear()
         this.mediaOperationRecovery.clear()
         this.capabilityProgressRuns.clear()
-        this.destroyGeneratedMediaChromeControls()
-        this.resetGeneratedMediaChromeSyncKey()
+        this.destroyGeneratedMediaControls()
+        this.resetGeneratedMediaControlsSyncKey()
         this.branchMarkerPresentation.clear()
-        this.videoChrome.clear()
+        this.videoControls.clear()
         this.selectionController.reset()
         this.canvasMediaLayer?.sync(null)
         this.connectionManager?.render()
@@ -3862,12 +3877,12 @@ export class LixpiWorkspaceCanvas {
         }
 
         this.branchMarkerPresentation.refreshTheme()
-        this.outputChrome.invalidate()
-        this.outputChrome.sync(this.currentCanvasState)
+        this.outputControls.invalidate()
+        this.outputControls.sync(this.currentCanvasState)
         this.selectionController.updateGroupOverlay()
         this.rightPanel?.applyConstraints()
         this.updateResizeHandles(this.getLiveViewport().zoom)
-        this.updateGeneratedMediaChromeLayout()
+        this.updateGeneratedMediaControlsLayout()
         this.scheduleEdgesRender()
     }
 
@@ -3899,7 +3914,7 @@ export class LixpiWorkspaceCanvas {
         this.viewportBridge?.applyViewport(vp)
         this.panZoom?.syncViewport(vp)
         this.updateResizeHandles(vp.zoom)
-        this.updateGeneratedMediaChromeLayout()
+        this.updateGeneratedMediaControlsLayout()
         this.scheduleEdgesRender()
         this.persistedViewportApplied = true
     }
@@ -4021,6 +4036,8 @@ export class LixpiWorkspaceCanvas {
             () => this.context?.destroy(),
             () => void (this.globalCanvasComposer = null),
             () => this.globalCanvasComposer?.destroy(),
+            () => void (this.conversationLayout = null),
+            () => this.conversationLayout?.destroy(),
             () => this.interactions?.destroy(),
             () => this.generationPlacements?.clear(),
             () => this.mediaTrackers?.destroy(),
@@ -4034,21 +4051,21 @@ export class LixpiWorkspaceCanvas {
             },
             () => void (this.canvasMediaLayer = null),
             () => this.canvasMediaLayer?.destroy(),
-            () => void (this.mediaChromeViewportEl = null),
-            () => this.mediaChromeViewportEl?.remove(),
-            () => this.videoChrome?.destroy(),
+            () => void (this.mediaControlsViewportEl = null),
+            () => this.mediaControlsViewportEl?.remove(),
+            () => this.videoControls?.destroy(),
             () => this.mediaGenerationProgressInstances?.clear(),
             () => destroyWorkspaceCanvasResources(
                 Array.from(this.mediaGenerationProgressInstances?.values() ?? [], progress => () => progress.destroy()),
             ),
-            () => this.outputChrome?.invalidate(),
+            () => this.outputControls?.invalidate(),
             () => this.canvasAssetViews?.destroy(),
             () => {
                 if (
-                    this.outputChrome
+                    this.outputControls
                     && this.canvasAssetViews
                 )
-                    this.destroyGeneratedMediaChromeControls()
+                    this.destroyGeneratedMediaControls()
             },
             () => void (this.viewportBridge = null),
             () => void (this.connectionManager = null),
@@ -4068,7 +4085,7 @@ export class LixpiWorkspaceCanvas {
                     this.generatedOutputDetailsRefreshRaf = null
                 }
             },
-            () => this.outputChrome?.destroy(),
+            () => this.outputControls?.destroy(),
             () => {
                 if (typeof this.edgesRaf === 'number') {
                     this.window.cancelAnimationFrame(this.edgesRaf)

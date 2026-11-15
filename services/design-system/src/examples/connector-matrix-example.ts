@@ -4,7 +4,7 @@ import {
     getAdaptiveBoundedZoomScalingOptions,
     getOrthogonalRoutePoints,
     isOrthogonalRouteSimple,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
     type CanvasEnginePoint,
     type BoundedZoomScalingOptions,
 } from '@lixpi/canvas-engine/shared'
@@ -368,7 +368,7 @@ export class ConnectorMatrixExample {
         const settings = canvasThemeConnectorSettings(this.board.theme.value)
         const viewport = this.board.canvas.scene.viewport
         const scaling = getAdaptiveBoundedZoomScalingOptions(this.zoomScaling)
-        const worldSize = (value: number): number => scaleCanvasChromeWorldSizeForZoom(
+        const worldSize = (value: number): number => scaleCanvasControlsWorldSizeForZoom(
             value,
             viewport.zoom,
             scaling,
@@ -572,7 +572,7 @@ export class ConnectorMatrixExample {
             "import { CanvasController } from '@lixpi/canvas-engine/frontend/runtime'",
             "import { ConnectorRenderer, computeConnectorDatum, computeConnectorEndpoints, type ConnectorRenderDatum, type EdgeConfig, type NodeConfig } from '@lixpi/canvas-engine/frontend/connectors'",
             "import { createArrowRightMarker, arrowRightMarkerBodyLengthFraction } from '@lixpi/ui-kit/svg'",
-            "import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeWorldSizeForZoom, getOrthogonalRoutePoints, isOrthogonalRouteSimple, type CanvasEnginePoint } from '@lixpi/canvas-engine/shared'",
+            "import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasControlsWorldSizeForZoom, getOrthogonalRoutePoints, isOrthogonalRouteSimple, type CanvasEnginePoint } from '@lixpi/canvas-engine/shared'",
             '',
             '// Existing canvas nodes supply their live measured bounds. Status is an inline output.',
             'const mountConnectors = (canvas: CanvasController, status: HTMLOutputElement) => {',
@@ -587,7 +587,7 @@ export class ConnectorMatrixExample {
             '        const renderer = new ConnectorRenderer({ surface: context, marker: createArrowRightMarker(), dash: [8, 5], zoomScaling })',
             '        const render = () => {',
             '            const viewport = canvas.scene.viewport',
-            '            const worldSize = (value: number) => scaleCanvasChromeWorldSizeForZoom(value, viewport.zoom, getAdaptiveBoundedZoomScalingOptions(zoomScaling))',
+            '            const worldSize = (value: number) => scaleCanvasControlsWorldSizeForZoom(value, viewport.zoom, getAdaptiveBoundedZoomScalingOptions(zoomScaling))',
             '            const nodes = new Map<string, NodeConfig>(canvas.scene.scene.nodes.map(node => {',
             '                const bounds = canvas.scene.getNodeGeometry(node.nodeId)!.connectorBounds',
             "                return [node.nodeId, { id: node.nodeId, shape: 'rect', ...bounds }]",

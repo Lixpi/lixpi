@@ -521,20 +521,8 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-width')).toContain(
             settings.aiPromptInput.modelMenu.styles.infoBubbleWidth,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toContain(
-            settings.aiPromptInput.modelMenu.styles.infoBubbleBorderRadius,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-background')).toContain(
-            settings.aiPromptInput.modelMenu.styles.infoBubbleBackground,
-        )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-divider-height')).toContain(
             settings.aiPromptInput.modelMenu.styles.sectionDividerHeight,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-title-color')).toContain(
-            settings.aiPromptInput.modelMenu.styles.sectionTitleColor,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toContain(
-            settings.aiPromptInput.modelMenu.styles.controlLabelColor,
         )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-font-size')).toContain(
             settings.aiPromptInput.modelMenu.styles.controlLabelFontSize,

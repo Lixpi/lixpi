@@ -174,7 +174,7 @@
     svg {
         width: 18px;
         height: 18px;
-        fill: var(--canvas-text-muted, var(--workspace-chrome-steel-blue));
+        fill: var(--canvas-text-muted, var(--workspace-controls-steel-blue));
     }
 
     &:hover,
@@ -182,7 +182,7 @@
         background: var(--canvas-surface-hover, #eef0f4);
 
         svg {
-            fill: var(--canvas-text, var(--workspace-chrome-night-blue));
+            fill: var(--canvas-text, var(--workspace-controls-night-blue));
         }
     }
 }
@@ -225,7 +225,7 @@
     background: transparent;
     cursor: pointer;
     font-size: var(--canvas-font-size, 13px);
-    color: var(--canvas-text, var(--workspace-chrome-night-blue));
+    color: var(--canvas-text, var(--workspace-controls-night-blue));
     text-align: left;
     transition: hoverTransition(background, $defaultHoverTransitionDuration);
 
@@ -250,7 +250,7 @@
     box-sizing: border-box;
 
     &:focus {
-        border-color: var(--canvas-accent, var(--workspace-chrome-steel-blue));
+        border-color: var(--canvas-accent, var(--workspace-controls-steel-blue));
     }
 }
 
@@ -273,7 +273,7 @@
 
 .workspace-image-submenu-url-back {
     background: transparent;
-    color: var(--canvas-text-muted, var(--workspace-chrome-steel-blue));
+    color: var(--canvas-text-muted, var(--workspace-controls-steel-blue));
 
     &:hover {
         background: var(--canvas-surface-hover, #f0f0f0);
@@ -281,11 +281,11 @@
 }
 
 .workspace-image-submenu-url-insert {
-    background: var(--canvas-accent, var(--workspace-chrome-night-blue));
-    color: var(--canvas-on-accent, var(--workspace-chrome-off-white));
+    background: var(--canvas-accent, var(--workspace-controls-night-blue));
+    color: var(--canvas-on-accent, var(--workspace-controls-off-white));
 
     &:hover {
-        background: var(--canvas-accent, var(--workspace-chrome-insert-hover));
+        background: var(--canvas-accent, var(--workspace-controls-insert-hover));
     }
 }
 

@@ -123,6 +123,9 @@ export type SidePanelConfig = {
     // Optional measurement of the panel's actual rendered width, used as the
     // start width for the first drag before any width has been set.
     measureWidth?: () => number
+    // Convert a signed screen-pixel width change into the panel's width units.
+    // A positive delta grows the panel; without this callback the delta is unchanged.
+    mapResizeDelta?: (delta: number) => number
 
     // Persistence adapter. The component decides *when* to load and save; the
     // host owns *where* the state lives.
@@ -534,7 +537,8 @@ class SidePanel implements SidePanelInstance {
             if (moveEvent.pointerId !== pointerId)
                 return
 
-            this.setWidth(startWidth + sign * (moveEvent.clientX - startX))
+            const delta = sign * (moveEvent.clientX - startX)
+            this.setWidth(startWidth + (this.config.mapResizeDelta?.(delta) ?? delta))
         }
 
         const handlePointerUp = (upEvent: PointerEvent): void => {

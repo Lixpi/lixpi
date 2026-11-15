@@ -1,6 +1,6 @@
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
     type BoundedZoomScalingOptions,
 } from '@lixpi/canvas-engine/shared'
 import {
@@ -60,7 +60,7 @@ export type WorkspaceLoadingOutlineInstance = LoadingLease
 export const getWorkspaceLoadingPresentation = (settings: WorkspaceLoadingSettings): Pick<LoadingOverlayOptions, 'outline' | 'errorTitle' | 'retryLabel'> => {
     const animation = settings.mediaNode.inProgressOutlineAnimation
     const loading = settings.workspaceLoadingOutline
-    const getStrokeScale = () => scaleCanvasChromeWorldSizeForZoom(
+    const getStrokeScale = () => scaleCanvasControlsWorldSizeForZoom(
         1,
         1,
         getAdaptiveBoundedZoomScalingOptions(animation.zoomScaling ?? { minZoom: 0 }),

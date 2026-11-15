@@ -87,8 +87,8 @@ export type WorkspaceCanvasRenderingPorts = {
     syncCanvasLayer: (state: CanvasState) => void
     scheduleEdges: () => void
     syncMedia: (state: CanvasState) => void
-    syncChrome: (state: CanvasState | null) => void
-    updateChromeLayout: () => void
+    syncControls: (state: CanvasState | null) => void
+    updateControlsLayout: () => void
     reattachRuns: () => void
     createComposer: () => void
     markPersistedViewportApplied: () => void
@@ -272,7 +272,7 @@ export class WorkspaceCanvasRendering {
             this.ports.setKeys({ visual: getCanvasVisualSyncKey(currentState) })
         }
 
-        this.ports.syncChrome(currentState)
+        this.ports.syncControls(currentState)
         this.syncViewport(
             previousViewport,
             effectiveState,
@@ -367,7 +367,7 @@ export class WorkspaceCanvasRendering {
             || previousViewport?.y !== currentViewport?.y
             || previousViewport?.zoom !== currentViewport?.zoom
         )
-            this.ports.updateChromeLayout()
+            this.ports.updateControlsLayout()
     }
 
     private debugPendingMerge(

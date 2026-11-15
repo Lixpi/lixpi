@@ -14,7 +14,7 @@ import {
     type LixpiCanvasPalette,
 } from '../settings/index.ts'
 
-export type WorkspaceCanvasChromeSettings = {
+export type WorkspaceCanvasControlsSettings = {
     panel: {
         defaultDimensions: { width: number }
         dimensions: { maxPaneMargin: number }
@@ -35,11 +35,11 @@ export type WorkspaceCanvasChromeSettings = {
     palette: LixpiCanvasPalette
 }
 
-export type WorkspaceCanvasChromeOptions = {
+export type WorkspaceCanvasControlsOptions = {
     controls?: boolean
 }
 
-export type WorkspaceCanvasChromePorts = {
+export type WorkspaceCanvasControlsPorts = {
     document: Document
     createDocument: () => Promise<void>
     uploadFile: (file: File) => Promise<void>
@@ -47,12 +47,16 @@ export type WorkspaceCanvasChromePorts = {
     reportError: (error: unknown) => void
 }
 
-export class WorkspaceCanvasChrome {
+export class WorkspaceCanvasControls {
     readonly element: HTMLElement
     readonly pane: HTMLDivElement
     readonly viewportMount: HTMLDivElement
     readonly mediaModeSwitchMount: HTMLDivElement
     readonly modelMenuControlMount: HTMLDivElement
+    readonly conversationControls?: {
+        left: HTMLElement
+        right: HTMLElement
+    }
     readonly glassTargets: readonly {
         id: string
         element: HTMLElement
@@ -70,9 +74,9 @@ export class WorkspaceCanvasChrome {
     private disposed = false
 
     constructor(
-        settings: WorkspaceCanvasChromeSettings,
-        private readonly ports: WorkspaceCanvasChromePorts,
-        options: WorkspaceCanvasChromeOptions = {},
+        settings: WorkspaceCanvasControlsSettings,
+        private readonly ports: WorkspaceCanvasControlsPorts,
+        options: WorkspaceCanvasControlsOptions = {},
     ) {
         const html = (this.html = createDocumentHtml(ports.document))
         this.viewportMount = html`<div className="workspace-viewport-mount"></div>` as HTMLDivElement
@@ -128,9 +132,14 @@ export class WorkspaceCanvasChrome {
             </div>
         ` as HTMLDivElement
         const controls = this.promptControls.element
+        const leftControls = html`<div className="workspace-canvas-left-control-rail">${actions}</div>` as HTMLDivElement
+        this.conversationControls = {
+            left: leftControls,
+            right: controls,
+        }
         this.element = html`
             <div className="workspace-canvas">
-                <div className="workspace-canvas-left-control-rail">${actions}</div>
+                ${leftControls}
                 ${controls}${this.fileInput}${this.zoomIndicator}${this.pane}
             </div>
         ` as HTMLElement
@@ -186,7 +195,7 @@ export class WorkspaceCanvasChrome {
     private applySettings({
         panel,
         palette,
-    }: WorkspaceCanvasChromeSettings): void {
+    }: WorkspaceCanvasControlsSettings): void {
         const hsl = rgbToHsl(
             parseHexColor(palette.nightBlue),
         )
@@ -201,10 +210,10 @@ export class WorkspaceCanvasChrome {
             '--side-panel-backdrop-fill-opaque': panel.styles.backdropFillOpaque,
             '--side-panel-toggle-color': panel.styles.toggleColor,
             '--side-panel-toggle-hover-color': panel.styles.toggleHoverColor,
-            '--workspace-chrome-steel-blue': palette.steelBlue,
-            '--workspace-chrome-night-blue': palette.nightBlue,
-            '--workspace-chrome-off-white': palette.offWhite,
-            '--workspace-chrome-insert-hover': rgbToHex(
+            '--workspace-controls-steel-blue': palette.steelBlue,
+            '--workspace-controls-night-blue': palette.nightBlue,
+            '--workspace-controls-off-white': palette.offWhite,
+            '--workspace-controls-insert-hover': rgbToHex(
                 hslToRgb({
                     ...hsl,
                     l: Math.max(0, hsl.l - 0.05),

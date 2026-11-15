@@ -28,7 +28,7 @@ describe('nested list editor area layout', () => {
 
         const item = css.match(/\.nested-list-item\s*\{([^}]+)\}/)?.[1] ?? ''
         const underlay = css.match(/\.nested-list-item-row-underlay\s*\{([^}]+)\}/)?.[1] ?? ''
-        const chrome = css.match(/\.nested-list-item-chrome\s*\{([^}]+)\}/)?.[1] ?? ''
+        const itemControls = css.match(/\.nested-list-item-controls\s*\{([^}]+)\}/)?.[1] ?? ''
 
         expect(surface).toMatch(/background:\s*transparent/)
         expect(paragraph).toMatch(/font-size: 14px/)
@@ -37,15 +37,9 @@ describe('nested list editor area layout', () => {
         expect(item).toMatch(/width: 100%/)
         expect(underlay).toMatch(/grid-row:\s*1/)
         expect(underlay).toMatch(/grid-column:\s*1\s*\/\s*-1/)
-        expect(chrome).toMatch(/grid-row:\s*1/)
-        expect(chrome).toMatch(/padding-inline-end:[^;]*1\.1rem[^;]*26px/)
-        const panel = css.match(/\.nested-list-block-panel\s*\{([^}]+)\}/)?.[1] ?? ''
-        const textPanel = css.match(/\.nested-list-block-panel-text\s*\{([^}]+)\}/)?.[1] ?? ''
-        expect(panel).toMatch(/display:\s*flex/)
-        expect(panel).toMatch(/flex-direction:\s*column/)
-        expect(panel).not.toMatch(/grid-template-columns/)
-        expect(panel).not.toMatch(/min-width:\s*12rem/)
-        expect(textPanel).toMatch(/align-items:\s*stretch/)
+        expect(itemControls).toMatch(/grid-row:\s*1/)
+        expect(itemControls).toMatch(/padding-inline-end:[^;]*1\.1rem[^;]*26px/)
+        expect(css.includes('.nested-list-block-panel')).toBe(false)
     })
 
     it('uses the compact heading scale without asymmetric vertical padding', async () => {
@@ -79,23 +73,23 @@ describe('nested list row feedback', () => {
                 <span class="nested-list-item-row-underlay"></span>
                 <div class="nested-list-item-content">
                     <p>Parent</p>
-                    <ul><li class="nested-list-item"><span class="nested-list-item-row-underlay"></span><div class="nested-list-item-content"><p>Child</p></div><span class="nested-list-item-chrome"></span></li></ul>
+                    <ul><li class="nested-list-item"><span class="nested-list-item-row-underlay"></span><div class="nested-list-item-content"><p>Child</p></div><span class="nested-list-item-controls"></span></li></ul>
                 </div>
-                <span class="nested-list-item-chrome"></span>
+                <span class="nested-list-item-controls"></span>
             </li>
         `
         const parent = root.querySelector<HTMLElement>('.nested-list-item')!
         const parentUnderlay = parent.querySelector<HTMLElement>(':scope > .nested-list-item-row-underlay')!
         const parentLabel = parent.querySelector<HTMLElement>(':scope > .nested-list-item-content > p')!
-        const parentChrome = parent.querySelector<HTMLElement>(':scope > .nested-list-item-chrome')!
+        const parentControls = parent.querySelector<HTMLElement>(':scope > .nested-list-item-controls')!
         const child = parent.querySelector<HTMLElement>('.nested-list-item')!
         const childLabel = child.querySelector<HTMLElement>(':scope > .nested-list-item-content > p')!
-        const childChrome = child.querySelector<HTMLElement>(':scope > .nested-list-item-chrome')!
+        const childControls = child.querySelector<HTMLElement>(':scope > .nested-list-item-controls')!
         const hoverUnderlay = '.nested-list-item:not(.nested-list-active)[data-nested-list-hover=true] > .nested-list-item-row-underlay'
         const selectedUnderlay = '.nested-list-item.nested-list-active > .nested-list-item-row-underlay'
         const selectedLabel = '.nested-list-item.nested-list-active > .nested-list-item-content > p:first-child'
-        const selectedChrome = '.nested-list-item.nested-list-active > .nested-list-item-chrome'
-        const hoverChrome = '.nested-list-item:not(.nested-list-active)[data-nested-list-hover=true] > .nested-list-item-chrome'
+        const selectedControls = '.nested-list-item.nested-list-active > .nested-list-item-controls'
+        const hoverControls = '.nested-list-item:not(.nested-list-active)[data-nested-list-hover=true] > .nested-list-item-controls'
 
         expect(findRule(hoverUnderlay)).toMatch(/rgba\(95,\s*143,\s*207,\s*0\.14\)/)
         expect(findRule(selectedUnderlay)).toMatch(/rgba\(95,\s*143,\s*207,\s*0\.24\)/)
@@ -103,17 +97,17 @@ describe('nested list row feedback', () => {
         expect(findRule(selectedUnderlay)).toMatch(/border-radius: 8px/)
         expect(findRule(hoverUnderlay)).toMatch(/margin-inline: 14px 8px/)
         expect(findRule(hoverUnderlay)).toMatch(/border-radius: 8px/)
-        expect(findRule(hoverChrome)).toMatch(/rgba\(66,\s*73,\s*79,\s*0\.62\)/)
-        expect(findRule(selectedChrome)).toMatch(/color:\s*#000/)
+        expect(findRule(hoverControls)).toMatch(/rgba\(66,\s*73,\s*79,\s*0\.62\)/)
+        expect(findRule(selectedControls)).toMatch(/color:\s*#000/)
         expect(parentUnderlay.matches(selectedUnderlay)).toBe(true)
         expect(parentUnderlay.matches(hoverUnderlay)).toBe(false)
         expect(parentLabel.matches(selectedLabel)).toBe(true)
-        expect(parentChrome.matches(selectedChrome)).toBe(true)
+        expect(parentControls.matches(selectedControls)).toBe(true)
         expect(childLabel.matches(selectedLabel)).toBe(false)
-        expect(childChrome.matches(selectedChrome)).toBe(false)
+        expect(childControls.matches(selectedControls)).toBe(false)
         parent.classList.remove('nested-list-active')
         expect(parentUnderlay.matches(hoverUnderlay)).toBe(true)
-        expect(parentChrome.matches(hoverChrome)).toBe(true)
+        expect(parentControls.matches(hoverControls)).toBe(true)
     })
 
     it('shows drag feedback without changing block geometry', async () => {

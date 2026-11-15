@@ -28,9 +28,9 @@ import {
     type WorkspaceCanvasInsertionNode,
 } from './workspace-canvas-actions.ts'
 import {
-    WorkspaceCanvasChrome,
-    type WorkspaceCanvasChromeSettings,
-} from './workspace-canvas-chrome.ts'
+    WorkspaceCanvasControls,
+    type WorkspaceCanvasControlsSettings,
+} from './workspace-canvas-controls.ts'
 
 export type WorkspaceCanvasDocument = {
     documentId: string
@@ -64,6 +64,10 @@ export type WorkspaceCanvasRendererOptions = {
     viewportEl: HTMLDivElement
     mediaModeSwitchMountEl: HTMLDivElement
     modelMenuControlMountEl: HTMLDivElement
+    conversationControls?: {
+        left: HTMLElement
+        right: HTMLElement
+    }
     glassTargets: readonly {
         id: string
         element: HTMLElement
@@ -163,7 +167,7 @@ const cloneViewport = (value: Viewport | null | undefined): Viewport | null => {
 export class WorkspaceCanvasSurface {
     readonly el: HTMLElement
     private readonly lifetime = new Lifetime()
-    private readonly chrome: WorkspaceCanvasChrome
+    private readonly controls: WorkspaceCanvasControls
     private readonly actions: WorkspaceCanvasActions
     private renderer: WorkspaceCanvasRenderer | null = null
     private viewportPersistence: WorkspaceViewportPersistence | null = null
@@ -186,7 +190,7 @@ export class WorkspaceCanvasSurface {
     private reconcileRequested = false
 
     constructor(
-        settings: WorkspaceCanvasChromeSettings & { insertionWidth: number },
+        settings: WorkspaceCanvasControlsSettings & { insertionWidth: number },
         private readonly ports: WorkspaceCanvasSurfacePorts,
     ) {
         this.snapshot = ports.readSnapshot()
@@ -243,10 +247,10 @@ export class WorkspaceCanvasSurface {
                 nodeId,
                 placeholderId,
             ),
-            closeUploadMenu: () => this.chrome.closeUploadMenu(),
+            closeUploadMenu: () => this.controls.closeUploadMenu(),
             reportError: ports.reportError,
         })
-        this.chrome = new WorkspaceCanvasChrome(
+        this.controls = new WorkspaceCanvasControls(
             settings,
             {
                 document: ports.document,
@@ -256,8 +260,8 @@ export class WorkspaceCanvasSurface {
                 reportError: error => ports.reportError('[CANVAS] Toolbar action failed:', error),
             },
         )
-        this.el = this.chrome.element
-        this.lifetime.own(() => this.chrome.destroy())
+        this.el = this.controls.element
+        this.lifetime.own(() => this.controls.destroy())
         this.lifetime.own(() => this.actions.destroy())
         this.lifetime.own(() => this.stopSynchronization?.())
         this.lifetime.own(() => this.viewportPersistence?.destroy())
@@ -266,13 +270,14 @@ export class WorkspaceCanvasSurface {
             this.derive(this.snapshot)
             this.ensureViewportPersistence()
             this.viewport = cloneViewport(this.canvasState?.viewport) ?? this.viewport
-            this.chrome.setZoom(this.viewport.zoom)
+            this.controls.setZoom(this.viewport.zoom)
             const renderer = ports.createRenderer({
-                paneEl: this.chrome.pane,
-                viewportEl: this.chrome.viewportMount,
-                mediaModeSwitchMountEl: this.chrome.mediaModeSwitchMount,
-                modelMenuControlMountEl: this.chrome.modelMenuControlMount,
-                glassTargets: this.chrome.glassTargets,
+                paneEl: this.controls.pane,
+                viewportEl: this.controls.viewportMount,
+                mediaModeSwitchMountEl: this.controls.mediaModeSwitchMount,
+                modelMenuControlMountEl: this.controls.modelMenuControlMount,
+                conversationControls: this.controls.conversationControls,
+                glassTargets: this.controls.glassTargets,
                 workspaceId: this.snapshot.workspaceId,
                 canvasState: this.canvasState,
                 documents: this.documents,
@@ -425,7 +430,7 @@ export class WorkspaceCanvasSurface {
             return
 
         this.viewport = viewport
-        this.chrome.setZoom(viewport.zoom)
+        this.controls.setZoom(viewport.zoom)
         this.viewportPersistence?.change(viewport)
     }
 
@@ -539,7 +544,7 @@ export class WorkspaceCanvasSurface {
                         return
 
                     this.viewport = viewport
-                    this.chrome.setZoom(viewport.zoom)
+                    this.controls.setZoom(viewport.zoom)
                     this.renderer?.setViewport(viewport)
                 },
                 storage: this.ports.storage,
@@ -570,7 +575,7 @@ export class WorkspaceCanvasSurface {
                 if (this.disposed)
                     return
 
-                this.chrome.setRightPanelOpen(
+                this.controls.setRightPanelOpen(
                     Boolean(this.isLoaded() && (this.canvasState?.aiChatPanel?.isOpen ?? this.canvasState?.lastActiveConversationAssetId)),
                 )
                 this.synchronize()
@@ -591,7 +596,7 @@ export class WorkspaceCanvasSurface {
 
                 this.renderedWorkspaceId = this.snapshot.workspaceId
                 this.viewport = this.renderer?.getViewport() ?? this.viewport
-                this.chrome.setZoom(this.viewport.zoom)
+                this.controls.setZoom(this.viewport.zoom)
                 this.viewportPersistence?.sync(this.viewport, this.canvasState)
                 this.viewportPersistence?.restore(this.canvasState?.viewport)
             } while (

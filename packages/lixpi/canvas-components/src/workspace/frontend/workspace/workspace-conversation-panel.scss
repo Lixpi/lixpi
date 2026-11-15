@@ -2,6 +2,7 @@
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 
 @import "@lixpi/ui-primitives/styles/transitions";
+@import "./workspace-conversation-layout";
 
 // The fixed composer keeps its input and reference tray in place while the
 // conversation consumes only the space remaining above them.
@@ -52,7 +53,7 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
-    padding: 2px 20px 6px;
+    padding: 2px $workspace-conversation-content-inset 6px;
     color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
     font-size: 12px;
 }
@@ -91,19 +92,9 @@
     outline-offset: 2px;
 }
 
-.workspace-conversation-menu {
-    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
-}
-
-.workspace-conversation-menu > .bubble-menu-content {
-    padding: 12px;
-    border-radius: 12px;
-    border-color: var(--canvas-border, #{themeScope.token("border", themePalette.$roles)});
-    background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
-}
-
 .workspace-conversation-menu-content {
     display: grid;
+    padding: 26px 30px;
     gap: 12px;
     width: 240px;
     max-width: calc(100vw - 72px);
@@ -162,7 +153,7 @@
 .workspace-conversation-messages {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 6px 20px 0;
+    padding: 6px $workspace-conversation-content-inset 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
@@ -187,7 +178,7 @@
 .workspace-conversation-origin {
     flex: 0 0 auto;
     margin: 0;
-    padding: 6px 20px 10px;
+    padding: 6px $workspace-conversation-content-inset 10px;
     color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
     font-size: 12px;
 }

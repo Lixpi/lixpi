@@ -231,7 +231,7 @@ const fixture = (overrides: Partial<WorkspaceCanvasHost> = {}, optionOverrides: 
         aiPromptInput: { useShiftingGradientBackground: false },
         gradient: { styles: { shiftingColors: [] } },
     } as WorkspaceCanvasHost['settings']
-    settings.canvasChrome.glassBorder.enabled = false
+    settings.canvasControls.glassBorder.enabled = false
     let command: ((workspaceId?: string) => void) | undefined
     const releaseCommand = vi.fn()
     const assetCallbacks: Function[] = []

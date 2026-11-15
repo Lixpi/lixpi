@@ -156,7 +156,7 @@ describe('ImageNodeView — initialization and source resolution', () => {
 })
 
 // =============================================================================
-// Generated media chrome and placeholder behavior
+// Generated media controls and placeholder behavior
 // =============================================================================
 
 describe('ImageNodeView — generated image behaviors', () => {
@@ -191,22 +191,22 @@ describe('ImageNodeView — generated image behaviors', () => {
         await vi.waitFor(() => expect(nodeView.dom.querySelector('.ai-generated-media-section-title')).not.toBeNull())
     })
 
-    it('shows generated model chrome and updates it when media model changes', async () => {
+    it('shows generated model controls and updates it when media model changes', async () => {
         const { nodeView } = createImageView(createGeneratedImageNode({
             mediaModelId: 'Google:gemini-2.5-flash',
         }))
 
         await vi.waitFor(() => expect(getImageElement(nodeView).getAttribute('src')).toContain('token=token-1'))
-        const modelChrome = nodeView.dom.querySelector('.ai-generated-media-run-meta') as HTMLElement
-        expect(modelChrome).not.toBeNull()
+        const modelControls = nodeView.dom.querySelector('.ai-generated-media-run-meta') as HTMLElement
+        expect(modelControls).not.toBeNull()
         expect(modelBadge.decorate).toHaveBeenCalledExactlyOnceWith(nodeView.dom)
-        expect(modelChrome.textContent).toContain('Google')
+        expect(modelControls.textContent).toContain('Google')
 
         nodeView.update(createGeneratedImageNode({
             mediaModelId: 'OpenAI:gpt-4.1',
         }))
-        expect(modelChrome.textContent).toContain('OpenAI')
-        expect(modelChrome.textContent).toContain('gpt-4.1')
+        expect(modelControls.textContent).toContain('OpenAI')
+        expect(modelControls.textContent).toContain('gpt-4.1')
     })
 
     it('adds an unavailable placeholder and keeps it deduplicated on repeated image errors', () => {

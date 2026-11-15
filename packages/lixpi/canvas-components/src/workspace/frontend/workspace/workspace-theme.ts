@@ -41,7 +41,7 @@ export const resolveLixpiCanvasTheme = <Settings extends LixpiCanvasSettings>(
         borderRadius: theme.shape.mediaRadius,
         backgroundColor: theme.colors.surface,
     }
-    next.canvasChrome.glassBorder = effects.glassBorder
+    next.canvasControls.glassBorder = effects.glassBorder
     next.mediaNode.inProgressOutlineAnimation = {
         ...next.mediaNode.inProgressOutlineAnimation,
         radius: outline.radius,
@@ -80,14 +80,14 @@ export const resolveLixpiCanvasTheme = <Settings extends LixpiCanvasSettings>(
         boxShadow: property('branch-shadow', next.mediaBranchLineage.branchOrigin.styles.boxShadow),
         separatorGradient: property('branch-separator', next.mediaBranchLineage.branchOrigin.styles.separatorGradient),
     }
-    next.mediaNode.generatedMediaChrome.styles = {
-        ...next.mediaNode.generatedMediaChrome.styles,
-        modelBadgeProviderColor: property('badge-provider', next.mediaNode.generatedMediaChrome.styles.modelBadgeProviderColor),
-        modelBadgeModelColor: property('badge-model', next.mediaNode.generatedMediaChrome.styles.modelBadgeModelColor),
+    next.mediaNode.generatedMediaControls.styles = {
+        ...next.mediaNode.generatedMediaControls.styles,
+        modelBadgeProviderColor: property('badge-provider', next.mediaNode.generatedMediaControls.styles.modelBadgeProviderColor),
+        modelBadgeModelColor: property('badge-model', next.mediaNode.generatedMediaControls.styles.modelBadgeModelColor),
         modelBadgeNameFontSize: 'var(--canvas-font-size)',
         modelBadgeNameLineHeight: theme.typography.lineHeight,
-        infoButtonColor: property('media-info', next.mediaNode.generatedMediaChrome.styles.infoButtonColor),
-        infoButtonHoverColor: property('media-info-hover', next.mediaNode.generatedMediaChrome.styles.infoButtonHoverColor),
+        infoButtonColor: property('media-info', next.mediaNode.generatedMediaControls.styles.infoButtonColor),
+        infoButtonHoverColor: property('media-info-hover', next.mediaNode.generatedMediaControls.styles.infoButtonHoverColor),
     }
 
     const textScale = theme.typography.fontSize / baseTheme.typography.fontSize

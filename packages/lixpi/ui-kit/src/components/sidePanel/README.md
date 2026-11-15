@@ -78,6 +78,7 @@ The component owns the panel width state, clamps it through the configured const
 - `minWidth`, `defaultWidth`: resize constraints. `defaultWidth` is the resolved width before the user has ever resized.
 - `getMaxWidth()`: dynamic upper bound (depends on available canvas/pane width).
 - `measureWidth()`: optional measurement of the actual rendered panel width, used as the start width for the first drag before any width is stored.
+- `mapResizeDelta(delta)`: optional conversion of a signed screen-pixel width change into the panel's width units before constraints apply. A positive delta grows the panel. Without this callback, the delta is unchanged.
 - `loadState()` / `persistState(state)`: persistence adapter.
 - `onResizeStart()`, `onResize(width)`, `onResizeEnd(width)`: drag lifecycle callbacks. `onResize` also fires for programmatic `setWidth`.
 - `onOpenChange(open)`: request open-state changes from component-owned overlay click/tap and swipe-to-close gestures.

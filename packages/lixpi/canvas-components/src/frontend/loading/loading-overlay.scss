@@ -7,7 +7,7 @@
     pointer-events: auto;
 
     // Contained in one area, such as the workspace pane, the layer covers only
-    // that area. A host whose own chrome floats over the start of that area
+    // that area. A host whose own controls float over the start of that area
     // sets `--canvas-loading-layer-inset-inline-start` to keep the layer clear
     // of it.
     &.is-contained {

@@ -144,7 +144,7 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 | [Code Quality Skill](${LIXPI_REPOSITORY_PATH}/skills/code-quality/SKILL.md) | Selects coding and testing guides and applies the test and linter modes from `env.lixpi` |
 | [Go Coding Style](code-quality/coding-style/GO.md) | Repository-wide Go package structure, service boundaries, APIs, startup, errors, logging, data access, concurrency, and tooling rules |
 | [TypeScript Coding Style](code-quality/coding-style/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules; mandatory for all TypeScript in the repo |
-| [UI Components Coding Style](code-quality/coding-style/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas chrome, component ownership, layout, and event rules |
+| [UI Components Coding Style](code-quality/coding-style/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas controls, component ownership, layout, and event rules |
 | [API-Owned Media Lineage Planning](knowledge/API-OWNED-MEDIA-LINEAGE-PLANNING.md) | API/browser ownership boundary for media branch topology, lineage plans, marker provenance, and canvas application |
 | [Rendering Architecture for a Media-Heavy Canvas](knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md) | Why the DOM/PIXI split; what the leading canvases use |
 | [Why Model Combinations Produce Different Styles](knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md) | Model chaining and visual signatures |

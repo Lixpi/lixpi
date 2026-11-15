@@ -86,7 +86,7 @@ describe('workspace diagram canvas options', () => {
             sceneKey: 'research-flow',
             settings: {
                 mediaNode: {
-                    generatedMediaChrome: {
+                    generatedMediaControls: {
                         styles: {
                             infoButtonColor: explicitInfoButtonColor,
                         },
@@ -109,7 +109,7 @@ describe('workspace diagram canvas options', () => {
 
         expect(connectionSettings.proximityConnectThreshold).toBe(91)
         expect(mocks.applyWorkspaceCanvasTheme.mock.calls.at(-1)?.[1]).toBe(retainedSettings)
-        expect(retainedSettings.mediaNode.generatedMediaChrome.styles.infoButtonColor).toBe(explicitInfoButtonColor)
+        expect(retainedSettings.mediaNode.generatedMediaControls.styles.infoButtonColor).toBe(explicitInfoButtonColor)
         diagram.destroy()
     })
 

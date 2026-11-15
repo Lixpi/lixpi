@@ -15,13 +15,13 @@ import {
     getAdaptiveBoundedZoomScalingOptions,
     getResizeCursor,
     getResizeHandleScaledSizes,
-    scaleCanvasChromeToScreenForZoom,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsToScreenForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
     type BoundedZoomScalingOptions,
     type CanvasEngineRect,
     type CanvasViewport,
 } from '@lixpi/canvas-engine/shared'
-export type PlaybackChromeNode = {
+export type PlaybackControlsNode = {
     nodeId: string
     type: 'video' | 'audio'
 }
@@ -38,7 +38,7 @@ export type PlaybackControlsSettings = VideoControlsSettings & {
     }
 }
 
-export type PlaybackChromeOptions<Node extends PlaybackChromeNode = PlaybackChromeNode> = {
+export type PlaybackControlsOptions<Node extends PlaybackControlsNode = PlaybackControlsNode> = {
     document: Document
     getResizeSettings: () => {
         useZoomCompensatedScaling: boolean
@@ -77,14 +77,14 @@ const safeZoom = (viewport: CanvasViewport): number => (Number.isFinite(viewport
 
 // Canvas positioning and surface gestures wrap UI-kit's shared video controls.
 // The native video stays visible so browser playback and fullscreen keep working.
-export class PlaybackChrome<Node extends PlaybackChromeNode = PlaybackChromeNode> {
+export class PlaybackControls<Node extends PlaybackControlsNode = PlaybackControlsNode> {
     readonly element: HTMLDivElement
-    private readonly entries = new Map<string, VideoChromeEntry>()
+    private readonly entries = new Map<string, VideoControlsEntry>()
     private destroyed = false
 
-    constructor(private readonly options: PlaybackChromeOptions<Node>) {
+    constructor(private readonly options: PlaybackControlsOptions<Node>) {
         const html = createDocumentHtml(options.document)
-        this.element = html`<div className="workspace-media-chrome-viewport"></div>` as HTMLDivElement
+        this.element = html`<div className="workspace-media-controls-viewport"></div>` as HTMLDivElement
     }
 
     sync(nodes: readonly (Node)[]): void {
@@ -111,7 +111,7 @@ export class PlaybackChrome<Node extends PlaybackChromeNode = PlaybackChromeNode
             ) {
                 entry?.destroy()
                 this.entries.delete(node.nodeId)
-                entry = new VideoChromeEntry(
+                entry = new VideoControlsEntry(
                     node.nodeId,
                     video,
                     this.options,
@@ -157,12 +157,12 @@ export class PlaybackChrome<Node extends PlaybackChromeNode = PlaybackChromeNode
         const scaling = getAdaptiveBoundedZoomScalingOptions(settings.canvas.zoomScaling)
         const zoom = safeZoom(viewport)
 
-        return scaleCanvasChromeToScreenForZoom(
+        return scaleCanvasControlsToScreenForZoom(
             settings.canvas.bottomInset,
             zoom,
             scaling,
         )
-            + scaleCanvasChromeToScreenForZoom(
+            + scaleCanvasControlsToScreenForZoom(
                 settings.height,
                 zoom,
                 scaling,
@@ -194,7 +194,7 @@ export class PlaybackChrome<Node extends PlaybackChromeNode = PlaybackChromeNode
     }
 }
 
-class VideoChromeEntry {
+class VideoControlsEntry {
     readonly element: HTMLElement
     private readonly lifetime = new Lifetime()
     private readonly surface: HTMLElement
@@ -205,13 +205,13 @@ class VideoChromeEntry {
     constructor(
         private readonly nodeId: string,
         readonly video: HTMLMediaElement,
-        private readonly options: Omit<PlaybackChromeOptions, 'getBounds'>,
+        private readonly options: Omit<PlaybackControlsOptions, 'getBounds'>,
     ) {
         const html = createDocumentHtml(options.document)
         this.element = html`
             <div
-                className="workspace-video-chrome"
-                data=${{ videoChromeNodeId: nodeId }}
+                className="workspace-video-controls-node"
+                data=${{ videoControlsNodeId: nodeId }}
             >
                 <div className="workspace-video-surface"></div>
                 <div className="workspace-video-controls-host"></div>
@@ -307,13 +307,13 @@ class VideoChromeEntry {
         const { settings } = this.options
         const zoom = safeZoom(viewport)
         const scaling = getAdaptiveBoundedZoomScalingOptions(settings.canvas.zoomScaling)
-        const screenScale = scaleCanvasChromeToScreenForZoom(
+        const screenScale = scaleCanvasControlsToScreenForZoom(
             1,
             zoom,
             scaling,
         )
         const baseInset = bounds.width * zoom >= settings.canvas.compactWidthThreshold ? settings.canvas.horizontalInset : settings.canvas.compactHorizontalInset
-        const insetX = scaleCanvasChromeWorldSizeForZoom(
+        const insetX = scaleCanvasControlsWorldSizeForZoom(
             baseInset,
             zoom,
             scaling,
@@ -325,7 +325,7 @@ class VideoChromeEntry {
             width,
             top: this.video.tagName === 'AUDIO'
                 ? Math.max(0, (bounds.height - settings.height * screenScale / zoom) / 2)
-                : bounds.height + scaleCanvasChromeWorldSizeForZoom(
+                : bounds.height + scaleCanvasControlsWorldSizeForZoom(
                     settings.canvas.bottomInset,
                     zoom,
                     scaling,

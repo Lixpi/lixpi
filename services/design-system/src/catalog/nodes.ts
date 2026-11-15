@@ -85,8 +85,8 @@ export const workspaceCanvasNodeTypes: readonly CanvasNode['type'][] = canvasNod
 const nodeDescriptions: Record<string, string> = {
     'node-diagram': 'DiagramNodeView registration and an embedded adapter with metric content, activation, fitting and loading.',
     'node-image': 'One image registration supports contain, cover and stretch. Change the fit, resize the image or retry a failed load.',
-    'node-video': 'Native video with shared PlaybackChrome and UI-kit SVG controls.',
-    'node-audio': 'Native audio with shared PlaybackChrome and UI-kit SVG controls.',
+    'node-video': 'Native video with shared PlaybackControls and UI-kit SVG controls.',
+    'node-audio': 'Native audio with shared PlaybackControls and UI-kit SVG controls.',
     'node-lixpi-document': 'The original document canvas node plus editable, read-only lease, loading and retryable editor-mount states.',
     'node-lixpi-media-document': 'A read-only file added to the canvas as prompt context, shown as a picture of its first page. Covers PDF, Word converted to PDF, Markdown and a file whose page image failed.',
     'node-lixpi-operation': 'The original operation-status canvas node plus upload and generation progress, failure and required-action presentations.',

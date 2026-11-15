@@ -65,8 +65,8 @@ const expectExcerptNotToContain = (excerpt: string, snippet: string, label = 'so
 
 const loadScss = (): string => {
     return readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas.scss').replace(
-        '@import "@lixpi/canvas-components/styles/workspace/canvas-chrome";',
-        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-chrome.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/canvas-controls";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-controls.scss'),
     ).replace(
         '@import "@lixpi/canvas-components/styles/workspace/document-node";',
         readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/document-node.scss'),
@@ -87,14 +87,14 @@ const loadScss = (): string => {
         '@import "@lixpi/canvas-components/styles/workspace/output-details";',
         readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/generated-output-details-sidebar.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components/styles/workspace/video-chrome";',
-        readSourceFile('../../packages/lixpi/canvas-components/src/frontend/media/playback-chrome.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/video-controls";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/frontend/media/playback-controls.scss'),
     ).replace(
         '@import "@lixpi/canvas-components/styles/workspace/asset-views";',
         readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/workspace-asset-views.scss'),
     ).replace(
-        '@import "@lixpi/canvas-components/styles/workspace/output-chrome";',
-        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-chrome.scss'),
+        '@import "@lixpi/canvas-components/styles/workspace/output-controls";',
+        readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-controls.scss'),
     ).replace(
         '@import "@lixpi/canvas-components/styles/workspace/right-panel";',
         readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-right-panel.scss'),
@@ -104,7 +104,7 @@ const loadScss = (): string => {
     )
 }
 
-const loadOutputChrome = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/workspace-output-chrome.ts')
+const loadOutputControls = (): string => readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/workspace-output-controls.ts')
 
 const loadTs = (): string => {
     const workspaceOwnerFiles = [
@@ -191,7 +191,7 @@ const loadWorkspaceMarkerHandoff = (): string => readSourceFile('../../packages/
 
 const loadWorkspaceCanvasView = (): string => {
     return readSourceFile('../components/workspaceCanvasView/workspaceCanvasView.ts', 'components/workspaceCanvasView/workspaceCanvasView.ts')
-        + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-chrome.ts')
+        + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-controls.ts')
         + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas-surface.ts')
 }
 
@@ -434,7 +434,7 @@ const extractFunctionBody = (source: string, functionName: string): string => {
 
     const arrowIndex = source.indexOf('=>', signatureCloseIndex)
 
-    // A concise arrow body (`=> void this.chrome.sync(state)`) has no braces, so the
+    // A concise arrow body (`=> void this.controls.sync(state)`) has no braces, so the
     // declaration ends at the end of its line.
     if (
         arrowIndex !== -1
@@ -509,7 +509,7 @@ const extractFunctionBody = (source: string, functionName: string): string => {
     return source.slice(functionIndex, endIndex + 1)
 }
 
-describe('Capability Artifact generated-output chrome parity', () => {
+describe('Capability Artifact generated-output controls parity', () => {
     it('uses registered branch surfaces within the canvas world root', () => {
         const source = loadTs()
         expectSourceToContain(source, 'branch: node => this.branchMarkerPresentation.create(node),')
@@ -576,7 +576,7 @@ describe('Workspace canvas — durable media request recovery and identity', () 
         expectExcerptToContain(recovery, '...replacedGeneratedMediaNodeIds', 'failure recovery')
         expectExcerptToContain(recovery, 'this.ports.clearTransientImage(nodeId)', 'failure recovery')
         expectExcerptToContain(recovery, 'this.ports.syncNode(updatedNode)', 'failure recovery')
-        expectExcerptToContain(recovery, 'this.ports.syncChrome()', 'failure recovery')
+        expectExcerptToContain(recovery, 'this.ports.syncControls()', 'failure recovery')
         expectExcerptNotToContain(recovery, 'loadWorkspaceRouteData(workspaceId)', 'failure recovery')
     })
 
@@ -665,7 +665,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
     it('.workspace-image-node base uses the theme-configured default box-shadow', () => void expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--canvas-shadow, var\(--workspace-media-node-default-box-shadow\)\);/m))
 
-    it('keeps generated media model chrome free of badge and button shadows', () => {
+    it('keeps generated media model controls free of badge and button shadows', () => {
         const badgeBlock = extractBlock(loadMediaModelBadgeScss(), '.media-model-badge')
         const infoButtonBlock = extractBlock(
             loadCanvasNodeFooterScss(),
@@ -682,9 +682,9 @@ describe('workspace node CSS — box-shadow consistency', () => {
         expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
     })
 
-    it('renders generated media icon chrome with bounded screen-space zoom scaling', () => {
+    it('renders generated media icon controls with bounded screen-space zoom scaling', () => {
         const ts = loadTs()
-        const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer,\n.workspace-generated-media-pending-icon-layer')
+        const controlsLayerBlock = extractBlock(scss, '.workspace-generated-media-controls-layer,\n.workspace-generated-media-pending-icon-layer')
         const footerScss = loadCanvasNodeFooterScss()
         const actionsBlock = extractBlock(footerScss, '.canvas-node-footer')
         const infoButtonBlock = extractBlock(
@@ -692,14 +692,14 @@ describe('workspace node CSS — box-shadow consistency', () => {
             '.canvas-node-footer-info-button,\n.canvas-node-footer-progress-button',
         )
         const infoIconBlock = extractBlock(footerScss, '.canvas-node-footer-info-icon svg')
-        expectSourceToContain(ts, 'this.paneEl.append(this.outputChrome.element, this.outputChrome.pendingElement)')
-        expectSourceToContain(ts, 'settings: this.host.settings.mediaNode.generatedMediaChrome,')
-        expectSourceToContain(ts, 'outputChrome.update(nodeId, { ...position, ...dimensions }, viewport)')
-        expectSourceToContain(ts, 'outputChrome.sync(canvasState)')
+        expectSourceToContain(ts, 'this.paneEl.append(this.outputControls.element, this.outputControls.pendingElement)')
+        expectSourceToContain(ts, 'settings: this.host.settings.mediaNode.generatedMediaControls,')
+        expectSourceToContain(ts, 'outputControls.update(nodeId, { ...position, ...dimensions }, viewport)')
+        expectSourceToContain(ts, 'outputControls.sync(canvasState)')
         expectSourceToContain(ts, 'createModelBadge: options => this.host.models.createBadge(options)')
         expectSourceNotToContain(ts, 'generatedMediaInfoPanelLayerEl')
-        expectSourceNotToContain(ts, 'createGeneratedMediaInfoPanelChrome')
-        expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer')
+        expectSourceNotToContain(ts, 'createGeneratedMediaInfoPanelControls')
+        expectExcerptToContain(controlsLayerBlock, 'pointer-events: none', 'generated media controls layer')
         expectExcerptToContain(actionsBlock, 'gap: 6px', 'canvas node footer')
         expectExcerptToContain(infoButtonBlock, 'width: var(--canvas-node-footer-icon-size, 34px)', 'media info button')
         expectExcerptToContain(infoIconBlock, 'width: 79.5918%', 'media info icon')
@@ -846,16 +846,16 @@ describe('Workspace canvas — generated image preview rendering', () => {
     it('keeps terminal candidate controls usable while the local Asset cache catches up', () => {
         const readiness = extractFunctionBody(ts, 'isReviewReady')
         const accepted = extractFunctionBody(ts, 'isAccepted')
-        const chrome = loadOutputChrome()
-        const chromeKey = loadOutputChrome()
+        const controls = loadOutputControls()
+        const controlsKey = loadOutputControls()
 
         expectExcerptToContain(readiness, 'this.ports.review.isGeneratedOutputReviewReady(node)', 'generated output readiness')
         expectExcerptToContain(accepted, 'this.ports.review.isGeneratedOutputAccepted(node)', 'generated output accepted state')
-        expectExcerptToContain(chrome, 'isGeneratedOutputRejectableForCanvas(reviewContext)', 'reject control')
-        expectExcerptToContain(chromeKey, "node.generatedBy?.generationRequestId ?? ''", 'generated media chrome key')
-        expectExcerptToContain(chromeKey, "node.generatedBy?.branchOriginNodeId ?? ''", 'generated media chrome key')
-        expectExcerptToContain(chromeKey, "asset?.media?.renditions.original?.status ?? ''", 'generated media chrome key')
-        expectExcerptToContain(chromeKey, "asset?.generatedOutputReview?.status ?? ''", 'generated media chrome key')
+        expectExcerptToContain(controls, 'isGeneratedOutputRejectableForCanvas(reviewContext)', 'reject control')
+        expectExcerptToContain(controlsKey, "node.generatedBy?.generationRequestId ?? ''", 'generated media controls key')
+        expectExcerptToContain(controlsKey, "node.generatedBy?.branchOriginNodeId ?? ''", 'generated media controls key')
+        expectExcerptToContain(controlsKey, "asset?.media?.renditions.original?.status ?? ''", 'generated media controls key')
+        expectExcerptToContain(controlsKey, "asset?.generatedOutputReview?.status ?? ''", 'generated media controls key')
         expectSourceToContain(ts, 'this.documentNodes.syncDocuments(this.currentDocuments)')
         expectSourceToContain(ts, 'this.branchMarkerPresentation.syncAll()')
     })
@@ -1018,21 +1018,21 @@ describe('Workspace canvas — generated video canvas state', () => {
         expectExcerptNotToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'video error handler')
     })
 
-    it('supplies ready videos and live geometry to the package chrome', () => {
-        expectSourceToContain(ts, 'video: this.videoChrome,')
+    it('supplies ready videos and live geometry to the package controls', () => {
+        expectSourceToContain(ts, 'video: this.videoControls,')
         expectSourceToContain(ts, 'getAsset: assetId => this.host.assets.read(assetId),')
-        expectSourceToContain(ts, 'outputChrome.update(nodeId, { ...position, ...dimensions }, viewport)')
+        expectSourceToContain(ts, 'outputControls.update(nodeId, { ...position, ...dimensions }, viewport)')
     })
 
-    it('syncs video chrome after video handler entries exist', () => {
+    it('syncs video controls after video handler entries exist', () => {
         const renderStart = ts.indexOf('    render(\n        incomingState: CanvasState | null')
         const pixiSync = ts.indexOf('this.ports.syncCanvasLayer(currentState)', renderStart)
-        const chromeSync = ts.indexOf('this.ports.syncChrome(currentState)', renderStart)
+        const controlsSync = ts.indexOf('this.ports.syncControls(currentState)', renderStart)
 
         expect(renderStart).toBeGreaterThan(-1)
         expect(pixiSync).toBeGreaterThan(-1)
-        expect(chromeSync).toBeGreaterThan(pixiSync)
-        expectSourceToContain(ts, 'onPlaybackReady: () => this.scheduleGeneratedMediaChromeSync(),')
+        expect(controlsSync).toBeGreaterThan(pixiSync)
+        expectSourceToContain(ts, 'onPlaybackReady: () => this.scheduleGeneratedMediaControlsSync(),')
     })
 
     it('counts prior videos as siblings when positioning a new generated output', () => {
@@ -1114,14 +1114,14 @@ describe('Workspace canvas — generated video canvas state', () => {
         const renderDetails = extractFunctionBody(ts, 'renderContent')
         const detailsProjection = extractFunctionBody(ts, 'mountMediaHistory')
         const chatProjection = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/review/workspace-generation-history.ts')
-        const artifactChrome = loadOutputChrome()
+        const artifactControls = loadOutputControls()
         expectExcerptToContain(renderDetails, 'assets: this.ports.createAssetViewPorts()', 'generated media details')
         expectExcerptToContain(renderDetails, 'new WorkspaceOutputDetails(body, node, {', 'generated media history')
         expectExcerptToContain(renderDetails, 'this.mountMediaHistory(host, target, onProgress, signal)', 'generated media history')
         expectExcerptToContain(detailsProjection, 'return mountWorkspaceMediaHistory({', 'generated media history')
         expectExcerptToContain(chatProjection, 'includeGenerationProgressTimeline: true', 'generated media history')
         expectExcerptToContain(chatProjection, 'resolveMediaGenerationHistoryProgress({', 'generated media history')
-        expectExcerptToContain(artifactChrome, 'new GeneratedOutputNodeChrome({', 'generated Artifact chrome')
+        expectExcerptToContain(artifactControls, 'new GeneratedOutputNodeControls({', 'generated Artifact controls')
         expectSourceNotToContain(ts, 'createGeneratedOutputHistoryButton')
         expectSourceNotToContain(loadScss(), '.media-history-button')
     })
@@ -1143,9 +1143,9 @@ describe('Workspace canvas — generated video canvas state', () => {
         expectExcerptToContain(historyTimelineBlock, 'margin: 18px 0 0;', 'generated media history timeline')
     })
 
-    it('uses the package chrome for media and Capability Artifact nodes with their progress state', () => {
+    it('uses the package controls for media and Capability Artifact nodes with their progress state', () => {
         const progress = extractFunctionBody(ts, 'isProgressActive')
-        expectSourceToContain(ts, 'this.outputChrome = new WorkspaceOutputChrome({')
+        expectSourceToContain(ts, 'this.outputControls = new WorkspaceOutputControls({')
         expectSourceToContain(ts, 'isProgressActive: this.outputDetails.isProgressActive,')
         expectExcerptToContain(progress, 'this.ports.getCapabilityProgressStatus(node)', 'Capability Artifact progress')
         expectExcerptToContain(progress, "status === 'pending' || status === 'running'", 'Capability Artifact progress')
@@ -1193,12 +1193,12 @@ describe('Workspace canvas — video node interaction', () => {
         expectExcerptToContain(nodeBlock, '&.is-dragging', '.workspace-video-node')
     })
 
-    it('lets the visible video chrome and controls own hover while preserving pointer interaction', () => {
-        const chrome = extractBlock(scss, '.workspace-video-chrome')
+    it('lets the visible video controls and controls own hover while preserving pointer interaction', () => {
+        const controls = extractBlock(scss, '.workspace-video-controls-node')
         const surface = extractBlock(scss, '.workspace-video-surface')
         const controlsHost = extractBlock(scss, '.workspace-video-controls-host')
 
-        expectExcerptToContain(chrome, 'pointer-events: none', '.workspace-video-chrome')
+        expectExcerptToContain(controls, 'pointer-events: none', '.workspace-video-controls-node')
         expectExcerptToContain(surface, 'pointer-events: auto', '.workspace-video-surface')
         expectExcerptToContain(controlsHost, 'pointer-events: none', '.workspace-video-controls-host')
         expectExcerptNotToContain(controlsHost, '&.is-visible', '.workspace-video-controls-host')
@@ -1248,7 +1248,7 @@ describe('Workspace canvas — media descriptors', () => {
     })
 
     it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
-        expectSourceToContain(loadOutputChrome(), "this.ports.getDescriptor(node)?.status === 'analyzing'")
+        expectSourceToContain(loadOutputControls(), "this.ports.getDescriptor(node)?.status === 'analyzing'")
         const buttonBlock = extractBlock(scss, '.canvas-node-footer-info-button.is-analyzing')
         expectExcerptToContain(buttonBlock, 'animation: workspace-media-analyzing-pulse', '.canvas-node-footer-info-button.is-analyzing')
         expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
@@ -2532,7 +2532,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
         expectSourceToContain(geometry, 'width: collisionRect.width,')
     })
 
-    it('includes resolved media title and action chrome in collision boxes', () => {
+    it('includes resolved media title and action controls in collision boxes', () => {
         const geometry = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/shared/branch-tree-layout/workspace-geometry.ts')
         expectSourceToContain(ts, 'this.workspaceGeometry.getCanvasNodeCollisionRect(node, worldPosition)')
         expectSourceToContain(geometry, 'getNodeConnectorAnchorRect: (node, position) => this.getCanvasNodeConnectorAnchorRect(node, position)')

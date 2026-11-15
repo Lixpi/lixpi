@@ -19,7 +19,7 @@ import {
     type CanvasViewport,
 } from '@lixpi/canvas-engine/shared'
 
-export type GeneratedOutputChromeState = CanvasNodeFooterState & {
+export type GeneratedOutputControlsState = CanvasNodeFooterState & {
     pendingBeforeFrame: boolean
     generated: boolean
     hasAsset: boolean
@@ -30,11 +30,11 @@ export type GeneratedOutputChromeState = CanvasNodeFooterState & {
     analyzing: boolean
 }
 
-export type GeneratedOutputNodeChromeOptions = {
+export type GeneratedOutputNodeControlsOptions = {
     document: Document
     nodeId: string
     kind: 'media' | 'artifact'
-    state: GeneratedOutputChromeState
+    state: GeneratedOutputControlsState
     modelBadge: HTMLElement | null
     settings: {
         gap: number
@@ -48,13 +48,13 @@ export type GeneratedOutputNodeChromeOptions = {
 }
 
 // Product review actions and title placement compose UI-kit's shared footer.
-export class GeneratedOutputNodeChrome {
+export class GeneratedOutputNodeControls {
     readonly element: HTMLElement
     private readonly shell: CanvasNodeShell
     private readonly footer: CanvasNodeFooterInstance
     private readonly lifetime = new Lifetime()
 
-    constructor(private readonly options: GeneratedOutputNodeChromeOptions) {
+    constructor(private readonly options: GeneratedOutputNodeControlsOptions) {
         try {
             const html = createDocumentHtml(options.document)
             const {
@@ -152,8 +152,8 @@ export class GeneratedOutputNodeChrome {
             })
             this.lifetime.own(() => this.shell.destroy())
             this.element = this.shell.element
-            this.element.classList.add('workspace-generated-media-chrome')
-            this.element.dataset.mediaChromeNodeId = options.nodeId
+            this.element.classList.add('workspace-generated-media-controls')
+            this.element.dataset.mediaControlsNodeId = options.nodeId
         } catch (error) {
             this.lifetime.destroy()
 

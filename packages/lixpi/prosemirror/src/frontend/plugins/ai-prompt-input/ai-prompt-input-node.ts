@@ -108,7 +108,7 @@ type DropdownView = {
 }
 
 export type AiPromptInputNodeViewOptions = {
-    services: Pick<EditorServices, 'models' | 'modelControls' | 'settings' | 'promptChrome'>
+    services: Pick<EditorServices, 'models' | 'modelControls' | 'settings' | 'promptControls'>
     onSubmit: () => void
     placeholderText?: string
     createContextTray?: () => HTMLElement | null
@@ -642,7 +642,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
         )
         const submitButton = options.createSubmitButton(submitControls)
         submitButton.dataset.helpTooltip = 'aria-description'
-        const mediaModeSwitch = options.services.promptChrome.createMediaModeSwitch({
+        const mediaModeSwitch = options.services.promptControls.createMediaModeSwitch({
             document: dom.ownerDocument,
             value: getMediaGenerationMode(),
             appearance: settings.aiPromptInput.mediaModeSwitch.styles,
@@ -978,7 +978,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             event.stopPropagation()
         }
 
-        const modelMenuTriggerPresentation = options.services.promptChrome.createModelMenuTrigger({
+        const modelMenuTriggerPresentation = options.services.promptControls.createModelMenuTrigger({
             document: dom.ownerDocument,
             onClick: toggleModelMenu,
         })

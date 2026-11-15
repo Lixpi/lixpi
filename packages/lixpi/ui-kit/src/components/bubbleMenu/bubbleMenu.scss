@@ -1,28 +1,18 @@
-@use "sass:color";
-@use "../../styles/tokens" as *;
 @use "@lixpi/ui-primitives/styles/transitions" as *;
-
-// Use same colors as dropdown and infoBubble primitives
-$bubbleMenuBg: theme-color("button-background");
-$bubbleMenuFg: theme-color("button-text");
-$bubbleMenuBorder: color.adjust($steelBlue, $lightness: -10%);
-$bubbleMenuHoverBg: theme-color("button-hover");
-$bubbleMenuActiveBg: theme-color("accent");
-$bubbleMenuShadow: theme-color("shadow-control");
 
 .bubble-menu {
     position: absolute;
-    z-index: 100;
-    color: $bubbleMenuFg;
+    z-index: var(--bubble-menu-z-index);
+    color: var(--bubble-menu-foreground);
     visibility: hidden;
     opacity: 0;
     --bubble-menu-visual-scale: 1;
-    transform: translateY(4px) scale(var(--bubble-menu-visual-scale));
+    transform: translateY(var(--bubble-menu-enter-offset)) scale(var(--bubble-menu-visual-scale));
     transform-origin: top left;
     transition:
-        pupOutTransition(opacity, 100ms),
-        pupOutTransition(transform, 100ms),
-        pupOutTransition(visibility, 100ms);
+        pupOutTransition(opacity, var(--bubble-menu-enter-duration)),
+        pupOutTransition(transform, var(--bubble-menu-enter-duration)),
+        pupOutTransition(visibility, var(--bubble-menu-enter-duration));
 
     &.is-visible {
         visibility: visible;
@@ -40,20 +30,19 @@ $bubbleMenuShadow: theme-color("shadow-control");
     }
 }
 
+.bubble-menu-inline.is-visible {
+    transform: none;
+}
+
 .bubble-menu-content {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 4px;
-    background: $bubbleMenuBg;
-    border-radius: 99px;
-    box-shadow: $bubbleMenuShadow;
-    border: 0.06rem solid $bubbleMenuBorder;
-
-    // Mobile: slightly larger touch targets
-    @media (max-width: 640px) {
-        gap: 4px;
-    }
+    gap: var(--bubble-menu-surface-gap);
+    padding: var(--bubble-menu-surface-padding);
+    background: var(--bubble-menu-background);
+    border-radius: var(--bubble-menu-radius);
+    box-shadow: var(--bubble-menu-shadow);
+    border: var(--bubble-menu-border-width) solid var(--bubble-menu-border-color);
 
     // Prevent text selection in menu
     user-select: none;
@@ -61,24 +50,37 @@ $bubbleMenuShadow: theme-color("shadow-control");
     -webkit-touch-callout: none;
 }
 
+.bubble-menu-vertical {
+    z-index: var(--bubble-menu-submenu-z-index);
+    width: max-content;
+}
+
+.bubble-menu-vertical > .bubble-menu-content {
+    flex-direction: column;
+    gap: var(--bubble-menu-submenu-gap);
+    box-sizing: border-box;
+    max-height: min(var(--bubble-menu-submenu-max-height), var(--bubble-menu-available-height, var(--bubble-menu-submenu-max-height)));
+    overflow-y: auto;
+}
+
 .bubble-menu-button {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--bubble-menu-button-size);
+    height: var(--bubble-menu-button-size);
     padding: 0;
     border: none;
-    border-radius: 99px;
+    border-radius: var(--bubble-menu-radius);
     background: transparent;
-    color: $bubbleMenuFg;
+    color: var(--bubble-menu-foreground);
     cursor: pointer;
-    transition: hoverTransition(all, 150ms);
+    transition: hoverTransition(all, var(--bubble-menu-button-hover-duration));
 
     // Mobile: larger touch targets
     @media (max-width: 640px) {
-        width: 40px;
-        height: 40px;
+        width: var(--bubble-menu-button-touch-size);
+        height: var(--bubble-menu-button-touch-size);
     }
 
     // Prevent default touch behavior
@@ -86,22 +88,17 @@ $bubbleMenuShadow: theme-color("shadow-control");
     touch-action: manipulation;
 
     svg {
-        width: 16px;
-        height: 16px;
-        fill: $bubbleMenuFg;
+        width: var(--bubble-menu-icon-size);
+        height: var(--bubble-menu-icon-size);
+
+        &:not([fill="none"]) {
+            fill: currentColor;
+        }
     }
 
     &:hover {
-        background-color: $bubbleMenuHoverBg;
-    }
-
-    &:active {
-        background-color: $bubbleMenuActiveBg;
-    }
-
-    &.is-active {
-        background-color: $bubbleMenuActiveBg;
-        color: $bubbleMenuFg;
+        background-color: var(--bubble-menu-hover-background);
+        color: var(--bubble-menu-hover-foreground);
     }
 
     &:focus-visible {
@@ -111,10 +108,10 @@ $bubbleMenuShadow: theme-color("shadow-control");
 
 .bubble-menu-separator {
     display: block;
-    width: 1px;
-    height: 20px;
-    background-color: $bubbleMenuBorder;
-    margin: 0 4px;
+    width: var(--bubble-menu-separator-width);
+    height: var(--bubble-menu-separator-height);
+    background-color: var(--bubble-menu-separator-color);
+    margin: 0 var(--bubble-menu-separator-margin);
 }
 
 // Text type dropdown
@@ -125,24 +122,24 @@ $bubbleMenuShadow: theme-color("shadow-control");
 .bubble-menu-dropdown-toggle {
     display: flex;
     align-items: center;
-    gap: 4px;
-    height: 28px;
-    padding: 0 10px;
+    gap: var(--bubble-menu-dropdown-trigger-gap);
+    height: var(--bubble-menu-button-size);
+    padding: 0 var(--bubble-menu-dropdown-trigger-padding);
     border: none;
-    border-radius: 99px;
+    border-radius: var(--bubble-menu-radius);
     background: transparent;
-    color: $bubbleMenuFg;
-    font-size: 13px;
-    font-weight: 500;
+    color: var(--bubble-menu-foreground);
+    font-size: var(--bubble-menu-dropdown-font-size);
+    font-weight: var(--bubble-menu-dropdown-font-weight);
     cursor: pointer;
     transition: hoverTransition(background-color);
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
 
     @media (max-width: 640px) {
-        height: 40px;
-        padding: 0 12px;
-        font-size: 14px;
+        height: var(--bubble-menu-button-touch-size);
+        padding: 0 var(--bubble-menu-dropdown-trigger-touch-padding);
+        font-size: var(--bubble-menu-dropdown-touch-font-size);
     }
 
     .dropdown-label {
@@ -150,49 +147,31 @@ $bubbleMenuShadow: theme-color("shadow-control");
         align-items: center;
 
         svg {
-            width: 16px;
-            height: 16px;
-            fill: $bubbleMenuFg;
+            width: var(--bubble-menu-icon-size);
+            height: var(--bubble-menu-icon-size);
             opacity: 1;
+
+            &:not([fill="none"]) {
+                fill: currentColor;
+            }
         }
     }
 
     // Chevron icon
     > svg {
-        width: 14px;
-        height: 14px;
-        fill: $bubbleMenuFg;
-        opacity: 0.7;
+        width: var(--bubble-menu-chevron-size);
+        height: var(--bubble-menu-chevron-size);
+        opacity: var(--bubble-menu-secondary-icon-opacity);
+
+        &:not([fill="none"]) {
+            fill: currentColor;
+        }
     }
 
-    &:hover {
-        background-color: $bubbleMenuHoverBg;
-    }
-}
-
-.bubble-menu-dropdown-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 4px;
-    padding: 4px;
-    background: $bubbleMenuBg;
-    border-radius: 99px;
-    box-shadow: $bubbleMenuShadow;
-    border: 0.06rem solid $bubbleMenuBorder;
-    visibility: hidden;
-    opacity: 0;
-    transform: translateY(-4px);
-    transition:
-        pupOutTransition(opacity, 150ms),
-        pupOutTransition(transform, 150ms),
-        pupOutTransition(visibility, 150ms);
-    z-index: 110;
-
-    &.is-open {
-        visibility: visible;
-        opacity: 1;
-        transform: translateY(0);
+    &:hover,
+    &:focus-visible {
+        background-color: var(--bubble-menu-hover-background);
+        color: var(--bubble-menu-hover-foreground);
     }
 }
 
@@ -200,54 +179,105 @@ $bubbleMenuShadow: theme-color("shadow-control");
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: var(--bubble-menu-option-size);
+    height: var(--bubble-menu-option-size);
     padding: 0;
     border: none;
-    border-radius: 99px;
+    border-radius: var(--bubble-menu-radius);
     background: transparent;
-    color: $bubbleMenuFg;
-    font-size: 13px;
+    color: var(--bubble-menu-foreground);
+    font-size: var(--bubble-menu-dropdown-font-size);
     cursor: pointer;
     transition: hoverTransition(background-color);
     -webkit-tap-highlight-color: transparent;
 
     svg {
-        width: 18px;
-        height: 18px;
-        fill: $bubbleMenuFg;
-    }
+        width: var(--bubble-menu-option-icon-size);
+        height: var(--bubble-menu-option-icon-size);
 
-    @media (max-width: 640px) {
-        width: 36px;
-        height: 36px;
-
-        svg {
-            width: 20px;
-            height: 20px;
+        &:not([fill="none"]) {
+            fill: currentColor;
         }
     }
 
-    &:hover {
-        background-color: $bubbleMenuHoverBg;
+    @media (max-width: 640px) {
+        width: var(--bubble-menu-option-touch-size);
+        height: var(--bubble-menu-option-touch-size);
+
+        svg {
+            width: var(--bubble-menu-option-touch-icon-size);
+            height: var(--bubble-menu-option-touch-icon-size);
+        }
     }
 
-    &.is-active {
-        background-color: $bubbleMenuActiveBg;
+    &:hover,
+    &:focus-visible {
+        background-color: var(--bubble-menu-hover-background);
+        color: var(--bubble-menu-hover-foreground);
     }
+
+    &:disabled {
+        opacity: var(--bubble-menu-disabled-opacity);
+        cursor: default;
+    }
+}
+
+.bubble-menu-button:active,
+.bubble-menu-button.is-active,
+.bubble-menu-dropdown-toggle.is-active,
+.bubble-menu-dropdown-item.is-active {
+    background-color: var(--bubble-menu-active-background);
+    color: var(--bubble-menu-active-foreground);
+}
+
+.bubble-menu-button svg :is([fill="rgb(0,0,0)"], [fill="#000"], [fill="#000000"], [fill="black"]),
+.bubble-menu-dropdown-toggle svg :is([fill="rgb(0,0,0)"], [fill="#000"], [fill="#000000"], [fill="black"]),
+.bubble-menu-dropdown-item svg :is([fill="rgb(0,0,0)"], [fill="#000"], [fill="#000000"], [fill="black"]) {
+    fill: currentColor;
+}
+
+.bubble-menu-text-item {
+    align-self: stretch;
+    flex-shrink: 0;
+    max-width: var(--bubble-menu-text-option-max-width);
+    border: none;
+    border-radius: var(--bubble-menu-radius);
+    padding: var(--bubble-menu-text-option-padding);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: var(--bubble-menu-text-option-font-size);
+    text-align: start;
+    cursor: pointer;
+    transition: hoverTransition(background-color);
+
+    &:hover,
+    &:focus-visible {
+        background-color: var(--bubble-menu-hover-background);
+        color: var(--bubble-menu-hover-foreground);
+    }
+
+    &:disabled {
+        opacity: var(--bubble-menu-disabled-opacity);
+        cursor: default;
+    }
+}
+
+.bubble-menu-vertical .bubble-menu-dropdown-item {
+    flex-shrink: 0;
 }
 
 // Link input panel
 .bubble-menu-link-input {
     display: none;
     align-items: center;
-    gap: 6px;
-    padding: 4px;
-    background: $bubbleMenuBg;
-    border-radius: 99px;
-    box-shadow: $bubbleMenuShadow;
-    border: 0.06rem solid $bubbleMenuBorder;
-    margin-top: 4px;
+    gap: var(--bubble-menu-link-gap);
+    padding: var(--bubble-menu-link-panel-padding);
+    background: var(--bubble-menu-background);
+    border-radius: var(--bubble-menu-radius);
+    box-shadow: var(--bubble-menu-shadow);
+    border: var(--bubble-menu-border-width) solid var(--bubble-menu-border-color);
+    margin-top: var(--bubble-menu-link-panel-margin);
 
     &.is-active {
         display: flex;
@@ -256,26 +286,26 @@ $bubbleMenuShadow: theme-color("shadow-control");
 
 .link-input-field {
     flex: 1;
-    min-width: 140px;
-    padding: 6px 10px;
+    min-width: var(--bubble-menu-link-field-min-width);
+    padding: var(--bubble-menu-link-field-padding);
     border: none;
-    border-radius: 99px;
-    background: color.adjust($steelBlue, $lightness: -8%);
-    color: $bubbleMenuFg;
-    font-size: 13px;
+    border-radius: var(--bubble-menu-radius);
+    background: var(--bubble-menu-link-field-background);
+    color: var(--bubble-menu-foreground);
+    font-size: var(--bubble-menu-link-field-font-size);
     outline: none;
 
     @media (max-width: 640px) {
-        min-width: 120px;
-        padding: 8px 12px;
+        min-width: var(--bubble-menu-link-field-touch-min-width);
+        padding: var(--bubble-menu-link-field-touch-padding);
     }
 
     &:focus {
-        background: color.adjust($steelBlue, $lightness: -12%);
+        background: var(--bubble-menu-link-field-focus-background);
     }
 
     &::placeholder {
-        color: color.adjust($offWhite, $alpha: -0.5);
+        color: var(--bubble-menu-link-field-placeholder-color);
     }
 }
 
@@ -284,42 +314,42 @@ $bubbleMenuShadow: theme-color("shadow-control");
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: var(--bubble-menu-link-action-size);
+    height: var(--bubble-menu-link-action-size);
     cursor: pointer;
     transition: hoverTransition(opacity);
     -webkit-tap-highlight-color: transparent;
 
     svg {
-        width: 16px;
-        height: 16px;
+        width: var(--bubble-menu-icon-size);
+        height: var(--bubble-menu-icon-size);
     }
 
     &:hover {
-        opacity: 0.8;
+        opacity: var(--bubble-menu-link-action-hover-opacity);
     }
 
     @media (max-width: 640px) {
-        width: 28px;
-        height: 28px;
+        width: var(--bubble-menu-link-action-touch-size);
+        height: var(--bubble-menu-link-action-touch-size);
 
         svg {
-            width: 18px;
-            height: 18px;
+            width: var(--bubble-menu-link-action-touch-icon-size);
+            height: var(--bubble-menu-link-action-touch-icon-size);
         }
     }
 }
 
 .link-input-apply {
     svg {
-        fill: theme-color("success");
+        fill: var(--bubble-menu-link-apply-color);
     }
 }
 
 .link-input-remove {
     svg {
-        fill: $bubbleMenuFg;
-        opacity: 0.7;
+        fill: currentColor;
+        opacity: var(--bubble-menu-secondary-icon-opacity);
     }
 
     &:hover svg {

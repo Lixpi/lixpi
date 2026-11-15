@@ -213,9 +213,9 @@ describe('settings - grouped configuration', () => {
         expectFiniteNumber(settings.connector.scaling.clickAreaWidth, 'settings.connector.scaling.clickAreaWidth')
         expectFiniteNumber(settings.connector.scaling.zoomScaling.minZoom, 'settings.connector.scaling.zoomScaling.minZoom')
         expectFiniteNumber(settings.canvasBubbleMenu.zoomScaling.minZoom, 'settings.canvasBubbleMenu.zoomScaling.minZoom')
-        expectFiniteNumber(settings.mediaNode.generatedMediaChrome.iconSize, 'settings.mediaNode.generatedMediaChrome.iconSize')
-        expectFiniteNumber(settings.mediaNode.generatedMediaChrome.gap, 'settings.mediaNode.generatedMediaChrome.gap')
-        expectFiniteNumber(settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom, 'settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom')
+        expectFiniteNumber(settings.mediaNode.generatedMediaControls.iconSize, 'settings.mediaNode.generatedMediaControls.iconSize')
+        expectFiniteNumber(settings.mediaNode.generatedMediaControls.gap, 'settings.mediaNode.generatedMediaControls.gap')
+        expectFiniteNumber(settings.mediaNode.generatedMediaControls.zoomScaling.minZoom, 'settings.mediaNode.generatedMediaControls.zoomScaling.minZoom')
         expectFiniteNumber(settings.mediaNode.resizeHandle.size, 'settings.mediaNode.resizeHandle.size')
         expectFiniteNumber(settings.mediaNode.resizeHandle.offset, 'settings.mediaNode.resizeHandle.offset')
         expectFiniteNumber(settings.mediaNode.resizeHandle.minSize, 'settings.mediaNode.resizeHandle.minSize')
@@ -320,7 +320,7 @@ describe('settings - grouped configuration', () => {
             'settings.connector.styles': settings.connector.styles,
             'settings.selection.styles': settings.selection.styles,
             'settings.mediaNode.styles': settings.mediaNode.styles,
-            'settings.mediaNode.generatedMediaChrome.styles': settings.mediaNode.generatedMediaChrome.styles,
+            'settings.mediaNode.generatedMediaControls.styles': settings.mediaNode.generatedMediaControls.styles,
             'settings.mediaNode.inProgressOutlineAnimation.styles': settings.mediaNode.inProgressOutlineAnimation.styles,
             'settings.mediaBranchLineage.branchOrigin.styles': settings.mediaBranchLineage.branchOrigin.styles,
         }

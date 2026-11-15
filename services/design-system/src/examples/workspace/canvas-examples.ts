@@ -1,11 +1,11 @@
 import { LoadingOverlay } from '@lixpi/canvas-components/loading'
-import { createLibraryWorkspaceChromeSettings } from '@lixpi/canvas-components/library'
+import { createLibraryWorkspaceControlsSettings } from '@lixpi/canvas-components/library'
 import { unionRectangles } from '@lixpi/canvas-engine/shared'
 import { getWorkspaceLoadingPresentation } from '@lixpi/canvas-components/workspace/loading'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     LixpiWorkspaceCanvas,
-    WorkspaceCanvasChrome,
+    WorkspaceCanvasControls,
 } from '@lixpi/canvas-components/workspace'
 import {
     WorkspaceNodeShells,
@@ -98,7 +98,7 @@ export class FullWorkspaceExample {
     readonly frame: ExampleFrame
     private readonly fixtures = new WorkspaceFixtures()
     private readonly renderer: LixpiWorkspaceCanvas
-    private readonly chrome: WorkspaceCanvasChrome
+    private readonly controls: WorkspaceCanvasControls
     private initialFitActive = false
     private initialFitFrame: number | null = null
     private initialFitGeometry = ''
@@ -148,8 +148,8 @@ export class FullWorkspaceExample {
             this.lifetime.own(() => fixtureHost.destroy())
             const surface = html`<div className="canvas-workspace-surface"></div>` as HTMLDivElement
             this.frame.stage.append(surface)
-            this.chrome = new WorkspaceCanvasChrome(
-                createLibraryWorkspaceChromeSettings(fixtureHost.appearance),
+            this.controls = new WorkspaceCanvasControls(
+                createLibraryWorkspaceControlsSettings(fixtureHost.appearance),
                 {
                     document: host.ownerDocument,
                     createDocument: async () => this.insertDocument(),
@@ -160,18 +160,18 @@ export class FullWorkspaceExample {
                 },
                 { controls: workspaceControls },
             )
-            surface.append(this.chrome.element)
-            this.lifetime.own(() => this.chrome.destroy())
+            surface.append(this.controls.element)
+            this.lifetime.own(() => this.controls.destroy())
             this.renderer = new LixpiWorkspaceCanvas(
                 {
                     composer: workspaceControls,
                     conversationPanel: workspaceControls,
                     sidePanel: workspaceControls,
-                    paneEl: this.chrome.pane,
-                    viewportEl: this.chrome.viewportMount,
-                    mediaModeSwitchMountEl: this.chrome.mediaModeSwitchMount,
-                    modelMenuControlMountEl: this.chrome.modelMenuControlMount,
-                    glassTargets: this.chrome.glassTargets,
+                    paneEl: this.controls.pane,
+                    viewportEl: this.controls.viewportMount,
+                    mediaModeSwitchMountEl: this.controls.mediaModeSwitchMount,
+                    modelMenuControlMountEl: this.controls.modelMenuControlMount,
+                    glassTargets: this.controls.glassTargets,
                     workspaceId,
                     canvasState: this.state,
                     documents: this.fixtures.documents,
@@ -181,7 +181,7 @@ export class FullWorkspaceExample {
                             ...this.state,
                             viewport,
                         }
-                        this.chrome.setZoom(viewport.zoom)
+                        this.controls.setZoom(viewport.zoom)
                         this.syncViewportParameters()
                     },
                     onCanvasStateChange: state => {
@@ -549,7 +549,7 @@ export class FullWorkspaceExample {
             ),
             40,
         )
-        const size = this.chrome.viewportMount.getBoundingClientRect()
+        const size = this.controls.viewportMount.getBoundingClientRect()
 
         if (
             !bounds
@@ -589,7 +589,7 @@ export class FullWorkspaceExample {
             y,
             zoom,
         })
-        this.chrome.setZoom(zoom)
+        this.controls.setZoom(zoom)
         this.syncViewportParameters()
     }
 
@@ -867,10 +867,7 @@ export class ArtifactNodesExample extends NodeExample {
     private width = 520
 
     constructor(host: HTMLElement) {
-        super(
-            host,
-            'WorkspaceCapabilityNode mounts the Media Pipeline Artifact view and the retained Media Sequence view in this example.',
-        )
+        super(host, 'WorkspaceCapabilityNode mounts the Media Pipeline Artifact view and the retained Media Sequence view in this example.')
 
         try {
             this.lifetime.own(() => this.clearViews())

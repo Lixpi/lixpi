@@ -3,7 +3,7 @@
 // The curves are the JS side of the ones declared in
 // `@lixpi/ui-primitives/styles/transitions`. Anything that animates
 // from code — d3 transitions, the Web Animations API, requestAnimationFrame
-// loops, PIXI tweens, canvas chrome, SVG icons — needs an easing *function*
+// loops, PIXI tweens, canvas controls, SVG icons — needs an easing *function*
 // rather than a CSS `cubic-bezier()` string, so the same control points are
 // solved here. Consumers that hand timing back to CSS (inline styles, WAAPI
 // options, generated keyframes) should use `TRANSITION_EASING_CSS` so both

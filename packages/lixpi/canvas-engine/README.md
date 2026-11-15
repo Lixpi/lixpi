@@ -42,7 +42,7 @@ Shared modules contain:
 - `collision`: rectangle collision resolution.
 - `canvas-node`: rigid group movement that preserves caller node payloads.
 - `tree-layout`: tidy-tree layout over abstract boxes.
-- `zoom-scaling`: bounded sizing for controls and connector geometry.
+- `zoom-scaling`: bounded sizing for controls and connector geometry. `scaleCanvasControlsWorldSizeForZoom` returns sizes for transformed canvas content; `scaleCanvasControlsScreenSizeForZoom` returns projected screen sizes. `getCanvasControlsScreenLayout` positions a control group outside the transformed viewport.
 
 Lixpi branch lineage and generated-output admission belong to `@lixpi/canvas-components/workspace/shared`. Their adapters supply measurements and constraints to the engine.
 

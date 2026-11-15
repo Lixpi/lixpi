@@ -48,8 +48,8 @@ const extractBlock = (source: string, selector: string): string => {
 describe('generated media review controls', () => {
     const canvasSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-canvas.ts')
         + readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-branch-marker-presentation.ts')
-    const scssSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-chrome.scss')
-    const chromeSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-chrome.ts')
+    const scssSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-controls.scss')
+    const controlsSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/media/generated-output-node-controls.ts')
     const branchActionsSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-actions.ts')
     const branchScssSource = readSourceFile('../../packages/lixpi/canvas-components/src/workspace/frontend/nodes/branch-marker-content.scss')
     const layoutSource = readSourceFile('../views/layouts/layout.ts')
@@ -59,10 +59,10 @@ describe('generated media review controls', () => {
     const footerScssSource = readSourceFile('../../packages/lixpi/ui-kit/src/components/canvasNodeFooter/canvas-node-footer.scss')
 
     it('uses the shared icon set and pure dropdown for review actions', () => {
-        expectSourceToContain(chromeSource, 'checkMarkIcon,', 'generated-output-node-chrome.ts')
-        expectSourceToContain(chromeSource, 'refreshIcon,', 'generated-output-node-chrome.ts')
+        expectSourceToContain(controlsSource, 'checkMarkIcon,', 'generated-output-node-controls.ts')
+        expectSourceToContain(controlsSource, 'refreshIcon,', 'generated-output-node-controls.ts')
         expectSourceToContain(footerSource, 'innerHTML=${config.icons.info}', 'canvasNodeFooter.ts')
-        expectSourceToContain(chromeSource, 'icons: { info: infoLetterIcon, progress: progressRippleArtwork }', 'generated-output-node-chrome.ts')
+        expectSourceToContain(controlsSource, 'icons: { info: infoLetterIcon, progress: progressRippleArtwork }', 'generated-output-node-controls.ts')
         expectSourceToContain(canvasSource, 'new BranchMarkerActions({', 'WorkspaceCanvas.ts')
         expectSourceToContain(branchActionsSource, 'buttonIcon: refreshIcon', 'branch-marker-actions.ts')
         expectSourceToContain(branchActionsSource, "title: 'Regenerate variants'", 'branch-marker-actions.ts')

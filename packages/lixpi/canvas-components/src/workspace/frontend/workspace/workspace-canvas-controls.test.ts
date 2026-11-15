@@ -7,19 +7,19 @@ import {
     vi,
 } from 'vitest'
 import {
-    WorkspaceCanvasChrome,
-    type WorkspaceCanvasChromePorts,
-    type WorkspaceCanvasChromeSettings,
-} from './workspace-canvas-chrome.ts'
+    WorkspaceCanvasControls,
+    type WorkspaceCanvasControlsPorts,
+    type WorkspaceCanvasControlsSettings,
+} from './workspace-canvas-controls.ts'
 
-const owners: WorkspaceCanvasChrome[] = []
+const owners: WorkspaceCanvasControls[] = []
 const setup = (palette = {
     steelBlue: '#5d656d',
     nightBlue: '#42494f',
     offWhite: '#f5f3f3',
 }, controls = true) => {
     vi.useFakeTimers()
-    const settings: WorkspaceCanvasChromeSettings = {
+    const settings: WorkspaceCanvasControlsSettings = {
         panel: {
             defaultDimensions: { width: 500 },
             dimensions: { maxPaneMargin: 30 },
@@ -39,14 +39,14 @@ const setup = (palette = {
         modelMenuHoverBackground: '#abc',
         palette,
     }
-    const ports: WorkspaceCanvasChromePorts = {
+    const ports: WorkspaceCanvasControlsPorts = {
         document,
         createDocument: vi.fn(async () => {}),
         uploadFile: vi.fn(async () => {}),
         importUrl: vi.fn(async () => {}),
         reportError: vi.fn(),
     }
-    const owner = new WorkspaceCanvasChrome(settings, ports, controls ? {} : { controls: false })
+    const owner = new WorkspaceCanvasControls(settings, ports, controls ? {} : { controls: false })
     owners.push(owner)
     document.body.append(owner.element)
     const button = (label: string) => owner.element.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!
@@ -72,7 +72,7 @@ afterEach(() => {
     vi.useRealTimers()
 })
 
-describe('workspace canvas chrome', () => {
+describe('workspace canvas controls', () => {
     it('exposes independent renderer and control mounts without creating generic controls', () => {
         const {
             owner,
@@ -107,9 +107,9 @@ describe('workspace canvas chrome', () => {
         expect(second.owner.element.querySelector('.workspace-zoom-indicator')?.textContent).toBe('100%')
         expect(first.owner.element.classList.contains('workspace-canvas-right-side-panel-open')).toBe(true)
         expect(second.owner.element.classList.contains('workspace-canvas-right-side-panel-open')).toBe(false)
-        expect(first.owner.element.style.getPropertyValue('--workspace-chrome-steel-blue')).toBe('#5d656d')
-        expect(second.owner.element.style.getPropertyValue('--workspace-chrome-steel-blue')).toBe('#112233')
-        expect(document.documentElement.style.getPropertyValue('--workspace-chrome-steel-blue')).toBe('')
+        expect(first.owner.element.style.getPropertyValue('--workspace-controls-steel-blue')).toBe('#5d656d')
+        expect(second.owner.element.style.getPropertyValue('--workspace-controls-steel-blue')).toBe('#112233')
+        expect(document.documentElement.style.getPropertyValue('--workspace-controls-steel-blue')).toBe('')
     })
 
     it('retains URL entry when navigating back and submits it by Enter or the Add button', () => {
@@ -187,8 +187,8 @@ describe('workspace canvas chrome', () => {
     })
 })
 
-describe('workspace canvas chrome controls option', () => {
-    it('omits chrome controls while keeping public mounts detached and methods safe', () => {
+describe('workspace canvas controls visibility option', () => {
+    it('omits controls while keeping public mounts detached and methods safe', () => {
         const { owner } = setup(undefined, false)
 
         expect(owner.glassTargets).toHaveLength(0)

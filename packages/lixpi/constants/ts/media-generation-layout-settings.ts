@@ -35,19 +35,19 @@ export type MediaGenerationMarkerSettings = {
     text: MediaGenerationMarkerTextSettings
 }
 
-export type GeneratedMediaChromeLayoutSettings = {
+export type GeneratedMediaControlsLayoutSettings = {
     // Base screen-pixel height reserved for the single-line title above a
     // resolved media node, including the title's bottom padding.
     titleCollisionHeight: number
-    // Screen-pixel gap between a media node's bottom edge and its chrome strip.
+    // Screen-pixel gap between a media node's bottom edge and its controls strip.
     topGap: number
-    // Screen-pixel icon/button size of the chrome strip.
+    // Screen-pixel icon/button size of the controls strip.
     iconSize: number
     // Screen-pixel height of the shared video controls bar.
     videoControlsHeight: number
     // Screen-pixel gap between a video node edge and the external controls strip.
     videoControlsBottomInset: number
-    // Bounded zoom curve used to project screen-fixed chrome. Collision layout
+    // Bounded zoom curve used to project screen-fixed controls. Collision layout
     // reserves the curve's maximum world-space footprint.
     zoomScaling: {
         minZoom: number
@@ -73,7 +73,7 @@ export type MediaGenerationLayoutSettings = {
     preFrameCircleScale: number
     serverFallbackPaneHeight: number
     marker: MediaGenerationMarkerSettings
-    generatedMediaChrome: GeneratedMediaChromeLayoutSettings
+    generatedMediaControls: GeneratedMediaControlsLayoutSettings
     generatedMediaProgress: GeneratedMediaProgressLayoutSettings
 }
 
@@ -144,9 +144,9 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
             responseLineHeight: 1.15,
         },
     },
-    // Screen-fixed title/model chrome reserved around resolved media in collision
+    // Screen-fixed title/model controls reserved around resolved media in collision
     // boxes, on both the API and the WebUI.
-    generatedMediaChrome: {
+    generatedMediaControls: {
         titleCollisionHeight: 46,
         topGap: 8,
         iconSize: 34,

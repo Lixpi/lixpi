@@ -140,7 +140,7 @@ The [dropdown](src/components/dropdown/README.md) accepts custom trigger content
 
 | Import | Contract | Styles |
 |---|---|---|
-| `/components/bubble-menu` | Context-sensitive floating toolbar with caller-owned items, selection bounds and visual scale. Position retries end on hide or disposal. | `/styles/bubble-menu` |
+| `/components/bubble-menu` | [BubbleMenu](src/components/bubbleMenu/README.md) provides inline and floating toolbars. Its icon selector uses the same component in a vertical layout. | `/styles/bubble-menu` |
 | `/components/side-panel` | Resizing, width state, drawer transitions, backdrop, outside close and optional swipe gestures. Pass `root` to scope its document and persistence callbacks for stored width. | `/styles/side-panel` |
 | `/components/popover` | `InteractivePreviewPopover` coordinates pointer/focus activation, Escape, outside dismissal and disposal around explicit root, trigger and popover elements. | Caller surface |
 | `/components/loading-placeholder` | Error/retry DOM, with optional document, theme and overlay. The class instance owns its listeners and element. | `/styles/loading-placeholder` |
