@@ -104,6 +104,32 @@
     filter: none;
 }
 
+[data-canvas-theme] .bubble-menu-link-input {
+    border-color: var(--canvas-border);
+    border-radius: var(--canvas-panel-radius);
+    background: var(--canvas-surface-raised);
+    box-shadow: var(--canvas-shadow);
+}
+
+[data-canvas-theme] .link-input-field {
+    border-radius: var(--canvas-control-radius);
+    background: var(--canvas-surface);
+    color: var(--canvas-text);
+    font-family: var(--canvas-font-family);
+}
+
+[data-canvas-theme] .link-input-field:focus {
+    background: var(--canvas-surface-hover);
+}
+
+[data-canvas-theme] .link-input-field::placeholder {
+    color: var(--canvas-text-muted);
+}
+
+[data-canvas-theme] .link-input-apply svg {
+    fill: var(--canvas-success);
+}
+
 [data-canvas-theme] .dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button,
 [data-canvas-theme] .dropdown-menu-popover .bubble-body .submenu li {
     border-radius: var(--canvas-control-radius);

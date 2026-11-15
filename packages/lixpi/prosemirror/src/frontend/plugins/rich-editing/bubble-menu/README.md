@@ -44,7 +44,7 @@ This plugin is a **thin adapter** over the core `BubbleMenu` class from `@lixpi/
 4. **Link input management** — ProseMirror-specific panel for URL editing
 5. **Image wrapper tracking** — Manages `pm-image-menu-active` CSS class for visual feedback
 
-The core `BubbleMenu` handles DOM creation, context switching, transform-aware positioning, and the prevent-hide pattern.
+The core `BubbleMenu` handles DOM creation, context switching, transform-aware positioning, and the prevent-hide pattern. Within a canvas theme, the Link URL form retains the canvas panel surface, radius, border and shadow, along with its input, focus and placeholder colors.
 
 ### Files
 

@@ -92,9 +92,25 @@
     outline-offset: 2px;
 }
 
+.workspace-conversation-layout > .workspace-conversation-panel:has(> .workspace-conversation-menu.is-visible),
+.workspace-conversation-layout > .workspace-canvas-global-composer:has(.ai-prompt-model-menu-info-bubble.is-visible) {
+    z-index: calc(var(--side-panel-resize-handle-z-index, 9990) + 1);
+}
+
+.workspace-conversation-menu {
+    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+}
+
+.workspace-conversation-menu > .bubble-menu-content {
+    padding: 12px;
+    border-radius: 12px;
+    border-color: var(--canvas-border, #{themeScope.token("border", themePalette.$roles)});
+    background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
+    box-shadow: var(--canvas-shadow, #{themeScope.token("shadow-control", themePalette.$roles)});
+}
+
 .workspace-conversation-menu-content {
     display: grid;
-    padding: 26px 30px;
     gap: 12px;
     width: 240px;
     max-width: calc(100vw - 72px);
