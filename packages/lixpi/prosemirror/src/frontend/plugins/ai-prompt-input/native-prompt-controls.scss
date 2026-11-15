@@ -218,14 +218,17 @@
     max-width: var(--ai-prompt-model-menu-info-bubble-max-width, min(640px, calc(100vw - 20px)));
     max-height: min(var(--ai-prompt-model-menu-info-bubble-max-height, calc(100dvh - 16px)), calc(100dvh - 16px));
     box-sizing: border-box;
-    padding: var(--ai-prompt-model-menu-info-bubble-padding, 30px 34px);
+    padding: var(--ai-prompt-model-menu-info-bubble-padding, 12px 14px);
+    border: none;
+    border-radius: var(--ai-prompt-model-menu-info-bubble-border-radius, #{themeScope.token("components-composer-model-menu-info-bubble-border-radius", themePalette.$roles)});
+    background: var(--ai-prompt-model-menu-info-bubble-background, #{themeScope.token("components-composer-model-menu-info-bubble-background", themePalette.$roles)});
+    box-shadow: var(--ai-prompt-model-menu-info-bubble-box-shadow, #{themeScope.token("components-composer-controls-bubble-menu-content-base-shadow", themePalette.$roles)});
+    color: var(--ai-prompt-model-menu-info-bubble-color, #{themeScope.token("components-composer-model-menu-info-bubble-color", themePalette.$roles)});
     overflow-y: auto;
     overscroll-behavior: contain;
 }
 
 .ai-prompt-model-menu-content {
-    --ai-prompt-model-menu-section-title-color: #{themeScope.token("button-text", themePalette.$roles)};
-    --ai-prompt-model-menu-control-label-color: #{themeScope.token("button-text", themePalette.$roles)};
     display: flex;
     flex-direction: column;
     gap: var(--ai-prompt-model-menu-content-gap, 12px);

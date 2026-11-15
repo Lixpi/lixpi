@@ -350,8 +350,15 @@ export class PromptModelDropdownOptionView implements SlidingDropdownOptionRende
             .attr('font-size', appearance.valueFontSize)
             .attr('text-anchor', 'start')
             .attr('dominant-baseline', 'central')
-        this.provider = this.label.append('tspan').attr('class', 'ai-model-sliding-dropdown-option-provider')
-        this.model = this.label.append('tspan').attr('class', 'ai-model-sliding-dropdown-option-model')
+        // WebKit needs the centered baseline on each span as well as its text parent.
+        this.provider = this.label
+            .append('tspan')
+            .attr('class', 'ai-model-sliding-dropdown-option-provider')
+            .attr('dominant-baseline', 'central')
+        this.model = this.label
+            .append('tspan')
+            .attr('class', 'ai-model-sliding-dropdown-option-model')
+            .attr('dominant-baseline', 'central')
         this.render(state)
     }
 

@@ -139,11 +139,11 @@ The bottom settings row summarizes the active media model and its primary config
 
 The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper. Model and configuration changes trigger a new position measurement after the trigger summary and menu structure update.
 
-The model settings menu uses UI-kit BubbleMenu surface styling and is capped to the viewport space above its trigger. Its content scrolls when the configured model rows exceed that height. Sliding dropdowns use their portaled wheel and touch scroll surface.
+The model settings surface keeps its own themed panel appearance and is capped to the viewport space above its trigger. Its content scrolls when the configured model rows exceed that height. Sliding dropdowns use their portaled wheel and touch scroll surface.
 
 Each section has a title, help tooltip, `Add model` action, and one or more removable model rows. The final row's removal control stays disabled.
 
-The web UI projects model-menu trigger, layout, divider, and tooltip settings to CSS custom properties on the NodeView root through `applyAiModelMenuStyleSettings()`. The shared BubbleMenu owns the menu surface and foreground. Layout rules stay in `@lixpi/prosemirror/styles/editor/native-prompt-controls`.
+The web UI projects model-menu trigger, surface, text, layout, divider, and tooltip settings to CSS custom properties on the NodeView root through `applyAiModelMenuStyleSettings()`. BubbleMenu supplies positioning and lifecycle; `settings.aiPromptInput.modelMenu.styles` owns the matrix panel's appearance. Layout rules stay in `@lixpi/prosemirror/styles/editor/native-prompt-controls`.
 
 The NodeView hides the model menu on document `mousedown` outside the controls row, model menu, and sliding-dropdown scroll surfaces/SVGs. It removes that listener in `destroy()`.
 
