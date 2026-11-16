@@ -124,12 +124,20 @@ const readDocumentOverflow = (document: Document): ScrollOverflow | null => {
 
     const root = view.getComputedStyle(document.documentElement)
     const body = view.getComputedStyle(document.body)
-    const axis = (rootValue: string, bodyValue: string): AxisOverflow =>
-        HIDDEN_OVERFLOW_VALUES.has(rootValue) || HIDDEN_OVERFLOW_VALUES.has(bodyValue) ? 'hidden' : 'scroll'
+    const axis = (
+        rootValue: string,
+        bodyValue: string,
+    ): AxisOverflow => HIDDEN_OVERFLOW_VALUES.has(rootValue)
+        || HIDDEN_OVERFLOW_VALUES.has(bodyValue)
+        ? 'hidden'
+        : 'scroll'
     const x = axis(root.overflowX, body.overflowX)
     const y = axis(root.overflowY, body.overflowY)
 
-    if (x === 'hidden' && y === 'hidden')
+    if (
+        x === 'hidden'
+        && y === 'hidden'
+    )
         return null
 
     return {
@@ -155,7 +163,10 @@ const isPolicyAllowed = (element: Element): boolean => {
     return marker !== null && (marker === editable || editable.contains(marker))
 }
 
-const captureSelection = (document: Document, element: Element): SelectionSnapshot | null => {
+const captureSelection = (
+    document: Document,
+    element: Element,
+): SelectionSnapshot | null => {
     const selection = document.getSelection()
 
     if (
@@ -173,7 +184,10 @@ const captureSelection = (document: Document, element: Element): SelectionSnapsh
     }
 }
 
-const restoreSelection = (document: Document, snapshot: SelectionSnapshot | null): void => {
+const restoreSelection = (
+    document: Document,
+    snapshot: SelectionSnapshot | null,
+): void => {
     const selection = document.getSelection()
 
     if (
@@ -231,7 +245,7 @@ class ScrollbarAttachment {
         private readonly style: CSSStyleDeclaration,
         createInstance: (slot: HTMLElement | null) => OverlayScrollbars,
     ) {
-        this.slot = supportsStickySlot(style) ? createDocumentHtml(element.ownerDocument)`<div className=${SCROLLBAR_SLOT_CLASS}></div>` as HTMLElement : null
+        this.slot = supportsStickySlot(style) ? (createDocumentHtml(element.ownerDocument)`<div className=${SCROLLBAR_SLOT_CLASS}></div>` as HTMLElement) : null
 
         if (this.slot) {
             element.prepend(this.slot)
@@ -247,10 +261,7 @@ class ScrollbarAttachment {
         const MutationObserverConstructor = view?.MutationObserver
         const ResizeObserverConstructor = view?.ResizeObserver
         this.childObserver = MutationObserverConstructor ? new MutationObserverConstructor(this.keepSlotFirst) : null
-        this.childObserver?.observe(
-            element,
-            { childList: true },
-        )
+        this.childObserver?.observe(element, { childList: true })
         this.resizeObserver = ResizeObserverConstructor ? new ResizeObserverConstructor(this.measure) : null
         this.resizeObserver?.observe(element)
         this.measure()
@@ -611,8 +622,5 @@ export const acquireDocumentScrollbars = (document: Document): DocumentScrollbar
     }
     documentEntries.set(document, entry)
 
-    return new DocumentScrollbarsLeaseHandle(
-        document,
-        entry,
-    )
+    return new DocumentScrollbarsLeaseHandle(document, entry)
 }

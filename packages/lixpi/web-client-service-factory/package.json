@@ -11,7 +11,6 @@
         ".": "./src/index.ts",
         "./vite": "./src/vite/index.ts",
         "./client-performance": "./src/application/clientPerformanceReport.ts",
-
         "./styles/foundation": {
             "types": "./styles/styles.d.ts",
             "sass": "./styles/foundation.scss",

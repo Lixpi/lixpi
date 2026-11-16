@@ -2,7 +2,7 @@ $workspace-conversation-content-inset: 20px;
 
 .workspace-conversation-layout > .workspace-canvas-global-composer {
     width: auto;
-    margin-inline: calc(#{$workspace-conversation-content-inset} - var(--ai-prompt-input-ring-width));
+    margin-inline: calc($workspace-conversation-content-inset - var(--ai-prompt-input-ring-width));
 }
 
 .workspace-conversation-layout > .workspace-canvas-global-context-chips {

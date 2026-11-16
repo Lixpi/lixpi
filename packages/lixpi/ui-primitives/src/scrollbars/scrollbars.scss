@@ -43,7 +43,9 @@
     --os-handle-perpendicular-size-active: 100%;
     --os-handle-interactive-area-offset: 5px;
     z-index: 1;
-    transition: overlayVisibilityTransition(opacity), overlayVisibilityTransition(visibility);
+    transition:
+        overlayVisibilityTransition(opacity),
+        overlayVisibilityTransition(visibility);
 }
 
 .os-scrollbar.lixpi-scrollbar.os-scrollbar-vertical {
