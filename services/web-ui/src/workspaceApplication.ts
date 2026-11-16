@@ -92,9 +92,12 @@ export const createWorkspaceApplication = (config: {
                 : undefined,
                 onAccessDenied: recovery.deny,
             })
+
             // The first connection succeeded inside init(), before this
             // listener existed, so a later outage starts its own retry window.
-            performance.mark('startup:nats-connected')
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:nats-connected')
+
             recovery.connected()
             nats.onReconnect(recovery.connected)
 
@@ -137,7 +140,9 @@ export const createWorkspaceApplication = (config: {
             dependencies: { auth },
             router,
         }) => {
-            performance.mark('startup:view')
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:view')
+
             config.onReady()
 
             return createLayout({
@@ -183,7 +188,8 @@ export const createWorkspaceApplication = (config: {
                     },
                 })
 
-            performance.mark('startup:user-loaded')
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:user-loaded')
         },
         startServices: async ({ dependencies: {
             auth,
@@ -208,7 +214,9 @@ export const createWorkspaceApplication = (config: {
             })
             servicesStore.getData('aiModelService')!.getAvailableAiModels()
             servicesStore.getData('workspaceService')!.getUserWorkspaceTree()
-            performance.mark('startup:services')
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:services')
         },
         shutdownServices: async () => {
             await servicesStore.getData('workspaceService')?.canvasSessions.close()

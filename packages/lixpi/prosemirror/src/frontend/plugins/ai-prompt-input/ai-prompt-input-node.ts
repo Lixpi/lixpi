@@ -1004,7 +1004,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
         if (contextTrayEl)
             dom.appendChild(contextTrayEl)
 
-        dom.appendChild(contentDOM)
+        dom.appendChild(surface.scroller)
 
         if (capabilityControls)
             dom.appendChild(capabilityControlsEl)
@@ -1041,6 +1041,19 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             'nowheel',
         )
         modelMenu.element.ariaLabel = 'Model settings'
+
+        // `ignoreMutation` skips these regions, so scroll containers inside them
+        // can host the shared overlay scrollbar without editing the document.
+        for (const region of [
+            controlsEl,
+            mediaModeSwitchHost,
+            contextTrayEl,
+            modelMenu.element,
+        ]) {
+            if (region)
+                region.dataset.scrollbars = 'auto'
+        }
+
         modelMenu.element.addEventListener(
             'wheel',
             handleModelMenuWheel,
@@ -1087,6 +1100,9 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             dom,
             contentDOM,
             ignoreMutation: (mutation: ViewMutationRecord) => {
+                if (surface.ownsMutationTarget(mutation.target as Node))
+                    return true
+
                 if (
                     contextTrayEl
                     && (mutation.target === contextTrayEl || contextTrayEl.contains(mutation.target as Node))

@@ -25,6 +25,25 @@ import {
     type ViewportSize,
 } from './glass-border-geometry.ts'
 
+// Diagnostic spans are folded away by the web client Vite config when disabled.
+const recordTiming = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true'
+    ? (name: string, start: number): void => {
+        const end = performance.now()
+
+        if (end - start < 8)
+            return
+
+        performance.measure(
+            name,
+            {
+                start,
+                end,
+            },
+        )
+        performance.clearMeasures(name)
+    }
+    : undefined
+
 export type GlassBorderOptions = {
     surface: CanvasDrawingSurface
     style: GlassBorderStyle
@@ -151,6 +170,7 @@ export class GlassBorder {
         width: 1,
         height: 1,
     }
+    declare private readonly profileGlassToggleListener: (() => void) | undefined
     private destroyed = false
 
     constructor(private readonly options: GlassBorderOptions) {
@@ -214,6 +234,11 @@ export class GlassBorder {
             throw error
         }
 
+        if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true') {
+            this.profileGlassToggleListener = () => this.options.surface.invalidate()
+            window.addEventListener('lixpi:profile-glass-toggle', this.profileGlassToggleListener)
+        }
+
         signal.addEventListener(
             'abort',
             this.destroy,
@@ -241,43 +266,54 @@ export class GlassBorder {
         if (this.destroyed)
             return
 
-        const {
-            style,
-            surface: { resources },
-        } = this.options
-        const borderWidth = Math.max(0, style.widthPx)
-        const visible = style.enabled
-            && borderWidth > 0
-            && viewport.width > 0
-            && viewport.height > 0
-            ? datums.filter(
-                datum =>
-                    datum.visible && datum.x + datum.width + borderWidth >= 0 && datum.y + datum.height + borderWidth >= 0 && datum.x - borderWidth <= viewport.width && datum.y - borderWidth <= viewport.height,
-            )
-            : []
-        resources.setVisible(this.root, visible.length > 0)
+        const syncStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
 
-        if (visible.length === 0) {
-            if (
-                this.capture
-                && this.captureSpec?.enabled !== false
-            ) {
-                this.captureSpec = {
-                    ...this.captureSpec!,
-                    enabled: false,
+        try {
+            const {
+                style,
+                surface: { resources },
+            } = this.options
+            const borderWidth = Math.max(0, style.widthPx)
+            const visible = style.enabled
+                && (
+                    import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG !== 'true'
+                    || !document.documentElement.hasAttribute('data-lixpi-profile-glass-bypass')
+                )
+                && borderWidth > 0
+                && viewport.width > 0
+                && viewport.height > 0
+                ? datums.filter(
+                    datum =>
+                        datum.visible && datum.x + datum.width + borderWidth >= 0 && datum.y + datum.height + borderWidth >= 0 && datum.x - borderWidth <= viewport.width && datum.y - borderWidth <= viewport.height,
+                )
+                : []
+            resources.setVisible(this.root, visible.length > 0)
+
+            if (visible.length === 0) {
+                if (
+                    this.capture
+                    && this.captureSpec?.enabled !== false
+                ) {
+                    this.captureSpec = {
+                        ...this.captureSpec!,
+                        enabled: false,
+                    }
+                    resources.updateCapture(this.capture.handle, this.captureSpec)
                 }
-                resources.updateCapture(this.capture.handle, this.captureSpec)
+
+                this.captureSignature = ''
+
+                return
             }
 
-            this.captureSignature = ''
-
-            return
+            this.syncDisplacement(visible, viewport)
+            this.syncCapture(visible, viewport)
+            this.syncPaths(visible)
+            this.syncMeshes(visible)
+        } finally {
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:glass-sync', syncStart)
         }
-
-        this.syncDisplacement(visible, viewport)
-        this.syncCapture(visible, viewport)
-        this.syncPaths(visible)
-        this.syncMeshes(visible)
     }
 
     private syncDisplacement(
@@ -293,14 +329,30 @@ export class GlassBorder {
         if (signature === this.displacementSignature)
             return
 
-        const pixels = bakeGlassDisplacementMap(
-            datums,
-            viewport,
-            this.options.style,
-        )
-        this.options.surface.resources.updateTexture(this.displacementTexture, pixels)
-        this.mapSize = pixels.size
-        this.displacementSignature = signature
+        const displacementStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
+
+        try {
+            const pixels = bakeGlassDisplacementMap(
+                datums,
+                viewport,
+                this.options.style,
+            )
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:glass-map-bake', displacementStart)
+
+            const mapUploadStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
+            this.options.surface.resources.updateTexture(this.displacementTexture, pixels)
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:glass-map-upload', mapUploadStart)
+
+            this.mapSize = pixels.size
+            this.displacementSignature = signature
+        } finally {
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:glass-displacement', displacementStart)
+        }
     }
 
     private syncCapture(
@@ -505,6 +557,13 @@ export class GlassBorder {
             resources,
             signal,
         } = this.options.surface
+
+        if (
+            import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true'
+            && this.profileGlassToggleListener
+        )
+            window.removeEventListener('lixpi:profile-glass-toggle', this.profileGlassToggleListener)
+
         signal.removeEventListener('abort', this.destroy)
         this.displace?.()
         this.displace = null

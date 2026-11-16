@@ -98,7 +98,8 @@ The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option va
 div.ai-prompt-input-wrapper[data-empty]
 ├── [div.ai-prompt-media-mode-switch  Image / Video icon switch, unless externally mounted]
 ├── [context tray from createContextTray()]
-├── div.ai-prompt-input-content
+├── div.ai-prompt-input-scroll[data-scrollbars="auto"]
+│   └── div.ai-prompt-input-content[data-scrollbars="off"]
 ├── div.ai-prompt-input-controls
     ├── [button.ai-prompt-model-menu-trigger, unless externally mounted]
     └── [submit button from createSubmitButton()]
@@ -176,7 +177,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## NodeView Lifecycle
 
-- `ignoreMutation()` returns `true` for mutations inside the controls row, media-mode switch, and injected context tray.
+- `ignoreMutation()` returns `true` for mutations inside the controls row, media-mode switch, injected context tray and model menu, and for the `.ai-prompt-input-scroll` wrapper outside the editable content. The wrapper owns the input's scrolling, so the shared overlay scrollbar adds its elements beside the content instead of inside it. Those regions carry `data-scrollbars="auto"`; the editable content carries `data-scrollbars="off"`.
 - `stopEvent()` returns `true` for events inside the controls row, media-mode switch, and injected context tray.
 - `update()` accepts `aiPromptInput` nodes, syncs empty state, and updates every mounted dropdown/tag row.
 - `destroy()` removes the document mouse listener, destroys the model menu content, destroys the `BubbleMenu`, and destroys mounted toggles, dropdowns, and tag rows.
@@ -195,7 +196,8 @@ SCSS lives in ``@lixpi/prosemirror/styles/editor/native-prompt-controls``.
 └── .floating-input-editor
     └── .ai-prompt-input-wrapper
         ├── [.ai-prompt-media-mode-switch when not externally mounted]
-        ├── .ai-prompt-input-content
+        ├── .ai-prompt-input-scroll
+        │   └── .ai-prompt-input-content
         └── .ai-prompt-input-controls
             ├── [.ai-prompt-model-menu-trigger when not externally mounted]
             ├── .ai-submit-button

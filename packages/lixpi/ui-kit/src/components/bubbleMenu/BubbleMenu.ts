@@ -61,6 +61,7 @@ export class BubbleMenu {
         const html = createDocumentHtml(options.parentEl.ownerDocument)
         const style = {
             position: this.inline ? 'relative' : 'absolute',
+            display: 'none',
             visibility: 'hidden',
         }
         const menuClass = [
@@ -138,7 +139,13 @@ export class BubbleMenu {
 
         this.updateVisibleItems(context)
         this.menu.classList.toggle(noEntranceMotionClass, !(position?.animateOnShow ?? bubbleMenuSettings.placement.animateOnShow))
-        applyStyle(this.menu, { visibility: 'hidden' })
+        applyStyle(
+            this.menu,
+            {
+                display: '',
+                visibility: 'hidden',
+            },
+        )
         this.menu.classList.add('is-visible')
         this.onShow?.(context)
         this.lastPosition = position ?? null
@@ -158,7 +165,14 @@ export class BubbleMenu {
         )
             return
 
-        applyStyle(this.menu, { visibility: 'hidden' })
+        // Invisible menus and nested dropdowns must not extend scrollable content.
+        applyStyle(
+            this.menu,
+            {
+                display: 'none',
+                visibility: 'hidden',
+            },
+        )
         this.menu.classList.remove('is-visible')
         this.currentContext = ''
         this.lastPosition = null

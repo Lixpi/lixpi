@@ -5,17 +5,23 @@ mod diagnostics;
 mod downloads;
 mod hot_reload;
 mod keyboard;
+#[cfg(target_os = "macos")]
 mod local_trust;
 mod origins;
+mod startup_navigation;
+#[cfg(target_os = "macos")]
+mod storage;
 mod title_bar;
-mod webkit;
 mod window_commands;
+
+use std::sync::Arc;
 
 use origins::{
     NavigationAction,
     NewWindowAction,
     Origins,
 };
+use startup_navigation::StartupNavigation;
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
 use tauri::{
@@ -24,7 +30,6 @@ use tauri::{
     WebviewWindowBuilder,
     WindowEvent,
     webview::{
-        DownloadEvent,
         NewWindowResponse,
         PageLoadEvent,
     },
@@ -42,8 +47,7 @@ const TITLE: &str = "Lixpi";
 /// Returns the error that stopped the app from starting or running, such as a
 /// window that could not be created.
 pub fn run() -> tauri::Result<()> {
-    tauri::Builder::default()
-        .runtime(tauri_runtime_wry::Wry {})
+    runtime_builder()?
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .menu(app_menu::build)
@@ -60,6 +64,22 @@ pub fn run() -> tauri::Result<()> {
         .run(tauri::generate_context!())
 }
 
+#[cfg(target_os = "macos")]
+fn runtime_builder() -> tauri::Result<tauri::Builder> {
+    let runtime = storage::configure(
+        tauri_runtime_cef::Cef::default()
+            .sandbox(tauri_runtime_cef::SandboxPolicy::Required)
+            .certificate_errors(tauri_runtime_cef::CertificateErrorPolicy::Cancel),
+    )?;
+
+    Ok(tauri::Builder::default().runtime(local_trust::configure(runtime)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn runtime_builder() -> tauri::Result<tauri::Builder> {
+    Err(std::io::Error::other("The Lixpi desktop application currently supports macOS only").into())
+}
+
 // The window shows web-ui from the same origin a browser uses. Sign-in,
 // NATS and the API all check that origin, so the app works with every
 // environment exactly as the browser does, without a copy of web-ui inside it.
@@ -73,8 +93,11 @@ fn open_main_window(
 
     let web_ui = origins.web_ui.clone();
     let blank = tauri::Url::parse("about:blank").map_err(tauri::Error::InvalidUrl)?;
-    // The window starts blank and opens web-ui once it can answer certificate
-    // checks for the local stack.
+    let startup = Arc::new(StartupNavigation::default());
+    let loaded_startup = Arc::clone(&startup);
+    let startup_web_ui = web_ui.clone();
+    // CEF defers the builder URL until its document-start scripts are ready.
+    // Wait for that blank load and verified trust before opening web-ui.
     let builder = WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::External(blank))
         .title(window_title(""))
         .inner_size(1440.0, 900.0)
@@ -106,20 +129,7 @@ fn open_main_window(
 
             NewWindowResponse::Deny
         })
-        // WebKit saves each download to the Downloads folder under a name
-        // that doesn't overwrite an existing file.
-        .on_download(|_, event| {
-            if let DownloadEvent::Finished {
-                url,
-                success: false,
-                ..
-            } = event
-            {
-                eprintln!("Download failed: {}", origins::without_query(&url));
-            }
-
-            true
-        });
+        .on_download(|webview, event| downloads::handle(&webview, event));
     let builder = match hot_reload::initialization_script() {
         Some(script) => builder.initialization_script(script),
         None => builder,
@@ -135,12 +145,24 @@ fn open_main_window(
     #[cfg(feature = "diagnostics")]
     let diagnostics = diagnostics::Diagnostics::new(app);
     #[cfg(feature = "diagnostics")]
-    let page_loads = std::sync::Arc::clone(&diagnostics);
+    let page_loads = Arc::clone(&diagnostics);
     #[cfg(feature = "diagnostics")]
-    let builder = builder.initialization_script(diagnostics::CAPTURE_SCRIPT);
+    let builder = diagnostics::INITIALIZATION_SCRIPTS
+        .iter()
+        .fold(builder, |builder, &script| builder.initialization_script(script));
     let builder = builder.on_page_load(move |window, payload| {
         if matches!(payload.event(), PageLoadEvent::Finished) {
-            title_bar::reflect_fullscreen(&window);
+            if payload.url().as_str() == "about:blank"
+                && loaded_startup.blank_finished()
+                && let Err(error) = window.navigate(startup_web_ui.clone())
+            {
+                #[cfg(feature = "diagnostics")]
+                page_loads.record(&format!("Could not open web-ui after Chromium startup: {error}"));
+                #[cfg(not(feature = "diagnostics"))]
+                eprintln!("Could not open web-ui after Chromium startup: {error}");
+            }
+
+            title_bar::reflect_fullscreen_after_page_load(window);
         }
 
         #[cfg(feature = "diagnostics")]
@@ -155,13 +177,48 @@ fn open_main_window(
         }
     });
 
-    #[cfg(feature = "diagnostics")]
-    diagnostics.watch(window.clone());
-
     #[cfg(target_os = "macos")]
     keyboard::install(window.clone());
 
-    webkit::open(&window, web_ui)
+    #[cfg(target_os = "macos")]
+    {
+        let trust = local_trust::verify(&window);
+        #[cfg(feature = "diagnostics")]
+        record_startup(&diagnostics, &trust);
+
+        trust?;
+    }
+
+    #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+    diagnostics.watch(window.clone());
+
+    if startup.trust_verified() {
+        window.navigate(web_ui)?;
+    }
+
+    Ok(())
+}
+
+// Records the runtime, storage and trust state a diagnostics build starts with.
+#[cfg(all(feature = "diagnostics", target_os = "macos"))]
+fn record_startup(
+    diagnostics: &diagnostics::Diagnostics,
+    trust: &tauri::Result<()>,
+) {
+    let version = tauri_runtime_cef::webview_version().unwrap_or_else(|error| format!("version unavailable: {error}"));
+    diagnostics.record(&format!(
+        "runtime Chromium {version}; native profiling enabled={}",
+        cfg!(feature = "profiling")
+    ));
+    diagnostics.record("encrypted browser storage: Lixpi Safe Storage system keychain; cef-protected profile");
+
+    match trust {
+        Ok(()) if local_trust::has_authority() => {
+            diagnostics.record("development CA preference verified: localhost subtree, 127.0.0.1/32, ::1/128; normal TLS validation enabled");
+        },
+        Ok(()) => diagnostics.record("development CA preference verified: no embedded authority; normal TLS validation enabled"),
+        Err(error) => diagnostics.record(&format!("Chromium trust initialization failed: {error}")),
+    }
 }
 
 fn window_title(document_title: &str) -> String {

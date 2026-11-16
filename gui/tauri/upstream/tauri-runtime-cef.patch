@@ -1,0 +1,74 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -66,14 +66,14 @@
+ version = "0.22"
+ 
+ [dependencies.cef]
+-version = "=154.5.0"
++version = "=156.4.0"
+ features = [
+     "build-util",
+     "linux-x11",
+ ]
+ 
+ [dependencies.cef-dll-sys]
+-version = "=154.5.0"
++version = "=156.4.0"
+ default-features = false
+ 
+ [dependencies.dioxus-debug-cell]
+--- a/src/platform/macos/window.rs
++++ b/src/platform/macos/window.rs
+@@ -112,13 +112,12 @@
+     observe_traffic_light_resets(&nswindow, pos);
+   }
+ 
+-  /// Restore the traffic light position after a window appearance change.
++  /// Restore the traffic light position after pending AppKit layout finishes.
+   ///
+-  /// Changing the appearance rebuilds the titlebar like a geometry change does,
+-  /// but posts no window notification, so the theme paths have to ask for it.
+-  /// AppKit rebuilds *after* the new appearance is observable, so the inset is
+-  /// restored on the next run loop turn — restoring it inline is overwritten.
+-  pub(crate) fn reapply_traffic_light_position_after_appearance_change(&self) {
++  /// CEF view attachment and appearance changes can rebuild the titlebar after
++  /// the inset was applied. Restore it on the next run loop turn. Theme paths
++  /// also use this because appearance changes post no geometry notification.
++  pub(crate) fn reapply_traffic_light_position_after_layout(&self) {
+     let nsview = self.nsview();
+     let Some(nswindow) = nsview.window() else {
+       return;
+--- a/src/runtime.rs
++++ b/src/runtime.rs
+@@ -2413,7 +2413,7 @@
+           // Following the system: the appearance changed without going through
+           // `set_theme`, so the titlebar rebuild still has to be undone.
+           #[cfg(target_os = "macos")]
+-          appwindow.reapply_traffic_light_position_after_appearance_change();
++          appwindow.reapply_traffic_light_position_after_layout();
+         }
+         self.emit_window_event(window_id, WindowEvent::ThemeChanged(system_theme));
+       }
+--- a/src/window.rs
++++ b/src/window.rs
+@@ -749,7 +749,7 @@
+     self.window.set_theme(tauri_theme_to_winit_theme(theme));
+     self.apply_cef_theme(theme);
+     #[cfg(target_os = "macos")]
+-    self.reapply_traffic_light_position_after_appearance_change();
++    self.reapply_traffic_light_position_after_layout();
+   }
+ 
+   fn apply_cef_theme(&self, theme: Option<Theme>) {
+@@ -909,6 +909,11 @@
+         webview,
+       )?;
+     }
++
++    // The initial inset precedes CEF native view attachment and layout.
++    // Reapply it after AppKit finishes that work.
++    #[cfg(target_os = "macos")]
++    appwindow.reapply_traffic_light_position_after_layout();
+ 
+     self
+       .state

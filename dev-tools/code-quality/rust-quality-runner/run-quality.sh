@@ -18,6 +18,13 @@ service_dir="/usr/src/service/$target"
 [ -f "$manifest_dir/Cargo.lock" ] || { echo "Missing Cargo.lock for Rust quality target: $target" >&2; exit 2; }
 [ -d "$service_dir" ] || { echo "Missing source mounts for Rust quality target: $target" >&2; exit 2; }
 
+# An adapter may mount a prepare step that fetches sources the target builds
+# from into the container, so they never reach the checkout or the formatter.
+prepare="/usr/src/prepare/$target/prepare.sh"
+if [ -f "$prepare" ]; then
+    sh "$prepare"
+fi
+
 # The crate root belongs to the container. Cargo never rewrites host manifests
 # outside the dependencies action.
 cp "$manifest_dir/Cargo.toml" "$service_dir/Cargo.toml"
@@ -34,6 +41,8 @@ if [ "$action" = dependencies ]; then
 fi
 
 runner=/usr/src/runner
+# Each mounted target is a standalone crate, so formatting without --all leaves
+# its path dependencies outside the target alone.
 # One lint flag per line; the unquoted expansion splits each into its words.
 lints=$(grep -v -e '^#' -e '^$' "$runner/clippy-lints")
 status=0
@@ -41,9 +50,9 @@ if [ "$action" = fix ]; then
     # shellcheck disable=SC2086
     cargo clippy --locked --all-targets --all-features --fix --allow-dirty --allow-no-vcs -- $lints || true
     check-rust-source --fix . || true
-    cargo "+nightly-$RUST_NIGHTLY_VERSION" fmt --all -- --config-path "$runner/rustfmt.toml" || status=1
+    cargo "+nightly-$RUST_NIGHTLY_VERSION" fmt -- --config-path "$runner/rustfmt.toml" || status=1
 else
-    cargo "+nightly-$RUST_NIGHTLY_VERSION" fmt --all --check -- --config-path "$runner/rustfmt.toml" || status=1
+    cargo "+nightly-$RUST_NIGHTLY_VERSION" fmt --check -- --config-path "$runner/rustfmt.toml" || status=1
 fi
 check-rust-source . || status=1
 # shellcheck disable=SC2086

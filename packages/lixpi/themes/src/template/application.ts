@@ -199,6 +199,7 @@ export type ApplicationTheme = {
             disabled: string
         }
         scrollbar: {
+            track: string
             thumb: string
             hover: string
             active: string

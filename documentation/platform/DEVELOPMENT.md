@@ -116,24 +116,41 @@ Some dependencies are baked into a service's image at build time (for example, t
 
 ## Profiling the Web UI
 
-When the Web UI feels slow, the browser can report where its time goes to the web-ui dev server log, so the cause can be found from the log instead of the browser's developer tools. It is off by default and exists only in development: the reporter needs the dev server's socket, so production builds never include it.
+The Vite dev server enables profiling only when `VITE_CLIENT_PERFORMANCE_DEBUG = true`. With the flag off, Vite removes the reporter import and timing calls from the app modules it serves. Production builds always remove them.
 
-Set `VITE_CLIENT_PERFORMANCE_DEBUG = true` in your `.env.<stage>` file, then recreate `lixpi-web-ui` so the container picks up the new value: run `./run.sh` and restart or rebuild only that container. Reload the page and use it normally; each batch of entries then appears in the container log about a second after it happens:
+1. Set the flag in `.env.<stage>`, then use `./run.sh` to recreate `lixpi-web-ui` with the updated environment.
+2. Reload and focus the target client. Before starting the capture, confirm that fresh batches for its `source.pageId` report `source.visibility` as `visible` and a nonzero heartbeat count. Use the same workspace, viewport and gestures when comparing runs. For a desktop investigation, enable the separate native performance probes if you need to compare page delays with the native queue. [Desktop diagnostics](DESKTOP-APP.md#diagnostics-builds).
+3. Read the matching `client-performance` batches in the container log. Record the reproduction time, page ID, runtime and viewport so someone else can compare the same session. Archive the complete raw logs for that time window before recreating the container, which discards the previous container log.
+4. Set the flag back to `false`, recreate `lixpi-web-ui` and reload the client.
 
 ```shell
-docker logs --since 5m lixpi-web-ui 2>&1 | grep client-performance
+docker logs --since 5m lixpi-web-ui 2>&1 | docker run --rm -i --network none --entrypoint grep lixpi/web-ui -F client-performance
 ```
 
-Each line holds a JSON array of entries with a `type`, a `name`, a `start` in milliseconds since the page loaded, and a `duration`:
+Parse a bounded, complete log stream inside Docker before printing compact results. Large batches can exceed the tool's output limit; do not parse an already truncated tool response or treat missing printed rows as gaps in application reporting.
 
-- `longtask` and `long-animation-frame` are stretches of 50 ms or more when the main thread could not respond. A long animation frame also lists the scripts that ran longest in it, with their source file and function, which names the code to fix.
-- `event` is input the page handled slowly, such as a click that took more than 40 ms to process.
+Each JSON batch includes `source` with the page ID, runtime (`tauri` or `browser`), user agent, page time origin, current path without the query string, viewport width and height in CSS pixels, device pixel ratio, visibility, the glass mode, and supported entry types. Group batches by page ID when more than one client is connected. Entry times are in milliseconds relative to the page time origin.
+
+- `longtask` and `long-animation-frame` come from the browser when supported. Long animation frames also list the longest-running scripts and their source files and functions.
+- `event` describes input with a browser-reported duration of at least 40 ms. The timing fields separate the wait before event processing, the time spent processing, and the estimated time from the end of processing to the browser's reported paint. The entry also carries raw `processingStart` and `processingEnd` timestamps. The target includes only the element tag, a role if present, and up to three CSS class names.
 - `mark` and `measure` are the application's own phases. Startup marks are `startup:session`, `startup:workspace-created`, `startup:nats-connected`, `startup:user-loaded`, `startup:view`, `startup:services` and `startup:application-started`. Opening a workspace records `workspace-open:fetch`, `workspace-open:assets` and `workspace-open:render`, and the side panel records `navigation:request`, `navigation:response` and `navigation:render`.
 - `navigation` and `resource-summary` give the page load and how long its modules took to arrive.
 
-A phase measure that is long while a long task overlaps it was waiting on the main thread, not on the network. The API logs the server side of the same request: any NATS reply that takes 250 ms or more appears in `docker logs lixpi-api` as `slow reply on <subject>` with its queue wait and handler time.
+Check the `canvas:renderer:webgl` or `canvas:renderer:webgpu` mark before comparing captures. A `canvas:resize:<width>x<height>` mark records the physical canvas dimensions after each Pixi resize call. Repeated identical dimensions can occur when a logical size change rounds to the same physical dimensions.
 
-Agents never open the page themselves. Ask the developer to turn the flag on and reproduce the slow action, read the log, and ask them to turn it off again afterwards.
+Canvas timings use the browser's clock and appear as measures when the synchronous phase takes at least 8 ms. `canvas:frame` includes `canvas:before-render` (application updates), `canvas:captures` (preparing offscreen captures), and `canvas:draw` (submitting the onscreen draw). `canvas:glass-sync` contains `canvas:glass-displacement`, which includes `canvas:glass-map-bake` and `canvas:glass-map-upload`. The latter measures the synchronous texture update, including preparing pixels for Pixi. These are elapsed CPU-side spans. GPU completion and presentation need separate measurements. Nested spans overlap, so compare their timestamps and use the outer span for the total.
+
+With profiling on, press Ctrl+Alt+Shift+G in a focused page to pause the existing glass rims and captures. Repeat the same gesture, then press the shortcut again to restore glass and repeat once more. The mode is local to the page and resets on reload. The `canvas:glass-bypass` and `canvas:glass-restore` entries mark the two transitions. Before each pass, confirm the expected `source.glassMode` in a fresh batch. Accessibility snapshots and screenshots can affect the measured application, so keep them outside the measurement window and discard any pass with missed or unconfirmed changes.
+
+To compare panel transitions without repeated accessibility queries, click **Profile panels** or press Ctrl+Alt+Shift+P once in the focused Web UI, then leave it untouched for 20 seconds. The profiling-only scenario waits four seconds, clicks the navigation toggle four times and the right-panel toggle twice, and allows two seconds after each click. It uses the existing button handlers and verifies each component's open-state class after settling. `profile:panels:*` marks identify the start, synchronous click return, verified state and completion; the corresponding `click` measures cover only synchronous handler execution. A successful run restores both initial panel states. Click **Cancel panel profile** or press the shortcut again to cancel. Hiding the page or HMR disposal also cancels and restores connected controls through their handlers. An unavailable target or failed state check cancels the run, so use only runs with a `profile:panels:complete` mark. The scenario is dormant until invoked and excluded alongside the reporter when profiling is off. These synthetic clicks exercise application handlers and rendering, but bypass native input delivery and pointer events.
+
+The `responsiveness` sample summarizes gaps between consecutive animation frame callbacks. The `frameIntervals` list records gaps of at least 50 ms with both the browser's animation frame timestamps (`frameStart` and `frameEnd`) and `performance.now()` at callback entry (`callbackStart` and `callbackEnd`). The callback timestamps show when JavaScript ran. Measuring on-screen presentation requires compositor or native frame timings.
+
+A separate 50 ms heartbeat counts timer callbacks and records delays of at least 50 ms with `scheduledAt`, `callbackAt` and `lateness`. The next deadline is 50 ms after the last callback, so a single stall does not inflate subsequent samples. Compare the heartbeat intervals with frame gaps and the canvas measures. A nonzero `heartbeatCount` during a frame gap shows that JavaScript ran between the frame callbacks. The gap alone leaves the reason for delayed frame delivery open. Add `source.timeOrigin` to the page-relative timestamps to align them with the native log. The reporter pauses both samples while the page is hidden and reports dropped intervals when a batch reaches its recording limit.
+
+When a long task overlaps an application phase, part of the phase elapsed while the main thread was busy. The API logs the server side of the same request: any NATS reply that takes 250 ms or more appears in `docker logs lixpi-api` as `slow reply on <subject>` with its queue wait and handler time.
+
+Ask the developer to reproduce by default. Use native UI tools to install, relaunch or drive the target app only when the developer explicitly authorizes those actions. Use logs to verify the result. For an authorized WebKit Inspector recording, leave screenshot capture off to avoid adding work to the measurement.
 
 ## Deploying to production (Web UI build)
 

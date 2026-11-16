@@ -84,7 +84,14 @@ class CodeBlockView implements NodeView {
     ) {
         this.node = node
         this.editable = view.editable
-        this.dom = html`<div className="code-block-wrapper"></div>` as HTMLDivElement
+        // ProseMirror ignores every mutation inside a NodeView without content
+        // DOM, so CodeMirror's scroller can host the shared overlay scrollbar.
+        this.dom = html`
+            <div
+                className="code-block-wrapper"
+                data-scrollbars="auto"
+            ></div>
+        ` as HTMLDivElement
         this.codeMirror = new CodeMirrorEditorView({
             state: CodeMirrorEditorState.create({
                 doc: node.textContent,

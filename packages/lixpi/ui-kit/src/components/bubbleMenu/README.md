@@ -14,6 +14,8 @@ The core `BubbleMenu` class handles:
 - **Prevent-hide pattern**: `mousedown` + `preventDefault` prevents focus loss when clicking menu buttons
 - **Scroll/resize tracking**: Repositions on scroll and mobile viewport resize
 
+Closed menus use `display: none` so the toolbar and its nested dropdowns cannot extend a scroll container beyond its content. Opening restores the menu's display before measuring and positioning it; inline toolbars also restore their normal layout when reopened.
+
 `settings.ts` owns the shared menu's appearance, sizing, motion, and placement defaults. BubbleMenu exposes them to its stylesheet through CSS custom properties. Colors come from the active theme's `control.bubbleMenu` roles, projected as `--theme-bubble-menu-*` properties. The light preset uses the image/video switch's pale blue background, blue selection, and dark icon palette; Mariana supplies its own dark surfaces and light foregrounds. Hovered and selected icons inherit their button's themed state color. A dropdown trigger with a selected value uses the same active background and foreground as that option in the expanded menu; a trigger without a selected value keeps its neutral appearance. Open toolbars and dropdowns resolve these properties against the nearest Lixpi theme scope and follow theme changes. A host overlay can raise the menu through its own stacking rule.
 
 ## Consumers

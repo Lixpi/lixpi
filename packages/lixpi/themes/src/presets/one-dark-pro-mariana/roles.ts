@@ -2,6 +2,7 @@ import {
     type ThemeRoles,
 } from '../../template/application.ts'
 import {
+    marianaScrollbarPalette,
     marianaShadowPalette,
     type marianaPalette,
 } from '../../palettes/mariana.ts'
@@ -210,9 +211,10 @@ export const createMarianaRoles = (palette: MarianaColors) =>
                 disabled: palette.stormGray,
             },
             scrollbar: {
-                thumb: palette.smokeBlue38,
-                hover: palette.denimGray50,
-                active: palette.dustyBlue50,
+                track: marianaScrollbarPalette.white04,
+                thumb: palette.dustyBlue50,
+                hover: marianaScrollbarPalette.silverBlue70,
+                active: marianaScrollbarPalette.silverBlue85,
             },
         },
         panel: {

@@ -82,4 +82,42 @@ describe('Pixi texture resources', () => {
         expect(Array.from(resource.texture.source.resource as Uint8Array)).toEqual([100, 50, 25, 128, 0, 0, 0, 0])
         resource.destroy()
     })
+
+    it('reuses the upload buffer across opaque and mixed-alpha updates', () => {
+        const size = {
+            width: 3,
+            height: 1,
+        }
+        const opaquePixels = [10, 20, 30, 255, 200, 100, 50, 255, 255, 7, 9, 255]
+        const mixedPixels = [10, 20, 30, 255, 200, 100, 50, 128, 255, 7, 9, 0]
+        const opaque = new Uint8ClampedArray(opaquePixels)
+        const mixed = new Uint8Array(mixedPixels)
+        const resource = new PixiTextureResource({
+            kind: 'pixels',
+            size,
+            rgba: opaque,
+        })
+        const source = resource.texture.source
+        const staged = source.resource as Uint8Array
+        expect(Array.from(staged)).toEqual(opaquePixels)
+
+        resource.update({
+            kind: 'pixels',
+            size,
+            rgba: mixed,
+        })
+        expect(source.resource).toBe(staged)
+        expect(Array.from(staged)).toEqual([10, 20, 30, 255, 100, 50, 25, 128, 0, 0, 0, 0])
+        expect(Array.from(mixed)).toEqual(mixedPixels)
+
+        resource.update({
+            kind: 'pixels',
+            size,
+            rgba: opaque,
+        })
+        expect(source.resource).toBe(staged)
+        expect(Array.from(staged)).toEqual(opaquePixels)
+        expect(Array.from(opaque)).toEqual(opaquePixels)
+        resource.destroy()
+    })
 })

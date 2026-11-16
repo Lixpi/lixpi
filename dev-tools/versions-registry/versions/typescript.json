@@ -114,6 +114,7 @@
         "onnxruntime-web": "1.31.1",
         "openai": "7.45.1",
         "ora": "9.4.1",
+        "overlayscrollbars": "2.17.0",
         "oxc-parser": "0.156.0",
         "oxfmt": "0.75.0",
         "oxlint": "1.90.0",

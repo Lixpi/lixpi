@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import {
     describe,
     expect,
@@ -225,6 +227,70 @@ describe('GlassBorder', () => {
         expect(resources.capture).toHaveBeenCalledOnce()
         expect(resources.updateCapture).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ enabled: true }))
         border.destroy()
+    })
+
+    it('pauses the rim and its capture during the profiling glass bypass', () => {
+        vi.stubEnv(
+            'VITE_CLIENT_PERFORMANCE_DEBUG',
+            'true',
+        )
+        const attribute = 'data-lixpi-profile-glass-bypass'
+        const {
+            border,
+            resources,
+            surface,
+        } = fixture()
+        const viewport = {
+            width: 400,
+            height: 300,
+        }
+
+        try {
+            border.sync(
+                [datum],
+                viewport,
+            )
+            const root = resources.createGroup.mock.results[0].value
+            const capture = resources.capture.mock.results[0].value
+            document.documentElement.toggleAttribute(
+                attribute,
+                true,
+            )
+            window.dispatchEvent(new Event('lixpi:profile-glass-toggle'))
+            expect(surface.invalidate).toHaveBeenCalledOnce()
+            border.sync(
+                [datum],
+                viewport,
+            )
+            expect(resources.setVisible).toHaveBeenLastCalledWith(
+                root,
+                false,
+            )
+            expect(resources.updateCapture).toHaveBeenLastCalledWith(
+                capture.handle,
+                expect.objectContaining({ enabled: false }),
+            )
+
+            document.documentElement.removeAttribute(attribute)
+            window.dispatchEvent(new Event('lixpi:profile-glass-toggle'))
+            border.sync(
+                [datum],
+                viewport,
+            )
+            expect(resources.setVisible).toHaveBeenCalledWith(
+                root,
+                true,
+            )
+            expect(resources.updateCapture).toHaveBeenLastCalledWith(
+                capture.handle,
+                expect.objectContaining({ enabled: true }),
+            )
+            expect(resources.capture).toHaveBeenCalledOnce()
+        } finally {
+            document.documentElement.removeAttribute(attribute)
+            border.destroy()
+            vi.unstubAllEnvs()
+        }
     })
 
     it('disposes only its own capture, textures, and displacement binding on abort', () => {

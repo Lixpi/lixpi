@@ -5,7 +5,7 @@ description: The native macOS app that runs web-ui in its own window, how it is 
 
 # Desktop App
 
-The desktop app runs web-ui as a native macOS application: its own window, Dock icon, app menu and keyboard shortcuts, without a browser around it. It lives in `gui/tauri` and is built with Tauri 3, which wraps the system WebKit view in a small Rust program. Tauri 3 is still in alpha, so the project pins exact prerelease versions of Tauri, its plugins and its CLI.
+The desktop app runs web-ui as a native macOS application: its own window, Dock icon, app menu and keyboard shortcuts, without a browser around it. It lives in `gui/tauri` and is built with Tauri 3, which embeds Chromium through the Chromium Embedded Framework (CEF). Tauri 3 is still in alpha, so the project pins exact prerelease versions of Tauri, its plugins and its CLI.
 
 ## What the window loads
 
@@ -16,11 +16,11 @@ The window opens web-ui from the same origin a browser would use, such as `https
 
 Because the window shows the real origin, sign-in, NATS, the API and, in a build with hot reload, Vite's live updates all work exactly as they do in a browser, and no service needs a desktop-specific allowance. The origin comes from the environment file used for the build. `ORIGIN_HOST_URL` sets the page the window opens and `VITE_API_URL` identifies the API, so each environment file produces an app for that environment.
 
-A local stack serves HTTPS with certificates from its own certificate authority, which **Initialize infrastructure** creates in the `caddy-certs` volume. The app trusts that authority itself, so it works whether or not the authority is installed in the macOS keychain. A build whose web-ui URL is `https://localhost` or `https://127.0.0.1` embeds the authority from the volume, and fails with a clear message if the volume has none. Builds for any other environment embed nothing.
+A local stack serves HTTPS with certificates from its own certificate authority, which **Initialize infrastructure** creates in the `caddy-certs` volume. A build for `localhost`, any subdomain of `localhost`, `127.0.0.1` or `::1` embeds that authority and fails if the volume has none. Other environments embed no authority. The build never installs it in the macOS keychain.
 
-WebKit asks the app's navigation delegate whether to accept each server certificate, for the page, its subresources and the NATS WebSocket alike. wry's delegate doesn't answer that question, so on macOS the app adds the method to the delegate's class through the Objective-C runtime, then sets the delegate again so WebKit sees it. The window starts on a blank page and opens web-ui only after that, so the first request is already covered. For `localhost`, `127.0.0.1` and `::1` the method checks the server's chain against the embedded authority under the system's TLS policy, keeping the system's own anchors too, and accepts the certificate only when that check passes. Every other host, and every other kind of challenge, gets the system's default handling. This is the app's only unsafe code; it lives in `src/local_trust/macos.rs` with a reason for each unsafe operation.
+The app supplies the embedded authority through Chromium's profile preference `certificates.ca_certificates_with_constraints`. Its permitted DNS subtree is `localhost`, and its permitted IP ranges are exactly `127.0.0.1/32` and `::1/128`. Both constraint types are supplied because an omitted type would be unrestricted. Chromium's normal certificate verifier still checks the server's signature, expiry and hostname for HTTPS and WSS. Public certificates retain normal Chromium trust. A build without an embedded authority writes an empty preference to remove a previous local build's persisted anchor.
 
-The system's TLS policy still applies Apple's rule that a server certificate may be valid for at most 825 days, even under a trusted authority. Chrome doesn't apply that rule, so a certificate can work in Chrome and still fail in the app. Local issuance keeps the certificates NATS and the HTTPS gateway serve inside the limit, as the [Caddy certificate service](../../services/caddy/documentation/ARCHITECTURE.md) describes.
+The window starts at `about:blank`. Before navigating to web-ui, the app checks that the preference is registered and writable, writes it with error handling, and compares its readback with the expected value. It also waits for that exact blank page to finish loading, because CEF defers its initial navigation until document-start scripts are registered. A shared gate permits the real navigation once both conditions hold, in either order, and only once; a delayed blank load cannot replace web-ui. A missing, rejected or different preference stops startup. Certificate errors are cancelled; the app does not offer an exception interstitial or pass certificate-ignore switches. These checks establish the configured trust policy; a successful build alone does not establish live HTTPS or WSS connectivity.
 
 ## Links, new windows and downloads
 
@@ -29,19 +29,21 @@ A desktop app has no tabs, so the window decides where each kind of request goes
 - Navigation inside web-ui, including the trip through the sign-in page, stays in the window.
 - A request to open a new window on the API's origin, such as the workspace export, is saved as a download.
 - Any other web link that would open a new window, such as the account page in the user portal, opens in the default browser.
-- A navigation to an API URL with `download=true` is saved as a download instead of being shown. WebKit displays an image even when the API marks it as an attachment, so without this a media download would replace the workspace with the bare image.
+- A navigation to an API URL with `download=true` is saved as a download instead of being shown. This keeps the workspace open when an asset endpoint could otherwise be displayed in the window.
 
-The app saves downloads by fetching the file from inside the page and handing it to WebKit's download handling, which writes it to the Downloads folder without overwriting an existing file. The page's own origin is the one the API's CORS policy admits, and the API exposes the `Content-Disposition` header, so the file keeps its original name.
+The app saves downloads by fetching the file from inside the page and handing it to Chromium's download handling. It selects the Downloads folder and reserves an unused filename atomically, adding a numeric suffix when the name is already taken. This also prevents simultaneous downloads from choosing the same filename. A failed download can leave an empty reservation file. The page's own origin is the one the API's CORS policy admits, and the API exposes the `Content-Disposition` header, so the file keeps its original name.
 
-WebKit treats plain-HTTP `localhost` as insecure, unlike Chrome, and silently cancels a plain-HTTP frame inside an HTTPS page. The local auth client refreshes tokens in such a hidden frame, so the local HTTPS gateway serves LocalAuth0 at `https://localhost:3446` and the frontends use that origin. When NATS rejects a stored session, such as one from before LocalAuth0 restarted, the client fetches a new token in the background and reconnects, in Safari and the desktop app as in Chrome. NATS rejects a session the same way while the API restarts after a code change, so the client retries with its cached token at most 2 seconds apart and reconnects once the API is back instead of signing out. An edit to a file only the browser uses doesn't restart the API at all. The refresh keeps its time limit, so a refresh that can't complete still ends at the sign-in screen instead of loading forever.
+LocalAuth0 uses the local HTTPS gateway at `https://localhost:3446`, so hidden-frame token refresh works across the supported browsers and the desktop app. When NATS rejects a stored session, the client refreshes its token in the background and reconnects. While the API restarts after a code change, the client retries with its cached token at most 2 seconds apart rather than signing out. The refresh keeps its time limit, so a refresh that cannot complete returns to the sign-in screen.
 
 Apart from dragging the window, described in the next section, the page has no access to Tauri's native commands, so web-ui runs with the permissions it has in a browser.
 
 The window remembers its size and position between launches.
 
+Lixpi uses system-backed encryption for persisted cookies and saved passwords, with its own macOS keychain service `Lixpi Safe Storage` and account `com.lixpi.desktop`. It uses the browser profile at `~/Library/Caches/com.lixpi.desktop/cef-protected`; the first launch with this profile requires signing in again. The app has no profile-import or migration path. The encryption key is separate from the embedded development certificate authority. Chromium's mock encryption key is not used. A persistent local signing identity keeps the app's identity stable across builds, though it cannot guarantee that macOS will never request permission.
+
 ## Title bar
 
-On macOS the window has no native title bar. web-ui fills the whole window, starting at its top edge, and the traffic lights float over the page's top-left corner. Tauri's overlay title bar style sets this up, and the app moves the buttons so they sit centred in a 40-point row.
+On macOS the window has no native title bar. web-ui fills the whole window, starting at its top edge, and the traffic lights float over the page's top-left corner. Tauri's overlay title bar style sets this up, and the app moves the buttons so they sit centred in the page's title-bar row. After attaching and laying out the initial CEF view, the runtime reapplies that position on the next AppKit run-loop turn, because native startup layout can reset the earlier placement. Existing resize, focus and appearance handlers continue to maintain the same position.
 
 The page draws that row itself, so it belongs to the interface rather than sitting above it as a grey strip. A script that runs before any page script marks `<html>` with `data-title-bar="overlay"` and sets `--window-title-bar-height` and `--window-controls-inset`, the space the three buttons need. In a browser none of this is set, and web-ui looks as it always has.
 
@@ -52,7 +54,7 @@ web-ui's `WindowTitleBar` handles the rest for the life of the page, from sign-i
 - Because controls live in the row, no element covers it. Instead a capturing `pointerdown` listener treats a press in the row that doesn't land on a control (a button, link, field, focusable element or resize handle) as a press on the title bar. That press drags the window, and a double click that stays in place zooms it, as on a native title bar. The page never sees those presses, so pressing the row above the canvas doesn't also pan it. Like any overlay title bar, it can't drag the window until the window is focused, so the first click on an inactive window only focuses it.
 - The traffic lights sit in an action panel oval, the same component and height as the panel toggles, so they stay readable over a canvas or a conversation. The row is tall enough that the oval sits as far below the window's top edge as from its left edge, and every oval in the row keeps that margin above and below it, which also leaves room for the canvas glass rim. The closed navigation toggle sits just after the oval, and while the navigation panel is open the toggle sits just outside its edge, over the canvas.
 
-Dragging needs two of Tauri's window commands, `start_dragging` and `internal_toggle_maximize`. At startup the app grants them to the web-ui origin in the main window, and nothing else. In full screen macOS hides the traffic lights and slides its own title bar in on demand, so the app tells the page by setting `data-window-fullscreen` on `<html>` after each page load and resize. The page then hides the traffic light oval, stops treating the row as a title bar and puts the controls back in their browser positions.
+Dragging needs two of Tauri's window commands, `start_dragging` and `internal_toggle_maximize`. At startup the app grants them to the web-ui origin in the main window, and nothing else. In full screen macOS hides the traffic lights and slides its own title bar in on demand, so the app tells the page by setting `data-window-fullscreen` on `<html>` after each page load and resize. The page then hides the traffic light oval, stops treating the row as a title bar and puts the controls back in their browser positions. After a page load, fullscreen synchronization runs on a worker so the synchronous window query cannot block CEF's native callback.
 
 ## Hot reload, reloading and developer tools
 
@@ -63,13 +65,13 @@ A bare web view has no browser menu, so the app's View menu adds the two command
 | Command | Shortcut | What it does |
 |---------|----------|--------------|
 | Reload | Cmd+R (Ctrl+R elsewhere) | Reloads the page. When the window is still on its starting blank page, because web-ui wasn't reachable at launch, it opens web-ui instead |
-| Developer Tools | Option-Cmd-I or F12 (Ctrl+Shift+I or F12 elsewhere) | Shows the WebKit inspector, or hides it when it's open |
+| Developer Tools | Option-Cmd-I or F12 (Ctrl+Shift+I or F12 elsewhere) | Shows Chromium DevTools, or hides it when it's open |
 
-Both are menu key equivalents, so they work while the page is busy or broken. The inspector shortcut is the one Safari and Chrome use. Plain Cmd+I stays with the page, where the editors use it for italic. A menu item holds one shortcut, so the app catches F12 through an AppKit local event monitor in `src/keyboard/macos.rs`, and leaves F12 to the page when a modifier key is held. Every build has the inspector, which can also be opened with **Inspect Element** from the page's context menu.
+Both are menu key equivalents, so they work while the page is busy or broken. The inspector shortcut is the one Safari and Chrome use. Plain Cmd+I stays with the page, where the editors use it for italic. A menu item holds one shortcut, so the app catches F12 through an AppKit local event monitor in `src/keyboard/macos.rs`, and leaves F12 to the page when a modifier key is held. The AppKit monitor queues F12 presses to one worker, which preserves their order and lets the native event loop answer synchronous DevTools queries. Every build has the inspector, which can also be opened with **Inspect Element** from the page's context menu.
 
-## Rendering at the display's refresh rate
+## Rendering
 
-WebKit runs `requestAnimationFrame` near 60 frames a second by default, even on a 120 Hz ProMotion display, where Chrome runs at 120. Every canvas animation, pan and zoom follows that rate, so the canvas felt slower in the app than in Chrome. Before web-ui loads, the app turns off WebKit's `PreferPageRenderingUpdatesNear60FPSEnabled` feature flag, the same switch as Safari's "Prefer Page Rendering Updates near 60fps", so the page renders at the display's own rate. WebKit lists its feature flags only through private API, so the app looks the flag up by name and logs `Page animation stays near 60 frames per second` on stderr when a WebKit version doesn't have it. The canvas itself runs on Pixi, which uses WebGPU when the view offers it, as WebKit on current macOS does.
+Chromium schedules the page's frames. The app no longer changes private WebKit preferences. The canvas keeps the shared Pixi renderer configuration, which prefers WebGPU when available; there is no desktop-specific WebGL selection. The earlier Chrome comparison did not establish a global WebGL advantage, and the runtime migration makes no unverified performance claim. [Investigation and implementation evidence](../memory/DESKTOP-CHROMIUM-RUNTIME.md).
 
 ## Debugging the app
 
@@ -79,51 +81,54 @@ The app is a thin window around web-ui, so most problems are in the page, in the
 
 A build with diagnostics turned on records what happens inside the page. It captures console output, uncaught errors, unhandled promise rejections and blocked requests from the moment each page starts, together with every page load. It writes them to stderr and to `~/Library/Logs/com.lixpi.desktop/diagnostics.log`, because an app opened from Finder has no terminal. Access tokens, both `token=` values and anything shaped like a JSON Web Token, are redacted before anything is written.
 
-Choose **Debug mode: On** in **Build the macOS desktop app**, or set `LIXPI_DESKTOP_DIAGNOSTICS=true` on the build command. It compiles the crate's `diagnostics` feature, which normal builds leave out. Each line starts with a Unix timestamp in milliseconds:
+Choose **Debug mode: On** in **Build the macOS desktop app**, or set `LIXPI_DESKTOP_DIAGNOSTICS=true` on the build command. It compiles the crate's `diagnostics` feature, which normal builds leave out. Startup records the Chromium version, whether native profiling was compiled in, and the successfully verified development-CA scope or empty authority. A failed trust initialization is also logged, without certificate bytes or URL secrets. Each line starts with a Unix timestamp in milliseconds:
 
 ```text
 [1794127180655] page started: https://localhost:3443/
 [1794127181476] info /: NATS -> listening on: wss://localhost:9222
-[1794127182477] rendering /: 118 frames per second devicePixelRatio 2 WebGPU available
 [1794127183012] error /: NATS -> authorization failed, refreshing credentials {"name":"AuthorizationError"}
 ```
 
-A second after each page loads, the log records a `rendering` line: the frame rate the page actually got, the device pixel ratio, and whether WebGPU is available. Compare it with the display's refresh rate when the canvas feels slow.
+Page logs drain through a persistent Chromium DevTools-protocol observer. The worker tracks one evaluation request, matches its allocated ID, and waits up to ten seconds for its response. A missing result during navigation is retired before the next poll, so it cannot leave capture waiting forever or accumulate pending callbacks. The native callback only queues the result; it never unregisters itself. This avoids the one-shot evaluation observer in CEF runtime alpha.7, whose callback can destroy its own locked mutex. Console capture and token redaction remain enabled independently of profiling.
+
+Chromium writes native warnings and failures to `~/Library/Caches/com.lixpi.desktop/cef-protected/cef.log`. For a native crash, inspect that file alongside the app's diagnostics and the corresponding macOS report in `~/Library/Logs/DiagnosticReports/`.
+
+To include native performance probes, choose **Profiling: On** in **Build the macOS desktop app**. The row defaults to **Off** and is independent of **Debug mode**. For a direct Docker build, pass `-e LIXPI_DESKTOP_PROFILING=true` after `docker compose run --rm` in the builder command. This enables the Cargo `profiling` feature and implies diagnostics. The default diagnostics build keeps console and error logging. The startup rendering sample and native timing probes are compiled only into profiling builds. Use the [Web UI profiler](DEVELOPMENT.md#profiling-the-web-ui) separately when you need page timings.
+
+A second after each page loads with native profiling enabled, the log records a `rendering` line with the number of `requestAnimationFrame` callbacks per second, the device pixel ratio, and whether WebGPU is available. Measuring on-screen presentation requires compositor or native frame timings.
+
+With native profiling enabled, each log poll also schedules a native main-thread task and measures the JavaScript drain's roundtrip. A delay of at least 50 ms produces a `responsiveness` line with `scheduledAt` (Unix milliseconds), `nativeQueueMs` and `webviewRoundtripMs`. Native queue delay is reported immediately, with the roundtrip marked `pending`, even if the page never replies. The completed roundtrip includes native scheduling, Chromium IPC, page execution, callback delivery and the worker receiving its response; it is not a measurement of JavaScript execution alone. Compare the shared scheduling timestamp and the page's client-performance timestamps to distinguish a blocked native loop from a delay elsewhere in the web view. A one-second probe can miss shorter stalls between samples.
+
+Log parsing, token redaction, stderr output and file writes run on a dedicated writer thread. Native callbacks enqueue into a bounded queue without waiting; if the writer falls behind, it reports the number of dropped records when it resumes. Each log line retains the time it was queued, so disk delays do not change the timestamp used for correlation.
 
 ### For people
 
 - Follow the page as it runs with `tail -f ~/Library/Logs/com.lixpi.desktop/diagnostics.log` while using a diagnostics build.
-- Open the WebKit inspector with Option-Cmd-I, F12 or **Inspect Element** in the page's context menu. Every build has it, diagnostics or not, and it shows the console, network requests, storage and the DOM. Safari can attach to the same page from **Develop**, once **Show features for web developers** is on in Safari's settings.
+- Open Chromium DevTools with Option-Cmd-I, F12 or **Inspect Element** in the page's context menu. Every build has it, diagnostics or not, and it shows the console, network requests, storage and the DOM.
 - Run the binary from a terminal, `gui/tauri/dist/Lixpi.app/Contents/MacOS/Lixpi`, to see the app's own messages on stderr, such as a failed download or a window that couldn't open.
 
+- Open a newly built app with `open gui/tauri/dist/Lixpi.app`.
 ### For agents
 
-Agents must not inspect the window, take screenshots or drive the page. Everything below reads logs and process state instead.
+Build and read logs through Docker. Ask the developer to install, relaunch and reproduce by default. Use native UI tools for those actions only when the developer explicitly authorizes them for the target app. Use logs to verify the result.
 
-1. Build with diagnostics on and open the app:
-
-    ```bash
-    LIXPI_DESKTOP_DIAGNOSTICS=true COMPOSE_IGNORE_ORPHANS=true docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/desktop/docker-compose.tauri.yml run --rm lixpi-tauri-macos-builder
-    open gui/tauri/dist/Lixpi.app
-    ```
-
-2. Read `~/Library/Logs/com.lixpi.desktop/diagnostics.log`. It shows whether the page loaded, what web-ui logged and every uncaught error. A page that never logs `NATS -> listening` stopped before connecting; `authorization failed` means NATS rejected the session.
-3. List the connections the page holds. A live session has the web-ui gateway and NATS open:
+1. Build with diagnostics enabled and native profiling disabled unless profiling is explicitly requested. Replace `<stage>` with the environment being investigated.
 
     ```bash
-    for p in $(pgrep -f com.apple.WebKit.Networking); do lsof -nP -a -p "$p" -iTCP; done
+    COMPOSE_IGNORE_ORPHANS=true docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/desktop/docker-compose.tauri.yml run --rm -e LIXPI_DESKTOP_DIAGNOSTICS=true -e LIXPI_DESKTOP_PROFILING=false lixpi-tauri-macos-builder
     ```
 
-4. Read WebKit's TLS decisions from the system log. Each accepted connection shows `Returning from external verify block with result: true` followed by `TLS connected`:
+2. Ask the developer to install and open the built app. Read a bounded excerpt of its diagnostics log through a read-only Docker mount.
 
     ```bash
-    /usr/bin/log show --last 5m --info --debug --style compact --predicate 'processImagePath CONTAINS "WebKit.Networking"' | grep -E 'external verify block|TLS connected|handshake'
+    docker run --rm --network none --mount type=bind,source="$HOME/Library/Logs/com.lixpi.desktop",target=/desktop-logs,readonly --entrypoint sh lixpi/web-ui -c 'tail -n 200 /desktop-logs/diagnostics.log'
     ```
 
-5. Read the services. `docker logs --since 5m lixpi-nats-1` shows `TLS handshake error ... unknown certificate` when a client rejected the certificate and `authentication error` when it presented a session NATS refused. The API reports its readiness at `/health-check` inside its container. `docker logs lixpi-local-https` covers the HTTPS gateway.
-6. Check a certificate the way macOS does: `security verify-cert -c leaf.pem -c intermediate.pem -p ssl -s localhost`, with the chain copied from `openssl s_client -connect localhost:<port> -showcerts`.
+3. Check the page-load, console and connection evidence for the reported problem. If the page stops before `NATS -> listening` or reports `authorization failed`, inspect bounded recent NATS, API and HTTPS-gateway logs. A successful build does not verify launch, helper sandbox behavior, sign-in, downloads or live HTTPS/WSS.
 
-Never print an access token while debugging. The diagnostics log is redacted, but the app's web storage under `~/Library/WebKit/com.lixpi.desktop` isn't; decode only a token's timestamps when they matter.
+Native profiling remains a separate opt-in build feature. Web UI profiling uses `VITE_CLIENT_PERFORMANCE_DEBUG`, which defaults to `false`. Do not enable either to verify a normal runtime migration or run stress workloads without an explicit request.
+
+Keep access tokens out of debugging output. Use the redacted diagnostics log for session errors.
 
 ## Building the app
 
@@ -147,22 +152,30 @@ graph LR
     Bundle --> App
 ```
 
-Rust compiles the app for `aarch64-apple-darwin` or `x86_64-apple-darwin`, and Zig links it against the macOS SDK. The builder shares the application's Compose project, like the certificate generator, so it can read the local authority from the `caddy-certs` volume. The SDK comes from the Command Line Tools on the developer's own Mac. Docker Desktop can't bind-mount `/Library`, so Compose passes the SDK directory to the image build as an extra build context, and the image keeps a copy at `/opt/macos-sdk`. The image never downloads the SDK, and it stays local because it is never pushed. `MACOS_SDK_PATH` in the environment file names the SDK; change it to build against a different one, then rebuild the builder image.
+Rust compiles the app for `aarch64-apple-darwin` or `x86_64-apple-darwin`, and Zig links it against the macOS SDK. CMake and Ninja compile CEF's C++ wrapper using the Darwin toolchain in `gui/tauri/toolchain`; both the archiver and its indexer use Zig, because GNU `ranlib` corrupts the Darwin archive. The builder has a 4 GB memory limit and no CPU or compiler-job cap. Cargo and CMake use their normal parallelism defaults. The builder shares the application's Compose project, like the certificate generator, so it can read the local authority from the `caddy-certs` volume. The SDK comes from the Command Line Tools on the developer's own Mac. Docker Desktop can't bind-mount `/Library`, so Compose passes the SDK directory to the image build as an extra build context, and the image keeps a copy at `/opt/macos-sdk`. The image never downloads the SDK, and it stays local because it is never pushed. `MACOS_SDK_PATH` in the environment file names the SDK; change it to build against a different one, then rebuild the builder image.
 
-The Tauri bundler skips macOS bundles on Linux, so the build script compiles with `cargo tauri build --no-bundle` and assembles `Lixpi.app` itself. The `Info.plist` has the keys the bundler writes, filled from `tauri.conf.json`. `rcodesign` then gives the bundle an ad-hoc signature, which Apple silicon requires before it runs any app. The icons are rendered from `gui/tauri/app-icon.svg` whenever it changes. The icon repeats the company website's hero: its four greens at the freeform gradient's starting points with the renderer's falloff, its soft white glow and inner highlight, and the Lixpi mark in night blue on a macOS rounded-square tile. The five icons `tauri.conf.json` lists are committed, because the Rust runners compile the crate without running the builder.
+The Tauri bundler skips macOS bundles on Linux, so the build script compiles with `cargo tauri build --no-bundle` and assembles `Lixpi.app` itself. The shared `bundle-macos-app.sh` assembles the app, the Chromium framework and the five Helper, GPU, Renderer, Plugin and Alerts app bundles. Their entry point is the unchanged official helper source from [the pinned Tauri commit](https://github.com/tauri-apps/tauri/blob/81bfb7ca8f1a17be1e48c9b0d167c77b2137f9d3/crates/tauri-bundler/cef-helper/main.rs), which the builder image downloads as described below. The helper's own manifest in `gui/tauri/cef-helper` pins the same CEF crates as the application. The helper initializes its sandbox before loading the framework and keeps the framework loaded until exit. The `Info.plist` keys follow the official bundler, including the helper's string-valued `LSUIElement`. `rcodesign` signs the outer app and its nested code with the persistent local identity, with explicit helper scopes retaining Chromium's three JIT entitlements during recursive signing. The icons are rendered from `gui/tauri/app-icon.svg` whenever it changes. The icon repeats the company website's hero: its four greens at the freeform gradient's starting points with the renderer's falloff, its soft white glow and inner highlight, and the Lixpi mark in night blue on a macOS rounded-square tile. The five icons `tauri.conf.json` lists are committed, because the Rust runners compile the crate without running the builder.
 
-Run **Build the macOS desktop app** from `./run.sh`. It asks for the environment file, then shows one page for the Mac's processor, hot reload (**On** by default, **Off** for a release), debug mode and whether to rebuild the builder image, then leaves the app at `gui/tauri/dist/Lixpi.app`. Once an app has been launched, macOS keeps programs without App Management access, Docker's file sharing among them, from changing its bundle. So the container assembles each build in `gui/tauri/dist/staging/`, and the console's action, running in your terminal, replaces `Lixpi.app` with it. The same build without the console is:
+Run **Build the macOS desktop app** from `./run.sh`. It asks for the environment file, then shows one page for the Mac's processor, hot reload (**On** by default, **Off** for a release), debug mode, profiling (**Off** by default), and whether to use cached builder layers or rebuild them, then leaves the app at `gui/tauri/dist/Lixpi.app`. Once an app has been launched, macOS keeps programs without App Management access, Docker's file sharing among them, from changing its bundle. So the container assembles each build in `gui/tauri/dist/staging/`, and the console's action, running in your terminal, replaces `Lixpi.app` with it. The default **Builder: Use cache** option refreshes the image from its Dockerfile before compiling, reusing unchanged layers. This picks up required tools such as CMake and Ninja even when an older builder image already exists. **Rebuild** ignores the image layer cache. Neither option deletes the named Cargo or CEF caches.
+
+The same build without the console is:
 
 ```bash
-docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/desktop/docker-compose.tauri.yml run --rm lixpi-tauri-macos-builder
+docker compose --env-file .env.<stage> -f infrastructure/docker/utilities/desktop/docker-compose.tauri.yml run --rm --build lixpi-tauri-macos-builder
 ```
 
-Without the console, the build takes `LIXPI_DESKTOP_TARGET`, `LIXPI_DESKTOP_DIAGNOSTICS` and `LIXPI_DESKTOP_HOT_RELOAD` from the environment file: `x86_64-apple-darwin` for an Intel Mac, `true` for a diagnostics build, `false` for a build without hot reload. The console's choices override them for its builds. The Cargo registry and build output live in the `cargo-registry` and `cargo-target` volumes, so later builds compile only what changed. Open the result with `open gui/tauri/dist/Lixpi.app`, or move it to Applications.
+Without the console, the build takes `LIXPI_DESKTOP_TARGET`, `LIXPI_DESKTOP_DIAGNOSTICS` and `LIXPI_DESKTOP_HOT_RELOAD` from the environment file: `x86_64-apple-darwin` for an Intel Mac, `true` for a diagnostics build, `false` for a build without hot reload. The console's choices override them for its builds, and its **Profiling** choice explicitly sets `LIXPI_DESKTOP_PROFILING` to `false` unless **On** is selected. The Cargo registry, build output and downloaded Chromium distribution live in named Docker volumes, so later builds reuse unchanged dependencies and browser binaries. A direct Docker invocation leaves `gui/tauri/dist/staging/Lixpi.app`; it does not replace the installed bundle. Quit the existing app and move the staged bundle into `gui/tauri/dist/` or Applications through Finder, then open that installed copy. Keep the staging bundle unopened so subsequent Docker builds can replace it.
 
-The app's Rust code is formatted, linted and tested by the shared Rust runners under the `desktop` target, which compile it natively on Linux so CI can run them. Its tests cover the decisions the window makes: which navigations become downloads, where a new window goes, how a download URL enters the page script, which URLs the build accepts, what Reload does with the current page, which menu items and keys run a command, when the hot reload script is installed, and what the title bar script tells the page. [Rust Testing and Tooling](../code-quality/testing/RUST.md) has the commands.
+The shared Rust runners' `desktop` target compiles the app's portable rules natively on Linux. The CEF dependency and native startup are gated to macOS, so those tests do not download or launch Chromium. Non-macOS startup returns an unsupported-platform error; it does not select another engine. The portable tests cover navigation, download URL quoting, build URLs, menu commands, hot reload and title-bar scripts. [Rust Testing and Tooling](../code-quality/testing/RUST.md) has the commands.
 
-The ad-hoc signature lets the app run on the Mac that built it. Sharing the app with other people needs a Developer ID certificate and Apple's notarization, which this build doesn't do.
+On the first developer build, `prepare-signing-identity.sh` creates a self-signed `Lixpi Local Development` identity through `rcodesign`, with the `apple-development` profile and a ten-year validity period. Its certificate and private key stay in `/usr/src/signing/local-development.pem` inside the named `tauri-builder-signing` Docker volume, with mode `0600`. Later builds reuse that file. Concurrent builders install only one identity atomically, and an existing identity is never overwritten. Preserve this volume when cleaning Docker caches; replacing its identity can change keychain access. The builder does not install OS trust or edit keychain items. This identity is for local development. Distribution still requires an Apple Developer ID certificate and notarization, which this build does not implement.
 
 ## Versions
 
-The Rust crates are pinned in `gui/tauri/src-tauri/Cargo.toml` and `Cargo.lock`. Tauri 3 separates its core from the runtime that drives the web view, and an app that doesn't choose one fails at launch with `RuntimeNotConfigured`, so the app depends on `tauri-runtime-wry` and selects it in `lib.rs`. The builder's tools, which are Zig, `cargo-zigbuild`, the Tauri CLI and `apple-codesign`, are selected in the [Dependency Version Registry](../../dev-tools/versions-registry/README.md) like every other tool, and the Rust image is the same `rust` image the LocalAuth0 build uses. The Tauri CLI follows the Tauri 3 prerelease line, so an update proposes the newest published CLI even while it is a prerelease. Keep the CLI and the `tauri` crates on the same alpha when updating either.
+The application pins `tauri` 3.0.0-alpha.6 and builds against the published `tauri-runtime-cef` 3.0.0-alpha.7 with a small Lixpi patch. The published runtime pins CEF 154 exactly, but the app needs CEF 156, whose API 15600 adds the app-specific keychain service and account settings. Cargo can't override an exact pin inside a dependency, so the patch changes the runtime's `cef` and `cef-dll-sys` requirements to `=156.4.0`. It also reapplies traffic-light placement after CEF attaches its native view, because AppKit's startup layout resets it. The app and the official helper resolve `cef` and `cef-dll-sys` `156.4.0+156.0.26`.
+
+The checkout holds only Lixpi's part: the patch and its pins in `gui/tauri/upstream`. Its `prepare.sh` downloads the runtime crate from crates.io and the helper source from the Tauri commit that release was published from. It checks both against pinned SHA-256 digests, applies the patch and writes the result to `/opt/tauri-upstream` inside the container. The builder image runs it while the image builds. The Rust test and quality runners run it as the desktop target's prepare step, because Cargo resolves the macOS-only runtime even on Linux. Upstream source therefore never reaches the checkout, the host or the formatter. The app and helper manifests point at that container path, so Cargo resolves them only inside these containers. The pins live in the script rather than the version registry, because the patch applies to that exact release. Drop the patch when an official runtime release supports CEF 156.
+
+The builder's Zig, `cargo-zigbuild`, Tauri CLI and `apple-codesign` versions remain selected by the [Dependency Version Registry](../../dev-tools/versions-registry/README.md).
+
+The app requests `SandboxPolicy::Required`. macOS is the only supported packaged platform. CEF alpha.7 cannot provide a Chromium sandbox broker on Windows, and the required policy refuses to start there. Adding another platform requires resolving its runtime and packaging contract; disabling the sandbox is not a fallback.

@@ -158,9 +158,12 @@
         }
     }
 
+    .ai-prompt-input-scroll {
+        max-height: 120px;
+    }
+
     .ai-prompt-input-content {
         padding: 12px 12px 12px 24px;
-        max-height: 120px;
     }
 
     .ai-prompt-input-controls {

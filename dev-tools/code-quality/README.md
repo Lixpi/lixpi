@@ -57,8 +57,8 @@ Required-variable interpolation happens while Compose loads the file, before it 
 |--------|------------|-----------------|----------------------------|
 | Go test | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | module and build cache volumes |
 | Go quality | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | module, build, and lint cache volumes |
-| Rust test | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | Cargo registry and build output volumes |
-| Rust quality | `/usr/src/runner` | `/usr/src/manifests/<target>` and `/usr/src/service/<target>` | Cargo registry and build output volumes |
+| Rust test | `/usr/src/runner` | `/usr/src/manifests/<target>`, `/usr/src/service/<target>` and an optional `/usr/src/prepare/<target>` | Cargo registry and build output volumes |
+| Rust quality | `/usr/src/runner` | `/usr/src/manifests/<target>`, `/usr/src/service/<target>` and an optional `/usr/src/prepare/<target>` | Cargo registry and build output volumes |
 | TypeScript test | `/usr/src/service/run-tests.sh` | `/usr/src/service/<workspace>` and staged workspace manifests | pnpm store and per-workspace `node_modules` volumes |
 | TypeScript quality | `/usr/src/quality-runner` | selected paths under `/usr/src/repository` | tool `node_modules`, pnpm store, and dprint cache volumes |
 
@@ -78,7 +78,7 @@ A Go target name may contain lowercase letters, digits, and internal hyphens. It
 
 ## Rust mount behavior
 
-The Rust runners follow the Go mount model. The adapters mount `Cargo.toml` and `Cargo.lock` separately from source, and the runner copies both into the container-owned crate root before invoking Cargo. That keeps files a build script writes beside the crate, such as Tauri's generated schemas, out of the checkout. Test adapters mount everything read-only; quality adapters mount source and the lockfile writable because `fix` edits source and `dependencies` rewrites `Cargo.lock`. Every other command uses `--locked`.
+The Rust runners follow the Go mount model. The adapters mount `Cargo.toml` and `Cargo.lock` separately from source, and the runner copies both into the container-owned crate root before invoking Cargo. That keeps files a build script writes beside the crate, such as Tauri's generated schemas, out of the checkout. Test adapters mount everything read-only; quality adapters mount source and the lockfile writable because `fix` edits source and `dependencies` rewrites `Cargo.lock`. Every other command uses `--locked`. An adapter may mount a read-only `/usr/src/prepare/<target>` directory whose `prepare.sh` both runners run before Cargo. It places third-party sources a target builds from in container storage, so they never land in the checkout. Both images carry `patch` for that step.
 
 The [Rust quality runner](rust-quality-runner/README.md) combines rustfmt, a clippy lint policy, and a source-convention checker built on rust-analyzer's lossless syntax tree. Its image build formats, tests, and lints the checker against its own rules, and the `rust-quality-tools` target runs the checker's regression tests. Both images carry the GTK and WebKitGTK development packages, because the desktop app's web view links them on Linux.
 

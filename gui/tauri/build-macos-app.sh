@@ -9,11 +9,16 @@
 #   LIXPI_API_URL         the API origin that serves downloads
 #   LIXPI_DESKTOP_TARGET  aarch64-apple-darwin or x86_64-apple-darwin
 #   LIXPI_DESKTOP_DIAGNOSTICS  true builds the diagnostics feature into the app
+#   LIXPI_DESKTOP_PROFILING    true adds performance probes and enables diagnostics
 #   LIXPI_DESKTOP_HOT_RELOAD   true lets the page follow web-ui's rebuilds; false for a release
 #
-# Every input comes from the environment file; none has a default here.
+# Profiling defaults to off. Compose supplies the other settings.
 
 set -euo pipefail
+
+for tool in cmake ninja; do
+    command -v "${tool}" >/dev/null || { echo "The desktop builder image is missing ${tool}. Build through ./run.sh to refresh its Dockerfile layers." >&2; exit 2; }
+done
 
 project_dir=/usr/src/desktop
 source_dir="${project_dir}/src-tauri"
@@ -23,6 +28,7 @@ for name in LIXPI_DESKTOP_TARGET LIXPI_DESKTOP_DIAGNOSTICS LIXPI_DESKTOP_HOT_REL
 done
 
 target="${LIXPI_DESKTOP_TARGET}"
+source "${project_dir}/toolchain/environment.sh"
 
 case "${target}" in
     aarch64-apple-darwin|x86_64-apple-darwin) ;;
@@ -36,8 +42,6 @@ config="${source_dir}/tauri.conf.json"
 product_name="$(jq -er '.productName' "${config}")"
 identifier="$(jq -er '.identifier' "${config}")"
 version="$(jq -er '.version' "${config}")"
-minimum_system_version="$(jq -er '.bundle.macOS.minimumSystemVersion' "${config}")"
-copyright="$(jq -er '.bundle.copyright' "${config}")"
 
 cd "${source_dir}"
 
@@ -58,24 +62,46 @@ fi
 # app trusts the local certificates without the authority in the keychain.
 # The authority is PEM in the caddy-certs volume; the app embeds it as DER.
 local_ca=/usr/src/caddy-certs/ca.crt
-case "${LIXPI_WEB_UI_URL}" in
-    https://localhost|https://localhost[:/]*|https://127.0.0.1|https://127.0.0.1[:/]*)
-        [[ -f "${local_ca}" ]] || { echo "The local stack's certificate authority is missing. Run Initialize infrastructure first." >&2; exit 2; }
-        sed '/-----/d' "${local_ca}" | base64 -d > /tmp/lixpi-local-ca.der
-        export LIXPI_LOCAL_CA_DER=/tmp/lixpi-local-ca.der
-        echo "Trusting the local stack's certificate authority inside the app."
-        ;;
-esac
+unset LIXPI_LOCAL_CA_DER
+if [[ "${LIXPI_WEB_UI_URL}" == https://* ]]; then
+    authority="${LIXPI_WEB_UI_URL#https://}"
+    authority="${authority%%[/?#]*}"
+    authority="${authority##*@}"
+    if [[ "${authority}" == \[* ]]; then
+        local_host="${authority%%]*}]"
+    else
+        local_host="${authority%%:*}"
+    fi
+    case "${local_host,,}" in
+        localhost|*.localhost|127.0.0.1|'[::1]')
+            [[ -f "${local_ca}" ]] || { echo "The local stack's certificate authority is missing. Run Initialize infrastructure first." >&2; exit 2; }
+            sed '/-----/d' "${local_ca}" | base64 -d > /tmp/lixpi-local-ca.der
+            export LIXPI_LOCAL_CA_DER=/tmp/lixpi-local-ca.der
+            echo "Trusting the local stack's certificate authority inside the app."
+            ;;
+    esac
+fi
 
 features=()
 case "${LIXPI_DESKTOP_DIAGNOSTICS}" in
-    true)
-        features=(--features diagnostics)
-        echo "Including diagnostics: the app logs the page's console, errors and page loads to ~/Library/Logs/${identifier}/diagnostics.log."
-        ;;
+    true) features+=(--features diagnostics) ;;
     false) ;;
     *) echo "LIXPI_DESKTOP_DIAGNOSTICS must be true or false, found ${LIXPI_DESKTOP_DIAGNOSTICS}." >&2; exit 2 ;;
 esac
+
+profiling="${LIXPI_DESKTOP_PROFILING:-false}"
+case "${profiling}" in
+    true)
+        features+=(--features profiling)
+        echo "Including profiling for startup frames, the native event loop and webview round trips."
+        ;;
+    false) ;;
+    *) echo "LIXPI_DESKTOP_PROFILING must be true or false, found ${profiling}." >&2; exit 2 ;;
+esac
+
+if [[ "${LIXPI_DESKTOP_DIAGNOSTICS}" == "true" || "${profiling}" == "true" ]]; then
+    echo "Including diagnostics: the app logs the page's console, errors and page loads to ~/Library/Logs/${identifier}/diagnostics.log."
+fi
 
 case "${LIXPI_DESKTOP_HOT_RELOAD}" in
     true)
@@ -86,69 +112,16 @@ case "${LIXPI_DESKTOP_HOT_RELOAD}" in
     *) echo "LIXPI_DESKTOP_HOT_RELOAD must be true or false, found ${LIXPI_DESKTOP_HOT_RELOAD}." >&2; exit 2 ;;
 esac
 
+bash "${project_dir}/prepare-signing-identity.sh"
+
 echo "Building ${product_name} ${version} for ${target}, opening ${LIXPI_WEB_UI_URL}..."
 cargo tauri build --ci --no-bundle --target "${target}" --runner cargo-zigbuild "${features[@]}" -- --locked
 
-binary="${CARGO_TARGET_DIR}/${target}/release/lixpi-desktop"
-# macOS stops any program without App Management access, Docker's file
-# sharing included, from changing an app bundle once it has been launched. The
-# container therefore never touches dist/${product_name}.app: it assembles the
-# bundle in a staging folder nobody opens, and the dev console's host action
-# swaps it into place.
-staging="${project_dir}/dist/staging"
-app="${staging}/${product_name}.app"
-
-rm -rf "${staging}"
-mkdir -p "${app}/Contents/MacOS" "${app}/Contents/Resources"
-cp "${binary}" "${app}/Contents/MacOS/${product_name}"
-cp icons/icon.icns "${app}/Contents/Resources/${product_name}.icns"
-
-# The keys match what the Tauri bundler writes for a macOS app.
-# NSAllowsLocalNetworking lets the window open a plain-HTTP localhost web-ui.
-cat > "${app}/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>English</string>
-    <key>CFBundleDisplayName</key>
-    <string>${product_name}</string>
-    <key>CFBundleExecutable</key>
-    <string>${product_name}</string>
-    <key>CFBundleIconFile</key>
-    <string>${product_name}.icns</string>
-    <key>CFBundleIdentifier</key>
-    <string>${identifier}</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>${product_name}</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>${version}</string>
-    <key>CFBundleVersion</key>
-    <string>${version}</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.productivity</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>${minimum_system_version}</string>
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsLocalNetworking</key>
-        <true/>
-    </dict>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>${copyright}</string>
-</dict>
-</plist>
-PLIST
-
-# Without a signing certificate rcodesign signs ad hoc, which is enough to run
-# the app on the Mac that built it.
-rcodesign sign "${app}"
-
-echo "Assembled gui/tauri/dist/staging/${product_name}.app"
+# Build the upstream CEF-only helper with the same pinned CEF crates. The
+# full application executable must never be copied into the helper bundles.
+cargo zigbuild --locked --release --target "${target}" --manifest-path "${project_dir}/cef-helper/Cargo.toml"
+metadata="$(cargo metadata --locked --format-version 1)"
+cef_version="$(jq -er '.packages[] | select(.name == "cef") | .version | split("+")[1]' <<<"${metadata}")"
+cef_arch="${target%%-*}"
+framework="${CEF_PATH}/${cef_version}/cef_macos_${cef_arch}/Chromium Embedded Framework.framework"
+bash "${project_dir}/bundle-macos-app.sh" "${CARGO_TARGET_DIR}/${target}/release/lixpi-desktop" "${CARGO_TARGET_DIR}/${target}/release/tauri-cef-helper" "${framework}"

@@ -147,9 +147,20 @@ $ai-prompt-input-ring-width: 4px;
     content: none;
 }
 
+// The editable content grows inside this wrapper, which owns the scrolling so
+// overlay scrollbar elements stay outside ProseMirror's content DOM.
+.ai-prompt-input-scroll {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow-y: auto;
+    max-height: 250px;
+}
+
 .ai-prompt-input-content {
     position: relative;
-    flex: 1;
+    flex: 1 0 auto;
     display: flex;
     flex-direction: column;
     justify-content: flex-start; // Start text at top
@@ -158,8 +169,6 @@ $ai-prompt-input-ring-width: 4px;
     font-size: #{themeScope.token("components-composer-input-input-content-base-font-size", themePalette.$roles)};
     line-height: var(--canvas-lixpi-prompt-line-height, #{themeScope.token("components-composer-input-input-content-base-line-height", themePalette.$roles)});
     outline: none;
-    overflow-y: auto;
-    max-height: 250px;
 
     .ProseMirror {
         outline: none;

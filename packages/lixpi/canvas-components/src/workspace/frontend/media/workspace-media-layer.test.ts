@@ -650,6 +650,164 @@ describe('WorkspaceMediaLayer registration integration', () => {
         expect(onError).toHaveBeenCalledOnce()
     })
 
+    it('pans retained nodes and updates culling without publishing a scene or resizing the surface', () => {
+        const elements = new Map<string, HTMLElement>()
+        const {
+            layer,
+            renderer,
+            onError,
+        } = fixture({
+            mountDom: node => {
+                const element = document.createElement('div')
+                elements.set(node.nodeId, element)
+
+                return {
+                    element,
+                    update() {},
+                    destroy() {},
+                }
+            },
+        })
+        layer.sync(state([
+            {
+                ...mediaNode('near'),
+                type: 'document',
+            },
+            {
+                ...mediaNode('far'),
+                type: 'document',
+                position: {
+                    x: 5000,
+                    y: 20,
+                },
+            },
+        ]))
+        const scene = layer.canvas.scene.scene
+        const published = vi.fn()
+        const unsubscribe = layer.canvas.scene.subscribeScene(published)
+        published.mockClear()
+        renderer.resize.mockClear()
+        expect(elements.get('near')!.parentElement!.style.display).toBe('')
+        expect(elements.get('far')!.parentElement!.style.display).toBe('none')
+
+        layer.setViewport({
+            x: -5000,
+            y: 30,
+            zoom: 1,
+        })
+
+        expect(layer.canvas.scene.scene).toBe(scene)
+        expect(published).not.toHaveBeenCalled()
+        expect(renderer.resize).not.toHaveBeenCalled()
+        expect(layer.worldElement.style.transform).toBe('translate(-5000px, 30px) scale(1)')
+        expect(elements.get('near')!.parentElement!.style.display).toBe('none')
+        expect(elements.get('far')!.parentElement!.style.display).toBe('')
+        expect(layer.getNodeBounds('far')).toEqual({
+            x: 5000,
+            y: 20,
+            width: 100,
+            height: 80,
+        })
+        unsubscribe()
+        layer.destroy()
+        expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('loads and upgrades image renditions as zoom changes without replacing the scene', async () => {
+        const {
+            layer,
+            renderer,
+            assets,
+            lease,
+            onError,
+        } = fixture()
+        const media = assets.get('image')!.media!
+        media.renditions.preview = {
+            ...media.renditions.original!,
+            name: 'preview',
+        }
+        media.renditions.original = {
+            ...media.renditions.original!,
+            width: 1000,
+            height: 800,
+        }
+        layer.setViewport({
+            x: 0,
+            y: 0,
+            zoom: 0.05,
+        })
+        layer.sync(state([mediaNode('image')]))
+        const scene = layer.canvas.scene.scene
+        expect(renderer.imageRequests).toHaveLength(0)
+
+        layer.setViewport({
+            x: 0,
+            y: 0,
+            zoom: 1,
+        })
+
+        expect(renderer.imageRequests).toHaveLength(1)
+        const preview = {
+            ...lease(),
+            renditionId: 'preview',
+        }
+        renderer.imageRequests[0].resolve(preview)
+        await Promise.resolve()
+
+        layer.setViewport({
+            x: 0,
+            y: 0,
+            zoom: 4,
+        })
+
+        const resolution = Math.min(window.devicePixelRatio || 1, 2)
+        expect(renderer.imageRequests).toHaveLength(2)
+        expect(renderer.imageRequests[1].request.visiblePixels).toEqual({
+            width: 400 * resolution,
+            height: 320 * resolution,
+        })
+        expect(layer.canvas.scene.scene).toBe(scene)
+        expect(preview.release).not.toHaveBeenCalled()
+        layer.destroy()
+        expect(preview.release).toHaveBeenCalledOnce()
+        expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('prefetches a newly culled image after panning without publishing another scene', async () => {
+        const {
+            layer,
+            renderer,
+            lease,
+            onError,
+        } = fixture()
+        layer.sync(state([mediaNode('image')]))
+        const displayed = lease()
+        renderer.imageRequests[0].resolve(displayed)
+        await Promise.resolve()
+        const scene = layer.canvas.scene.scene
+
+        layer.setViewport({
+            x: -5000,
+            y: 0,
+            zoom: 1,
+        })
+
+        expect(displayed.release).toHaveBeenCalledOnce()
+        await vi.advanceTimersByTimeAsync(250)
+        expect(renderer.imageRequests).toHaveLength(2)
+        expect(renderer.imageRequests[1].request.visiblePixels).toEqual({
+            width: 1,
+            height: 1,
+        })
+        const prefetched = lease()
+        renderer.imageRequests[1].resolve(prefetched)
+        await Promise.resolve()
+        expect(prefetched.release).toHaveBeenCalledOnce()
+        expect(layer.canvas.scene.scene).toBe(scene)
+        layer.destroy()
+        expect(onError).not.toHaveBeenCalled()
+    })
+
     it('rejects invalid viewport updates before changing renderer state', () => {
         const {
             layer,

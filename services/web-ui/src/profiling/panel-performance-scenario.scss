@@ -1,0 +1,15 @@
+.panel-performance-trigger {
+    position: fixed;
+    inset-block-start: 8px;
+    inset-inline-start: 50%;
+    z-index: 10000;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    border: 1px solid ButtonText;
+    border-radius: 4px;
+    color: ButtonText;
+    background: ButtonFace;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}

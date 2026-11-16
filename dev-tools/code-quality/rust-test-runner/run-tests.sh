@@ -13,6 +13,13 @@ service_dir="/usr/src/service/$target"
 [ -f "$manifest_dir/Cargo.lock" ] || { echo "Missing Cargo.lock for Rust test target: $target" >&2; exit 2; }
 [ -d "$service_dir" ] || { echo "Missing source mounts for Rust test target: $target" >&2; exit 2; }
 
+# An adapter may mount a prepare step that fetches sources the target builds
+# from into the container, so they never reach the checkout.
+prepare="/usr/src/prepare/$target/prepare.sh"
+if [ -f "$prepare" ]; then
+    sh "$prepare"
+fi
+
 # The crate root belongs to the container. Cargo never rewrites host manifests.
 cp "$manifest_dir/Cargo.toml" "$service_dir/Cargo.toml"
 cp "$manifest_dir/Cargo.lock" "$service_dir/Cargo.lock"

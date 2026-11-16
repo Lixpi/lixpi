@@ -44,7 +44,7 @@ Suppress a lint with `#[expect(lint_name, reason = "...")]` on the narrowest ite
 
 ## Unsafe code
 
-Unsafe code is rejected unless a module explains why it can't be avoided. Reach the platform through a crate that wraps it safely whenever one exists. When none does, such as a WebKit callback that is only reachable through the Objective-C runtime, put the code in its own module and state the reason with `#![expect(unsafe_code, reason = "...")]`. Keep each `unsafe` block to one operation, and explain above it, in a `// SAFETY:` comment, why that operation is sound. The desktop app's `src/local_trust/macos.rs` is the reference. Code like this needs a reviewer who checks those claims, because the runner can only check that they are written down.
+Unsafe code is rejected unless a module explains why it can't be avoided. Reach the platform through a crate that wraps it safely whenever one exists. When none does, such as an AppKit event callback that is only reachable through the Objective-C runtime, put the code in its own module and state the reason with `#![expect(unsafe_code, reason = "...")]`. Keep each `unsafe` block to one operation, and explain above it, in a `// SAFETY:` comment, why that operation is sound. The desktop app's `src/keyboard/macos.rs` is the reference. Code like this needs a reviewer who checks those claims, because the runner can only check that they are written down.
 
 Platform-specific modules are gated with `#[cfg(target_os = "...")]`, so the Linux runners don't compile them. Lint a macOS module with the same policy for the Apple target before relying on it, as [Rust Testing and Tooling](../testing/RUST.md#platform-specific-code) describes.
 

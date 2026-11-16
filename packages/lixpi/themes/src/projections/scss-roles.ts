@@ -167,6 +167,7 @@ export const themeStylesheetRoles = (theme: ApplicationTheme) => ({
     'button-text': theme.control.button.foreground,
     'selection-background': theme.selection.background,
     'selection-text': theme.selection.foreground,
+    'scrollbar-track': theme.control.scrollbar.track,
     scrollbar: theme.control.scrollbar.thumb,
     'scrollbar-hover': theme.control.scrollbar.hover,
     'scrollbar-active': theme.control.scrollbar.active,

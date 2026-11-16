@@ -6,6 +6,8 @@
 // commands it may call are the two Tauri's drag region uses: dragging the
 // window and zooming it on a double click.
 
+use std::thread;
+
 #[cfg(any(target_os = "macos", test))]
 use tauri::LogicalPosition;
 use tauri::{
@@ -51,20 +53,31 @@ pub(crate) const TRAFFIC_LIGHTS: LogicalPosition<f64> = LogicalPosition {
 const CONTROLS_INSET: f64 = 96.0;
 
 // Marks the page as drawing its own title bar and gives it the row's
-// geometry. WebKit runs it once the document element exists, before any page
-// script, so the first layout already leaves room for the buttons.
+// geometry. Chromium can run startup scripts before the document element
+// exists, so observe its insertion before the first page script uses it.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn initialization_script() -> String {
     format!(
         r"
 (() => {{
-  const root = document.documentElement
-  if (!root)
+  const apply = () => {{
+    const root = document.documentElement
+    if (!root)
+      return false
+
+    root.dataset.titleBar = 'overlay'
+    root.style.setProperty('--window-title-bar-height', '{TITLE_BAR_HEIGHT}px')
+    root.style.setProperty('--window-controls-inset', '{CONTROLS_INSET}px')
+    return true
+  }}
+  if (apply())
     return
 
-  root.dataset.titleBar = 'overlay'
-  root.style.setProperty('--window-title-bar-height', '{TITLE_BAR_HEIGHT}px')
-  root.style.setProperty('--window-controls-inset', '{CONTROLS_INSET}px')
+  const observer = new MutationObserver(() => {{
+    if (apply())
+      observer.disconnect()
+  }})
+  observer.observe(document, {{ childList: true }})
 }})()
 "
     )
@@ -88,6 +101,18 @@ pub(crate) fn allow_window_dragging(
 
 fn remote_pattern(web_ui: &Url) -> String {
     format!("{}/*", web_ui.origin().ascii_serialization())
+}
+
+// CEF can deliver page loads from AppKit's timer outside winit's dispatch.
+// A synchronous window getter there would block the thread that must answer
+// it. Let a worker wait while the native event loop keeps processing requests.
+pub(crate) fn reflect_fullscreen_after_page_load(window: WebviewWindow) {
+    if let Err(error) = thread::Builder::new()
+        .name("lixpi-title-bar".to_owned())
+        .spawn(move || reflect_fullscreen(&window))
+    {
+        eprintln!("Could not schedule title-bar synchronization after page load: {error}");
+    }
 }
 
 // In full screen macOS hides the traffic lights and slides its own title bar

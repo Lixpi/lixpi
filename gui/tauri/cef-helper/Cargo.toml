@@ -1,0 +1,24 @@
+# Uses the official Tauri helper schema, with exact registry pins in place of
+# the bundler's resolved source paths. Both crates must match the app lockfile.
+[package]
+name = "tauri-cef-helper"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[[bin]]
+name = "tauri-cef-helper"
+# The official helper source, prepared inside the builder image by
+# ../upstream/prepare.sh. It never exists on the host.
+path = "/opt/tauri-upstream/cef-helper/main.rs"
+
+[dependencies]
+cef = { version = "=156.4.0", default-features = false }
+cef-dll-sys = { version = "=156.4.0", default-features = false }
+
+[features]
+default = ["sandbox"]
+sandbox = ["cef/sandbox"]
+
+[workspace]

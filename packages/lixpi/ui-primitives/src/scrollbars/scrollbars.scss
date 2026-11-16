@@ -1,0 +1,111 @@
+@use "../styles/transitions" as *;
+
+// Every scroll container shows the same overlay scrollbar on every browser and
+// platform. `documentScrollbars.ts` attaches it when a container is first
+// hovered, scrolled or focused, and OverlayScrollbars hides the native bar from
+// then on. Chromium and WebKit also hide native bars before that first
+// interaction. Firefox has no equivalent that leaves `scrollbar-width` free:
+// an element whose own CSS sets `scrollbar-width: none` opts out of the
+// overlay, so a global value here would hide that signal. A textarea keeps its
+// native scrollbar because OverlayScrollbars cannot host one.
+:not(textarea)::-webkit-scrollbar {
+    display: none;
+}
+
+// A thin rounded thumb over a faint full-length track. Applications that do not
+// load the shared themes derive both from the container's text color.
+// The bar is exactly 3px across. It has no perpendicular padding, so its width
+// cannot grow with the box-sizing it inherits; the gap from the container edge
+// comes from its offset below instead.
+.os-scrollbar.lixpi-scrollbar {
+    --os-size: 3px;
+    --os-padding-perpendicular: 0px;
+    --os-padding-axis: 2px;
+    box-sizing: border-box;
+    --os-track-border-radius: 999px;
+    --os-track-bg: var(--theme-scrollbar-track, color-mix(in srgb, currentColor 2%, transparent));
+    --os-track-bg-hover: var(--theme-scrollbar-track, color-mix(in srgb, currentColor 2%, transparent));
+    --os-track-bg-active: var(--theme-scrollbar-track, color-mix(in srgb, currentColor 2%, transparent));
+    --os-track-border: none;
+    --os-track-border-hover: none;
+    --os-track-border-active: none;
+    --os-handle-border-radius: 999px;
+    --os-handle-bg: var(--theme-scrollbar, color-mix(in srgb, currentColor 50%, transparent));
+    --os-handle-bg-hover: var(--theme-scrollbar-hover, color-mix(in srgb, currentColor 60%, transparent));
+    --os-handle-bg-active: var(--theme-scrollbar-active, color-mix(in srgb, currentColor 80%, transparent));
+    --os-handle-border: none;
+    --os-handle-border-hover: none;
+    --os-handle-border-active: none;
+    --os-handle-min-size: 32px;
+    --os-handle-max-size: none;
+    --os-handle-perpendicular-size: 100%;
+    --os-handle-perpendicular-size-hover: 100%;
+    --os-handle-perpendicular-size-active: 100%;
+    --os-handle-interactive-area-offset: 5px;
+    z-index: 1;
+    transition: overlayVisibilityTransition(opacity), overlayVisibilityTransition(visibility);
+}
+
+.os-scrollbar.lixpi-scrollbar.os-scrollbar-vertical {
+    right: 2px;
+}
+
+.os-scrollbar.lixpi-scrollbar.os-scrollbar-vertical.os-scrollbar-rtl {
+    right: auto;
+    left: 2px;
+}
+
+.os-scrollbar.lixpi-scrollbar.os-scrollbar-horizontal {
+    bottom: 2px;
+}
+
+.os-scrollbar.lixpi-scrollbar .os-scrollbar-track,
+.os-scrollbar.lixpi-scrollbar .os-scrollbar-handle {
+    transition: hoverTransition(background-color);
+}
+
+// Zero-size first child of a scroll container that holds its scrollbars. Its
+// sticky insets equal the container's padding, so it sits at the visible top
+// left corner both before and after scrolling, and a sticky offset never adds
+// to the scrollable area. `documentScrollbars.ts` sets the custom properties.
+.lixpi-scrollbar-slot {
+    position: sticky;
+    top: var(--lixpi-scrollbar-slot-top, 0px);
+    left: var(--lixpi-scrollbar-slot-left, 0px);
+    z-index: 1;
+    display: block;
+    flex: none;
+    align-self: flex-start;
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+
+// Inside the slot both scrollbars are placed against the container's visible
+// box, measured as the viewport size, instead of the slot's own zero size.
+.lixpi-scrollbar-slot > .os-scrollbar.lixpi-scrollbar.os-scrollbar-vertical {
+    top: calc(-1 * var(--lixpi-scrollbar-slot-top, 0px));
+    right: auto;
+    bottom: auto;
+    left: calc(var(--lixpi-scrollbar-viewport-width, 0px) - var(--lixpi-scrollbar-slot-left, 0px) - var(--os-size) - 2px);
+    height: var(--lixpi-scrollbar-viewport-height, 0px);
+}
+
+.lixpi-scrollbar-slot > .os-scrollbar.lixpi-scrollbar.os-scrollbar-horizontal {
+    top: calc(var(--lixpi-scrollbar-viewport-height, 0px) - var(--lixpi-scrollbar-slot-top, 0px) - var(--os-size) - 2px);
+    right: auto;
+    bottom: auto;
+    left: calc(-1 * var(--lixpi-scrollbar-slot-left, 0px));
+    width: var(--lixpi-scrollbar-viewport-width, 0px);
+}
+
+// Scroll containers stop at their edges instead of rubber-banding, which
+// WebKit (Safari and the desktop app) otherwise does on every scroller. Any
+// component rule that sets its own overscroll behavior still wins.
+* {
+    overscroll-behavior: none;
+}
