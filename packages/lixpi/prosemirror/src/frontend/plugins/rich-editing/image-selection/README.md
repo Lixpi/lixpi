@@ -2,12 +2,12 @@
 
 This plugin provides rich image editing functionality in the ProseMirror editor for **both `image` and `aiGeneratedImage` node types**, including:
 
-- **Visual Selection** - Images can be selected without revealing resize chrome
+- **Visual Selection** - Images can be selected without revealing resize controls
 - **Resize Handles** - Drag a corner handle to resize images (width only, aspect ratio is always preserved); only the hovered corner indicator is shown
 - **Percentage Width** - Image widths are stored as percentages for responsive behavior
 - **Bubble Menu Integration** - When an image is selected, the bubble menu shows image-specific options
 - **Partial Image Placeholder** - `aiGeneratedImage` nodes with `isPartial: true` and no `imageData` render a compact generating placeholder using the same wrapper, alignment, and selection behavior as completed images
-- **Generated Model Chrome** - `aiGeneratedImage` nodes render the provider/model badge below completed generated images; branch lineage stays in node attrs and AI chat projection markers, not in this badge row
+- **Generated Model Badge** - `aiGeneratedImage` nodes render the provider/model badge below completed generated images; branch lineage stays in node attrs and AI chat projection markers, not in this badge row
 
 ## Supported Node Types
 

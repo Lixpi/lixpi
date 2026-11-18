@@ -2,9 +2,12 @@ import {
     applyStyle,
     html,
 } from '@lixpi/ui-primitives/dom'
-import { BubbleMenu } from '@lixpi/ui-kit/components/bubble-menu'
 import {
-    chevronDownIcon,
+    BubbleMenu,
+    BubbleMenuDropdown,
+    type BubbleMenuPositionRequest,
+} from '@lixpi/ui-kit/components/bubble-menu'
+import {
     heading1Icon,
     heading2Icon,
     heading3Icon,
@@ -30,17 +33,15 @@ import {
 
 export type NestedListBlockTarget = NestedListBlockContext & { element: HTMLElement }
 type Target = NestedListBlockTarget
-const styles: Array<{
-    label: string
-    icon: string
-    style: NestedListBlockStyle
-}> = [
+const styles = [
     {
+        value: 'text',
         label: 'Text',
         icon: paragraphIcon,
         style: { type: 'paragraph' },
     },
     {
+        value: 'heading1',
         label: 'Heading 1',
         icon: heading1Icon,
         style: {
@@ -49,6 +50,7 @@ const styles: Array<{
         },
     },
     {
+        value: 'heading2',
         label: 'Heading 2',
         icon: heading2Icon,
         style: {
@@ -57,6 +59,7 @@ const styles: Array<{
         },
     },
     {
+        value: 'heading3',
         label: 'Heading 3',
         icon: heading3Icon,
         style: {
@@ -64,7 +67,14 @@ const styles: Array<{
             level: 3,
         },
     },
-]
+] as const satisfies readonly {
+    value: string
+    label: string
+    icon: string
+    style: NestedListBlockStyle
+}[]
+
+type StyleValue = (typeof styles)[number]['value']
 
 export const resolveNestedListBlockTarget = (
     view: EditorView,
@@ -140,10 +150,9 @@ export class NestedListBlockControls {
     private readonly bubble: BubbleMenu
     private readonly trigger: HTMLButtonElement
     private readonly dragHandle: HTMLElement
-    private readonly panel: HTMLElement
     private readonly toolbar: HTMLElement
-    private styleMenu?: HTMLElement
-    private styleToggle?: HTMLButtonElement
+    private actionMenu?: BubbleMenu
+    private styleMenu?: BubbleMenuDropdown<StyleValue>
     private target?: Target
     private leaveTimer?: ReturnType<typeof setTimeout>
     private open = false
@@ -177,14 +186,6 @@ export class NestedListBlockControls {
             ></span>
         ` as HTMLElement
         this.dragHandle.innerHTML = dragIcon
-        this.panel = html`
-            <div
-                className="bubble-menu-dropdown-menu nested-list-block-panel"
-                role="menu"
-                aria-label="Block actions"
-                hidden
-            ></div>
-        ` as HTMLElement
         this.toolbar = html`<div className="nested-list-block-toolbar"></div>` as HTMLElement
         const parent = view.dom.parentElement as HTMLElement
         parent.append(this.dragHandle, this.trigger)
@@ -194,7 +195,6 @@ export class NestedListBlockControls {
                 element: this.toolbar,
                 context: ['block'],
             }],
-            panels: [this.panel],
             label: 'Block actions',
         })
         this.bubble.element.classList.add('nested-list-block-bubble')
@@ -382,8 +382,7 @@ export class NestedListBlockControls {
 
     private closePopup(): void {
         this.open = false
-        this.panel.hidden = true
-        this.panel.classList.remove('is-open')
+        this.closeActionMenu()
         this.closeStyleMenu()
         this.trigger.setAttribute('aria-expanded', 'false')
         this.bubble.hide()
@@ -469,78 +468,45 @@ export class NestedListBlockControls {
         return button
     }
 
-    private closeStyleMenu(): void {
-        this.styleMenu?.classList.remove('is-open')
-        this.styleToggle?.setAttribute('aria-expanded', 'false')
+    private closeActionMenu(): void {
+        this.actionMenu?.destroy()
+        this.actionMenu = undefined
     }
 
-    private styleDropdown(target: Target): HTMLElement {
+    private closeStyleMenu(): void {
+        this.styleMenu?.hide()
+    }
+
+    private styleDropdown(target: Target): BubbleMenuDropdown<StyleValue> {
         const current = styles.find(
             option => option.style.type === target.label.type.name
                 && (option.style.type !== 'heading' || option.style.level === target.label.attrs.level),
         ) ?? styles[0]
-        const wrapper = html`<div className="bubble-menu-dropdown"></div>` as HTMLElement
-        const toggle = html`
-            <button
-                type="button"
-                className="bubble-menu-dropdown-toggle"
-                aria-label="Change current style"
-                aria-haspopup="menu"
-                aria-expanded="false"
-                data-help-tooltip="aria-label"
-            ><span className="dropdown-label"></span></button>
-        ` as HTMLButtonElement
-        toggle.querySelector<HTMLElement>('.dropdown-label')!.innerHTML = current.icon
-        toggle.insertAdjacentHTML('beforeend', chevronDownIcon)
-        const menu = html`
-            <div
-                className="bubble-menu-dropdown-menu nested-list-block-style-menu"
-                role="menu"
-                aria-label="Text style"
-            ></div>
-        ` as HTMLElement
 
-        for (const {
-            label,
-            icon,
-            style,
-        } of styles) {
-            const checked = label === current.label
-            const item: NestedListBlockMenuItem = {
-                label,
-                icon,
-                checked,
-                onSelect: () => {
-                    if (changeNestedListBlockStyle(target.entryId, style)(this.view.state, this.view.dispatch))
-                        this.view.focus()
-                },
-            }
-            menu.append(
-                this.button(item, () => this.select(item)),
-            )
-        }
-
-        toggle.addEventListener('pointerdown', event => event.preventDefault())
-        toggle.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            this.panel.hidden = true
-            this.panel.classList.remove('is-open')
-            const open = menu.classList.toggle('is-open')
-            toggle.setAttribute(
-                'aria-expanded',
-                String(open),
-            )
-            this.placePanel()
+        return new BubbleMenuDropdown({
+            document: this.view.dom.ownerDocument,
+            label: 'Change current style',
+            menuLabel: 'Text style',
+            value: current.value,
+            options: styles,
+            getBounds: () => this.viewport(),
+            onOpen: () => this.closeActionMenu(),
+            onChange: value => {
+                const option = styles.find(style => style.value === value)!
+                this.select({
+                    label: option.label,
+                    onSelect: () => {
+                        if (changeNestedListBlockStyle(target.entryId, option.style)(this.view.state, this.view.dispatch))
+                            this.view.focus()
+                    },
+                })
+            },
         })
-        wrapper.append(toggle, menu)
-        this.styleMenu = menu
-        this.styleToggle = toggle
-
-        return wrapper
     }
 
     private renderRoot(target: Target): void {
+        this.styleMenu?.destroy()
+        this.styleMenu = undefined
         const extension = this.options.blockMenu?.(target)
         const insert = this.iconButton(
             'Insert new block',
@@ -556,13 +522,9 @@ export class NestedListBlockControls {
         )
         const controls: HTMLElement[] = [insert]
 
-        if (!target.isListItem)
-            controls.push(
-                this.styleDropdown(target),
-            )
-        else {
-            this.styleMenu = undefined
-            this.styleToggle = undefined
+        if (!target.isListItem) {
+            this.styleMenu = this.styleDropdown(target)
+            controls.push(this.styleMenu.element)
         }
 
         if (extension?.actions?.length) {
@@ -605,34 +567,24 @@ export class NestedListBlockControls {
         )
     }
 
-    private placePanel(): void {
-        if (!this.open)
-            return
+    private actionMenuPosition(): BubbleMenuPositionRequest {
+        return {
+            targetRect: this.bubble.element.getBoundingClientRect(),
+            placement: 'auto',
+            horizontalAlignment: 'start',
+            bounds: this.viewport(),
+            gap: 4,
+            clampToParent: false,
+        }
+    }
 
-        const active = this.styleMenu?.classList.contains('is-open')
-            ? this.styleMenu
-            : this.panel.classList.contains('is-open')
-                ? this.panel
-                : undefined
+    private repositionMenus(): void {
+        this.styleMenu?.reposition()
 
-        if (!active)
-            return
-
-        const viewport = this.viewport()
-        const toolbar = this.bubble.element.getBoundingClientRect()
-
-        if (
-            !viewport.height
-            || !toolbar.height
-        )
-            return
-
-        const below = Math.max(0, viewport.bottom - toolbar.bottom - 4)
-        const above = Math.max(0, toolbar.top - viewport.top - 4)
-        const aboveIsBetter = below < active.scrollHeight && above > below
-        const space = aboveIsBetter ? above : below
-        active.classList.toggle('nested-list-block-panel-above', aboveIsBetter)
-        active.style.maxHeight = `${Math.min(288, space)}px`
+        if (this.actionMenu)
+            this.actionMenu.reposition(
+                this.actionMenuPosition(),
+            )
     }
 
     private render(
@@ -640,6 +592,7 @@ export class NestedListBlockControls {
         trail: Array<() => NestedListBlockMenuItem[]>,
     ): void {
         this.closeStyleMenu()
+        this.closeActionMenu()
         const back = trail.length
             ? [this.button(
                 { label: 'Back' },
@@ -650,7 +603,6 @@ export class NestedListBlockControls {
             )]
             : []
         const items = source()
-        this.panel.classList.toggle('nested-list-block-panel-text', back.length > 0 || items.some(item => !item.icon))
         const rows = items.map(
             item => this.button(
                 item,
@@ -665,10 +617,23 @@ export class NestedListBlockControls {
                 },
             ),
         )
-        this.panel.replaceChildren(...back, ...rows)
-        this.panel.hidden = false
-        this.panel.classList.add('is-open')
-        this.placePanel()
+        this.actionMenu = new BubbleMenu({
+            parentEl: this.bubble.element,
+            label: 'Block actions',
+            role: 'menu',
+            orientation: 'vertical',
+            items: [...back, ...rows].map(
+                element => ({
+                    context: ['actions'],
+                    element,
+                }),
+            ),
+        })
+        this.actionMenu.element.classList.add('nested-list-block-panel')
+        this.actionMenu.show(
+            'actions',
+            this.actionMenuPosition(),
+        )
     }
 
     private button(
@@ -678,7 +643,7 @@ export class NestedListBlockControls {
         const button = html`
             <button
                 type="button"
-                className=${item.icon ? 'bubble-menu-dropdown-item nested-list-block-icon-item' : 'nested-list-block-menu-item'}
+                className=${item.icon ? 'bubble-menu-dropdown-item' : 'bubble-menu-text-item'}
                 role="menuitem"
                 aria-label=${item.label}
             ></button>
@@ -744,7 +709,7 @@ export class NestedListBlockControls {
             'block',
             this.position(),
         )
-        this.placePanel()
+        this.repositionMenus()
         this.view.dom.blur()
         this.bubble.element.focus({ preventScroll: true })
     }
@@ -766,7 +731,7 @@ export class NestedListBlockControls {
             this.bubble.reposition(
                 this.position(),
             )
-            this.placePanel()
+            this.repositionMenus()
         }
     }
 
@@ -807,6 +772,12 @@ export class NestedListBlockControls {
         if (event.key !== 'Escape')
             return
 
+        if (
+            this.styleMenu?.isOpen
+            && this.styleMenu.element.contains(event.target as Node | null)
+        )
+            return
+
         const editing = this.options.isEditable?.() ?? false
 
         if (
@@ -836,6 +807,7 @@ export class NestedListBlockControls {
 
     destroy(): void {
         this.hide()
+        this.styleMenu?.destroy()
         this.dragHandle.removeEventListener('pointerdown', this.dragPointerDown)
         this.dragHandle.removeEventListener('pointerenter', this.cancelLeave)
         this.dragHandle.removeEventListener('pointerleave', this.leave)

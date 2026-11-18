@@ -64,13 +64,13 @@ export type WorkspaceNodeGesturesPorts = {
     bringToFront: (element: HTMLElement) => void
     lockPan: () => () => void
     getViewport: () => CanvasViewport
-    updateChromeTransform: (
+    updateControlsTransform: (
         nodeId: string,
         position: Point,
         dimensions: Size,
         viewport: CanvasViewport,
     ) => void
-    updateChromeLayout: () => void
+    updateControlsLayout: () => void
     scheduleEdges: () => void
     cancelEdges: () => void
     repositionMenu: () => void
@@ -428,7 +428,7 @@ export class WorkspaceNodeGestures {
                 if (!this.isCurrent(scope))
                     return
 
-                this.ports.updateChromeTransform(
+                this.ports.updateControlsTransform(
                     draggedNodeId,
                     currentPos,
                     currentDims,
@@ -637,7 +637,7 @@ export class WorkspaceNodeGestures {
                             if (!this.isCurrent(scope))
                                 return n
 
-                            this.ports.updateChromeTransform(
+                            this.ports.updateControlsTransform(
                                 n.nodeId,
                                 resolvedPosition,
                                 n.dimensions,
@@ -763,7 +763,7 @@ export class WorkspaceNodeGestures {
                     ) {
                         this.ports.syncNodeGeometry(this.currentCanvasState.nodes)
                         this.ports.syncMedia()
-                        this.ports.updateChromeLayout()
+                        this.ports.updateControlsLayout()
                         this.ports.updateSelectionOverlay()
                         this.ports.scheduleEdges()
                     }
@@ -871,7 +871,7 @@ export class WorkspaceNodeGestures {
             if (!this.isCurrent(scope))
                 return
 
-            this.ports.updateChromeTransform(
+            this.ports.updateControlsTransform(
                 nodeId,
                 liveResizePosition,
                 liveResizeDimensions,
@@ -1004,7 +1004,7 @@ export class WorkspaceNodeGestures {
                     ) {
                         this.ports.syncNodeGeometry(this.currentCanvasState.nodes)
                         this.ports.syncMedia()
-                        this.ports.updateChromeLayout()
+                        this.ports.updateControlsLayout()
                         this.ports.updateSelectionOverlay()
                         this.ports.scheduleEdges()
                     }

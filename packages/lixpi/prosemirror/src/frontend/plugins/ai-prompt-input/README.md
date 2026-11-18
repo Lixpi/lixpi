@@ -1,6 +1,6 @@
 # AI Prompt Input Plugin
 
-`aiPromptInputPlugin` provides the ProseMirror editor used by AI prompt composer surfaces. It runs with `documentType: 'aiPromptInput'` and a single `aiPromptInput` document node. Hosts provide model controls, media controls, context chrome, and submit behavior through plugin options.
+`aiPromptInputPlugin` provides the ProseMirror editor used by AI prompt composer surfaces. It runs with `documentType: 'aiPromptInput'` and a single `aiPromptInput` document node. Hosts provide model and media controls, the context tray, and submit behavior through plugin options.
 
 ## Input Flow
 
@@ -88,7 +88,9 @@ The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels
 
 ## NodeView Structure
 
-`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` and `mountModelMenuControl()` to portal those controls into adjacent layout chrome; otherwise they remain children of the node view.
+The floating prompt exposes its decorative rim through `--ai-prompt-input-ring-width`, with a 4px default. The input wrapper uses that width as its margin, so hosts can align the visible input surface independently of the surrounding rim.
+
+`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` and `mountModelMenuControl()` to mount those controls next to the composer. Without those hooks, the node view mounts them directly.
 
 The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. `settings.aiPromptInput.mediaModeSwitch.styles` supplies the soft-blue track and selected circle, inactive and hover icon colors, and shadow setting. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
 
@@ -96,7 +98,8 @@ The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option va
 div.ai-prompt-input-wrapper[data-empty]
 ├── [div.ai-prompt-media-mode-switch  Image / Video icon switch, unless externally mounted]
 ├── [context tray from createContextTray()]
-├── div.ai-prompt-input-content
+├── div.ai-prompt-input-scroll[data-scrollbars="auto"]
+│   └── div.ai-prompt-input-content[data-scrollbars="off"]
 ├── div.ai-prompt-input-controls
     ├── [button.ai-prompt-model-menu-trigger, unless externally mounted]
     └── [submit button from createSubmitButton()]
@@ -137,11 +140,11 @@ The bottom settings row summarizes the active media model and its primary config
 
 The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper. Model and configuration changes trigger a new position measurement after the trigger summary and menu structure update.
 
-The model settings surface is capped to the viewport space above its trigger. Its content scrolls when the configured model rows exceed that height. Sliding dropdowns use their portaled wheel and touch scroll surface.
+The model settings surface keeps its own themed panel appearance and is capped to the viewport space above its trigger. Its content scrolls when the configured model rows exceed that height. Sliding dropdowns use their portaled wheel and touch scroll surface.
 
 Each section has a title, help tooltip, `Add model` action, and one or more removable model rows. The final row's removal control stays disabled.
 
-`settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in ``@lixpi/prosemirror/styles/editor/native-prompt-controls``.
+The web UI projects model-menu trigger, surface, text, layout, divider, and tooltip settings to CSS custom properties on the NodeView root through `applyAiModelMenuStyleSettings()`. BubbleMenu supplies positioning and lifecycle; `settings.aiPromptInput.modelMenu.styles` owns the matrix panel's appearance. Layout rules stay in `@lixpi/prosemirror/styles/editor/native-prompt-controls`.
 
 The NodeView hides the model menu on document `mousedown` outside the controls row, model menu, and sliding-dropdown scroll surfaces/SVGs. It removes that listener in `destroy()`.
 
@@ -174,7 +177,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## NodeView Lifecycle
 
-- `ignoreMutation()` returns `true` for mutations inside the controls row, media-mode switch, and injected context tray.
+- `ignoreMutation()` returns `true` for mutations inside the controls row, media-mode switch, injected context tray and model menu, and for the `.ai-prompt-input-scroll` wrapper outside the editable content. The wrapper owns the input's scrolling, so the shared overlay scrollbar adds its elements beside the content instead of inside it. Those regions carry `data-scrollbars="auto"`; the editable content carries `data-scrollbars="off"`.
 - `stopEvent()` returns `true` for events inside the controls row, media-mode switch, and injected context tray.
 - `update()` accepts `aiPromptInput` nodes, syncs empty state, and updates every mounted dropdown/tag row.
 - `destroy()` removes the document mouse listener, destroys the model menu content, destroys the `BubbleMenu`, and destroys mounted toggles, dropdowns, and tag rows.
@@ -193,7 +196,8 @@ SCSS lives in ``@lixpi/prosemirror/styles/editor/native-prompt-controls``.
 └── .floating-input-editor
     └── .ai-prompt-input-wrapper
         ├── [.ai-prompt-media-mode-switch when not externally mounted]
-        ├── .ai-prompt-input-content
+        ├── .ai-prompt-input-scroll
+        │   └── .ai-prompt-input-content
         └── .ai-prompt-input-controls
             ├── [.ai-prompt-model-menu-trigger when not externally mounted]
             ├── .ai-submit-button

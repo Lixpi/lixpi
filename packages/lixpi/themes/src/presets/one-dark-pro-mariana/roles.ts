@@ -2,6 +2,7 @@ import {
     type ThemeRoles,
 } from '../../template/application.ts'
 import {
+    marianaScrollbarPalette,
     marianaShadowPalette,
     type marianaPalette,
 } from '../../palettes/mariana.ts'
@@ -179,6 +180,19 @@ export const createMarianaRoles = (palette: MarianaColors) =>
                 hover: palette.deepGraphite,
                 foreground: palette.pearlGray,
             },
+            bubbleMenu: {
+                background: palette.charcoalBlue,
+                foreground: palette.silverBlue,
+                hoverBackground: palette.graphiteBlue,
+                hoverForeground: palette.paleSilver,
+                activeBackground: palette.graphiteBlue,
+                activeForeground: palette.paleSilver,
+                border: palette.slateBlue,
+                separator: palette.slateBlue,
+                fieldBackground: palette.deepCharcoal,
+                fieldFocusBackground: palette.charcoal,
+                placeholder: palette.stormGray,
+            },
             slidingSwitch: {
                 track: palette.charcoalBlue,
                 indicator: palette.graphiteBlue,
@@ -197,9 +211,10 @@ export const createMarianaRoles = (palette: MarianaColors) =>
                 disabled: palette.stormGray,
             },
             scrollbar: {
-                thumb: palette.smokeBlue38,
-                hover: palette.denimGray50,
-                active: palette.dustyBlue50,
+                track: marianaScrollbarPalette.white04,
+                thumb: palette.dustyBlue50,
+                hover: marianaScrollbarPalette.silverBlue70,
+                active: marianaScrollbarPalette.silverBlue85,
             },
         },
         panel: {

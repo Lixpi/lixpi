@@ -2,6 +2,7 @@
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 
 @import "@lixpi/ui-primitives/styles/transitions";
+@import "./workspace-conversation-layout";
 
 // The fixed composer keeps its input and reference tray in place while the
 // conversation consumes only the space remaining above them.
@@ -52,7 +53,7 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
-    padding: 2px 20px 6px;
+    padding: 2px $workspace-conversation-content-inset 6px;
     color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
     font-size: 12px;
 }
@@ -91,6 +92,11 @@
     outline-offset: 2px;
 }
 
+.workspace-conversation-layout > .workspace-conversation-panel:has(> .workspace-conversation-menu.is-visible),
+.workspace-conversation-layout > .workspace-canvas-global-composer:has(.ai-prompt-model-menu-info-bubble.is-visible) {
+    z-index: calc(var(--side-panel-resize-handle-z-index, 9990) + 1);
+}
+
 .workspace-conversation-menu {
     color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
 }
@@ -100,6 +106,7 @@
     border-radius: 12px;
     border-color: var(--canvas-border, #{themeScope.token("border", themePalette.$roles)});
     background: var(--canvas-surface, #{themeScope.token("surface", themePalette.$roles)});
+    box-shadow: var(--canvas-shadow, #{themeScope.token("shadow-control", themePalette.$roles)});
 }
 
 .workspace-conversation-menu-content {
@@ -162,12 +169,11 @@
 .workspace-conversation-messages {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 6px 20px 0;
+    padding: 6px $workspace-conversation-content-inset 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
     overflow-wrap: anywhere;
-    scrollbar-width: thin;
 }
 
 .workspace-conversation-transcript,
@@ -187,7 +193,7 @@
 .workspace-conversation-origin {
     flex: 0 0 auto;
     margin: 0;
-    padding: 6px 20px 10px;
+    padding: 6px $workspace-conversation-content-inset 10px;
     color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
     font-size: 12px;
 }

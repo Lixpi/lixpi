@@ -1,7 +1,7 @@
 // NavigationSidePanel - the workspace tree side panel built on the shared
 // SidePanel component.
 //
-// Renderer: TypeScript `html` DOM for the panel chrome. The workspace tree in
+// Renderer: TypeScript `html` DOM for the panel controls. The workspace tree in
 // the list uses the local workspace adapter; this panel supplies its
 // ports (NATS requests, routing, confirmation, import and export, collapse
 // persistence) and keeps the header, footer and SidePanel shell.
@@ -28,6 +28,8 @@ import {
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import { settings } from '$src/settings.ts'
 import { navigationSidePanelToggleIcon } from '@lixpi/ui-kit/svg'
+import { bindCanvasTheme } from '@lixpi/canvas-components/theme'
+import { canvasThemeStore } from '$src/canvas-adapters/canvas-theme.ts'
 
 import { workspaceTreeStore } from '$src/stores/workspaceTreeStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -167,7 +169,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
                 openOffset: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.openOffset,
                 closedTravel: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.closedTravel,
                 top: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.top,
-                size: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.size,
                 onToggle: this.toggleVisibility,
             },
             minWidth: NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth,
@@ -183,8 +184,15 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
 
         this.reflectStyleSettings()
 
-        if (this.sidePanel.toggleElement)
+        // The toggle is the same action panel as the controls beside the prompt
+        // input. It mounts outside the canvas, so it takes the canvas theme's
+        // paint here to look the same.
+        if (this.sidePanel.toggleElement) {
             this.paneEl.appendChild(this.sidePanel.toggleElement)
+            this.unsubscribers.push(
+                bindCanvasTheme(this.sidePanel.toggleElement, canvasThemeStore),
+            )
+        }
 
         if (this.sidePanel.overlayElement)
             this.paneEl.appendChild(this.sidePanel.overlayElement)
@@ -342,8 +350,6 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     private reflectStyleSettings = (): void => {
         this.paneEl.style.setProperty('--side-panel-backdrop-fill', NAVIGATION_SIDE_PANEL_SETTINGS.styles.backdropFill)
         this.paneEl.style.setProperty('--side-panel-backdrop-fill-opaque', NAVIGATION_SIDE_PANEL_SETTINGS.styles.backdropFillOpaque)
-        this.paneEl.style.setProperty('--side-panel-toggle-color', NAVIGATION_SIDE_PANEL_SETTINGS.styles.toggleColor)
-        this.paneEl.style.setProperty('--side-panel-toggle-hover-color', NAVIGATION_SIDE_PANEL_SETTINGS.styles.toggleHoverColor)
     }
 
     private reflectInitialOpenState(): void {

@@ -135,7 +135,7 @@ top of the node, while the expanded panel renders the summary and tags first,
 before Asset diagnostics and provenance.
 
 Documents and conversation nodes do not render the media analyzing pulse. See
-[Workspace Model](../canvas/WORKSPACE-MODEL.md) for the canvas node chrome these
+[Workspace Model](../canvas/WORKSPACE-MODEL.md) for the canvas node controls these
 indicators attach to.
 
 ## Why Videos Send a Still, Not the Clip
@@ -153,5 +153,5 @@ and VEO anchoring.
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md): how descriptors/tags feed branch grounding
 - [Image Generation](../media-generation/IMAGE-GENERATION.md): generated-image completion and final-frame storage
 - [Video Generation](../media-generation/VIDEO-GENERATION.md): mid-frame extraction and VEO image-to-video anchoring
-- [Workspace Model](../canvas/WORKSPACE-MODEL.md): canvas media nodes and chrome
+- [Workspace Model](../canvas/WORKSPACE-MODEL.md): canvas media nodes and controls
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md): the shared generation workflow

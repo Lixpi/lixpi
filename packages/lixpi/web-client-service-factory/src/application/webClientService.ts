@@ -1,4 +1,8 @@
 import {
+    acquireDocumentScrollbars,
+    type DocumentScrollbarsLease,
+} from '@lixpi/ui-primitives/scrollbars'
+import {
     mountWebClientApplication,
     type WebClientApplicationInstance,
     type WebClientMountResource,
@@ -42,6 +46,7 @@ class WebClientService<Dependencies> implements WebClientServiceInstance {
     private dependenciesInitialized = false
     private destruction: Promise<void> | null = null
     private readonly router: WebClientRouterService
+    private scrollbars: DocumentScrollbarsLease | null = null
     private serviceLifecycleStarted = false
     private startup: Promise<void> | null = null
 
@@ -62,6 +67,11 @@ class WebClientService<Dependencies> implements WebClientServiceInstance {
     }
 
     private async initialize(): Promise<void> {
+        const document = this.config.document ?? globalThis.document
+        // Scrollbars outlive a failed startup so the error or sign-in screen an
+        // application shows from `onError` gets them too. `destroy()` ends them.
+        this.scrollbars = acquireDocumentScrollbars(document)
+
         try {
             this.dependencies = await this.config.createDependencies?.()
             this.dependenciesInitialized = true
@@ -69,7 +79,6 @@ class WebClientService<Dependencies> implements WebClientServiceInstance {
             this.serviceLifecycleStarted = true
             await this.config.initializeServices?.(context)
 
-            const document = this.config.document ?? globalThis.document
             const mountTargetId = this.config.mountTargetId ?? 'app'
             const target = document.getElementById(mountTargetId)
 
@@ -112,7 +121,13 @@ class WebClientService<Dependencies> implements WebClientServiceInstance {
 
     private async disposeAfterStartup(): Promise<void> {
         await this.startup
-        await this.disposeOwnedResources()
+
+        try {
+            await this.disposeOwnedResources()
+        } finally {
+            this.scrollbars?.release()
+            this.scrollbars = null
+        }
     }
 
     private async disposeOwnedResources(): Promise<void> {

@@ -12,8 +12,6 @@
     --side-panel-overlay-fill-opaque: var(--canvas-surface);
     --side-panel-backdrop-fill: var(--canvas-lixpi-panel-backdrop, var(--canvas-surface-raised));
     --side-panel-backdrop-fill-opaque: var(--canvas-lixpi-panel-backdrop-opaque, var(--canvas-surface-raised));
-    --side-panel-toggle-color: var(--canvas-panel-toggle-color);
-    --side-panel-toggle-hover-color: var(--canvas-panel-toggle-hover);
     --side-panel-resize-handle-gradient: var(--canvas-panel-resize-handle-gradient);
     --side-panel-resize-handle-width: var(--canvas-panel-resize-handle-width);
     --context-preview-background: var(--canvas-surface);
@@ -104,45 +102,11 @@
     filter: none;
 }
 
-[data-canvas-theme] .bubble-menu-content,
-[data-canvas-theme] .bubble-menu-dropdown-menu,
 [data-canvas-theme] .bubble-menu-link-input {
     border-color: var(--canvas-border);
     border-radius: var(--canvas-panel-radius);
     background: var(--canvas-surface-raised);
     box-shadow: var(--canvas-shadow);
-}
-
-[data-canvas-theme] .bubble-menu-button,
-[data-canvas-theme] .bubble-menu-dropdown-toggle,
-[data-canvas-theme] .bubble-menu-dropdown-item {
-    height: var(--canvas-control-height);
-    border-radius: var(--canvas-control-radius);
-    color: var(--canvas-text);
-    font-family: var(--canvas-font-family);
-}
-
-[data-canvas-theme] .bubble-menu-button svg,
-[data-canvas-theme] .bubble-menu-dropdown-toggle svg,
-[data-canvas-theme] .bubble-menu-dropdown-item svg,
-[data-canvas-theme] .link-input-remove svg {
-    fill: currentColor;
-}
-
-[data-canvas-theme] .bubble-menu-button:hover,
-[data-canvas-theme] .bubble-menu-dropdown-toggle:hover,
-[data-canvas-theme] .bubble-menu-dropdown-item:hover {
-    background: var(--canvas-surface-hover);
-}
-
-[data-canvas-theme] .bubble-menu-button.is-active,
-[data-canvas-theme] .bubble-menu-dropdown-item.is-active {
-    background: var(--canvas-accent);
-    color: var(--canvas-on-accent);
-}
-
-[data-canvas-theme] .bubble-menu-separator {
-    background: var(--canvas-border);
 }
 
 [data-canvas-theme] .link-input-field {

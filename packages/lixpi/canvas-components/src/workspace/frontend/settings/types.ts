@@ -24,7 +24,7 @@ export type CanvasBubbleMenuSettings = {
     zoomScaling: BoundedZoomScalingSettings
 }
 
-export type CanvasChromeSettings = {
+export type CanvasControlsSettings = {
     glassBorder: {
         enabled: boolean
         widthPx: number
@@ -64,7 +64,7 @@ export type MediaNodeSettings = {
         borderRadius: number
         backgroundColor?: string
     }
-    generatedMediaChrome: {
+    generatedMediaControls: {
         iconSize: number
         gap: number
         chatScale: number
@@ -213,7 +213,7 @@ export type LixpiCanvasPalette = {
 
 export type LixpiCanvasSettings = {
     canvasBubbleMenu: CanvasBubbleMenuSettings
-    canvasChrome: CanvasChromeSettings
+    canvasControls: CanvasControlsSettings
     connector: ConnectorSettings
     selection: SelectionSettings
     workspaceCollision: WorkspaceCollisionSettings

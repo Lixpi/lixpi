@@ -19,7 +19,7 @@ import {
     applyBranchLineageNodeGap,
     normalizeBranchLineageNodeGap,
 } from './branch-lineage-spacing.ts'
-import { getGeneratedOutputChromeCollisionInsets } from './media-fitting.ts'
+import { getGeneratedOutputControlsCollisionInsets } from './media-fitting.ts'
 import {
     getGeneratedMediaPreFrameLayoutRect,
     getGeneratedMediaPreFrameSize,
@@ -202,7 +202,7 @@ export class WorkspaceGeometry {
         }
     }
 
-    getMediaChromeCollisionInsets(node: CanvasNode): {
+    getMediaControlsCollisionInsets(node: CanvasNode): {
         top: number
         bottom: number
     } {
@@ -217,7 +217,7 @@ export class WorkspaceGeometry {
                 bottom: 0,
             }
 
-        return getGeneratedOutputChromeCollisionInsets(node.type)
+        return getGeneratedOutputControlsCollisionInsets(node.type)
     }
 
     getCanvasNodeCollisionRect(
@@ -248,12 +248,12 @@ export class WorkspaceGeometry {
                 this.ports.settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale,
             )
         } else {
-            const chromeInsets = this.getMediaChromeCollisionInsets(node)
+            const controlsInsets = this.getMediaControlsCollisionInsets(node)
             collisionRect = {
                 x: worldPosition.x,
-                y: worldPosition.y - chromeInsets.top,
+                y: worldPosition.y - controlsInsets.top,
                 width: dimensions.width,
-                height: chromeInsets.top + dimensions.height + chromeInsets.bottom,
+                height: controlsInsets.top + dimensions.height + controlsInsets.bottom,
             }
         }
 

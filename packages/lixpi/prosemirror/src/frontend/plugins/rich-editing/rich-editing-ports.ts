@@ -14,7 +14,7 @@ export type MediaUrlResolver = (
 
 // The model badge shown on generated media.
 export type GeneratedMediaModelBadge = {
-    // Sizes the badge chrome on the element that holds the media.
+    // Sizes the badge on the element that holds the media.
     decorate: (container: HTMLElement) => void
     render: (
         target: HTMLElement,

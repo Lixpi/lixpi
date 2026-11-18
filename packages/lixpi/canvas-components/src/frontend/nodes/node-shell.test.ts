@@ -247,8 +247,8 @@ describe('withNodeShell', () => {
 })
 
 
-describe('withNodeShell conditional chrome and footer geometry', () => {
-    it('toggles chrome for a node update without replacing its content view', () => {
+describe('withNodeShell conditional controls and footer geometry', () => {
+    it('toggles controls for a node update without replacing its content view', () => {
         const {
             context,
             overlayRoot,

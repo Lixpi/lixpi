@@ -101,7 +101,7 @@ dev-tools/dev-console/actions/init-config.sh --non-interactive --name=shelby --e
 
 Supported options are `--help`, `--non-interactive`, `--name=<name>`, and `--env=local|dev|production`.
 
-Lixpi ignores `env.lixpi` and runtime `.env.*` files. Templates are the committed source of defaults; generated files may contain secrets and must not be committed.
+Lixpi ignores `env.lixpi` and runtime `.env.*` files. Templates are the committed source of defaults; generated files may contain secrets and must not be committed. Web UI performance reporting and native desktop profiling both default to false. Desktop diagnostics logging is a separate option, so enabling Debug mode in the dev console does not enable performance probes.
 
 ## Extending the runner
 

@@ -1,8 +1,8 @@
 ARG RUST_ALPINE_IMAGE_REFERENCE=rust:1.99.1-alpine
 
 # Builds the macOS desktop app on Linux. Rust compiles for the Apple targets,
-# Zig links them against the macOS SDK, and rcodesign gives the bundle an
-# ad-hoc signature, which Apple silicon requires before an app can launch.
+# Zig links them against the macOS SDK, and rcodesign signs the bundle
+# with the persistent local-development identity from the signing volume.
 FROM ${RUST_ALPINE_IMAGE_REFERENCE}
 ARG ZIG_VERSION=0.17.1
 ARG CARGO_ZIGBUILD_VERSION=0.24.1
@@ -25,6 +25,16 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry cargo install --locked "
 # The SDK comes from the developer's own Mac through the `macos-sdk` build
 # context, so the image never downloads or redistributes it.
 COPY --from=macos-sdk . /opt/macos-sdk
+
+# CEF adds a native C++ wrapper, and patch applies the runtime patch. Keep this
+# after the cached Rust tools and SDK.
+RUN apk add --no-cache cmake ninja patch
+
+# The official Tauri runtime and CEF helper sources, downloaded, verified and
+# patched inside the image at /opt/tauri-upstream. Only Lixpi's patch and pins
+# live in the checkout.
+COPY upstream /usr/src/tauri-upstream
+RUN sh /usr/src/tauri-upstream/prepare.sh
 
 ENV SDKROOT=/opt/macos-sdk
 ENV MACOSX_DEPLOYMENT_TARGET=13.0

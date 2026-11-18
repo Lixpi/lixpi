@@ -9,7 +9,7 @@ import {
 
 type AssetNode = Extract<CanvasNode, { type: 'image' | 'video' | 'audio' | 'capabilityArtifact' }>
 
-// Each canvas chrome or details sidebar owns its own collection of Asset views.
+// Each canvas controls or details sidebar owns its own collection of Asset views.
 export class WorkspaceAssetViews {
     private readonly views = new Map<string, { destroy: () => void }>()
     private destroyed = false

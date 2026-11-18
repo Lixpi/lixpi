@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+set -eu
+exec zig cc -target "${LIXPI_CEF_ZIG_TARGET}" -isysroot "${SDKROOT}" "$@"

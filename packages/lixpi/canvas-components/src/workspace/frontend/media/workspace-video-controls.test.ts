@@ -1,0 +1,379 @@
+// @vitest-environment happy-dom
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    type VideoCanvasNode,
+    type AudioCanvasNode,
+} from '@lixpi/constants'
+import { createDefaultVideoControlsSettings } from '@lixpi/ui-kit/components/video-controls'
+import {
+    WorkspaceVideoControls,
+    type WorkspaceVideoControlsOptions,
+} from './workspace-video-controls.ts'
+
+const controlMount = vi.hoisted(() => ({ fail: false }))
+vi.mock('@lixpi/ui-kit/components/video-controls', async importOriginal => {
+    const actual = await importOriginal<typeof import('@lixpi/ui-kit/components/video-controls')>()
+
+    return {
+        ...actual,
+        createVideoControls: (...args: Parameters<typeof actual.createVideoControls>) => {
+            if (controlMount.fail)
+                throw new Error('controls unavailable')
+
+            return actual.createVideoControls(...args)
+        },
+    }
+})
+
+const node: VideoCanvasNode = {
+    nodeId: 'video',
+    type: 'video',
+    assetId: 'asset',
+    position: {
+        x: 100,
+        y: 200,
+    },
+    dimensions: {
+        width: 400,
+        height: 240,
+    },
+}
+const owners: WorkspaceVideoControls[] = []
+
+const fixture = () => {
+    const sourceHost = document.createElement('div')
+    const video = document.createElement('video')
+    video.src = 'https://example.test/video.mp4'
+    sourceHost.appendChild(video)
+    document.body.appendChild(sourceHost)
+    const options: WorkspaceVideoControlsOptions = {
+        document,
+        settings: {
+            ...createDefaultVideoControlsSettings(),
+            canvas: {
+                horizontalInset: 12,
+                compactHorizontalInset: 4,
+                compactWidthThreshold: 300,
+                bottomInset: 8,
+                zoomScaling: { minZoom: 0.4 },
+            },
+        },
+        getVideo: () => video,
+        getBounds: node => ({
+            ...node.position,
+            ...node.dimensions,
+        }),
+        getViewport: () => ({
+            x: 0,
+            y: 0,
+            zoom: 1,
+        }),
+        getResizeSettings: () => ({
+            useZoomCompensatedScaling: false,
+            size: 10,
+            offset: 0,
+            minSize: 10,
+            zoomScaling: { minZoom: 0.4 },
+        }),
+        startDrag: vi.fn(),
+        startResize: vi.fn(),
+        togglePlayback: vi.fn(),
+    }
+    const controls = new WorkspaceVideoControls(options)
+    document.body.appendChild(controls.element)
+    owners.push(controls)
+
+    return {
+        controls,
+        video,
+        sourceHost,
+        options,
+    }
+}
+
+const mouse = (element: Element, type: string, clientX = 110, clientY = 110) => {
+    element.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX,
+        clientY,
+    }))
+}
+
+afterEach(() => {
+    controlMount.fail = false
+
+    for (const owner of owners.splice(0)) owner.destroy()
+
+    vi.restoreAllMocks()
+    document.body.replaceChildren()
+})
+
+describe('WorkspaceVideoControls', () => {
+    it('mounts audible audio controls inside the node and preserves playback across updates', async () => {
+        const {
+            controls,
+            sourceHost,
+            options,
+        } = fixture()
+        const audio = document.createElement('audio')
+        audio.src = 'https://example.test/export.wav'
+        audio.muted = false
+        let paused = true
+        Object.defineProperties(audio, {
+            duration: { get: () => 4 },
+            paused: { get: () => paused },
+        })
+        audio.play = vi.fn(async () => {
+            paused = false
+            audio.dispatchEvent(new Event('play'))
+        })
+        audio.pause = vi.fn(() => {
+            paused = true
+            audio.dispatchEvent(new Event('pause'))
+        })
+        sourceHost.appendChild(audio)
+        options.getAudio = () => audio
+        const audioNode: AudioCanvasNode = {
+            ...node,
+            type: 'audio',
+            dimensions: {
+                width: 360,
+                height: 96,
+            },
+        }
+        controls.sync([audioNode])
+        const element = controls.element.firstElementChild as HTMLElement
+        const host = element.querySelector<HTMLElement>('.workspace-video-controls-host')!
+        expect(element.querySelector('audio')).toBe(audio)
+        expect(parseFloat(host.style.top)).toBeGreaterThanOrEqual(0)
+        expect(parseFloat(host.style.top) + parseFloat(host.style.height)).toBeLessThanOrEqual(96)
+        expect(element.textContent).toContain('0:04')
+        expect(element.querySelector('.video-controls-fullscreen')).toBeNull()
+        expect(element.querySelector('[aria-label="Enter fullscreen"]')).toBeNull()
+        mouse(element.querySelector('.video-controls-play-hit')!, 'click')
+        await Promise.resolve()
+        expect(audio.play).toHaveBeenCalledOnce()
+        expect(audio.muted).toBe(false)
+        expect(element.querySelector('[aria-label="Pause audio"]')).not.toBeNull()
+        controls.sync([{
+            ...audioNode,
+            position: {
+                x: 300,
+                y: 400,
+            },
+        }])
+        expect(controls.element.firstElementChild).toBe(element)
+        mouse(element.querySelector('.video-controls-play-hit')!, 'click')
+        expect(audio.pause).toHaveBeenCalledOnce()
+        expect(controls.outsideOffsetScreen(audioNode.nodeId, options.getViewport())).toBe(0)
+        const playHit = element.querySelector('.video-controls-play-hit')!
+        controls.sync([])
+        expect(sourceHost.contains(audio)).toBe(true)
+        mouse(playHit, 'click')
+        expect(audio.play).toHaveBeenCalledOnce()
+    })
+
+    it('retains playback controls across metadata and geometry updates and restores the native element on removal', () => {
+        const {
+            controls,
+            video,
+            sourceHost,
+        } = fixture()
+        controls.sync([node])
+        const element = controls.element.firstElementChild as HTMLElement
+        const svg = element.querySelector('svg')!
+        expect(element.querySelector('video')).toBe(video)
+        expect(element.querySelector('.canvas-node-footer')).toBeNull()
+        expect(element.style.left).toBe('100px')
+        controls.sync([{
+            ...node,
+            position: {
+                x: 300,
+                y: 400,
+            },
+        }])
+        expect(controls.element.firstElementChild).toBe(element)
+        expect(element.querySelector('svg')).toBe(svg)
+        expect(element.style.left).toBe('300px')
+        expect(element.style.top).toBe('400px')
+        expect(controls.outsideOffsetScreen(node.nodeId, {
+            x: 0,
+            y: 0,
+            zoom: 1,
+        })).toBeGreaterThan(8)
+        controls.sync([])
+        expect(sourceHost.firstElementChild).toBe(video)
+        expect(controls.element.children).toHaveLength(0)
+        expect(controls.outsideOffsetScreen(node.nodeId, {
+            x: 0,
+            y: 0,
+            zoom: 1,
+        })).toBe(0)
+    })
+
+    it('routes surface drag, corner resize and double-click playback and releases every surface listener', () => {
+        const {
+            controls,
+            options,
+        } = fixture()
+        controls.sync([node])
+        const surface = controls.element.querySelector('.workspace-video-surface')!
+        vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(new DOMRect(10, 10, 400, 240))
+        mouse(surface, 'mousedown')
+        expect(options.startDrag).toHaveBeenCalledWith(expect.any(MouseEvent), node.nodeId)
+        const corners = [[11, 11, 'top-left'], [409, 11, 'top-right'], [11, 249, 'bottom-left'], [409, 249, 'bottom-right']] as const
+
+        for (const [x, y, corner] of corners) {
+            mouse(surface, 'mousemove', x, y)
+            expect((surface as HTMLElement).style.cursor).toMatch(/resize$/)
+            mouse(surface, 'mousedown', x, y)
+            expect(options.startResize).toHaveBeenLastCalledWith(expect.any(MouseEvent), node.nodeId, corner)
+        }
+
+        mouse(surface, 'dblclick')
+        expect(options.togglePlayback).toHaveBeenCalledExactlyOnceWith(node.nodeId)
+        controls.clear()
+        mouse(surface, 'mousedown')
+        mouse(surface, 'dblclick')
+        expect(options.startDrag).toHaveBeenCalledOnce()
+        expect(options.startResize).toHaveBeenCalledTimes(4)
+        expect(options.togglePlayback).toHaveBeenCalledOnce()
+    })
+
+    it('keeps the control row below the node through zoom and live resizing', () => {
+        const { controls } = fixture()
+        controls.sync([node])
+        const bounds = {
+            x: 50,
+            y: 60,
+            width: 200,
+            height: 120,
+        }
+        controls.update(node.nodeId, bounds, {
+            x: 90,
+            y: 80,
+            zoom: 0.25,
+        })
+        const element = controls.element.firstElementChild as HTMLElement
+        const surface = element.querySelector('.workspace-video-surface') as HTMLElement
+        const host = element.querySelector('.workspace-video-controls-host') as HTMLElement
+        expect(element.style.left).toBe('50px')
+        expect(element.style.top).toBe('60px')
+        expect(surface.style.width).toBe('200px')
+        expect(surface.style.height).toBe('120px')
+        expect(parseFloat(host.style.top)).toBeGreaterThanOrEqual(120)
+        const viewBox = element.querySelector('svg')!.getAttribute('viewBox')!.split(' ').map(Number)
+        expect(viewBox.every(Number.isFinite)).toBe(true)
+        expect(viewBox[2]).toBeGreaterThan(0)
+        expect(parseFloat(element.style.height)).toBeGreaterThan(120)
+    })
+
+    it.each([[2, 19, true], [2, 21, false], [0.25, 15, true], [0.25, 17, false]] as const)('tests resize corners in screen pixels at zoom %s and distance %s', (zoom, distance, resize) => {
+        const {
+            controls,
+            options,
+        } = fixture()
+        options.getViewport = () => ({
+            x: 0,
+            y: 0,
+            zoom,
+        })
+        controls.sync([node])
+        const surface = controls.element.querySelector('.workspace-video-surface')!
+        vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(new DOMRect(10, 10, 400 * zoom, 240 * zoom))
+        mouse(surface, 'mousedown', 10 + distance, 10 + distance)
+        expect(options.startResize).toHaveBeenCalledTimes(resize ? 1 : 0)
+        expect(options.startDrag).toHaveBeenCalledTimes(resize ? 0 : 1)
+    })
+
+    it('waits for a playable source and replaces only the changed native element', () => {
+        const {
+            controls,
+            video,
+            sourceHost,
+            options,
+        } = fixture()
+        video.removeAttribute('src')
+        controls.sync([node])
+        expect(controls.element.children).toHaveLength(0)
+        video.src = 'https://example.test/ready.mp4'
+        controls.sync([node])
+        const replacement = document.createElement('video')
+        replacement.src = 'https://example.test/replacement.mp4'
+        sourceHost.appendChild(replacement)
+        options.getVideo = () => replacement
+        controls.sync([node])
+        expect(controls.element.querySelector('video')).toBe(replacement)
+        expect(video.parentNode).toBe(sourceHost)
+        controls.destroy()
+        expect(replacement.parentNode).toBe(sourceHost)
+        controls.sync([node])
+        expect(controls.element.children).toHaveLength(0)
+    })
+
+    it('restores every borrowed video when one child cleanup fails', () => {
+        const {
+            controls,
+            options,
+            sourceHost,
+            video,
+        } = fixture()
+        const other = document.createElement('video')
+        other.src = 'https://example.test/other.mp4'
+        sourceHost.append(other)
+        options.getVideo = id => id === 'video' ? video : other
+        controls.sync([node, {
+            ...node,
+            nodeId: 'other',
+        }])
+        const originalAppend = sourceHost.appendChild.bind(sourceHost)
+        vi.spyOn(sourceHost, 'appendChild').mockImplementation(child => {
+            originalAppend(child)
+
+            if (child === other)
+                throw new Error('host cleanup')
+
+            return child
+        })
+        expect(() => controls.clear()).toThrow(AggregateError)
+        expect(video.parentNode).toBe(sourceHost)
+        expect(other.parentNode).toBe(sourceHost)
+        expect(controls.element.children).toHaveLength(0)
+        vi.restoreAllMocks()
+    })
+
+    it('does not dispose another canvas using the same node identity', () => {
+        const first = fixture()
+        const second = fixture()
+        first.controls.sync([node])
+        second.controls.sync([node])
+        const secondSurface = second.controls.element.querySelector('.workspace-video-surface')!
+        first.controls.destroy()
+        expect(second.controls.element.querySelector('video')).toBe(second.video)
+        mouse(secondSurface, 'dblclick')
+        expect(second.options.togglePlayback).toHaveBeenCalledExactlyOnceWith(node.nodeId)
+    })
+
+    it('restores borrowed media after a failed control mount and can retry', () => {
+        const {
+            controls,
+            video,
+            sourceHost,
+        } = fixture()
+        controlMount.fail = true
+        expect(() => controls.sync([node])).toThrow('controls unavailable')
+        expect(video.parentNode).toBe(sourceHost)
+        expect(controls.element.children).toHaveLength(0)
+        controlMount.fail = false
+        controls.sync([node])
+        expect(controls.element.querySelector('video')).toBe(video)
+    })
+})

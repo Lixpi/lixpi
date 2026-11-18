@@ -33,6 +33,8 @@ IDBD Explorer loads this stylesheet from its HTML head so its first paint alread
 
 Navigation section headings use the shared `components.navigation.sectionHeading` profile: 14px text with a 1.5 line height, weight 500, normal letter spacing, no text transform, and 16px 20px 4px padding. The theme supplies their font family and section-label color. The Gentelella adapter and canvas library read the same profile, while Mariana keeps its apricot labels and existing font stack.
 
+BubbleMenu colors live in each preset's `control.bubbleMenu` roles. The light preset shares the composer image/video switch's pale blue and dark icon palette; Mariana uses its sliding switch's charcoal and graphite surfaces with light icon colors. The stylesheet projection exposes these roles as `--theme-bubble-menu-*`, which the shared menu consumes through its component settings.
+
 Panel widths, resize targets, toggle geometry and slide timing live in the shared panel values. Web UI settings project those values into their runtime configuration, and the canvas library consumes the same settings. The library's information panel retains its separate 416px initial width.
 
 ## Color mapping and attribution

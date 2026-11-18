@@ -3,7 +3,7 @@ export type ZoomScalingMode =
     | 'adaptive' // Shrinks at low zoom, constant at 100%, grows at high zoom
 
 export type AdaptiveZoomScalingOptions = {
-    lowZoomPower?: number // Generic adaptive power below 100% (default: 0.4; bounded canvas chrome adapts separately)
+    lowZoomPower?: number // Generic adaptive power below 100% (default: 0.4; bounded canvas controls adapt separately)
     highZoomGrowth?: number // Linear growth rate above 100% (default: 0.5)
     minMultiplier?: number // Lower visual-scale clamp for very low zoom
     maxMultiplier?: number // Upper visual-scale clamp for very high zoom
@@ -13,9 +13,9 @@ export type ZoomScalingOptions = AdaptiveZoomScalingOptions & {
     mode?: ZoomScalingMode
 }
 
-// Bounded zoom scaling is used for canvas chrome whose visual size must not be
+// Bounded zoom scaling is used for canvas controls whose visual size must not be
 // a direct function of node/world size. Examples include connector strokes,
-// arrowheads, resize handles, bubble menus, and generated-media info chrome.
+// arrowheads, resize handles, bubble menus, and generated-media info controls.
 //
 // `minZoom` is the lower compensation breakpoint, not the viewport's allowed
 // minimum zoom. Above this breakpoint, plain bounded scaling can counteract the
@@ -25,19 +25,19 @@ export type ZoomScalingOptions = AdaptiveZoomScalingOptions & {
 // `lowZoomPower` opts into perceptual low-zoom shrink. With this value omitted,
 // the helper preserves the original bounded-constant behavior. With it present,
 // the screen-size multiplier is `zoom ** lowZoomPower` between 100% and
-// `minZoom`, so chrome gently shrinks as the canvas zooms out instead of
+// `minZoom`, so controls gently shrink as the canvas zooms out instead of
 // staying mathematically constant and looking large relative to the content.
 export type BoundedZoomScalingOptions = {
     minZoom: number
     lowZoomPower?: number
 }
 
-// Layout contract for DOM chrome mounted outside a CSS-transformed viewport.
+// Layout contract for DOM controls mounted outside a CSS-transformed viewport.
 // `viewport` is the live screen transform: screen = world * zoom + x/y.
 // `worldPosition` and `worldDimensions` describe the node in canvas units.
 // `baseGap` is the desired screen-space gap before applying bounded scaling.
-// `zoomScaling` selects the bounded curve used for both the gap and chrome size.
-export type CanvasChromeScreenLayoutConfig = {
+// `zoomScaling` selects the bounded curve used for both the gap and controls size.
+export type CanvasControlsScreenLayoutConfig = {
     viewport: {
         x: number
         y: number
@@ -55,25 +55,25 @@ export type CanvasChromeScreenLayoutConfig = {
     zoomScaling: BoundedZoomScalingOptions
 }
 
-export type CanvasChromeScreenLayout = {
-    // Screen-space left edge of the unscaled chrome wrapper.
+export type CanvasControlsScreenLayout = {
+    // Screen-space left edge of the unscaled controls wrapper.
     left: number
-    // Screen-space top edge of the unscaled chrome wrapper.
+    // Screen-space top edge of the unscaled controls wrapper.
     top: number
     // CSS layout width before the wrapper's `transform: scale(screenScale)`.
-    // This expands when low-zoom chrome shrinks so the transformed right edge
+    // This expands when low-zoom controls shrink so the transformed right edge
     // still lines up with the projected media-node right edge.
     layoutWidth: number
-    // Final visual multiplier applied to the chrome wrapper. A 34px icon renders
+    // Final visual multiplier applied to the controls wrapper. A 34px icon renders
     // as `34 * screenScale` screen pixels.
     screenScale: number
-    // Final screen-space gap between the projected media node and the chrome.
+    // Final screen-space gap between the projected media node and the controls.
     screenGap: number
-    // Projected media width in screen pixels before chrome compensation.
+    // Projected media width in screen pixels before controls compensation.
     screenWidth: number
 }
 
-// Default exponent for canvas chrome that should shrink a little while zooming
+// Default exponent for canvas controls that should shrink a little while zooming
 // out. 0.45 is intentionally close to the older 0.4 adaptive curve, but gives a
 // small extra reduction at overview zooms so fixed controls do not read larger
 // than the media or connector geometry around them.
@@ -100,7 +100,7 @@ const clamp = (
     )
 }
 
-const getBoundedChromeScreenMultiplier = (
+const getBoundedControlsScreenMultiplier = (
     zoom: number,
     minZoom: number,
     lowZoomPower?: number,
@@ -121,8 +121,8 @@ const getBoundedChromeScreenMultiplier = (
         return boundedConstantMultiplier
 
     // Adaptive path: at 100% and above, `Math.min(z, 1)` clamps the multiplier to
-    // 1, so canvas chrome never grows larger than its configured base pixels.
-    // Between 100% and `minZoom`, the power curve gently shrinks the chrome. This
+    // 1, so canvas controls never grow larger than their configured base pixels.
+    // Between 100% and `minZoom`, the power curve gently shrinks the controls. This
     // fixes the perceptual problem where mathematically constant pixels look
     // larger as the underlying node/image shrinks on zoom-out.
     const lowZoomMultiplier = Math.pow(
@@ -144,7 +144,7 @@ const getBoundedChromeScreenMultiplier = (
 }
 
 // Converts a plain `{ minZoom }` bounded config into the adaptive bounded curve
-// used by canvas chrome. Keeping this as an explicit adapter makes call sites
+// used by canvas controls. Keeping this as an explicit adapter makes call sites
 // state their coordinate-space intent instead of silently changing every helper
 // use in the codebase.
 export const getAdaptiveBoundedZoomScalingOptions = (options: BoundedZoomScalingOptions): BoundedZoomScalingOptions => {
@@ -158,7 +158,7 @@ export const getAdaptiveBoundedZoomScalingOptions = (options: BoundedZoomScaling
 // - Below 100% zoom: shrinks gently with a power curve
 // - At 100% zoom: returns 1 (no change)
 // - Above 100% zoom: grows linearly
-// - Optional multiplier clamps stop chrome from becoming unusably small or large
+// - Optional multiplier clamps stop controls from becoming unusably small or large
 // Examples: zoom=0.19→0.52, zoom=0.33→0.64, zoom=1.0→1.0, zoom=1.5→1.25, zoom=2.0→1.5
 export const getAdaptiveZoomMultiplier = (
     zoom: number,
@@ -186,14 +186,14 @@ export const getAdaptiveZoomMultiplier = (
     )
 }
 
-export const scaleCanvasChromeWorldSizeForZoom = (
+export const scaleCanvasControlsWorldSizeForZoom = (
     baseSize: number,
     zoom: number,
     options: BoundedZoomScalingOptions,
 ): number => {
     const z = safeZoom(zoom)
     const { minZoom } = options
-    const screenMultiplier = getBoundedChromeScreenMultiplier(
+    const screenMultiplier = getBoundedControlsScreenMultiplier(
         z,
         minZoom,
         options.lowZoomPower,
@@ -204,13 +204,13 @@ export const scaleCanvasChromeWorldSizeForZoom = (
     // compensation. `zoom` is the current viewport scale. `options` contains the
     // lower breakpoint and, optionally, the adaptive low-zoom exponent.
     //
-    // World-space chrome lives inside a viewport that will be multiplied by
+    // World-space controls live inside a viewport that will be multiplied by
     // `zoom` later. Divide the desired final screen size by the current zoom so
     // the viewport transform produces the intended visible pixel size.
     return (baseSize * screenMultiplier) / z
 }
 
-export const scaleCanvasChromeScreenSizeForZoom = (
+export const scaleCanvasControlsScreenSizeForZoom = (
     baseSize: number,
     zoom: number,
     options: BoundedZoomScalingOptions,
@@ -218,51 +218,51 @@ export const scaleCanvasChromeScreenSizeForZoom = (
     const z = safeZoom(zoom)
     const { minZoom } = options
 
-    // Parameters match `scaleCanvasChromeWorldSizeForZoom`, but the return value
+    // Parameters match `scaleCanvasControlsWorldSizeForZoom`, but the return value
     // is already a final CSS/screen pixel size. Use this for overlays that are not
     // children of the transformed viewport and for PIXI layers that project world
     // coordinates into screen coordinates before drawing.
     //
-    // Screen-space chrome has already projected world coordinates into pixels.
+    // Screen-space controls use world coordinates already projected into pixels.
     // Return the final pixel size directly; callers must not divide by zoom again.
-    return baseSize * getBoundedChromeScreenMultiplier(
+    return baseSize * getBoundedControlsScreenMultiplier(
         z,
         minZoom,
         options.lowZoomPower,
     )
 }
 
-export const scaleCanvasChromeForZoom = (
+export const scaleCanvasControlsForZoom = (
     baseSize: number,
     zoom: number,
     options: BoundedZoomScalingOptions,
 ): number => {
     // Compatibility wrapper for older world-space call sites.
-    return scaleCanvasChromeWorldSizeForZoom(
+    return scaleCanvasControlsWorldSizeForZoom(
         baseSize,
         zoom,
         options,
     )
 }
 
-export const scaleCanvasChromeToScreenForZoom = (
+export const scaleCanvasControlsToScreenForZoom = (
     baseSize: number,
     zoom: number,
     options: BoundedZoomScalingOptions,
 ): number => {
     // Compatibility wrapper for older screen-space call sites.
-    return scaleCanvasChromeScreenSizeForZoom(
+    return scaleCanvasControlsScreenSizeForZoom(
         baseSize,
         zoom,
         options,
     )
 }
 
-// Geometry for floating DOM chrome mounted outside the transformed viewport.
+// Geometry for floating DOM controls mounted outside the transformed viewport.
 // World coordinates are projected once into screen coordinates. The returned
-// layout width expands when low-zoom chrome thins so the transformed right edge
+// layout width expands when low-zoom controls thin so the transformed right edge
 // still matches the projected media right edge.
-export const getCanvasChromeScreenLayout = (config: CanvasChromeScreenLayoutConfig): CanvasChromeScreenLayout => {
+export const getCanvasControlsScreenLayout = (config: CanvasControlsScreenLayoutConfig): CanvasControlsScreenLayout => {
     const {
         viewport,
         worldPosition,
@@ -271,12 +271,12 @@ export const getCanvasChromeScreenLayout = (config: CanvasChromeScreenLayoutConf
         zoomScaling,
     } = config
     const zoom = safeZoom(viewport.zoom)
-    const screenScale = scaleCanvasChromeScreenSizeForZoom(
+    const screenScale = scaleCanvasControlsScreenSizeForZoom(
         1,
         zoom,
         zoomScaling,
     )
-    const screenGap = scaleCanvasChromeScreenSizeForZoom(
+    const screenGap = scaleCanvasControlsScreenSizeForZoom(
         baseGap,
         zoom,
         zoomScaling,
@@ -288,7 +288,7 @@ export const getCanvasChromeScreenLayout = (config: CanvasChromeScreenLayoutConf
         // coordinates. This layer is not inside the viewport transform.
         left: viewport.x + worldPosition.x * zoom,
         // Project the media node's bottom edge, then add the bounded screen-space
-        // gap. The gap follows the same curve as the chrome icons.
+        // gap. The gap follows the same curve as the control icons.
         top: viewport.y + (worldPosition.y + worldDimensions.height) * zoom + screenGap,
         // The wrapper is scaled after layout. Expanding the layout width by the
         // inverse scale preserves right-edge alignment with the media node.
@@ -360,7 +360,7 @@ const defaultEdgeConfig = {
 // Calculates edge/connector sizes in viewport world units. Plain bounded
 // options keep screen size constant above minZoom; adaptive bounded options
 // shrink below 100%, then freeze world size below the lower threshold so
-// overview zooms keep thinning chrome instead of making it dominate the canvas.
+// overview zooms keep thinning controls instead of making it dominate the canvas.
 export const getEdgeScaledSizes = (
     zoom: number,
     config: EdgeScalingConfig,
@@ -380,31 +380,31 @@ export const getEdgeScaledSizes = (
     // geometry: marker offsets change where the path starts/ends, and click area
     // width is used by world-space hit testing. Screen-space renderers should
     // carry their configured base pixels separately and call
-    // `scaleCanvasChromeScreenSizeForZoom` while painting.
+    // `scaleCanvasControlsScreenSizeForZoom` while painting.
     return {
-        strokeWidth: scaleCanvasChromeWorldSizeForZoom(
+        strokeWidth: scaleCanvasControlsWorldSizeForZoom(
             baseStrokeWidth,
             zoom,
             zoomScaling,
         ),
-        markerSize: scaleCanvasChromeWorldSizeForZoom(
+        markerSize: scaleCanvasControlsWorldSizeForZoom(
             baseMarkerSize,
             zoom,
             zoomScaling,
         ),
         markerOffset: {
-            source: scaleCanvasChromeWorldSizeForZoom(
+            source: scaleCanvasControlsWorldSizeForZoom(
                 baseMarkerOffset.source,
                 zoom,
                 zoomScaling,
             ),
-            target: scaleCanvasChromeWorldSizeForZoom(
+            target: scaleCanvasControlsWorldSizeForZoom(
                 baseMarkerOffset.target,
                 zoom,
                 zoomScaling,
             ),
         },
-        clickAreaWidth: scaleCanvasChromeWorldSizeForZoom(
+        clickAreaWidth: scaleCanvasControlsWorldSizeForZoom(
             baseClickAreaWidth,
             zoom,
             zoomScaling,
@@ -431,7 +431,7 @@ const defaultResizeHandleConfig = {
 }
 
 // Calculates resize handle sizes scaled for the current zoom level.
-// Both size and offset use the configured bounded chrome curve.
+// Both size and offset use the configured bounded controls curve.
 export const getResizeHandleScaledSizes = (
     zoom: number,
     config: ResizeHandleScalingConfig,
@@ -447,20 +447,20 @@ export const getResizeHandleScaledSizes = (
     const { zoomScaling } = config
 
     // Resize handles are authored as screen-pixel design values but most handle
-    // DOM is mounted inside transformed node chrome. Return world-unit CSS sizes
+    // DOM is mounted inside transformed node controls. Return world-unit CSS sizes
     // so the browser viewport transform produces the bounded adaptive screen
     // size. Pointer hit testing that uses `clientX/clientY` must multiply these
     // returned values by zoom before comparing screen coordinates.
     return {
         size: Math.max(
             minSize,
-            scaleCanvasChromeWorldSizeForZoom(
+            scaleCanvasControlsWorldSizeForZoom(
                 baseSize,
                 zoom,
                 zoomScaling,
             ),
         ),
-        offset: scaleCanvasChromeWorldSizeForZoom(
+        offset: scaleCanvasControlsWorldSizeForZoom(
             baseOffset,
             zoom,
             zoomScaling,

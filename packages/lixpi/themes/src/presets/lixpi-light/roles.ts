@@ -178,6 +178,19 @@ export const createLixpiLightRoles = (palette: LixpiColors) =>
                 hover: palette.nightBlue,
                 foreground: palette.offWhite,
             },
+            bubbleMenu: {
+                background: palette.cornflowerBlue14,
+                foreground: palette.nightBlue62,
+                hoverBackground: palette.cornflowerBlue24,
+                hoverForeground: palette.nightBlue,
+                activeBackground: palette.cornflowerBlue24,
+                activeForeground: palette.black,
+                border: palette.transparent,
+                separator: palette.nightBlue20,
+                fieldBackground: palette.white72,
+                fieldFocusBackground: palette.white90,
+                placeholder: palette.nightBlue62,
+            },
             slidingSwitch: {
                 track: palette.slate09,
                 indicator: palette.white72,
@@ -196,9 +209,10 @@ export const createLixpiLightRoles = (palette: LixpiColors) =>
                 disabled: palette.navy32,
             },
             scrollbar: {
-                thumb: 'revert',
-                hover: 'revert',
-                active: 'revert',
+                track: palette.black02,
+                thumb: palette.nightBlue,
+                hover: palette.nightBlue,
+                active: palette.nightBlue,
             },
         },
         panel: {

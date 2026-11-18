@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { createConversationSettings, type ConversationSnapshot } from '@lixpi/constants'
 import { WorkspaceConversationController, type WorkspaceConversationPorts } from './workspace-conversation-controller.ts'
 import { WorkspaceConversationPanel } from './workspace-conversation-panel.ts'
+import { WorkspaceConversationLayout } from './workspace-conversation-layout.ts'
+import { ViewportController } from '@lixpi/canvas-engine/frontend/viewport'
 import { type CanvasConversationEditorMount, type CanvasConversationThread } from './canvas-conversation-run.ts'
 
 const fixture = (overrides: Partial<ConversationSnapshot> = {}) => {
@@ -87,6 +89,131 @@ const fixture = (overrides: Partial<ConversationSnapshot> = {}) => {
         panel,
     }
 }
+
+
+const dispatchChatWheel = (
+    target: HTMLElement,
+    deltaY: number,
+    ctrlKey: boolean,
+): Event => {
+    // Happy DOM's WheelEvent omits MouseEvent coordinates and modifier keys.
+    const event = new MouseEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 300,
+        clientY: 250,
+        ctrlKey,
+    })
+    Object.defineProperties(event, {
+        deltaX: { value: 0 },
+        deltaY: { value: deltaY },
+        deltaMode: { value: 0 },
+    })
+    target.dispatchEvent(event)
+
+    return event
+}
+
+// =============================================================================
+// CANVAS ZOOM AND TRANSCRIPT SCROLLING
+// =============================================================================
+
+describe('WorkspaceConversationPanel canvas gestures', () => {
+    it.each(['center', 'left', 'right', 'detached'] as const)(
+        'zooms the canvas over %s chat while retaining ordinary text scrolling',
+        async mode => {
+            const f = fixture()
+            const pane = document.createElement('main')
+            const composer = document.createElement('div')
+            composer.className = 'workspace-canvas-global-composer-host nopan'
+            const input = document.createElement('textarea')
+            composer.append(f.panel.element, input)
+            pane.append(composer)
+            document.body.append(pane)
+            Object.defineProperties(pane, {
+                clientWidth: { value: 1200 },
+                clientHeight: { value: 900 },
+            })
+            const bounds = vi.spyOn(pane, 'getBoundingClientRect')
+                .mockReturnValue(new DOMRect(25, 50, 1200, 900))
+            const onTransformChange = vi.fn()
+            const viewport = new ViewportController({
+                root: pane,
+                viewport: {
+                    x: 0,
+                    y: 0,
+                    zoom: 1,
+                },
+                onTransformChange,
+            })
+            const layout = new WorkspaceConversationLayout({
+                pane,
+                element: composer,
+                storage: {
+                    getItem: () => null,
+                    setItem: vi.fn(),
+                },
+                settings: {
+                    dimensions: {
+                        minWidth: 320,
+                        maxPaneMargin: 48,
+                    },
+                    resizeHandle: {
+                        offset: 4,
+                        grabWidth: 20,
+                    },
+                },
+                getViewport: () => viewport.getViewport(),
+            })
+
+            try {
+                await vi.waitFor(() => expect(f.mount).toHaveBeenCalledOnce())
+                layout.setMode(mode)
+                const messages = f.panel.element.querySelector<HTMLElement>('.workspace-conversation-messages')!
+                const text = document.createElement('p')
+                messages.append(text)
+                messages.scrollTop = 120
+                const resize = [...composer.querySelectorAll<HTMLElement>('.workspace-conversation-layout-resize')]
+                    .find(handle => !handle.hidden)!
+
+                for (const target of [text, input, resize]) {
+                    onTransformChange.mockClear()
+                    const scroll = dispatchChatWheel(target, 40, false)
+                    expect(scroll.defaultPrevented).toBe(false)
+                    expect(onTransformChange).not.toHaveBeenCalled()
+                    expect(messages.scrollTop).toBe(120)
+
+                    const pinchIn = dispatchChatWheel(target, -20, true)
+                    expect(pinchIn.defaultPrevented).toBe(true)
+                    expect(onTransformChange).toHaveBeenCalledOnce()
+                    const zoomed = viewport.getViewport()
+                    expect(zoomed.zoom).toBeGreaterThan(1)
+                    expect((275 - zoomed.x) / zoomed.zoom).toBeCloseTo(275)
+                    expect((200 - zoomed.y) / zoomed.zoom).toBeCloseTo(200)
+                    expect(messages.scrollTop).toBe(120)
+
+                    const pinchOut = dispatchChatWheel(target, 20, true)
+                    expect(pinchOut.defaultPrevented).toBe(true)
+                    expect(onTransformChange).toHaveBeenCalledTimes(2)
+                    expect(viewport.getViewport().zoom).toBeCloseTo(1)
+                    expect(messages.scrollTop).toBe(120)
+                }
+
+                layout.destroy()
+                onTransformChange.mockClear()
+                const scrollAfterDestroy = dispatchChatWheel(input, 40, false)
+                expect(scrollAfterDestroy.defaultPrevented).toBe(true)
+                expect(onTransformChange).toHaveBeenCalledOnce()
+            } finally {
+                layout.destroy()
+                viewport.destroy()
+                f.panel.destroy()
+                bounds.mockRestore()
+                pane.remove()
+            }
+        },
+    )
+})
 
 describe('WorkspaceConversationPanel native conversation editor', () => {
     it('mounts the authoritative conversation once and never renders command-log text as messages', async () => {

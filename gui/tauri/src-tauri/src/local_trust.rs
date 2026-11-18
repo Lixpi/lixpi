@@ -1,73 +1,108 @@
-// A local development stack serves HTTPS with certificates from its own
-// certificate authority. A local build embeds that authority, and the app
-// trusts it for `localhost` itself, so the developer's Mac doesn't need the
-// authority installed in its keychain. Builds for any other environment embed
-// nothing and leave every certificate to the system.
+// The development CA is private to Chromium's app profile. Both DNS and IP
+// constraints are present so an omitted constraint cannot admit other hosts.
+// Chromium still verifies certificate signatures, validity and hostnames.
 
-#[cfg(target_os = "macos")]
-mod macos;
+use std::{
+    io,
+    sync::mpsc,
+};
 
-// build.rs writes the authority here in DER form, or an empty file when the
-// build has none. Only the macOS web view consults it.
-#[cfg(target_os = "macos")]
+use base64::{
+    Engine,
+    engine::general_purpose::STANDARD,
+};
+use serde_json::{
+    Value,
+    json,
+};
+use tauri::WebviewWindow;
+use tauri_runtime_cef::{
+    Cef,
+    WebviewCefExt,
+    cef::{
+        self,
+        CefString,
+        ImplBrowser,
+        ImplBrowserHost,
+        ImplPreferenceManager,
+        ImplValue,
+        JsonParserOptions,
+    },
+};
+
+const PREFERENCE: &str = "certificates.ca_certificates_with_constraints";
 const LOCAL_CA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/local-ca.der"));
 
-// The local authority issues certificates for `localhost` only.
-#[cfg(any(target_os = "macos", test))]
-const LOCAL_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
-
-// Answers WebKit's certificate checks for the local stack in `web_view`, the
-// window's WKWebView, when this build embeds the local authority. It runs
-// before web-ui loads, so the first request is already covered.
-#[cfg(target_os = "macos")]
-pub(crate) fn install(web_view: *mut objc2::runtime::AnyObject) {
-    if LOCAL_CA.is_empty() {
-        return;
-    }
-
-    if let Err(error) = macos::install(web_view) {
-        eprintln!("Could not trust the local certificate authority: {error}");
-    }
+#[cfg(feature = "diagnostics")]
+pub(crate) fn has_authority() -> bool {
+    !LOCAL_CA.is_empty()
 }
 
-// The embedded authority's certificate, when it may vouch for `host`.
-#[cfg(target_os = "macos")]
-fn anchor_for(host: &str) -> Option<&'static [u8]> {
-    anchor(host, LOCAL_CA)
+pub(crate) fn configure(runtime: Cef) -> Cef {
+    // An empty array also clears a previous local build's persisted anchor
+    // when this build connects to an environment with public certificates.
+    runtime.profile_preference_value(PREFERENCE, constraints(LOCAL_CA))
 }
 
-#[cfg(any(target_os = "macos", test))]
-fn anchor<'a>(
-    host: &str,
-    authority: &'a [u8],
-) -> Option<&'a [u8]> {
-    let host = host.trim_start_matches('[').trim_end_matches(']');
-    if authority.is_empty() || !LOCAL_HOSTS.contains(&host) {
-        return None;
+fn constraints(authority: &[u8]) -> Value {
+    if authority.is_empty() {
+        return json!([]);
     }
 
-    Some(authority)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::anchor;
-
-    const AUTHORITY: &[u8] = b"local authority";
-
-    #[test]
-    fn vouches_only_for_local_hosts() {
-        for host in ["localhost", "127.0.0.1", "::1", "[::1]"] {
-            assert_eq!(anchor(host, AUTHORITY), Some(AUTHORITY), "{host}");
+    json!([{
+        "certificate": STANDARD.encode(authority),
+        "constraints": {
+            "permitted_dns_names": ["localhost"],
+            "permitted_cidrs": ["127.0.0.1/32", "::1/128"]
         }
+    }])
+}
 
-        for host in ["lixpi.ai", "localhost.lixpi.ai", "dev.lixpi.dev", "127.0.0.2", ""] {
-            assert_eq!(anchor(host, AUTHORITY), None, "{host}");
+// Called on the setup thread while the window is still about:blank. CEF runs
+// with_webview synchronously there. Refuse navigation if its scheduling or
+// profile contract changes, rather than starting with unverified trust.
+pub(crate) fn verify(window: &WebviewWindow) -> tauri::Result<()> {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    window.with_cef_webview(move |webview| {
+        if sender.send(verify_profile(webview)).is_err() {
+            eprintln!("The Chromium trust check completed after startup stopped");
         }
+    })?;
+    let result = receiver
+        .try_recv()
+        .map_err(|error| io::Error::other(format!("Chromium trust verification did not finish during setup: {error}")))?;
+
+    result.map_err(|error| io::Error::other(format!("Could not configure Chromium's development CA: {error}")).into())
+}
+
+fn verify_profile(webview: &tauri_runtime_cef::Webview) -> Result<(), String> {
+    let context = webview
+        .browser()
+        .host()
+        .and_then(|host| host.request_context())
+        .ok_or("the browser has no request context")?;
+    let name = CefString::from(PREFERENCE);
+    if context.has_preference(Some(&name)) == 0 {
+        return Err(format!("{PREFERENCE} is not registered"));
     }
 
-    #[test]
-    fn a_build_without_an_authority_vouches_for_nothing() {
-        assert_eq!(anchor("localhost", b""), None);
+    if context.can_set_preference(Some(&name)) == 0 {
+        return Err(format!("{PREFERENCE} is not writable"));
     }
+
+    let encoded = CefString::from(constraints(LOCAL_CA).to_string().as_str());
+    let mut expected = cef::parse_json(Some(&encoded), JsonParserOptions::RFC).ok_or("could not allocate the CA preference")?;
+    // A real writable string is required by CEF's error out-parameter; a
+    // default CefString represents a null pointer and makes every write fail.
+    let mut error = CefString::from("");
+    if context.set_preference(Some(&name), Some(&mut expected), Some(&mut error)) == 0 {
+        return Err(format!("{PREFERENCE} was rejected: {error}"));
+    }
+
+    let actual = context.preference(Some(&name)).ok_or("could not read back the CA preference")?;
+    if actual.is_equal(Some(&mut expected)) == 0 {
+        return Err("the stored CA preference differs from this build's constrained authority".to_owned());
+    }
+
+    Ok(())
 }

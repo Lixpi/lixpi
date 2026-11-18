@@ -154,7 +154,10 @@ export class WorkspaceConversationPanel {
                 role="log"
                 aria-live="off"
                 aria-label="Conversation messages"
-                onwheel=${(event: WheelEvent) => event.stopPropagation()}
+                onwheel=${(event: WheelEvent) => {
+                    if (!event.ctrlKey)
+                        event.stopPropagation()
+                }}
             ></div>
         ` as HTMLElement
         this.state = this.html`

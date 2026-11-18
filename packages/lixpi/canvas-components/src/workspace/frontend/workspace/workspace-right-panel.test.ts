@@ -38,7 +38,7 @@ vi.mock('@lixpi/ui-kit/components/side-panel', () => ({
         let width = config.loadState?.()?.width ?? config.defaultWidth
         const instance = {
             element: document.createElement('div'),
-            toggleElement: document.createElement('button'),
+            toggleElement: document.createElement('div'),
             backdropElement: document.createElement('div'),
             overlayElement: document.createElement('div'),
             getWidth: () => width,

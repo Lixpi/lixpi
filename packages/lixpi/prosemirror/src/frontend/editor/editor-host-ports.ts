@@ -55,7 +55,7 @@ export type EditorAppearanceSettings = {
         fallbackWidth: number
     } }
 }
-export type EditorPromptChromePorts = {
+export type EditorPromptControlsPorts = {
     createMediaModeSwitch: (config: {
         document: Document
         value: 'image' | 'video'

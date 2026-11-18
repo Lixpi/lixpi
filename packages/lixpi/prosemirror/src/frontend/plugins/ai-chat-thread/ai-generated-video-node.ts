@@ -91,7 +91,7 @@ export const aiGeneratedVideoNodeView = (
                 className="ai-generated-video-controls-host nopan"
                 style=${controlsHostStyle}
             ></div>
-            <div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>
+            <div className="ai-generated-media-model-controls ai-generated-media-run-meta"></div>
         </div>
     ` as HTMLElement
 
@@ -101,7 +101,7 @@ export const aiGeneratedVideoNodeView = (
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
-    const modelChromeElement = wrapper.querySelector('.ai-generated-media-model-chrome') as HTMLElement
+    const modelControlsElement = wrapper.querySelector('.ai-generated-media-model-controls') as HTMLElement
     applyVideoControlsHostStyleProperties(controlsHost, settings.videoControls.styles)
     media.modelBadge.decorate(wrapper)
     let videoControls: VideoControlsInstance | null = null
@@ -150,7 +150,7 @@ export const aiGeneratedVideoNodeView = (
 
     wrapper.addEventListener('click', handleClick)
 
-    const updateModelChrome = (): void => void media.modelBadge.render(modelChromeElement, node.attrs.mediaModelId || node.attrs.videoModel)
+    const updateModelControls = (): void => void media.modelBadge.render(modelControlsElement, node.attrs.mediaModelId || node.attrs.videoModel)
 
     const clearErrorPlaceholder = (): void => void container.querySelector('.video-error-placeholder')?.remove()
 
@@ -326,7 +326,7 @@ export const aiGeneratedVideoNodeView = (
     }
 
     void updateDisplaySafely()
-    unsubscribeModelBadge = media.modelBadge.subscribe(() => updateModelChrome())
+    unsubscribeModelBadge = media.modelBadge.subscribe(() => updateModelControls())
     syncContainerGeometry()
 
     return {
@@ -338,7 +338,7 @@ export const aiGeneratedVideoNodeView = (
             node = updatedNode
             syncContainerGeometry()
             void updateDisplaySafely()
-            updateModelChrome()
+            updateModelControls()
 
             return true
         },

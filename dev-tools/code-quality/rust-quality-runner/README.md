@@ -19,6 +19,8 @@ A target name contains lowercase letters, digits, and internal hyphens. The runn
 /usr/src/service/<target>/
 ```
 
+An adapter may also mount a directory at `/usr/src/prepare/<target>`. When it contains `prepare.sh`, the runner runs it before any Cargo command, for every action. The step fetches sources the target builds from into container storage, so they never land in the checkout. The desktop target uses it to download and patch the official Tauri runtime.
+
 The runner copies both manifests into the container-owned crate root before running Cargo, so build scripts that write beside the crate, such as Tauri's, write into the container rather than the checkout. Mount source paths individually beneath `/usr/src/service/<target>`. Source mounts are writable because `fix` changes source, and the lockfile mount is writable because `dependencies` rewrites it.
 
 The base service provides separate Cargo registry and build output volumes, and each target builds into its own directory inside the output volume. The consuming adapter declares those top-level volumes because Compose `extends` does not import them from another file.
@@ -36,6 +38,8 @@ Run a main-repository target from the repository root:
 ```bash
 docker compose -f infrastructure/docker/utilities/code-quality/docker-compose.rust-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-rust-quality-runner <target> <fix|validate|dependencies>
 ```
+
+A target that builds from third-party sources, such as the desktop app's patched Tauri runtime, gets them through the prepare step described in the [mount contract](#target-mount-contract), never from the checkout. Formatting selects the mounted standalone crate without `--all`, and the source checker only reads the target's source directory, so neither touches those prepared sources.
 
 Both quality actions run every stage and return failure if any stage fails, so a lint failure does not hide a formatting or convention failure. Every Cargo command except `dependencies` uses `--locked`, and clippy runs with `--all-features`, so code behind an optional feature is linted too.
 

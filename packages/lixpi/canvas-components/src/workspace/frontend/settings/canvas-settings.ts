@@ -24,13 +24,13 @@ export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> =
     // Each canvas can override nested settings without changing another canvas or shared API geometry.
     return structuredClone({
         canvasBubbleMenu: {
-            // Lower zoom breakpoint for canvas bubble-menu chrome. Runtime call sites
+            // Lower zoom breakpoint for canvas bubble-menu controls. Runtime call sites
             // opt this config into the shared adaptive low-zoom curve, which defaults
             // to 0.45 unless this object provides `lowZoomPower`.
             zoomScaling: { minZoom: 0.4 },
         },
 
-        canvasChrome: {
+        canvasControls: {
             // Shared glass coefficients with the product's established unthemed colors.
             glassBorder: {
                 enabled: effects.glassBorder.enabled,
@@ -86,20 +86,20 @@ export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> =
                 borderRadius: 30,
             },
 
-            // Provenance/descriptor controls below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; details render in the right sidebar.
-            generatedMediaChrome: {
+            // Provenance/descriptor controls below a media node. The strip is screen-space controls projected from media node bounds and uses bounded zoom compensation; details render in the right sidebar.
+            generatedMediaControls: {
                 // Base screen-pixel icon/button size at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
-                iconSize: mediaGenerationLayoutSettings.generatedMediaChrome.iconSize,
+                iconSize: mediaGenerationLayoutSettings.generatedMediaControls.iconSize,
                 // Base screen-pixel gap between media and the control strip at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
-                gap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
+                gap: mediaGenerationLayoutSettings.generatedMediaControls.topGap,
                 // Scale applied to generated-media badges rendered inside AI chat history cards.
                 chatScale: 0.72,
                 // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
                 modelBadgeSeparator: ' : ',
-                // Lower zoom breakpoint for generated-media icon chrome. Runtime call
+                // Lower zoom breakpoint for generated-media icon controls. Runtime call
                 // sites opt this config into the shared adaptive low-zoom curve,
                 // which defaults to 0.45 unless this object provides `lowZoomPower`.
-                zoomScaling: mediaGenerationLayoutSettings.generatedMediaChrome.zoomScaling,
+                zoomScaling: mediaGenerationLayoutSettings.generatedMediaControls.zoomScaling,
                 // Theme tokens for the model badge + info button, surfaced as CSS custom properties.
                 styles: {
                     // Gap between the provider icon and the provider/model name.
@@ -111,7 +111,7 @@ export const createLixpiCanvasSettings = (palette: Partial<LixpiCanvasPalette> =
                     modelBadgeNameFontSize: '15px',
                     modelBadgeNameFontWeight: 400,
                     modelBadgeNameLineHeight: 1.5,
-                    // Interactive chrome icons match the provider icon at rest and darken on hover.
+                    // Interactive controls icons match the provider icon at rest and darken on hover.
                     infoButtonColor: '#4d5963',
                     infoButtonHoverColor: '#181e23',
                 },

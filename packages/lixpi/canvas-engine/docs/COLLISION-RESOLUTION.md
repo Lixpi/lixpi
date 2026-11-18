@@ -19,7 +19,7 @@ The result includes a map containing only moved positions, the number of iterati
 
 ## Scene geometry
 
-`NodeGeometryPolicy.measure` receives world geometry and returns separate visual, hit, selection, collision and connector bounds. Include external chrome in collision bounds when the product must reserve that space. A pending placeholder may have a smaller visual footprint while its collision footprint reserves a later state.
+`NodeGeometryPolicy.measure` receives world geometry and returns separate visual, hit, selection, collision and connector bounds. Include external controls in collision bounds when the product must reserve that space. A pending placeholder may have a smaller visual footprint while its collision footprint reserves a later state.
 
 The generic controller optionally resolves collisions when committing geometry. Pure helpers also support insertion, world/parent coordinate conversion, dragging and rigid group separation. Parent-child containment is intentional overlap: exclude those pairs before separation and convert child results back to parent-relative storage.
 
@@ -39,7 +39,7 @@ Whether a node is a generated output, branch marker, container or loose item bel
 |---|---|
 | Children leave their container | Parent-child exclusions and world-to-parent conversion |
 | Group members lose spacing | The group was resolved member-by-member instead of as a rigid box |
-| Painted controls overlap despite separated nodes | Collision measurements omit chrome or a pending-state reservation |
+| Painted controls overlap despite separated nodes | Collision measurements omit controls or a pending-state reservation |
 | Small overlaps remain | Threshold, fixed constraints and iteration limit |
 | Drag completion jumps twice | A host reapplied transient overrides after accepting final geometry |
 

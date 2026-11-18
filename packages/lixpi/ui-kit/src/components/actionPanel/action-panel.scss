@@ -1,0 +1,64 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+
+// ActionPanel - floating pill of icon buttons. A panel is a perfect circle when
+// it holds a single button and stretches into a pill when it holds more. The
+// host positions it through its own class. Canvas theme variables drive the
+// paint inside a themed canvas, and the application theme covers the rest.
+.action-panel {
+    --action-panel-size: var(--canvas-control-height, 40px);
+
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: var(--action-panel-size);
+    min-width: var(--action-panel-size);
+    padding: 0 4px;
+    background: var(--canvas-lixpi-switch-surface, var(--canvas-surface-raised, #{themeScope.token("surface", themePalette.$roles)}));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: var(--canvas-lixpi-rail-radius, var(--canvas-control-radius, 9999px));
+    box-shadow: var(--canvas-shadow, #{themeScope.token("shadow-control", themePalette.$roles)});
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.action-panel-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--action-panel-size) - 8px);
+    height: calc(var(--action-panel-size) - 8px);
+    padding: 0;
+    border: none;
+    // Circular hover target, matching the input panel's icon buttons.
+    border-radius: 50%;
+    background: transparent;
+    color: var(--canvas-text-muted, #{themeScope.token("text-muted", themePalette.$roles)});
+    cursor: pointer;
+    transition:
+        hoverTransition(background, $defaultHoverTransitionDuration),
+        hoverTransition(color, $defaultHoverTransitionDuration);
+    -webkit-tap-highlight-color: transparent;
+
+    svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+    }
+
+    &:hover,
+    &:focus-visible,
+    &.active {
+        // The same paint as the selected segment of the prompt's image and video switch.
+        background: var(--canvas-lixpi-switch-indicator, var(--canvas-surface-hover, #{themeScope.token("surface-hover", themePalette.$roles)}));
+        color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
+        outline: none;
+    }
+}

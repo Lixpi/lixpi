@@ -41,7 +41,7 @@ const extractFunctionBody = (functionName: string): string => {
     if (signatureIndex < 0)
         throw new Error(`Missing function: ${functionName}`)
 
-    // An arrow can carry a concise expression body (`=> void this.chrome.sync(state)`)
+    // An arrow can carry a concise expression body (`=> void this.controls.sync(state)`)
     // rather than a braced one, so locate the body from the arrow itself and only
     // brace-match when a brace is actually what follows.
     const arrowIndex = isArrow ? source.indexOf('=>', signatureIndex) : -1
@@ -193,26 +193,26 @@ describe('branch marker lifecycle', () => {
     it('keeps shared request progress inside the branch marker surface', () => {
         const contentBody = extractFunctionBody('createContent')
         const progressBody = extractFunctionBody('createBranchMarkerGlobalProgress')
-        const chromeSyncBody = extractFunctionBody('syncGeneratedMediaChrome')
+        const controlsSyncBody = extractFunctionBody('syncGeneratedMediaControls')
         const cleanupBody = extractFunctionBody('cleanupBranchMarkerArtifacts')
 
         expectSourceToContain(progressBody, "className: 'workspace-branch-marker-progress'", 'branch progress factory')
         expectSourceToContain(progressBody, 'return progress.element', 'branch progress factory')
-        expectSourceNotToContain(progressBody, 'workspace-branch-generation-progress-chrome', 'branch progress factory')
+        expectSourceNotToContain(progressBody, 'workspace-branch-generation-progress-controls', 'branch progress factory')
         expectSourceToContain(progressBody, 'buildBranchMarkerProgress({', 'branch progress projection')
         expectSourceToContain(progressBody, "showSummaryWhenCollapsedItemIds: ['understand-request']", 'branch reasoning progress')
         expectSourceToContain(contentBody, 'new BranchMarkerContent({', 'branch marker content')
         expectSourceToContain(contentBody, 'progress: progress ? { element: progress', 'branch marker progress port')
         expectSourceToContain(contentBody, 'headerHeight: node.dimensions.height', 'branch marker progress geometry')
         expectSourceToContain(
-            chromeSyncBody,
-            'outputChrome.sync(canvasState)',
-            'media chrome rebuild',
+            controlsSyncBody,
+            'outputControls.sync(canvasState)',
+            'media controls rebuild',
         )
         expectSourceNotToContain(
-            chromeSyncBody,
+            controlsSyncBody,
             'destroyMediaGenerationProgressInstances()',
-            'media chrome rebuild',
+            'media controls rebuild',
         )
         expectSourceToContain(
             cleanupBody,

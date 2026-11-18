@@ -486,10 +486,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const mediaModeSwitchHost = nv.dom.querySelector('.ai-prompt-media-mode-switch')!
         // The media generation mode switch is mounted as the wrapper's first
         // child (unless the caller supplies mountMediaModeSwitch to render it
-        // elsewhere), followed by the context tray, then content and controls.
+        // elsewhere), followed by the context tray, then the scroller that holds
+        // the content, and the controls.
         expect(nv.dom.childNodes[0]).toBe(mediaModeSwitchHost)
         expect(nv.dom.childNodes[1]).toBe(contextTray)
-        expect(nv.dom.childNodes[2]).toBe(nv.contentDOM)
+        expect(nv.dom.childNodes[2]).toBe(nv.contentDOM!.parentElement)
+        expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-scroll')
         expect(nv.dom.childNodes[3]).toBe(controlsEl)
         expect(controlsEl).toBeDefined()
     })
@@ -503,7 +505,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         // bubble menu (mounted directly under the wrapper) — no context tray.
         expect(nv.dom.childNodes).toHaveLength(4)
         expect((nv.dom.childNodes[0] as HTMLElement).className).toBe('ai-prompt-media-mode-switch')
-        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM!.parentElement)
         expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-controls')
     })
 
@@ -521,20 +523,8 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-width')).toContain(
             settings.aiPromptInput.modelMenu.styles.infoBubbleWidth,
         )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toContain(
-            settings.aiPromptInput.modelMenu.styles.infoBubbleBorderRadius,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-background')).toContain(
-            settings.aiPromptInput.modelMenu.styles.infoBubbleBackground,
-        )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-divider-height')).toContain(
             settings.aiPromptInput.modelMenu.styles.sectionDividerHeight,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-title-color')).toContain(
-            settings.aiPromptInput.modelMenu.styles.sectionTitleColor,
-        )
-        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toContain(
-            settings.aiPromptInput.modelMenu.styles.controlLabelColor,
         )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-font-size')).toContain(
             settings.aiPromptInput.modelMenu.styles.controlLabelFontSize,
@@ -995,11 +985,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
     })
 
     describe('visual hierarchy — wrapper contains content then controls', () => {
-        it('wrapper has exactly 4 children: media mode switch, contentDOM, controlsEl, and the model menu bubble', () => {
+        it('wrapper has exactly 4 children: media mode switch, the content scroller, controlsEl, and the model menu bubble', () => {
             const { nv } = createNodeView()
             expect(nv.dom.childNodes.length).toBe(4)
             expect((nv.dom.childNodes[0] as HTMLElement).className).toBe('ai-prompt-media-mode-switch')
-            expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+            expect(nv.dom.childNodes[1]).toBe(nv.contentDOM!.parentElement)
+            expect((nv.dom.childNodes[1] as HTMLElement).className).toBe('ai-prompt-input-scroll')
             expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-controls')
             expect((nv.dom.childNodes[3] as HTMLElement).classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
         })
@@ -1008,7 +999,9 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             const { nv } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls') as HTMLElement
             const children = Array.from(nv.dom.childNodes)
-            expect(children.indexOf(nv.contentDOM as ChildNode)).toBeLessThan(children.indexOf(controlsEl))
+            const scroller = nv.contentDOM!.parentElement as ChildNode
+            expect(children.indexOf(scroller)).toBeGreaterThanOrEqual(0)
+            expect(children.indexOf(scroller)).toBeLessThan(children.indexOf(controlsEl))
         })
     })
 
@@ -1875,13 +1868,14 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
         const nv = renderNodeView()
 
         // SCSS: .ai-prompt-input-wrapper uses flex-direction: column
-        // content is flex: 1 (fills space), controls are at the bottom. The
-        // media mode switch host and the model settings bubble menu are also
-        // direct children of the wrapper.
+        // the scroller holding the content is flex: 1 (fills space), controls are
+        // at the bottom. The media mode switch host and the model settings
+        // bubble menu are also direct children of the wrapper.
         const children = Array.from(nv.dom.children) as HTMLElement[]
         expect(children.length).toBe(4)
         expect(children[0].className).toBe('ai-prompt-media-mode-switch')
-        expect(children[1].className).toBe('ai-prompt-input-content')
+        expect(children[1].className).toBe('ai-prompt-input-scroll')
+        expect(children[1].firstElementChild).toBe(nv.contentDOM)
         expect(children[2].className).toBe('ai-prompt-input-controls')
         expect(children[3].classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
     })
@@ -1967,12 +1961,13 @@ describe('Visual proportions — SCSS sizing expectations', () => {
         expect(controls.children.length).toBe(2)
     })
 
-    it('content area comes right after the media mode switch — gets flex: 1 for vertical fill', () => {
+    it('content scroller comes right after the media mode switch — gets flex: 1 for vertical fill', () => {
         const nv = renderNodeView()
-        // SCSS: .ai-prompt-input-content { flex: 1; }
-        // The media mode switch host is the wrapper's first child; content
-        // still precedes the controls element in the column flex layout.
-        expect(nv.dom.children[1]).toBe(nv.contentDOM)
+        // The media mode switch host is the wrapper's first child; the scroller
+        // holding the content still precedes the controls element in the
+        // column flex layout.
+        expect(nv.dom.children[1]).toBe(nv.contentDOM!.parentElement)
+        expect(nv.dom.children[1].className).toBe('ai-prompt-input-scroll')
     })
 
     it('controls sit below content — no absolute positioning, natural flow', () => {

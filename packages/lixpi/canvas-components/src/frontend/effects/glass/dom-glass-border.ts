@@ -22,6 +22,11 @@ export class DomGlassBorder {
         height: number
         radius: number
     }>()
+    // Properties each target is transitioning. A ResizeObserver misses a target
+    // that slides by transform, so the border redraws every frame until the
+    // transitions settle.
+    private readonly moving = new Map<HTMLElement, Set<string>>()
+    private frame: number | null = null
     private destroyed = false
 
     constructor(private readonly options: DomGlassBorderOptions) {
@@ -59,11 +64,16 @@ export class DomGlassBorder {
             return
 
         this.observer.disconnect()
+        this.stopFollowing()
         this.targets = [...targets]
         this.radii.clear()
 
-        for (const target of targets)
+        for (const target of targets) {
             this.observer.observe(target.element)
+            target.element.addEventListener('transitionrun', this.handleTransitionRun)
+            target.element.addEventListener('transitionend', this.handleTransitionStop)
+            target.element.addEventListener('transitioncancel', this.handleTransitionStop)
+        }
 
         this.options.surface.invalidate()
     }
@@ -138,8 +148,82 @@ export class DomGlassBorder {
         this.destroyed = true
         this.options.surface.signal.removeEventListener('abort', this.destroy)
         this.observer.disconnect()
+        this.stopFollowing()
         this.border.destroy()
         this.targets = []
         this.radii.clear()
+    }
+
+    private readonly handleTransitionRun = (event: Event): void => {
+        const element = event.currentTarget as HTMLElement
+
+        if (
+            this.destroyed
+            || event.target !== element
+        )
+            return
+
+        const properties = this.moving.get(element) ?? new Set<string>()
+        properties.add((event as TransitionEvent).propertyName)
+        this.moving.set(element, properties)
+        this.follow()
+    }
+
+    private readonly handleTransitionStop = (event: Event): void => {
+        const element = event.currentTarget as HTMLElement
+        const properties = this.moving.get(element)
+
+        if (
+            this.destroyed
+            || event.target !== element
+            || !properties
+        )
+            return
+
+        properties.delete((event as TransitionEvent).propertyName)
+
+        if (properties.size === 0)
+            this.moving.delete(element)
+
+        this.options.surface.invalidate()
+    }
+
+    private follow(): void {
+        const view = this.options.root.ownerDocument.defaultView
+
+        if (
+            this.frame !== null
+            || this.moving.size === 0
+            || !view
+        )
+            return
+
+        this.frame = view.requestAnimationFrame(() => {
+            this.frame = null
+
+            if (
+                this.destroyed
+                || this.moving.size === 0
+            )
+                return
+
+            this.options.surface.invalidate()
+            this.follow()
+        })
+    }
+
+    private stopFollowing(): void {
+        for (const { element } of this.targets) {
+            element.removeEventListener('transitionrun', this.handleTransitionRun)
+            element.removeEventListener('transitionend', this.handleTransitionStop)
+            element.removeEventListener('transitioncancel', this.handleTransitionStop)
+        }
+
+        this.moving.clear()
+
+        if (this.frame !== null)
+            this.options.root.ownerDocument.defaultView?.cancelAnimationFrame(this.frame)
+
+        this.frame = null
     }
 }

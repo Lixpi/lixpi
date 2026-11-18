@@ -17,7 +17,7 @@ describe('Lixpi canvas presets', () => {
         expect(settings.workspacePersistence).toEqual(workspacePersistenceSettings)
         expect(settings.mediaBranchLineage.generatedMediaSize).toBe(mediaGenerationLayoutSettings.generatedMediaSize)
         expect(settings.mediaBranchLineage.marker.text).toEqual(mediaGenerationLayoutSettings.marker.text)
-        expect(settings.mediaNode.generatedMediaChrome.zoomScaling).toEqual(mediaGenerationLayoutSettings.generatedMediaChrome.zoomScaling)
+        expect(settings.mediaNode.generatedMediaControls.zoomScaling).toEqual(mediaGenerationLayoutSettings.generatedMediaControls.zoomScaling)
     })
 
     it('keeps nested overrides local to each canvas and leaves shared geometry unchanged', () => {
@@ -25,8 +25,8 @@ describe('Lixpi canvas presets', () => {
         const second = createLixpiCanvasSettings()
         const original = structuredClone(second)
         first.mediaBranchLineage.marker.text.messageFontSize += 10
-        first.mediaNode.generatedMediaChrome.zoomScaling.minZoom += 1
-        first.canvasChrome.glassBorder.materialColors.push('#000000')
+        first.mediaNode.generatedMediaControls.zoomScaling.minZoom += 1
+        first.canvasControls.glassBorder.materialColors.push('#000000')
         first.workspacePersistence.debounceMs += 100
         first.workspaceLoadingOutline.animationDurationMs += 100
         expect(second).toEqual(original)

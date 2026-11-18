@@ -1,12 +1,12 @@
 // Pure media geometry shared by the API projection and the WebUI canvas:
 // aspect-ratio fitting, lineage continuation placement, and the screen-fixed
-// chrome envelope reserved around resolved media in collision boxes.
+// controls envelope reserved around resolved media in collision boxes.
 
 import { mediaGenerationLayoutSettings } from '@lixpi/constants'
 import {
     getAdaptiveBoundedZoomScalingOptions,
     computeVerticallyCenteredY,
-    scaleCanvasChromeWorldSizeForZoom,
+    scaleCanvasControlsWorldSizeForZoom,
 } from '@lixpi/canvas-engine/shared'
 
 export type SizeLike = {
@@ -73,17 +73,17 @@ export const computeLineageContinuationPositionToRightOfRect = (
     }
 }
 
-export type GeneratedOutputChromeCollisionInsets = {
+export type GeneratedOutputControlsCollisionInsets = {
     top: number
     bottom: number
 }
 
-const getMaximumGeneratedMediaChromeWorldSize = (baseSize: number): number => {
-    const zoomScaling = getAdaptiveBoundedZoomScalingOptions(mediaGenerationLayoutSettings.generatedMediaChrome.zoomScaling)
+const getMaximumGeneratedMediaControlsWorldSize = (baseSize: number): number => {
+    const zoomScaling = getAdaptiveBoundedZoomScalingOptions(mediaGenerationLayoutSettings.generatedMediaControls.zoomScaling)
 
     return Math.max(
         baseSize,
-        scaleCanvasChromeWorldSizeForZoom(
+        scaleCanvasControlsWorldSizeForZoom(
             baseSize,
             zoomScaling.minZoom,
             zoomScaling,
@@ -91,24 +91,24 @@ const getMaximumGeneratedMediaChromeWorldSize = (baseSize: number): number => {
     )
 }
 
-// Resolved media title/actions are screen-fixed DOM chrome, so their largest
+// Resolved media title/actions are screen-fixed DOM controls, so their largest
 // world-space footprint occurs at the bounded curve's lower zoom breakpoint.
 // Pending media callers use the compact pre-frame circle instead of this box.
-export const getGeneratedOutputChromeCollisionInsets = (nodeType: 'image' | 'video' | 'audio' | 'capabilityArtifact'): GeneratedOutputChromeCollisionInsets => {
-    const chrome = mediaGenerationLayoutSettings.generatedMediaChrome
-    const bottomBaseHeight = chrome.topGap
-        + chrome.iconSize
+export const getGeneratedOutputControlsCollisionInsets = (nodeType: 'image' | 'video' | 'audio' | 'capabilityArtifact'): GeneratedOutputControlsCollisionInsets => {
+    const controls = mediaGenerationLayoutSettings.generatedMediaControls
+    const bottomBaseHeight = controls.topGap
+        + controls.iconSize
         + (nodeType === 'video'
-            ? chrome.videoControlsBottomInset + chrome.videoControlsHeight
+            ? controls.videoControlsBottomInset + controls.videoControlsHeight
             : 0)
 
     return {
-        top: getMaximumGeneratedMediaChromeWorldSize(chrome.titleCollisionHeight),
-        bottom: getMaximumGeneratedMediaChromeWorldSize(bottomBaseHeight),
+        top: getMaximumGeneratedMediaControlsWorldSize(controls.titleCollisionHeight),
+        bottom: getMaximumGeneratedMediaControlsWorldSize(bottomBaseHeight),
     }
 }
 
-export const getGeneratedOutputChromeCollisionHeight = (nodeType: 'image' | 'video' | 'audio' | 'capabilityArtifact'): number =>
-    getGeneratedOutputChromeCollisionInsets(nodeType).bottom
+export const getGeneratedOutputControlsCollisionHeight = (nodeType: 'image' | 'video' | 'audio' | 'capabilityArtifact'): number =>
+    getGeneratedOutputControlsCollisionInsets(nodeType).bottom
 
-export const getGeneratedMediaChromeCollisionHeight = getGeneratedOutputChromeCollisionHeight
+export const getGeneratedMediaControlsCollisionHeight = getGeneratedOutputControlsCollisionHeight

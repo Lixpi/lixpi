@@ -172,7 +172,7 @@
     transition: hoverTransition(transform, $defaultHoverTransitionDuration);
 }
 
-.nested-list-item-chrome {
+.nested-list-item-controls {
     grid-row: 1;
     grid-column: 2;
     z-index: 2;
@@ -232,14 +232,14 @@
     color: #{themeScope.token("components-composer-mode-switch-unselected-option-color", themePalette.$roles)};
 }
 
-.nested-list-item:not(.nested-list-active)[data-nested-list-hover="true"] > .nested-list-item-chrome,
-.nested-list-item:not(.nested-list-active):has(> .nested-list-item-content > p:first-child:hover) > .nested-list-item-chrome,
-.nested-list-item:not(.nested-list-active):focus-visible > .nested-list-item-chrome {
+.nested-list-item:not(.nested-list-active)[data-nested-list-hover="true"] > .nested-list-item-controls,
+.nested-list-item:not(.nested-list-active):has(> .nested-list-item-content > p:first-child:hover) > .nested-list-item-controls,
+.nested-list-item:not(.nested-list-active):focus-visible > .nested-list-item-controls {
     color: #{themeScope.token("components-composer-mode-switch-unselected-option-color", themePalette.$roles)};
     fill: currentColor;
 }
 
-.nested-list-item.nested-list-active > .nested-list-item-chrome {
+.nested-list-item.nested-list-active > .nested-list-item-controls {
     color: #{themeScope.token("components-composer-mode-switch-selected-option-color", themePalette.$roles)};
     fill: currentColor;
 }
@@ -439,72 +439,4 @@
 
 .nested-list-block-trigger[hidden] {
     display: none;
-}
-
-.nested-list-block-panel {
-    position: absolute;
-    inset-block-start: calc(100% + 4px);
-    inset-inline-start: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    width: max-content;
-    max-width: 18rem;
-    max-height: 18rem;
-    overflow-y: auto;
-}
-
-.nested-list-block-panel-above {
-    inset-block-start: auto;
-    inset-block-end: calc(100% + 4px);
-}
-
-.nested-list-block-panel-text {
-    align-items: stretch;
-    border-radius: 8px;
-}
-
-.nested-list-block-panel-text .nested-list-block-icon-item {
-    align-self: center;
-}
-
-.nested-list-block-panel[hidden] {
-    display: none;
-}
-
-.nested-list-block-style-menu {
-    max-height: 18rem;
-    overflow-y: auto;
-}
-
-.nested-list-block-style-menu.nested-list-block-panel-above {
-    top: auto;
-    bottom: calc(100% + 4px);
-    margin-top: 0;
-    margin-bottom: 4px;
-}
-
-.nested-list-block-menu-item {
-    border: 0;
-    border-radius: #{themeScope.token("navigation-item-radius", themePalette.$roles)};
-    padding: 7px 12px;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: 12.5px;
-    text-align: start;
-    cursor: pointer;
-    transition: hoverTransition(background, $defaultHoverTransitionDuration);
-}
-
-.nested-list-block-menu-item:hover,
-.nested-list-block-menu-item:focus-visible {
-    background: #{themeScope.token("navigation-hover", themePalette.$roles)};
-}
-
-.nested-list-block-menu-item:disabled,
-.nested-list-block-icon-item:disabled {
-    opacity: 0.5;
-    cursor: default;
 }

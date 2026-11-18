@@ -49,7 +49,7 @@ Image dimensions fit intrinsic proportions while preserving the resolved center.
 
 Images have no duplicate DOM pixel loader. Source replacement retains decoded pixels until replacement succeeds. Asset refresh distinguishes descriptor changes from title-only changes, and explicit source retries reset remembered failures when materialization advances.
 
-`WorkspaceVideoChrome` borrows the native video element from Canvas Components and mounts UI-kit controls below it. Double-click toggles playback; surface input preserves node drag/resize. Controls isolate their hit areas while empty strip space can pass canvas gestures through. Provider/info chrome follows below the control row. Removing chrome returns a borrowed video to its original host before releasing controls.
+`WorkspaceVideoControls` borrows the native video element from Canvas Components and mounts UI-kit controls below it. Double-click toggles playback; surface input preserves node drag/resize. Controls isolate their hit areas while empty strip space can pass canvas gestures through. Provider and info controls follow below the playback row. Destroying the component returns a borrowed video to its original host before releasing the controls.
 
 Playback position, rate, volume and fullscreen are not persisted canvas fields. Browser video frames are not sampled through a Pixi texture loop, so connector rendering remains independent of playback. [UI-kit controls](../../../ui-kit/docs/VIDEO-PLAYER-CONTROLS.md) covers scrubbing and accessibility.
 

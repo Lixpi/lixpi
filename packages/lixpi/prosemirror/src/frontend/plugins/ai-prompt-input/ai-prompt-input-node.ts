@@ -108,7 +108,7 @@ type DropdownView = {
 }
 
 export type AiPromptInputNodeViewOptions = {
-    services: Pick<EditorServices, 'models' | 'modelControls' | 'settings' | 'promptChrome'>
+    services: Pick<EditorServices, 'models' | 'modelControls' | 'settings' | 'promptControls'>
     onSubmit: () => void
     placeholderText?: string
     createContextTray?: () => HTMLElement | null
@@ -642,7 +642,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
         )
         const submitButton = options.createSubmitButton(submitControls)
         submitButton.dataset.helpTooltip = 'aria-description'
-        const mediaModeSwitch = options.services.promptChrome.createMediaModeSwitch({
+        const mediaModeSwitch = options.services.promptControls.createMediaModeSwitch({
             document: dom.ownerDocument,
             value: getMediaGenerationMode(),
             appearance: settings.aiPromptInput.mediaModeSwitch.styles,
@@ -978,7 +978,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             event.stopPropagation()
         }
 
-        const modelMenuTriggerPresentation = options.services.promptChrome.createModelMenuTrigger({
+        const modelMenuTriggerPresentation = options.services.promptControls.createModelMenuTrigger({
             document: dom.ownerDocument,
             onClick: toggleModelMenu,
         })
@@ -1004,7 +1004,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
         if (contextTrayEl)
             dom.appendChild(contextTrayEl)
 
-        dom.appendChild(contentDOM)
+        dom.appendChild(surface.scroller)
 
         if (capabilityControls)
             dom.appendChild(capabilityControlsEl)
@@ -1041,6 +1041,19 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             'nowheel',
         )
         modelMenu.element.ariaLabel = 'Model settings'
+
+        // `ignoreMutation` skips these regions, so scroll containers inside them
+        // can host the shared overlay scrollbar without editing the document.
+        for (const region of [
+            controlsEl,
+            mediaModeSwitchHost,
+            contextTrayEl,
+            modelMenu.element,
+        ]) {
+            if (region)
+                region.dataset.scrollbars = 'auto'
+        }
+
         modelMenu.element.addEventListener(
             'wheel',
             handleModelMenuWheel,
@@ -1087,6 +1100,9 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             dom,
             contentDOM,
             ignoreMutation: (mutation: ViewMutationRecord) => {
+                if (surface.ownsMutationTarget(mutation.target as Node))
+                    return true
+
                 if (
                     contextTrayEl
                     && (mutation.target === contextTrayEl || contextTrayEl.contains(mutation.target as Node))

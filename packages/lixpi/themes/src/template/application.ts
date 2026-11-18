@@ -168,6 +168,19 @@ export type ApplicationTheme = {
             hover: string
             foreground: string
         }
+        bubbleMenu: {
+            background: string
+            foreground: string
+            hoverBackground: string
+            hoverForeground: string
+            activeBackground: string
+            activeForeground: string
+            border: string
+            separator: string
+            fieldBackground: string
+            fieldFocusBackground: string
+            placeholder: string
+        }
         slidingSwitch: {
             track: string
             indicator: string
@@ -186,6 +199,7 @@ export type ApplicationTheme = {
             disabled: string
         }
         scrollbar: {
+            track: string
             thumb: string
             hover: string
             active: string

@@ -9,11 +9,17 @@
 // The row holds the page's own controls, such as the panel toggles, so it has
 // no element of its own covering them. Instead a press anywhere in the row
 // that doesn't land on a control drags the window, and a double click zooms it,
-// as a native title bar does. A backdrop behind the traffic lights keeps them
-// readable over the content and fades into it. In a browser, or in full
-// screen, the row does nothing and nothing is drawn.
+// as a native title bar does. The traffic lights sit in the same action panel
+// oval as the panel toggles beside them, which keeps them readable over the
+// content. In a browser, or in full screen, the row does nothing and nothing
+// is drawn.
 
-import { html } from '@lixpi/ui-primitives/dom'
+import {
+    createActionPanel,
+    type ActionPanelInstance,
+} from '@lixpi/ui-kit/components/action-panel'
+import { bindCanvasTheme } from '@lixpi/canvas-components/theme'
+import { canvasThemeStore } from '$src/canvas-adapters/canvas-theme.ts'
 import { hasOverlayTitleBar } from '$src/components/windowTitleBar/title-bar-mode.ts'
 import '$src/components/windowTitleBar/window-title-bar.scss'
 
@@ -65,7 +71,8 @@ const DOUBLE_CLICK_MS = 500
 const DOUBLE_CLICK_SLOP_PX = 4
 
 class WindowTitleBar implements WindowTitleBarInstance {
-    private readonly backdropEl: HTMLDivElement
+    private readonly controlsPanel: ActionPanelInstance
+    private readonly releaseTheme: () => void
     private previousPress: PreviousPress | null = null
     private pendingDoubleClick: PendingDoubleClick | null = null
 
@@ -73,14 +80,14 @@ class WindowTitleBar implements WindowTitleBarInstance {
         target: HTMLElement,
         private readonly root: HTMLElement,
     ) {
-        this.backdropEl = html`
-            <div
-                className="window-title-bar-backdrop"
-                aria-hidden="true"
-            ></div>
-        ` as HTMLDivElement
-
-        target.append(this.backdropEl)
+        this.controlsPanel = createActionPanel({
+            document: target.ownerDocument,
+            className: 'window-controls-panel',
+        })
+        this.controlsPanel.element.ariaHidden = 'true'
+        // Painted by the canvas theme, like the panel toggles it lines up with.
+        this.releaseTheme = bindCanvasTheme(this.controlsPanel.element, canvasThemeStore)
+        target.append(this.controlsPanel.element)
         // Capture runs before the canvas and every other page listener, so a
         // press that drags the window never also starts a pan or a selection.
         window.addEventListener(
@@ -191,7 +198,8 @@ class WindowTitleBar implements WindowTitleBarInstance {
             this.handlePointerUp,
             true,
         )
-        this.backdropEl.remove()
+        this.releaseTheme()
+        this.controlsPanel.destroy()
     }
 }
 

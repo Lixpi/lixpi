@@ -30,7 +30,7 @@ The shared coding-style guides map to work as follows:
 | Any `.rs` file Lixpi authors (not the vendored `services/localauth0` source) | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/RUST.md` |
 | Any `.ts` file anywhere in the repository | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/TYPESCRIPT.md` |
 | `.scss` or `.css` files, or code that creates or selects styled DOM elements | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/SASS-AND-CSS.md` |
-| `services/web-ui` UI work, including TypeScript DOM components, D3 or SVG, canvas chrome, ProseMirror plugins, and shared components | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/UI-COMPONENTS.md`, in addition to the applicable language and style guides |
+| `services/web-ui` UI work, including TypeScript DOM components, D3 or SVG, canvas controls, ProseMirror plugins, and shared components | `${LIXPI_REPOSITORY_PATH}/documentation/code-quality/coding-style/UI-COMPONENTS.md`, in addition to the applicable language and style guides |
 
 The guides stack. A TypeScript UI component with styles requires all three. `TYPESCRIPT.md` applies to every TypeScript file in the monorepo, not only web UI code. Only its DOM templating section is limited to `services/web-ui`.
 

@@ -566,7 +566,7 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
         applyMediaModelBadgeStyleProperties(
             modelHeader,
             {
-                scale: settings.mediaNode.generatedMediaChrome.chatScale,
+                scale: settings.mediaNode.generatedMediaControls.chatScale,
             },
         )
 

@@ -47,7 +47,7 @@ export class ImageNodeView implements NodeView {
     private mediaFrame: HTMLElement
     private img: HTMLImageElement
     private partialPlaceholder: HTMLElement | null = null
-    private modelChromeElement: HTMLElement | null = null
+    private modelControlsElement: HTMLElement | null = null
     private resizeHandles: Map<ResizeCorner, HTMLElement> = new Map()
 
     private originalAspectRatio = 1
@@ -118,7 +118,7 @@ export class ImageNodeView implements NodeView {
         this.figure.appendChild(this.mediaFrame)
         this.syncGeneratedImageTitle()
         this.syncPartialPlaceholder()
-        this.syncGeneratedImageModelChrome()
+        this.syncGeneratedImageModelControls()
 
         // Store aspect ratio when image loads
         this.img.addEventListener('load', this.handleImageLoad)
@@ -258,7 +258,7 @@ export class ImageNodeView implements NodeView {
             this.figure.insertBefore(this.titleElement, this.figure.firstChild)
     }
 
-    private syncGeneratedImageModelChrome(): void {
+    private syncGeneratedImageModelControls(): void {
         if (!this.isGeneratedImage)
             return
 
@@ -267,10 +267,10 @@ export class ImageNodeView implements NodeView {
         if (!badge)
             return
 
-        if (!this.modelChromeElement) {
-            this.modelChromeElement = html`<div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>` as HTMLElement
+        if (!this.modelControlsElement) {
+            this.modelControlsElement = html`<div className="ai-generated-media-model-controls ai-generated-media-run-meta"></div>` as HTMLElement
             badge.decorate(this.figure)
-            this.figure.appendChild(this.modelChromeElement)
+            this.figure.appendChild(this.modelControlsElement)
             this.unsubscribeModelBadge = badge.subscribe(() => this.renderGeneratedImageModelBadge())
         }
 
@@ -278,10 +278,10 @@ export class ImageNodeView implements NodeView {
     }
 
     private renderGeneratedImageModelBadge(): void {
-        if (!this.modelChromeElement)
+        if (!this.modelControlsElement)
             return
 
-        this.ports.modelBadge?.render(this.modelChromeElement, this.node.attrs.mediaModelId)
+        this.ports.modelBadge?.render(this.modelControlsElement, this.node.attrs.mediaModelId)
     }
 
     private createResizeHandle(corner: ResizeCorner): HTMLElement {
@@ -445,7 +445,7 @@ export class ImageNodeView implements NodeView {
         )
         this.syncGeneratedImageTitle()
         this.syncPartialPlaceholder()
-        this.syncGeneratedImageModelChrome()
+        this.syncGeneratedImageModelControls()
 
         if (node.attrs.alt !== this.img.alt)
             this.img.alt = node.attrs.alt || ''

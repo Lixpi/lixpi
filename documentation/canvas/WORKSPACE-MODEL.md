@@ -174,7 +174,7 @@ Capability Artifact outputs use the same reasoning-index branch placement, colli
 
 ## Rendering ownership
 
-The DOM owns editable documents, branch marker content, selection chrome, controls, and the conversation panel. PIXI owns media pixels, masks, placeholders, and high-volume visual effects. Both consume the same node geometry.
+The DOM owns editable documents, branch marker content, selection and other controls, and the conversation panel. PIXI owns media pixels, masks, placeholders, and high-volume visual effects. Both consume the same node geometry.
 
 Asset rendition selection is centralized:
 

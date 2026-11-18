@@ -64,7 +64,9 @@ export class WebUiStartup {
 
         try {
             session = await this.config.auth.initializeSession()
-            performance.mark('startup:session')
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:session')
         } catch {
             this.showSignIn(true)
 
@@ -89,7 +91,9 @@ export class WebUiStartup {
                 onReady: () => this.clearView(),
                 onError: error => this.showWorkspaceError(error),
             })
-            performance.mark('startup:workspace-created')
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:workspace-created')
 
             if (this.destroyed) {
                 await application.destroy()
@@ -99,7 +103,9 @@ export class WebUiStartup {
 
             this.application = application
             await application.start()
-            performance.mark('startup:application-started')
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:application-started')
         } catch (error) {
             // A rejected session also fails startup. Offering to reload would
             // only lead to the sign-in screen after one more click.

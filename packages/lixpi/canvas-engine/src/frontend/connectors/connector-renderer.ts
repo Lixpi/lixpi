@@ -1,6 +1,6 @@
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeToScreenForZoom,
+    scaleCanvasControlsToScreenForZoom,
     type BoundedZoomScalingOptions,
     type CanvasViewport,
 } from '../../shared/index.ts'
@@ -128,7 +128,7 @@ export class ConnectorRenderer {
             // A failed resource update must not retain the previous frame's cache key.
             entry.key = ''
 
-            const scale = (value: number) => scaleCanvasChromeToScreenForZoom(
+            const scale = (value: number) => scaleCanvasControlsToScreenForZoom(
                 value,
                 viewport.zoom,
                 getAdaptiveBoundedZoomScalingOptions(this.options.zoomScaling ?? { minZoom: 0 }),

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Use this guide when building UI components in `services/web-ui` that are not pure PIXI renderers. This includes TypeScript DOM UI, ProseMirror node views, canvas chrome, SVG controls, menus, switches, sliders, toolbars, overlays, and small reusable primitives.
+Use this guide when building UI components in `services/web-ui` that are not pure PIXI renderers. This includes TypeScript DOM UI, ProseMirror node views, canvas controls, SVG controls, menus, switches, sliders, toolbars, overlays, and small reusable primitives.
 
 This guide does not replace the PIXI rendering rules for canvas scene content. If the element is part of the canvas world and can be rendered naturally in PIXI, PIXI is the first choice. Use this guide for UI that sits outside PIXI or for canvas-adjacent controls that need DOM/SVG semantics.
 
@@ -23,7 +23,7 @@ Choose the rendering approach by where the UI lives and what it does.
 | Normal app UI | TypeScript `html` tagged template | Panels, dialogs, forms, settings, inspectors, app navigation, persistent screens, ProseMirror node views, and plugins covered by [`TYPESCRIPT.md`](TYPESCRIPT.md) |
 | Static icon or decorative SVG in DOM | Existing icon system | Import from [`@lixpi/ui-kit/svg`](../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts), then inject or parse according to the host renderer |
 
-Do not use D3 for ordinary application DOM. Do not use HTML templates for canvas chrome when the control is expected to live in an SVG overlay. Do not use PIXI for form-like UI, menus, segmented switches, media controls, or text-heavy widgets unless there is a concrete rendering reason.
+Do not use D3 for ordinary application DOM. Do not use HTML templates for canvas controls when the control is expected to live in an SVG overlay. Do not use PIXI for form-like UI, menus, segmented switches, media controls, or text-heavy widgets unless there is a concrete rendering reason.
 
 ## Canvas Rule
 
@@ -132,7 +132,7 @@ export function createExampleControl(parent: any, config: ExampleControlConfig):
 }
 ```
 
-Closure-backed factories are not acceptable for reusable UI components, D3/SVG controls, canvas chrome controls, controllers, menus, switches, sliders, popovers, tooltips, or editor-backed UI. Use plain functions only for pure utilities, tiny adapters, simple callbacks, and small mappers with no retained state or cleanup.
+Closure-backed factories are not acceptable for reusable UI components, D3/SVG controls, canvas controls, controllers, menus, switches, sliders, popovers, tooltips, or editor-backed UI. Use plain functions only for pure utilities, tiny adapters, simple callbacks, and small mappers with no retained state or cleanup.
 
 Do not build deep inheritance hierarchies. Prefer composition and helper functions. Inheritance deeper than 3 levels is not allowed.
 
@@ -179,7 +179,7 @@ Do not mix approaches inside one component without a clear boundary:
 
 - A TypeScript DOM panel can host an `<svg>` and call a D3 SVG primitive.
 - A ProseMirror NodeView can create a DOM shell with `html` and mount an SVG control inside it.
-- A canvas chrome layer can position an SVG host and let D3 render inside it.
+- A canvas controls layer can position an SVG host and let D3 render inside it.
 - A D3 SVG primitive should not create random HTML siblings.
 
 ## State Ownership

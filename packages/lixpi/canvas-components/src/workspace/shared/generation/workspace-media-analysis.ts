@@ -42,7 +42,7 @@ export type WorkspaceMediaAnalysisPorts = {
     ) => Promise<Asset | { error: string }>
     loadWorkspaceAssets: (workspaceId: string) => Promise<void>
     refreshVideo: (node: VideoCanvasNode) => void
-    refreshChrome: () => void
+    refreshControls: () => void
     refreshMarkers: () => void
     refreshContext: () => void
     setTimer: (
@@ -133,7 +133,7 @@ export class WorkspaceMediaAnalysis {
             if (!this.scopeIsCurrent(scope, revision))
                 return
 
-            this.ports.refreshChrome()
+            this.ports.refreshControls()
 
             if (this.scopeIsCurrent(scope, revision))
                 this.ports.refreshContext()
@@ -307,7 +307,7 @@ export class WorkspaceMediaAnalysis {
             )
 
             if (this.isCurrent(work, this.analysis))
-                this.ports.refreshChrome()
+                this.ports.refreshControls()
         } catch (error) {
             this.ports.reportError(error)
         } finally {
@@ -331,7 +331,7 @@ export class WorkspaceMediaAnalysis {
         let retry = false
 
         try {
-            this.ports.refreshChrome()
+            this.ports.refreshControls()
 
             if (!this.isCurrent(work, this.refreshes))
                 return
@@ -355,7 +355,7 @@ export class WorkspaceMediaAnalysis {
             if (!this.isCurrent(work, this.refreshes))
                 return
 
-            this.ports.refreshChrome()
+            this.ports.refreshControls()
 
             if (!this.isCurrent(work, this.refreshes))
                 return

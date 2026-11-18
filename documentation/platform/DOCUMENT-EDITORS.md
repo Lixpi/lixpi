@@ -46,7 +46,7 @@ Features that need application services receive them through typed ports in the 
 - `segments`: streamed response segments, routed by conversation
 - `capabilityArtifacts`: host factories for Capability Artifact previews, icons and styles
 - `previews`: host-owned reference chip creation; reference and message preview renderers supply callbacks without exposing canvas nodes
-- `promptChrome`: host factories for prompt controls
+- `promptControls`: host factories for prompt controls
 - `createCapabilityRunProgress`: the progress panel for Capability runs
 - `modelControls`: the prompt input's model menu and configuration matrix helpers
 

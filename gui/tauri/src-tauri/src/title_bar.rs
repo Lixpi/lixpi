@@ -6,6 +6,8 @@
 // commands it may call are the two Tauri's drag region uses: dragging the
 // window and zooming it on a double click.
 
+use std::thread;
+
 #[cfg(any(target_os = "macos", test))]
 use tauri::LogicalPosition;
 use tauri::{
@@ -21,18 +23,23 @@ use crate::MAIN_WINDOW;
 const START_DRAGGING: &str = "core:window:allow-start-dragging";
 const TOGGLE_MAXIMIZE: &str = "core:window:allow-internal-toggle-maximize";
 
-// Height of the row the page draws at the top of the window.
+// Height of the row the page draws at the top of the window. The page wraps
+// the traffic lights in a 34 point oval 9 points below the window's top edge,
+// which keeps the glass rim around it clear of the edge. The buttons are
+// centred in the row, so the row is the oval plus that offset above and below.
 #[cfg(any(target_os = "macos", test))]
-const TITLE_BAR_HEIGHT: f64 = 40.0;
+const TITLE_BAR_HEIGHT: f64 = 52.0;
 
 // AppKit draws the buttons' centres this much higher than the `y` they are
-// placed at, so the position adds it back to line them up with the page's
-// controls centred in the row.
+// placed at. tao grows the native title bar container by `y` and the buttons
+// keep their offset from its bottom, so their centres follow `y` point for
+// point; this is the offset measured in the running app, with the buttons
+// centred on the page's oval.
 #[cfg(any(target_os = "macos", test))]
-const TRAFFIC_LIGHTS_RAISE: f64 = 1.5;
+const TRAFFIC_LIGHTS_RAISE: f64 = 2.0;
 
 // The close button's left edge is at `x`, and the buttons are centred
-// vertically in the row.
+// vertically in the row, on the page's oval around them.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) const TRAFFIC_LIGHTS: LogicalPosition<f64> = LogicalPosition {
     x: 16.0,
@@ -46,20 +53,31 @@ pub(crate) const TRAFFIC_LIGHTS: LogicalPosition<f64> = LogicalPosition {
 const CONTROLS_INSET: f64 = 96.0;
 
 // Marks the page as drawing its own title bar and gives it the row's
-// geometry. WebKit runs it once the document element exists, before any page
-// script, so the first layout already leaves room for the buttons.
+// geometry. Chromium can run startup scripts before the document element
+// exists, so observe its insertion before the first page script uses it.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn initialization_script() -> String {
     format!(
         r"
 (() => {{
-  const root = document.documentElement
-  if (!root)
+  const apply = () => {{
+    const root = document.documentElement
+    if (!root)
+      return false
+
+    root.dataset.titleBar = 'overlay'
+    root.style.setProperty('--window-title-bar-height', '{TITLE_BAR_HEIGHT}px')
+    root.style.setProperty('--window-controls-inset', '{CONTROLS_INSET}px')
+    return true
+  }}
+  if (apply())
     return
 
-  root.dataset.titleBar = 'overlay'
-  root.style.setProperty('--window-title-bar-height', '{TITLE_BAR_HEIGHT}px')
-  root.style.setProperty('--window-controls-inset', '{CONTROLS_INSET}px')
+  const observer = new MutationObserver(() => {{
+    if (apply())
+      observer.disconnect()
+  }})
+  observer.observe(document, {{ childList: true }})
 }})()
 "
     )
@@ -83,6 +101,18 @@ pub(crate) fn allow_window_dragging(
 
 fn remote_pattern(web_ui: &Url) -> String {
     format!("{}/*", web_ui.origin().ascii_serialization())
+}
+
+// CEF can deliver page loads from AppKit's timer outside winit's dispatch.
+// A synchronous window getter there would block the thread that must answer
+// it. Let a worker wait while the native event loop keeps processing requests.
+pub(crate) fn reflect_fullscreen_after_page_load(window: WebviewWindow) {
+    if let Err(error) = thread::Builder::new()
+        .name("lixpi-title-bar".to_owned())
+        .spawn(move || reflect_fullscreen(&window))
+    {
+        eprintln!("Could not schedule title-bar synchronization after page load: {error}");
+    }
 }
 
 // In full screen macOS hides the traffic lights and slides its own title bar
@@ -130,7 +160,7 @@ mod tests {
 
         for expected in [
             "titleBar = 'overlay'",
-            "'--window-title-bar-height', '40px'",
+            "'--window-title-bar-height', '52px'",
             "'--window-controls-inset', '96px'",
         ] {
             assert!(script.contains(expected), "{expected}");

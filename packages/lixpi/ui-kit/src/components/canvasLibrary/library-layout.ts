@@ -51,7 +51,8 @@ const panelLayouts = {
             openAriaLabel: 'Close navigation',
             closedAriaLabel: 'Open navigation',
             className: 'navigation-side-panel-toggle',
-            ...navigation.geometry.toggle,
+            openOffset: navigation.geometry.toggle.openOffset,
+            top: navigation.geometry.toggle.top,
         },
     },
     parameters: {
@@ -69,7 +70,6 @@ const panelLayouts = {
             closedAriaLabel: 'Open parameters',
             openOffset: `calc(var(--canvas-library-theme-open-width) + var(--canvas-library-params-open-width) + ${libraryGeometry.toggleGap})`,
             top: rightPanel.geometry.toggle.top,
-            size: rightPanel.geometry.toggle.size,
         },
     },
     theme: {
@@ -87,7 +87,6 @@ const panelLayouts = {
             closedAriaLabel: 'Open canvas theme',
             openOffset: `calc(var(--canvas-library-theme-open-width) + ${libraryGeometry.toggleGap})`,
             top: libraryGeometry.themeToggleTop,
-            size: rightPanel.geometry.toggle.size,
         },
     },
 }

@@ -20,7 +20,7 @@ Workspaces nest. A campaign workspace can hold a workspace per channel, and each
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using Canvas Engine for geometry and native viewport input. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws documents, media, Capability Artifacts and branch lineage markers. In conversational workspaces, conversation Assets appear in a persistent transcript above the composer without requiring canvas nodes.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using Canvas Engine for geometry and native viewport input. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas controls. The renderer draws documents, media, Capability Artifacts and branch lineage markers. In conversational workspaces, conversation Assets appear in a persistent transcript above the composer without requiring canvas nodes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -60,8 +60,8 @@ graph TB
 | Node Type | Editor | Resize | Persistence |
 |-----------|--------|--------|-------------|
 | **Document** | ProseMirror Asset `content` role | Free | Asset snapshot Blob + workspace node geometry |
-| **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | Asset media renditions + workspace node geometry |
-| **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | Asset media renditions + workspace node geometry |
+| **Image** | None (PIXI pixels + DOM controls) | Aspect-ratio locked | Asset media renditions + workspace node geometry |
+| **Video** | None (PIXI poster + DOM `<video>` controls) | Aspect-ratio locked | Asset media renditions + workspace node geometry |
 | **Audio** | DOM `<audio>` playback surface | Fixed strip | Asset original rendition + workspace node geometry |
 | **Uploaded Document Media** | None (PDF/text/document preview) | Aspect-ratio locked | Asset document-media renditions + workspace node geometry |
 | **Branch Origin / Fork / Line** | None | API-positioned topology markers | Workspace `canvasState`; conversation/output relationships use Asset IDs |

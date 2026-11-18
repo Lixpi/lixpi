@@ -144,8 +144,8 @@ const setup = (nodes: CanvasNode[] = [image()]) => {
             y: 0,
             zoom: 1,
         }),
-        updateChromeTransform: vi.fn(),
-        updateChromeLayout: vi.fn(),
+        updateControlsTransform: vi.fn(),
+        updateControlsLayout: vi.fn(),
         scheduleEdges: vi.fn(),
         cancelEdges: vi.fn(),
         repositionMenu: vi.fn(),
@@ -415,9 +415,9 @@ describe('WorkspaceNodeGestures', () => {
         expect(fixture.timers).toHaveLength(0)
     })
 
-    it('stops a resize update when a chrome callback replaces the scene', () => {
+    it('stops a resize update when a controls callback replaces the scene', () => {
         const fixture = setup()
-        fixture.ports.updateChromeTransform = () => fixture.setScene('replacement')
+        fixture.ports.updateControlsTransform = () => fixture.setScene('replacement')
         fixture.owner.startResize(fixture.event(), 'image', 'bottom-right')
         fixture.resizes[0].onChange(new Map([['image', {
             x: 10,

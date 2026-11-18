@@ -7,6 +7,7 @@
 #   LIXPI_CONSOLE_ENV_FILE          environment file whose web-ui the app opens
 #   LIXPI_CONSOLE_OPTION_TARGET     aarch64-apple-darwin or x86_64-apple-darwin
 #   LIXPI_CONSOLE_OPTION_REBUILD    true rebuilds the builder image without cache
+#   LIXPI_CONSOLE_OPTION_PROFILING    true includes native performance probes; off by default
 #   LIXPI_CONSOLE_OPTION_DEBUG        true builds the app in debug mode, with diagnostics logging
 #   LIXPI_CONSOLE_OPTION_HOT_RELOAD   true lets the page follow web-ui's rebuilds, false for a release
 
@@ -20,8 +21,21 @@ COMPOSE=(docker compose -f infrastructure/docker/utilities/desktop/docker-compos
 
 if [[ "${LIXPI_CONSOLE_OPTION_REBUILD:-false}" == "true" ]]; then
     "${COMPOSE[@]}" --progress plain build --no-cache lixpi-tauri-macos-builder
+else
+    # Refresh changed Dockerfile layers even when the old image already exists.
+    "${COMPOSE[@]}" --progress plain build lixpi-tauri-macos-builder
 fi
 
-LIXPI_DESKTOP_TARGET="${LIXPI_CONSOLE_OPTION_TARGET:-aarch64-apple-darwin}" LIXPI_DESKTOP_DIAGNOSTICS="${LIXPI_CONSOLE_OPTION_DEBUG:-false}" LIXPI_DESKTOP_HOT_RELOAD="${LIXPI_CONSOLE_OPTION_HOT_RELOAD:-true}" "${COMPOSE[@]}" run --rm lixpi-tauri-macos-builder
+LIXPI_DESKTOP_TARGET="${LIXPI_CONSOLE_OPTION_TARGET:-aarch64-apple-darwin}" LIXPI_DESKTOP_DIAGNOSTICS="${LIXPI_CONSOLE_OPTION_DEBUG:-false}" LIXPI_DESKTOP_PROFILING="${LIXPI_CONSOLE_OPTION_PROFILING:-false}" LIXPI_DESKTOP_HOT_RELOAD="${LIXPI_CONSOLE_OPTION_HOT_RELOAD:-true}" "${COMPOSE[@]}" run --rm lixpi-tauri-macos-builder
 
-echo "Open it with: open gui/tauri/dist/Lixpi.app"
+# The container can't replace a bundle that has been launched, because macOS
+# keeps programs without App Management access from changing it. The host
+# swaps the freshly assembled bundle into place instead.
+staged=gui/tauri/dist/staging/Lixpi.app
+installed=gui/tauri/dist/Lixpi.app
+[[ -d "${staged}" ]] || { echo "The build did not assemble ${staged}." >&2; exit 1; }
+rm -rf "${installed}"
+mv "${staged}" "${installed}"
+rmdir gui/tauri/dist/staging
+
+echo "Open it with: open ${installed}"

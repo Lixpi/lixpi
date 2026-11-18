@@ -8,7 +8,7 @@ import {
     type ImageCanvasNode,
 } from '@lixpi/constants'
 import { createLixpiCanvasSettings } from '../../frontend/settings/canvas-settings.ts'
-import { getGeneratedOutputChromeCollisionInsets } from './media-fitting.ts'
+import { getGeneratedOutputControlsCollisionInsets } from './media-fitting.ts'
 import {
     WorkspaceGeometry,
     type WorkspaceGeometryPorts,
@@ -92,7 +92,7 @@ describe('WorkspaceGeometry', () => {
         })
     })
 
-    it('includes completed media chrome in collisions without moving connector anchors', () => {
+    it('includes completed media controls in collisions without moving connector anchors', () => {
         const { geometry } = setup()
         const node = image()
         const bounds = geometry.getCanvasNodeCollisionRect(node, node.position)
@@ -231,7 +231,7 @@ describe('WorkspaceGeometry', () => {
                 },
             }])
 
-        const insets = getGeneratedOutputChromeCollisionInsets('audio')
+        const insets = getGeneratedOutputControlsCollisionInsets('audio')
         const rects = nodes.map(node => ({
             x: node.position.x,
             y: node.position.y - insets.top,

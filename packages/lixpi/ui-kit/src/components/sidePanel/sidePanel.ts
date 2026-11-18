@@ -30,6 +30,10 @@ import {
     ElementStyleLease,
 } from '@lixpi/ui-primitives/dom'
 
+import {
+    createActionPanel,
+    type ActionPanelInstance,
+} from '../actionPanel/actionPanel.ts'
 import { uiKitSettings } from '../../runtime-settings.ts'
 
 export type SidePanelSide = 'left' | 'right'
@@ -54,7 +58,6 @@ export type SidePanelToggleConfig = {
     openOffset?: string
     closedTravel?: string
     top?: string
-    size?: string
     onToggle: () => void
 }
 
@@ -123,6 +126,9 @@ export type SidePanelConfig = {
     // Optional measurement of the panel's actual rendered width, used as the
     // start width for the first drag before any width has been set.
     measureWidth?: () => number
+    // Convert a signed screen-pixel width change into the panel's width units.
+    // A positive delta grows the panel; without this callback the delta is unchanged.
+    mapResizeDelta?: (delta: number) => number
 
     // Persistence adapter. The component decides *when* to load and save; the
     // host owns *where* the state lives.
@@ -148,9 +154,12 @@ export type SidePanelInstance = {
     // Optional full-container overlay behind the panel. Appended by the host into
     // the same container as the panel, before the backdrop/panel surfaces.
     overlayElement: HTMLDivElement | null
-    // Optional component-owned open/collapse button. Appended by the host into the
-    // same container as the panel; it either slides with the drawer or stays fixed.
-    toggleElement: HTMLButtonElement | null
+    // Optional component-owned open/collapse control: an action panel holding one
+    // button. Appended by the host into the same container as the panel; it
+    // either slides with the drawer or stays fixed.
+    toggleElement: HTMLDivElement | null
+    // The button inside `toggleElement`.
+    toggleButtonElement: HTMLButtonElement | null
     // Resolved, clamped current width (always a concrete number).
     getWidth: () => number
     // Raw stored width: null when the user has never resized.
@@ -233,7 +242,9 @@ class SidePanel implements SidePanelInstance {
     readonly element: HTMLDivElement
     readonly backdropElement: HTMLDivElement
     readonly overlayElement: HTMLDivElement | null
-    readonly toggleElement: HTMLButtonElement | null
+    readonly toggleElement: HTMLDivElement | null
+    readonly toggleButtonElement: HTMLButtonElement | null
+    private readonly toggle: ActionPanelInstance | null
     // Single source of truth for the panel width. null = never resized.
     private width: number | null = null
     private readonly listeners = new Set<(width: number) => void>()
@@ -307,7 +318,10 @@ class SidePanel implements SidePanelInstance {
         ` as HTMLDivElement
 
         this.overlayElement = config.overlay?.enabled ? this.createOverlayElement(config.overlay) : null
-        this.toggleElement = config.toggle ? this.createToggleElement(config.toggle) : null
+        const toggle = config.toggle ? this.createToggle(config.toggle) : null
+        this.toggle = toggle?.panel ?? null
+        this.toggleElement = toggle?.panel.element ?? null
+        this.toggleButtonElement = toggle?.button ?? null
         this.applyAnimationSettings(this.backdropElement)
 
         if (this.overlayElement)
@@ -487,10 +501,10 @@ class SidePanel implements SidePanelInstance {
         this.overlayElement?.classList.toggle('side-panel-overlay-open', open)
 
         if (
-            this.toggleElement
+            this.toggleButtonElement
             && this.config.toggle
         ) {
-            this.toggleElement.ariaLabel = open
+            this.toggleButtonElement.ariaLabel = open
                 ? this.config.toggle.openAriaLabel
                 : this.config.toggle.closedAriaLabel
         }
@@ -534,7 +548,8 @@ class SidePanel implements SidePanelInstance {
             if (moveEvent.pointerId !== pointerId)
                 return
 
-            this.setWidth(startWidth + sign * (moveEvent.clientX - startX))
+            const delta = sign * (moveEvent.clientX - startX)
+            this.setWidth(startWidth + (this.config.mapResizeDelta?.(delta) ?? delta))
         }
 
         const handlePointerUp = (upEvent: PointerEvent): void => {
@@ -572,32 +587,40 @@ class SidePanel implements SidePanelInstance {
 
     private detach = (): void => void this.detachDrag?.()
 
-    private createToggleElement(toggleConfig: SidePanelToggleConfig): HTMLButtonElement {
-        const toggleStyle: Partial<CSSStyleDeclaration> = {
-            ...(toggleConfig.top ? { top: toggleConfig.top } : {}),
-            ...(toggleConfig.size ? {
-                width: toggleConfig.size,
-                height: toggleConfig.size,
-            } : {}),
-            ...(this.config.side === 'left'
-                ? { left: toggleConfig.openOffset ?? '20px' }
-                : { right: toggleConfig.openOffset ?? '20px' }),
-        }
-        const toggleElement = this.html`
-            <button
-                className=${`side-panel-toggle side-panel-toggle-${this.config.side} nopan${toggleConfig.className ? ` ${toggleConfig.className}` : ''}`}
-                type="button"
-                style=${toggleStyle}
-                data-help-tooltip="aria-label"
-                innerHTML=${toggleConfig.iconSvg}
-                onclick=${this.handleToggleClick}
-            ></button>
-        ` as HTMLButtonElement
+    // The toggle is the same action panel that holds the controls beside the
+    // prompt input, with a single button, so it shares their surface and glass.
+    private createToggle(toggleConfig: SidePanelToggleConfig): {
+        panel: ActionPanelInstance
+        button: HTMLButtonElement
+    } {
+        const panel = createActionPanel({
+            document: this.document,
+            className: `side-panel-toggle side-panel-toggle-${this.config.side} nopan${toggleConfig.className ? ` ${toggleConfig.className}` : ''}`,
+        })
+        const button = panel.createButton({
+            iconSvg: toggleConfig.iconSvg,
+            ariaLabel: toggleConfig.closedAriaLabel,
+            className: 'side-panel-toggle-button',
+            onClick: this.handleToggleClick,
+        })
+        panel.element.append(button)
+        applyStyle(
+            panel.element,
+            {
+                ...(toggleConfig.top ? { top: toggleConfig.top } : {}),
+                ...(this.config.side === 'left'
+                    ? { left: toggleConfig.openOffset ?? '20px' }
+                    : { right: toggleConfig.openOffset ?? '20px' }),
+            },
+        )
 
         if (toggleConfig.closedTravel)
-            toggleElement.style.setProperty('--side-panel-toggle-closed-travel', toggleConfig.closedTravel)
+            panel.element.style.setProperty('--side-panel-toggle-closed-travel', toggleConfig.closedTravel)
 
-        return toggleElement
+        return {
+            panel,
+            button,
+        }
     }
 
     private createOverlayElement(overlayConfig: SidePanelOverlayConfig): HTMLDivElement {
@@ -1337,7 +1360,7 @@ class SidePanel implements SidePanelInstance {
             )
         }
 
-        this.toggleElement?.remove()
+        this.toggle?.destroy()
     }
 }
 

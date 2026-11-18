@@ -145,6 +145,7 @@ describe('BubbleMenu — construction', () => {
         const result = createBubbleMenu()
         parentEl = result.parentEl
         expect(result.menu.isVisible).toBe(false)
+        expect(window.getComputedStyle(result.menu.element).display).toBe('none')
     })
 
     it('sets correct ARIA attributes', () => {
@@ -177,6 +178,7 @@ describe('BubbleMenu — show/hide', () => {
     it('show() makes menu visible', () => {
         menu.show('text', createMockPosition())
         expect(menu.isVisible).toBe(true)
+        expect(window.getComputedStyle(menu.element).display).not.toBe('none')
     })
 
     it('show() sets context', () => {
@@ -188,6 +190,7 @@ describe('BubbleMenu — show/hide', () => {
         menu.show('text', createMockPosition())
         menu.hide()
         expect(menu.isVisible).toBe(false)
+        expect(window.getComputedStyle(menu.element).display).toBe('none')
     })
 
     it('hide() clears context', () => {
@@ -211,6 +214,29 @@ describe('BubbleMenu — show/hide', () => {
         menu.forceHide()
         expect(menu.isVisible).toBe(false)
         expect(menu.preventHide).toBe(false)
+    })
+
+    it.each([false, true])('reopens a hidden menu (inline: %s)', inline => {
+        const reopenedMenu = new BubbleMenu({
+            parentEl,
+            inline,
+            items: [createMockItem(['text'])],
+        })
+        const position = inline ? undefined : createMockPosition()
+
+        try {
+            reopenedMenu.show('text', position)
+            reopenedMenu.hide()
+            expect(window.getComputedStyle(reopenedMenu.element).display).toBe('none')
+
+            reopenedMenu.show('text', position)
+
+            expect(reopenedMenu.isVisible).toBe(true)
+            expect(window.getComputedStyle(reopenedMenu.element).display).not.toBe('none')
+            expect(window.getComputedStyle(reopenedMenu.element).visibility).toBe('visible')
+        } finally {
+            reopenedMenu.destroy()
+        }
     })
 })
 

@@ -11,6 +11,8 @@ use std::{
         self,
         NonNull,
     },
+    sync::mpsc,
+    thread,
 };
 
 use block2::RcBlock;
@@ -33,8 +35,21 @@ thread_local! {
     static MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
 }
 
-// Toggles `window`'s developer tools on F12. It must run on the main thread.
+// Installs the F12 event monitor. Installation must run on the main thread.
 pub(crate) fn install(window: WebviewWindow) {
+    // The AppKit monitor runs outside winit's dispatch. Keep synchronous
+    // DevTools queries off that callback, and process F12 presses in order.
+    let (toggle, requests) = mpsc::channel::<()>();
+    if let Err(error) = thread::Builder::new().name("lixpi-devtools".to_owned()).spawn(move || {
+        for () in requests {
+            window_commands::toggle_developer_tools(&window);
+        }
+    }) {
+        eprintln!("F12 does not open the developer tools: could not start its worker: {error}");
+
+        return;
+    }
+
     let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
         // SAFETY: AppKit passes a live NSEvent that stays valid for the call.
         let key_press = unsafe { event.as_ref() };
@@ -42,7 +57,9 @@ pub(crate) fn install(window: WebviewWindow) {
             .modifierFlags()
             .intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Control | NSEventModifierFlags::Option | NSEventModifierFlags::Shift);
         if super::toggles_developer_tools(key_press.keyCode(), modifier_held) {
-            window_commands::toggle_developer_tools(&window);
+            if let Err(error) = toggle.send(()) {
+                eprintln!("Could not schedule the F12 developer-tools command: {error}");
+            }
 
             // A null event tells AppKit the key press was handled.
             return ptr::null_mut();

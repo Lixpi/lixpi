@@ -589,6 +589,84 @@ describe('dev console', () => {
         it('rejects a reported option that isn\'t set to true', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"local:a","steps":[{"type":"choices","message":"m","options":[{"name":"n","label":"N","reported":"yes","choices":[]}]}]}]}')).toThrow('"reported": true'))
 
         it('rejects a hand-written service list', () => void expect(() => parseConsoleConfig('{"title":"x","actions":[{"id":"a","label":"A","script":"shared:start-services","steps":[{"type":"choices","message":"m","services":{"groups":[]}}]}]}')).toThrow('"services": true'))
+
+        describe('inheriting a shared action', () => {
+            const shared = JSON.stringify({
+                title: 'Lixpi',
+                actions: [
+                    {
+                        id: 'start',
+                        label: 'Start services',
+                        script: 'shared:start-services',
+                        params: { 'up-flags': '--build' },
+                        steps: [
+                            { type: 'env-file' },
+                            {
+                                type: 'choices',
+                                message: 'Which services should run?',
+                                options: [{
+                                    name: 'rebuild',
+                                    label: 'Containers',
+                                    choices: [{
+                                        value: 'false',
+                                        label: 'Use existing',
+                                    }],
+                                }],
+                                services: true,
+                            },
+                        ],
+                    },
+                ],
+            })
+            const mode = {
+                name: 'mode',
+                label: 'Billing',
+                choices: [{
+                    value: 'nex',
+                    label: 'NEX workload',
+                }],
+            }
+            const local = (action: Record<string, unknown>): string => JSON.stringify({
+                title: 'Billing',
+                actions: [{
+                    id: 'start',
+                    extends: 'shared:start',
+                    ...action,
+                }],
+            })
+
+            it('keeps the parent steps, adds rows and merges params', () => {
+                const [action] = parseConsoleConfig(local({
+                    hint: 'Billing only',
+                    params: { prepare: 'local:prepare-start' },
+                    options: [mode],
+                }), shared).actions
+
+                expect(action.script).toBe('shared:start-services')
+                expect(action.label).toBe('Start services')
+                expect(action.hint).toBe('Billing only')
+                expect(action.params).toEqual({
+                    'up-flags': '--build',
+                    prepare: 'local:prepare-start',
+                })
+                expect(action.steps?.[0]).toEqual({ type: 'env-file' })
+                expect(action.steps?.[1]).toMatchObject({
+                    services: true,
+                    options: [{ name: 'rebuild' }, mode],
+                })
+            })
+
+            it('rejects a parent Lixpi does not define', () => void expect(() => parseConsoleConfig(local({ extends: 'shared:missing' }), shared)).toThrow("Lixpi's console doesn't define"))
+
+            it('rejects an action that also sets its own steps', () => void expect(() => parseConsoleConfig(local({ steps: [] }), shared)).toThrow('script and steps come from'))
+
+            it('rejects a row the parent already has', () => void expect(() => parseConsoleConfig(local({ options: [{
+                ...mode,
+                name: 'rebuild',
+            }] }), shared)).toThrow('already has'))
+
+            it('rejects a parent outside Lixpi', () => void expect(() => parseConsoleConfig(local({ extends: 'local:start' }), shared)).toThrow('shared:<id>'))
+        })
     })
 
     describe('main menu', () => {

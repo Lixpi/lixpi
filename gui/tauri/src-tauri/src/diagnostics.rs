@@ -5,6 +5,11 @@
 // directory, because an app opened from Finder has no terminal. Access tokens
 // are redacted before anything is written.
 
+#[cfg(target_os = "macos")]
+mod page_logs;
+#[cfg(feature = "profiling")]
+mod profiling;
+
 use std::{
     fs::{
         self,
@@ -12,20 +17,31 @@ use std::{
     },
     io::Write,
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
+        mpsc::{
+            self,
+            SyncSender,
+        },
+    },
     thread,
     time::{
-        Duration,
         SystemTime,
         UNIX_EPOCH,
     },
 };
 
+#[cfg(any(target_os = "macos", test))]
 use serde_json::Value;
+#[cfg(target_os = "macos")]
+use tauri::WebviewWindow;
 use tauri::{
     AppHandle,
     Manager,
-    WebviewWindow,
     webview::{
         PageLoadEvent,
         PageLoadPayload,
@@ -36,15 +52,15 @@ use crate::origins;
 
 // Installed before any page script runs, so it sees startup failures too. The
 // buffer is capped so a page that logs in a loop can't grow it without bound.
-pub(crate) const CAPTURE_SCRIPT: &str = r"
+const CAPTURE_SCRIPT: &str = r"
 (() => {
   const buffer = window.__lixpiDiagnostics = []
   const describe = value => {
     try {
-      // WebKit's stack lists only the frames, unlike Chrome's, so the name
-      // and message lead and the stack follows.
-      if (value instanceof Error)
-        return value.stack ? `${value.name}: ${value.message}\n${value.stack}` : `${value.name}: ${value.message}`
+      if (value instanceof Error) {
+        const summary = `${value.name}: ${value.message}`
+        return value.stack?.startsWith(summary) ? value.stack : value.stack ? `${summary}\n${value.stack}` : summary
+      }
 
       return typeof value === 'object' ? JSON.stringify(value) : String(value)
     } catch {
@@ -67,32 +83,46 @@ pub(crate) const CAPTURE_SCRIPT: &str = r"
   addEventListener('error', event => record('uncaught', [event.message, `${event.filename}:${event.lineno}:${event.colno}`]))
   addEventListener('unhandledrejection', event => record('unhandled-rejection', [event.reason]))
   addEventListener('securitypolicyviolation', event => record('blocked', [event.violatedDirective, event.blockedURI]))
-
-  // Measures how often the page can render, which is what canvas animation
-  // feels like, plus what the GPU path has to work with.
-  addEventListener('load', () => {
-    const frames = []
-    const step = time => {
-      frames.push(time)
-
-      if (time - frames[0] < 1000)
-        return requestAnimationFrame(step)
-
-      const rate = Math.round((frames.length - 1) * 1000 / (time - frames[0]))
-      record('rendering', [`${rate} frames per second`, `devicePixelRatio ${devicePixelRatio}`, `WebGPU ${'gpu' in navigator ? 'available' : 'unavailable'}`])
-    }
-
-    requestAnimationFrame(step)
-  })
 })()
 ";
 
-const DRAIN_SCRIPT: &str = "JSON.stringify((window.__lixpiDiagnostics || []).splice(0))";
+pub(crate) const INITIALIZATION_SCRIPTS: &[&str] = &[
+    CAPTURE_SCRIPT,
+    #[cfg(feature = "profiling")]
+    profiling::RENDERING_SCRIPT,
+];
 
-const POLL_INTERVAL: Duration = Duration::from_secs(1);
+const LOG_QUEUE_CAPACITY: usize = 64;
+
+enum LogPayload {
+    Message(String),
+    #[cfg(any(target_os = "macos", test))]
+    PageBuffer(String),
+}
+
+struct QueuedLog {
+    milliseconds: u128,
+    payload: LogPayload,
+}
+
+impl QueuedLog {
+    fn lines(self) -> Vec<String> {
+        let messages = match self.payload {
+            LogPayload::Message(message) => vec![message],
+            #[cfg(any(target_os = "macos", test))]
+            LogPayload::PageBuffer(buffer) => entries(&buffer),
+        };
+
+        messages
+            .into_iter()
+            .map(|message| format!("[{}] {}", self.milliseconds, redact(&message)))
+            .collect()
+    }
+}
 
 pub(crate) struct Diagnostics {
-    log_file: Option<PathBuf>,
+    pending: SyncSender<QueuedLog>,
+    dropped: Arc<AtomicUsize>,
 }
 
 impl Diagnostics {
@@ -112,13 +142,35 @@ impl Diagnostics {
                 None
             },
         };
-        let diagnostics = Arc::new(Self {
-            log_file,
-        });
-        if let Some(file) = &diagnostics.log_file {
-            eprintln!("Writing diagnostics to {}", file.display());
-        }
+        let (pending, receiver) = mpsc::sync_channel::<QueuedLog>(LOG_QUEUE_CAPACITY);
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let writer_dropped = Arc::clone(&dropped);
+        thread::spawn(move || {
+            if let Some(file) = &log_file {
+                eprintln!("Writing diagnostics to {}", file.display());
+            }
 
+            for queued in receiver {
+                let lost = writer_dropped.swap(0, Ordering::Relaxed);
+                if lost > 0 {
+                    write_line(
+                        log_file.as_ref(),
+                        &format!(
+                            "[{}] diagnostics dropped {lost} records while the writer queue was full",
+                            unix_milliseconds()
+                        ),
+                    );
+                }
+
+                for line in queued.lines() {
+                    write_line(log_file.as_ref(), &line);
+                }
+            }
+        });
+        let diagnostics = Arc::new(Self {
+            pending,
+            dropped,
+        });
         diagnostics.record("diagnostics started");
 
         diagnostics
@@ -136,54 +188,106 @@ impl Diagnostics {
         self.record(&format!("page {event}: {}", origins::without_query(payload.url())));
     }
 
-    // Drains the page's buffer every second until the window is gone.
+    // Keep the protocol observer alive across drains. CEF alpha.7's one-shot
+    // eval callback unregisters itself while its own mutex is still locked.
+    #[cfg(target_os = "macos")]
     pub(crate) fn watch(
         self: Arc<Self>,
         window: WebviewWindow,
     ) {
         thread::spawn(move || {
-            loop {
-                thread::sleep(POLL_INTERVAL);
+            let logs = match page_logs::PageLogs::new(window.clone()) {
+                Ok(logs) => logs,
+                Err(error) => {
+                    self.record(&format!("Could not start page log capture: {error}"));
 
-                let diagnostics = Arc::clone(&self);
-                let drained = window.eval_with_callback(DRAIN_SCRIPT, move |result| {
-                    for entry in entries(&result) {
-                        diagnostics.record(&entry);
-                    }
-                });
-                if drained.is_err() {
+                    return;
+                },
+            };
+
+            loop {
+                thread::sleep(std::time::Duration::from_secs(1));
+
+                #[cfg(feature = "profiling")]
+                let Ok(probe) = profiling::ResponsivenessProbe::schedule(&window, &self) else {
                     break;
+                };
+
+                match logs.read() {
+                    Ok(Some(result)) => {
+                        #[cfg(feature = "profiling")]
+                        if let Some(message) = probe.webview_completed() {
+                            self.record(&message);
+                        }
+
+                        self.enqueue(LogPayload::PageBuffer(result));
+                    },
+                    // Navigation can discard an evaluation. A timed-out request
+                    // is retired so the next page can resume capture.
+                    Ok(None) => {},
+                    Err(error) => {
+                        self.record(&format!("Page log capture stopped: {error}"));
+
+                        break;
+                    },
                 }
             }
         });
     }
 
-    fn record(
+    pub(crate) fn record(
         &self,
         message: &str,
     ) {
-        let milliseconds = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis());
-        let line = format!("[{milliseconds}] {}", redact(message));
+        self.enqueue(LogPayload::Message(message.to_owned()));
+    }
 
-        eprintln!("{line}");
-
-        let Some(path) = &self.log_file else {
-            return;
-        };
-
-        let written = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .and_then(|mut file| writeln!(file, "{line}"));
-        if let Err(error) = written {
-            eprintln!("Could not write {}: {error}", path.display());
+    fn enqueue(
+        &self,
+        payload: LogPayload,
+    ) {
+        if self
+            .pending
+            .try_send(QueuedLog {
+                milliseconds: unix_milliseconds(),
+                payload,
+            })
+            .is_err()
+        {
+            // A slow or stopped writer must never block the native event loop.
+            // The writer reports losses when it next receives a record.
+            self.dropped.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
 
-// The page returns the drained buffer as a JSON string, which the runtime
-// hands back JSON-encoded again.
+fn unix_milliseconds() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis())
+}
+
+fn write_line(
+    log_file: Option<&PathBuf>,
+    line: &str,
+) {
+    eprintln!("{line}");
+
+    let Some(path) = log_file else {
+        return;
+    };
+
+    let written = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{line}"));
+    if let Err(error) = written {
+        eprintln!("Could not write {}: {error}", path.display());
+    }
+}
+
+// Accept the page buffer and the older runtime callback
+// representation, which JSON-encoded that string again.
+#[cfg(any(target_os = "macos", test))]
 fn entries(result: &str) -> Vec<String> {
     let mut value: Value = serde_json::from_str(result).unwrap_or(Value::Null);
     if let Value::String(inner) = &value {
@@ -244,10 +348,56 @@ fn is_parameter_end(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
+        mpsc,
+    };
+
     use super::{
+        Diagnostics,
+        INITIALIZATION_SCRIPTS,
+        LogPayload,
+        QueuedLog,
         entries,
         redact,
     };
+
+    #[test]
+    fn captures_page_errors_with_or_without_the_startup_frame_sampler() {
+        assert!(INITIALIZATION_SCRIPTS.iter().any(|script| script.contains("unhandledrejection")));
+        assert_eq!(
+            INITIALIZATION_SCRIPTS.iter().any(|script| script.contains("requestAnimationFrame")),
+            cfg!(feature = "profiling")
+        );
+    }
+
+    #[test]
+    fn drops_records_instead_of_waiting_for_a_full_writer_queue() {
+        let (pending, receiver) = mpsc::sync_channel(1);
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let diagnostics = Diagnostics {
+            pending,
+            dropped: Arc::clone(&dropped),
+        };
+        diagnostics.record("first");
+        diagnostics.record("second");
+        assert_eq!(dropped.load(Ordering::Relaxed), 1);
+        assert!(receiver.recv().unwrap().lines()[0].ends_with(" first"));
+    }
+
+    #[test]
+    fn queued_page_logs_keep_the_capture_time_and_are_redacted_before_output() {
+        let queued = QueuedLog {
+            milliseconds: 123,
+            payload: LogPayload::PageBuffer(String::from(r#"["info /: token=secret","warn /: next"]"#)),
+        };
+
+        assert_eq!(queued.lines(), ["[123] info /: token=[redacted]", "[123] warn /: next"]);
+    }
 
     #[test]
     fn redacts_token_parameters_and_json_web_tokens() {

@@ -17,6 +17,7 @@ import {
     applyStyle,
 } from '@lixpi/ui-primitives/dom'
 import {
+    BubbleMenuDropdown,
     type BubbleMenuItem,
 } from '@lixpi/ui-kit/components/bubble-menu'
 import {
@@ -27,7 +28,6 @@ import {
     codeBlockIcon,
     blockquoteIcon,
     linkIcon,
-    chevronDownIcon,
     paragraphIcon,
     heading1Icon,
     heading2Icon,
@@ -107,6 +107,7 @@ type DropdownItem = MenuItemBase & {
     key: string
     defaultIcon: string
     options: Array<{
+        label?: string
         icon: string
         node: string
         attrs?: Record<string, unknown>
@@ -199,20 +200,24 @@ const MENU_ITEMS: MenuItem[] = [
         context: ['text'],
         options: [
             {
+                label: 'Text',
                 icon: paragraphIcon,
                 node: 'paragraph',
             },
             {
+                label: 'Heading 1',
                 icon: heading1Icon,
                 node: 'heading',
                 attrs: { level: 1 },
             },
             {
+                label: 'Heading 2',
                 icon: heading2Icon,
                 node: 'heading',
                 attrs: { level: 2 },
             },
             {
+                label: 'Heading 3',
                 icon: heading3Icon,
                 node: 'heading',
                 attrs: { level: 3 },
@@ -616,134 +621,52 @@ const deleteTextBlock: Command = (
 const createDropdown = (
     item: DropdownItem,
     view: EditorView,
-): {
-    element: HTMLElement
-    update: () => void
-} => {
+): MenuItemElement => {
     const { schema } = view.state
-    const menu = createEl('div', { className: 'bubble-menu-dropdown-menu' })
-
-    const labelSpan = createEl(
-        'span',
-        {
-            className: 'dropdown-label',
-            innerHTML: item.defaultIcon,
-        },
-    )
-
-    const optionButtons: Array<{
-        btn: HTMLElement
-        node: string
-        attrs?: Record<string, unknown>
-    }> = []
-
-    item.options.forEach(opt => {
-        const nodeType = schema.nodes[opt.node]
+    const options = item.options.flatMap((option, index) => {
+        const nodeType = schema.nodes[option.node]
 
         if (!nodeType)
-            return
+            return []
 
-        const btn = createEl(
-            'button',
-            {
-                className: 'bubble-menu-dropdown-item',
-                type: 'button',
-                innerHTML: opt.icon,
-            },
-        )
-
-        optionButtons.push({
-            btn,
-            node: opt.node,
-            attrs: opt.attrs,
-        })
-
-        btn.addEventListener('click', e => {
-            e.preventDefault()
-            e.stopPropagation()
-            setTextType(nodeType, opt.attrs)(view.state, view.dispatch)
-            view.focus()
-            menu.classList.remove('is-open')
-        })
-
-        menu.appendChild(btn)
+        return [{
+            ...option,
+            value: String(index),
+            label: option.label ?? option.node.replaceAll('_', ' '),
+            nodeType,
+        }]
     })
+    const getCurrentValue = (): string | undefined => {
+        const parent = view.state.selection.$from.parent
 
-    const toggle = createEl(
-        'button',
-        {
-            className: 'bubble-menu-dropdown-toggle',
-            type: 'button',
-        },
-    )
-    toggle.appendChild(labelSpan)
-    toggle.insertAdjacentHTML('beforeend', chevronDownIcon)
-
-    const wrapper = createEl(
-        'div',
-        { className: 'bubble-menu-dropdown' },
-        toggle,
-        menu,
-    )
-
-    toggle.addEventListener('click', e => {
-        e.preventDefault()
-        e.stopPropagation()
-        menu.classList.toggle('is-open')
-    })
-
-    document.addEventListener('click', e => {
-        if (!wrapper.contains(e.target as Node))
-            menu.classList.remove('is-open')
-    })
-
-    const update = (): void => {
-        const { state } = view
-        const { $from } = state.selection
-        const parentNode = $from.parent
-
-        let currentIcon = item.defaultIcon
-
-        for (const opt of item.options) {
-            if (parentNode.type.name === opt.node) {
-                if (opt.attrs) {
-                    const attrsMatch = Object.entries(opt.attrs).every(([key, value]) => parentNode.attrs[key] === value)
-
-                    if (attrsMatch) {
-                        currentIcon = opt.icon
-
-                        break
-                    }
-                } else {
-                    currentIcon = opt.icon
-
-                    break
-                }
-            }
-        }
-
-        labelSpan.innerHTML = currentIcon
-
-        for (const {
-            btn,
-            node,
-            attrs,
-        } of optionButtons) {
-            let isActive = parentNode.type.name === node
-
-            if (
-                isActive
-                && attrs
-            )
-                isActive = Object.entries(attrs).every(([key, value]) => parentNode.attrs[key] === value)
-
-            btn.classList.toggle('is-active', isActive)
-        }
+        return options.find(
+            option => option.nodeType === parent.type && Object.entries(option.attrs ?? {}).every(([key, value]) => parent.attrs[key] === value),
+        )?.value
     }
+    const dropdown = new BubbleMenuDropdown({
+        document: view.dom.ownerDocument,
+        label: 'Change text type',
+        menuLabel: 'Text style',
+        value: getCurrentValue(),
+        fallbackIcon: item.defaultIcon,
+        options,
+        onChange: value => {
+            const option = options.find(option => option.value === value)!
+
+            setTextType(option.nodeType, option.attrs)(view.state, view.dispatch)
+            view.focus()
+        },
+    })
 
     return {
-        element: wrapper,
-        update,
+        element: dropdown.element,
+        context: item.context,
+        update: () => dropdown.setValue(
+            getCurrentValue(),
+        ),
+        hide: () => dropdown.hide(),
+        reposition: dropdown.reposition,
+        destroy: () => dropdown.destroy(),
     }
 }
 
@@ -1112,19 +1035,12 @@ export const buildBubbleMenuItems = (
 
                 break
             }
-            case 'dropdown': {
-                const {
-                    element,
-                    update,
-                } = createDropdown(item, view)
-                items.push({
-                    element,
-                    context: item.context,
-                    update,
-                })
+            case 'dropdown':
+                items.push(
+                    createDropdown(item, view),
+                )
 
                 break
-            }
             case 'mark': {
                 const cmd = getMarkCommand(schema, item.mark)
                 const btn = createButton(

@@ -30,7 +30,7 @@ export type WorkspaceCanvasAssetsPorts = {
     editors: WorkspaceCanvasEditors
     context: WorkspaceCanvasContext
     getWorkspaceId: () => string
-    refreshChrome: () => void
+    refreshControls: () => void
     reportError: (
         message: string,
         error: unknown,
@@ -137,7 +137,7 @@ export class WorkspaceCanvasAssets {
 
                 return updated
             },
-            onChanged: this.ports.refreshChrome,
+            onChanged: this.ports.refreshControls,
             onError: error => this.ports.reportError('Canvas Asset update failed:', error),
         }
     }

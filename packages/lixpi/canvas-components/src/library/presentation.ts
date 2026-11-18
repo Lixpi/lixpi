@@ -11,8 +11,8 @@ import {
     type createLixpiUiSettings,
 } from '../workspace/frontend/settings/ui-settings.ts'
 import {
-    type WorkspaceCanvasChromeSettings,
-} from '../workspace/frontend/workspace/workspace-canvas-chrome.ts'
+    type WorkspaceCanvasControlsSettings,
+} from '../workspace/frontend/workspace/workspace-canvas-controls.ts'
 
 type LibraryDiagramOptions = {
     shape?: DiagramNodeLabelAppearance['shape']
@@ -62,7 +62,7 @@ export const createLibraryMediaStyle = (theme: CanvasTheme) => ({
     placeholder: { color: theme.colors.surface },
 })
 
-export const createLibraryWorkspaceChromeSettings = (settings: ReturnType<typeof createLixpiUiSettings>): WorkspaceCanvasChromeSettings => ({
+export const createLibraryWorkspaceControlsSettings = (settings: ReturnType<typeof createLixpiUiSettings>): WorkspaceCanvasControlsSettings => ({
     panel: settings.rightSidePanel,
     modelMenuHoverBackground: settings.aiPromptInput.modelMenu.styles.triggerActiveBackground,
     palette: colorPalette,

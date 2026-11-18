@@ -20,6 +20,7 @@ services:
             - ../../../../gui/tauri/src-tauri/src:/usr/src/service/desktop/src:ro,cached
             - ../../../../gui/tauri/src-tauri/tauri.conf.json:/usr/src/service/desktop/tauri.conf.json:ro,cached
             - ../../../../gui/tauri/src-tauri/icons:/usr/src/service/desktop/icons:ro,cached
+            - ../../../../gui/tauri/upstream:/usr/src/prepare/desktop:ro,cached
 
 volumes:
     rust-test-runner-registry-cache:

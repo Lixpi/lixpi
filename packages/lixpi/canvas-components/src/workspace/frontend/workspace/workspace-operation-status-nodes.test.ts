@@ -86,7 +86,7 @@ const setup = (initialState: CanvasState, overrides: Partial<WorkspaceOperationS
         syncNode: vi.fn(),
         syncGeometry: vi.fn(),
         syncMedia: vi.fn(),
-        syncChrome: vi.fn(),
+        syncControls: vi.fn(),
         syncMarkers: vi.fn(),
         syncConnections: vi.fn(),
         syncProgress: vi.fn(),
@@ -230,7 +230,7 @@ describe('WorkspaceOperationStatusNodes', () => {
             }),
         ])
         expect(fixture.ports.syncMedia).toHaveBeenCalledWith(fixture.getState())
-        expect(fixture.ports.syncChrome).toHaveBeenCalledOnce()
+        expect(fixture.ports.syncControls).toHaveBeenCalledOnce()
         expect(fixture.ports.syncMarkers).toHaveBeenCalledOnce()
         expect(fixture.ports.syncConnections).toHaveBeenCalledOnce()
     })

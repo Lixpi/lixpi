@@ -1,5 +1,5 @@
 // The commands a browser gives every page and a bare web view doesn't:
-// reloading the page and showing the WebKit inspector. The app menu runs them
+// reloading the page and showing Chromium DevTools. The app menu runs them
 // by their shortcuts, and on macOS F12 toggles the inspector too.
 
 use tauri::{

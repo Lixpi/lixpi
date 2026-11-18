@@ -27,6 +27,10 @@ Every repository has the same layout, so a developer finds things in the same pl
 | `returnToMenu` | Comes back to the menu after the script finishes, instead of ending the console |
 | `envFile` | An environment file every run uses, instead of asking |
 | `steps` | What to ask before running, in order |
+| `extends` | `shared:<id>` inherits that action from Lixpi's own `console.config.json` |
+| `options` | With `extends`, radio rows added to the inherited choices step |
+
+An action with `extends` keeps the parent's script and steps, so it can't set `script` or `steps` itself. It may replace `label`, `hint`, `envFile` and `returnToMenu`, and its `params` are merged over the parent's. Its `options` appear after the parent's rows on the parent's single choices step, and a name the parent already uses is rejected. `lixpi-billing`, for example, extends `shared:start` and adds a **Billing** row that picks the NEX node or the plain container, so it keeps Lixpi's **Containers**, **Run** and service tree. The console reads Lixpi's config from its read-only mount of the Lixpi checkout.
 
 | Step type | What it asks |
 |---|---|
@@ -42,14 +46,14 @@ An option with `"reported": true` depends on something only the host can see, su
 
 A script runs from the repository root. It receives the selected services or prune targets as arguments, and the rest as environment variables: `LIXPI_CONSOLE_WORKSPACE`, `LIXPI_CONSOLE_ENV_FILE` as an absolute path, and `LIXPI_CONSOLE_OPTION_<NAME>` for each param and radio row. `LIXPI_REPOSITORY_PATH` is set too.
 
-`shared:start-services` starts the selected services from `compose-file` and `profile`, which the service tree supplies, and the optional params `up-flags` as a comma-separated list and `started-url`. It reads the radio rows `rebuild` and `detach`. **Run** defaults to **Foreground**, which keeps the console attached to the Compose logs until Ctrl+C. **Detached** starts the services in the background and returns, waiting until they're ready first when `started-url` is set. The other shared scripts are `aws-sso-login`, `prune-docker` and `setup-skills`.
+`shared:start-services` starts the selected services from `compose-file` and `profile`, which the service tree supplies, and the optional params `up-flags` as a comma-separated list, `started-url` and `prepare`. `prepare` names one of the repository's own scripts as `local:<name>`. The action sources it from the repository root before rebuilding or starting anything. The script reads the selected services from the `SERVICES` array and the repository's added rows from `LIXPI_CONSOLE_OPTION_<NAME>`. It can refuse the launch, export variables the Compose files read, or replace `SERVICES`, which is what the action then rebuilds and starts. It reads the radio rows `rebuild` and `detach`. **Run** defaults to **Foreground**, which keeps the console attached to the Compose logs until Ctrl+C. **Detached** starts the services in the background and returns, waiting until they're ready first when `started-url` is set. The other shared scripts are `aws-sso-login`, `prune-docker` and `setup-skills`.
 
 ## Main menu
 
 | Action | What it does |
 |---|---|
 | Start services | Asks for an environment file, then shows one page with the container and service choices above the service tree, then starts them |
-| Build the macOS desktop app | Asks for an environment file, the Mac's processor, whether to include hot reload (on by default, off for a release), whether to build in debug mode and whether to rebuild the builder image, then builds `gui/tauri/dist/Lixpi.app` in Docker. See [Desktop App](../../documentation/platform/DESKTOP-APP.md) |
+| Build the macOS desktop app | Asks for an environment file, the Mac's processor, whether to include hot reload (on by default, off for a release), whether to enable debug logs, whether to include profiling (off by default), and whether to use cached builder layers or rebuild them, then builds `gui/tauri/dist/Lixpi.app` in Docker. See [Desktop App](../../documentation/platform/DESKTOP-APP.md) |
 | Sign in to AWS SSO | Asks for an environment file, then signs in as that file's `AWS_PROFILE` |
 | Create or edit a configuration | Opens the [configuration wizard](../config-utils/README.md) |
 | Initialize infrastructure | Asks for an environment file, whether to regenerate the TLS certificates (**Keep** by default, and locked with the reason when none exist yet, since they're generated anyway) and whether to trust the local certificate authority (**Skip** by default, **Install** for running web-ui in a browser). It then sets up the certificates and, as a separate phase, the DynamoDB tables |
@@ -57,6 +61,12 @@ A script runs from the repository root. It receives the selected services or pru
 | Prune Docker | Asks what to prune, confirms, then reclaims disk space |
 | Install agent skills | Opens the skill installer |
 | Exit | Leaves the console |
+
+**Debug mode** enables desktop console and error logging. The separate **Profiling** row defaults to **Off**, which excludes native timing probes from the app. **On** enables those probes and diagnostic logging. The console explicitly passes the selection as `LIXPI_DESKTOP_PROFILING`, so **Off** also overrides a previously enabled environment value. Web UI timing probes remain a separate `VITE_CLIENT_PERFORMANCE_DEBUG` setting; see [Profiling the Web UI](../../documentation/platform/DEVELOPMENT.md#profiling-the-web-ui).
+
+The desktop builder's default **Use cache** option builds against the current Dockerfile before compiling the app. Unchanged layers are reused, while required additions such as CMake and Ninja are installed in a new layer. **Rebuild** ignores the image layer cache. Both choices retain the named Cargo and CEF cache volumes.
+
+Local desktop builds also keep their signing certificate and private key in the `tauri-builder-signing` Docker volume. The first build creates the identity, and later builds reuse it so macOS can recognize the app across rebuilds. The key is not written into the repository or printed in logs, and no certificate is installed in the macOS trust store. Preserve this volume when cleaning build caches; deleting it changes the next build's identity and can cause Keychain to request authorization again. This local certificate does not replace Apple Developer ID signing and notarization for distribution.
 
 Every action that needs an environment file uses the same picker. It lists the repository's `.env.*` files and leaves out the `.env.example` template. There is no default environment file, and the console doesn't remember a choice between actions.
 

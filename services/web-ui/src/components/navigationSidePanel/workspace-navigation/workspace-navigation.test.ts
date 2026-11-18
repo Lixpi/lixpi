@@ -404,7 +404,7 @@ ${navigationCss}`
             expect(popupColor).not.toBe(getComputedStyle(document.body).color)
             expect(getComputedStyle(rootOption).color).toBe(popupColor)
             rootOption.click()
-            const submenuOption = popup.querySelector<HTMLButtonElement>('.nested-list-block-panel .nested-list-block-menu-item')!
+            const submenuOption = popup.querySelector<HTMLButtonElement>('.nested-list-block-panel .bubble-menu-text-item')!
             expect(getComputedStyle(submenuOption).color).toBe(popupColor)
         } finally {
             stylesheet.remove()
@@ -684,11 +684,13 @@ ${navigationCss}`
             [...document.querySelectorAll<HTMLButtonElement>('.nested-list-block-bubble button')]
                 .find(button => button.getAttribute('aria-label') === label)!
         option('More').click()
-        const panel = document.querySelector<HTMLElement>('.nested-list-block-panel')!
-        expect(panel.classList.contains('nested-list-block-panel-text')).toBe(true)
+        const actions = document.querySelector<HTMLElement>('.nested-list-block-panel')!
+        expect(actions.classList.contains('bubble-menu-vertical')).toBe(true)
         expect(option('Tags').textContent).toBe('Tags')
         option('Insert new block').click()
-        expect(panel.classList.contains('nested-list-block-panel-text')).toBe(false)
+        const panel = document.querySelector<HTMLElement>('.nested-list-block-panel')!
+        expect(panel.classList.contains('bubble-menu-vertical')).toBe(true)
+        expect(panel.querySelector('.bubble-menu-text-item')).toBeNull()
         expect(panel.querySelectorAll('.bubble-menu-dropdown-item')).toHaveLength(5)
         expect(panel.querySelector('[aria-label="Bulleted list"]')).toBeNull()
         expect(option('Workspace').querySelector('svg')).not.toBeNull()

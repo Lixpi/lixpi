@@ -73,6 +73,7 @@ export const lixpiPalette = {
     signalRed: '#ff3f3f',
     tangerineOrange: '#f97316',
     alabaster: '#fcfcfc',
+    black02: 'rgba(0, 0, 0, 0.02)',
     black04: 'rgba(0, 0, 0, 0.04)',
     black08: 'rgba(0, 0, 0, 0.08)',
     pureRed: '#ff0000',

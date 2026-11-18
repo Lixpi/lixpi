@@ -54,7 +54,7 @@ const setup = (overrides: Partial<WorkspaceMediaAnalysisPorts> = {}) => {
         refreshAsset: vi.fn(async () => asset()),
         loadWorkspaceAssets: vi.fn(async () => {}),
         refreshVideo: vi.fn(),
-        refreshChrome: vi.fn(),
+        refreshControls: vi.fn(),
         refreshMarkers: vi.fn(),
         refreshContext: vi.fn(),
         setTimer: (callback, delay) => {
@@ -208,18 +208,18 @@ describe('workspace media analysis', () => {
         expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('does not refresh chrome or enqueue analysis after a completed-Asset reply arrives late', async () => {
+    it('does not refresh controls or enqueue analysis after a completed-Asset reply arrives late', async () => {
         let complete!: (value: Asset) => void
         const fixture = setup({
             refreshAsset: () =>
                 new Promise(resolve => void (complete = resolve)),
         })
         const pending = fixture.owner.refreshCompleted(node())
-        vi.mocked(fixture.ports.refreshChrome).mockClear()
+        vi.mocked(fixture.ports.refreshControls).mockClear()
         fixture.owner.clear()
         complete(asset(false))
         await pending
-        expect(fixture.ports.refreshChrome).not.toHaveBeenCalled()
+        expect(fixture.ports.refreshControls).not.toHaveBeenCalled()
         expect(fixture.ports.describe).not.toHaveBeenCalled()
         expect(vi.getTimerCount()).toBe(0)
     })

@@ -222,7 +222,7 @@ Image generation publishes live pipeline events on the same per-thread receive s
 
 On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; the Lixpi package's `WorkspaceMediaLayer` sends partial frames to the reusable image surface and supplies active bounds to `TravelingOutline`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers. In matrix fanout, each image model run carries a distinct `mediaRunId`, and its partial/final events publish through that run's response queue. The API preserves ordering for one run while allowing sibling image variants to render their partials as soon as their own object-store write and canvas projection finish.
 
-In the AI chat history, generated-image atom nodes are authored by the API-side ProseMirror assembler and rendered by `imageSelectionPlugin/ImageNodeView`. They carry the same generated-media provider badge used by canvas media chrome and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas chrome layer.
+In the AI chat history, generated-image atom nodes are authored by the API-side ProseMirror assembler and rendered by `imageSelectionPlugin/ImageNodeView`. They carry the same generated-media provider badge used by canvas media controls and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas controls layer.
 
 ## File Structure
 

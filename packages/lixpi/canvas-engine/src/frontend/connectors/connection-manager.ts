@@ -1466,7 +1466,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         // Recompute world-space offsets/hit areas on zoom changes. The cached
         // drawing backend edge datum still carries base screen pixels for stroke/arrow sizes;
         // `ConnectorRenderer` applies the matching adaptive bounded curve during
-        // paint so path geometry and rendered chrome stay in sync.
+        // paint so path geometry and rendered controls stay in sync.
         const edgeScaledSizes = this.config.settings.useZoomCompensatedScaling
             ? getEdgeScaledSizes(
                 zoom,

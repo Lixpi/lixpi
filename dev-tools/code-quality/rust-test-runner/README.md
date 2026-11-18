@@ -19,6 +19,8 @@ A target name contains lowercase letters, digits, and internal hyphens. The runn
 /usr/src/service/<target>/
 ```
 
+An adapter may also mount a directory at `/usr/src/prepare/<target>`. When it contains `prepare.sh`, the runner runs it before Cargo, so a target can fetch sources it builds from into container storage instead of keeping them in the checkout. The desktop target uses it to download and patch the official Tauri runtime.
+
 The adapter mounts manifests and source read-only. The runner copies the manifests into the container-owned crate root and runs:
 
 ```text

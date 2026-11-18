@@ -16,7 +16,7 @@ import {
 } from '@lixpi/constants'
 import {
     estimateBranchMarkerDimensions,
-    getGeneratedOutputChromeCollisionInsets,
+    getGeneratedOutputControlsCollisionInsets,
     getPendingGeneratedMediaNodeId,
 } from '@lixpi/canvas-components/workspace/shared'
 
@@ -996,7 +996,7 @@ describe('asset canvas projection', () => {
         expect(nodeCenterY(fork)).toBeCloseTo((nodeCenterY(first) + nodeCenterY(second)) / 2, 6)
     })
 
-    it.each(['image', 'audio'] as const)('separates first-frame media chrome from the title above an existing %s node', type => {
+    it.each(['image', 'audio'] as const)('separates first-frame media controls from the title above an existing %s node', type => {
         const pending = projectMedia(emptyCanvasState(), 0, true)
         const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
         const pendingNode = pending.nodes.find(node => node.nodeId === pendingNodeId)!
@@ -1021,8 +1021,8 @@ describe('asset canvas projection', () => {
         const resolved = projectMedia(beforeFirstFrame, 0, false, 3 / 2)
         const generatedOut = resolved.nodes.find(node => node.nodeId === pendingNodeId)!
         const existingOut = resolved.nodes.find(node => node.nodeId === existingNode.nodeId)!
-        const generatedInsets = getGeneratedOutputChromeCollisionInsets('image')
-        const existingInsets = getGeneratedOutputChromeCollisionInsets(type)
+        const generatedInsets = getGeneratedOutputControlsCollisionInsets('image')
+        const existingInsets = getGeneratedOutputControlsCollisionInsets(type)
 
         expect(generatedOut.position.y + generatedOut.dimensions.height + generatedInsets.bottom)
             .toBeLessThanOrEqual(existingOut.position.y - existingInsets.top + 1)

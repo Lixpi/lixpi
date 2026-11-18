@@ -10,7 +10,7 @@ import {
 } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     getAdaptiveBoundedZoomScalingOptions,
-    getCanvasChromeScreenLayout,
+    getCanvasControlsScreenLayout,
     type BoundedZoomScalingOptions,
     type CanvasEngineRect,
     type CanvasViewport,
@@ -81,7 +81,7 @@ export class CanvasNodeShell {
             return
 
         const settings = this.options.getSettings()
-        const layout = getCanvasChromeScreenLayout({
+        const layout = getCanvasControlsScreenLayout({
             viewport,
             worldPosition: bounds,
             worldDimensions: bounds,

@@ -2,12 +2,12 @@
 @import "../settings/canvas-theme.scss";
 @import "@lixpi/canvas-components/styles/loading-overlay";
 @import "@lixpi/canvas-components/styles/workspace/workspace-layer";
-@import "@lixpi/canvas-components/styles/workspace/video-chrome";
+@import "@lixpi/canvas-components/styles/workspace/video-controls";
 @import "@lixpi/canvas-components/styles/workspace/asset-views";
-@import "@lixpi/canvas-components/styles/workspace/output-chrome";
+@import "@lixpi/canvas-components/styles/workspace/output-controls";
 @import "@lixpi/canvas-components/styles/workspace/context-preview";
 
-@import "@lixpi/canvas-components/styles/workspace/canvas-chrome";
+@import "@lixpi/canvas-components/styles/workspace/canvas-controls";
 
 .workspace-pane {
     --side-panel-backdrop-bottom-outset: var(--workspace-canvas-padding-bottom, 0px);

@@ -1,3 +1,8 @@
+// Every application draws the same overlay scrollbars. A started web client
+// service attaches them; this stylesheet themes them and keeps native
+// scrollbars hidden from the first paint.
+@use "@lixpi/ui-primitives/styles/scrollbars";
+
 html,
 body,
 #app {

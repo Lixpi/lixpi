@@ -145,9 +145,8 @@
     .ai-prompt-input-wrapper {
         flex-direction: row;
         align-items: center;
-        // The wrapper carries a 4px margin (the gradient ring), so its floor is
-        // the composer pill height minus that ring on both sides.
-        min-height: calc(var(--workspace-canvas-composer-pill-height) - 8px);
+        // Exclude the decorative rim on both sides from the input surface height.
+        min-height: calc(var(--workspace-canvas-composer-pill-height) - 2 * var(--ai-prompt-input-ring-width));
         border-radius: var(--canvas-lixpi-composer-radius, #{themeScope.token("components-composer-workspace-input-wrapper-base-border-radius", themePalette.$roles)});
         padding: 0;
 
@@ -159,9 +158,12 @@
         }
     }
 
+    .ai-prompt-input-scroll {
+        max-height: 120px;
+    }
+
     .ai-prompt-input-content {
         padding: 12px 12px 12px 24px;
-        max-height: 120px;
     }
 
     .ai-prompt-input-controls {

@@ -268,7 +268,7 @@ export class WorkspaceGeneratedOutputDetails {
             }),
             styleReasoningHeader: header => this.ports.host.models.styleBadge(
                 header,
-                { scale: this.ports.host.settings.mediaNode.generatedMediaChrome.chatScale },
+                { scale: this.ports.host.settings.mediaNode.generatedMediaControls.chatScale },
             ),
             progressDetails: this.ports.context.getExecutionTraceTimelineDetail(),
             onError: error => this.ports.reportError('[CANVAS][generation-history]', error),
