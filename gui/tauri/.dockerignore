@@ -1,3 +1,5 @@
-# The builder image installs tools only. The app source is mounted when a build
-# runs, so nothing from this directory belongs in the build context.
+# The builder image installs tools and prepares the official Tauri sources.
+# The app source is mounted when a build runs, so only the upstream recipe
+# belongs in the build context.
 *
+!upstream

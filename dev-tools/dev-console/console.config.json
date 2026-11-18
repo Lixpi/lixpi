@@ -68,10 +68,18 @@
                             ]
                         },
                         {
+                            "name": "profiling",
+                            "label": "Profiling",
+                            "choices": [
+                                { "value": "false", "label": "Off", "hint": "Performance probes are excluded; Debug mode can still log console output and errors" },
+                                { "value": "true", "label": "On", "hint": "Includes native timing probes and diagnostic logs" }
+                            ]
+                        },
+                        {
                             "name": "rebuild",
                             "label": "Builder",
                             "choices": [
-                                { "value": "false", "label": "Use existing", "hint": "Builds the builder image only when it is missing" },
+                                { "value": "false", "label": "Use cache", "hint": "Updates the builder image using cached layers, including required tools" },
                                 { "value": "true", "label": "Rebuild", "hint": "Rebuilds the builder image without cache, picking up a new macOS SDK" }
                             ]
                         }
@@ -83,7 +91,9 @@
             "id": "aws-login",
             "label": "Sign in to AWS SSO",
             "script": "shared:aws-sso-login",
-            "steps": [{ "type": "env-file" }]
+            "steps": [
+                { "type": "env-file" }
+            ]
         },
         { "id": "configure", "label": "Create or edit a configuration", "script": "local:init-config", "returnToMenu": true },
         {
@@ -123,14 +133,19 @@
             "label": "Deploy and manage infrastructure",
             "hint": "Everything the Pulumi service offers",
             "script": "local:pulumi",
-            "steps": [{ "type": "env-file" }, { "type": "service-commands" }]
+            "steps": [
+                { "type": "env-file" },
+                { "type": "service-commands" }
+            ]
         },
         {
             "id": "prune",
             "label": "Prune Docker",
             "hint": "Reclaim disk space from containers, images, volumes and build cache",
             "script": "shared:prune-docker",
-            "steps": [{ "type": "docker-prune" }]
+            "steps": [
+                { "type": "docker-prune" }
+            ]
         },
         { "id": "skills", "label": "Install agent skills", "script": "shared:setup-skills" }
     ]

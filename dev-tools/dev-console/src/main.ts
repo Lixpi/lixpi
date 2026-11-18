@@ -6,6 +6,7 @@ import {
 } from './dev-console-wizard.ts'
 
 const WORKSPACE_PATH = '/workspace'
+const LIXPI_PATH = '/lixpi'
 
 // Neither stream is a terminal here: stdout carries the plan and stderr is piped
 // through Compose. Clack measures both, so they take the host terminal's size.
@@ -27,7 +28,7 @@ try {
 
     const plan = await new DevConsoleWizard(
         WORKSPACE_PATH,
-        readConsoleConfig(WORKSPACE_PATH),
+        readConsoleConfig(WORKSPACE_PATH, LIXPI_PATH),
         {
             entry: process.env.LIXPI_CONSOLE_ENTRY,
             dockerUsage: process.env.LIXPI_DOCKER_USAGE,

@@ -25,17 +25,5 @@
             color: var(--theme-selection-text);
             background: var(--theme-selection-background);
         }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--theme-scrollbar);
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--theme-scrollbar-hover);
-        }
-
-        ::-webkit-scrollbar-thumb:active {
-            background: var(--theme-scrollbar-active);
-        }
     }
 }

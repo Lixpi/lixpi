@@ -1,7 +1,18 @@
+use std::{
+    fs::OpenOptions,
+    io,
+    path::{
+        Path,
+        PathBuf,
+    },
+};
+
 use tauri::{
     AppHandle,
     Manager,
     Url,
+    Webview,
+    webview::DownloadEvent,
 };
 
 use crate::{
@@ -10,7 +21,7 @@ use crate::{
 };
 
 // Runs inside the web-ui page, which the API's CORS policy already admits.
-// Fetching the file and clicking a `download` link hands it to WebKit's
+// Fetching the file and clicking a `download` link hands it to Chromium's
 // download handling, so the file lands in the Downloads folder while the
 // workspace stays open. The API exposes `Content-Disposition`, which carries
 // the original file name.
@@ -53,6 +64,77 @@ const DOWNLOAD_SCRIPT: &str = r#"
 "#;
 
 const URL_PLACEHOLDER: &str = "__LIXPI_DOWNLOAD_URL__";
+
+pub(crate) fn handle(
+    webview: &Webview,
+    event: DownloadEvent<'_>,
+) -> bool {
+    match event {
+        DownloadEvent::Requested {
+            destination,
+            ..
+        } => {
+            let target = webview
+                .path()
+                .download_dir()
+                .and_then(|directory| reserve_destination(&directory, destination).map_err(Into::into));
+
+            match target {
+                Ok(path) => *destination = path,
+                Err(error) => {
+                    eprintln!("Could not choose a download destination: {error}");
+
+                    return false;
+                },
+            }
+        },
+        DownloadEvent::Finished {
+            url,
+            success: false,
+            ..
+        } => {
+            eprintln!("Download failed: {}", origins::without_query(&url));
+        },
+        _ => {},
+    }
+
+    true
+}
+
+// Reserve the chosen name atomically. A simultaneous download cannot select
+// the same path, and an existing file is never selected for replacement.
+fn reserve_destination(
+    directory: &Path,
+    suggested: &Path,
+) -> io::Result<PathBuf> {
+    let file_name = suggested.file_name().unwrap_or_else(|| std::ffi::OsStr::new("download"));
+    let name = Path::new(file_name);
+    let stem = name.file_stem().unwrap_or(file_name);
+
+    for number in 0..10_000 {
+        let candidate = if number == 0 {
+            directory.join(file_name)
+        } else {
+            let mut numbered = stem.to_os_string();
+            numbered.push(format!(" ({number})"));
+
+            if let Some(extension) = name.extension() {
+                numbered.push(".");
+                numbered.push(extension);
+            }
+
+            directory.join(numbered)
+        };
+
+        match OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(_) => return Ok(candidate),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(io::Error::other("no unused download filename is available"))
+}
 
 pub(crate) fn start(
     app: &AppHandle,

@@ -49,3 +49,10 @@ export const marianaShadowPalette = {
     black16: 'rgb(0 0 0 / 16%)',
     black22: 'rgb(0 0 0 / 22%)',
 } as const
+
+// Additional inks for the web application's scrollbar track and dragged thumb.
+export const marianaScrollbarPalette = {
+    white04: 'rgb(255 255 255 / 4%)',
+    silverBlue70: 'rgb(171 178 191 / 70%)',
+    silverBlue85: 'rgb(171 178 191 / 85%)',
+} as const

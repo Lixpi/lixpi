@@ -47,10 +47,9 @@ impl Origins {
         })
     }
 
-    // WebKit shows an image even when the API marks it as an attachment, so a
-    // media download would replace the workspace with the bare image. The API
-    // answers `download=true` with `Content-Disposition: attachment`, so those
-    // navigations become downloads instead.
+    // Keep an asset response from replacing the workspace with an image. The
+    // API marks `download=true` responses as attachments, so those navigations
+    // become downloads instead.
     pub(crate) fn navigation(
         &self,
         url: &Url,

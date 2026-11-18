@@ -10,11 +10,18 @@
         "./svg": "./src/svg/index.ts",
         "./animation": "./src/animation/index.ts",
         "./gradients": "./src/gradients/index.ts",
+        "./scrollbars": "./src/scrollbars/documentScrollbars.ts",
         "./styles/transitions": {
             "types": "./src/styles.d.ts",
             "sass": "./src/styles/_transitions.scss",
             "style": "./src/styles/_transitions.scss",
             "default": "./src/styles/_transitions.scss"
+        },
+        "./styles/scrollbars": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/scrollbars/scrollbars.scss",
+            "style": "./src/scrollbars/scrollbars.scss",
+            "default": "./src/scrollbars/scrollbars.scss"
         }
     },
     "scripts": {
@@ -23,7 +30,8 @@
     "dependencies": {
         "d3-selection": "3.0.0",
         "d3-transition": "3.0.1",
-        "htm": "3.1.1"
+        "htm": "3.1.1",
+        "overlayscrollbars": "2.17.0"
     },
     "devDependencies": {
         "@types/d3-selection": "3.0.12",

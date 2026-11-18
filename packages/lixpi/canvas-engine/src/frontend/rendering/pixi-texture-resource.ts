@@ -14,6 +14,20 @@ const copyPixels = (
     input: Uint8Array | Uint8ClampedArray,
     output: Uint8Array = new Uint8Array(input.length),
 ): Uint8Array => {
+    let alphaIndex = 3
+
+    while (
+        alphaIndex < input.length
+        && input[alphaIndex] === 255
+    )
+        alphaIndex += 4
+
+    if (alphaIndex >= input.length) {
+        output.set(input)
+
+        return output
+    }
+
     for (let index = 0; index < input.length; index += 4) {
         const alpha = input[index + 3]
         output[index] = Math.round((input[index] * alpha) / 255)

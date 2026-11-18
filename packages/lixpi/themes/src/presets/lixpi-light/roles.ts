@@ -209,9 +209,10 @@ export const createLixpiLightRoles = (palette: LixpiColors) =>
                 disabled: palette.navy32,
             },
             scrollbar: {
-                thumb: 'revert',
-                hover: 'revert',
-                active: 'revert',
+                track: palette.black02,
+                thumb: palette.nightBlue,
+                hover: palette.nightBlue,
+                active: palette.nightBlue,
             },
         },
         panel: {

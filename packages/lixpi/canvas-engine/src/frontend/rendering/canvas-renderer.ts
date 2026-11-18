@@ -28,6 +28,25 @@ import { PixiGpuRetirement } from './pixi-gpu-retirement.ts'
 import { keepMsaaStored } from './pixi-stored-msaa.ts'
 import { webGpuBisect } from './webgpu-bisect.ts'
 
+// Diagnostic spans are folded away by the web client Vite config when disabled.
+const recordTiming = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true'
+    ? (name: string, start: number): void => {
+        const end = performance.now()
+
+        if (end - start < 8)
+            return
+
+        performance.measure(
+            name,
+            {
+                start,
+                end,
+            },
+        )
+        performance.clearMeasures(name)
+    }
+    : undefined
+
 export type CanvasRendererOptions = {
     root: HTMLElement
     onError: (error: unknown) => void
@@ -186,6 +205,13 @@ export class CanvasRenderer {
             this.app.ticker.stop()
             this.initialized = true
 
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true') {
+                const backend = 'gpu' in this.app.renderer ? 'webgpu' : 'webgl'
+                const mark = `canvas:renderer:${backend}`
+                performance.mark(mark)
+                performance.clearMarks(mark)
+            }
+
             if (
                 'gpu' in this.app.renderer
                 && 'buffer' in this.app.renderer
@@ -282,28 +308,55 @@ export class CanvasRenderer {
         )
             return
 
-        this.options.beforeRender?.()
+        const frameStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
 
-        if (this.destroyed)
-            return
+        try {
+            const beforeRenderStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
+            this.options.beforeRender?.()
 
-        if (
-            this.renderedSize?.width !== this.size.width
-            || this.renderedSize?.height !== this.size.height
-        ) {
-            this.app.renderer.resize(this.size.width, this.size.height)
-            this.renderedSize = { ...this.size }
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:before-render', beforeRenderStart)
+
+            if (this.destroyed)
+                return
+
+            if (
+                this.renderedSize?.width !== this.size.width
+                || this.renderedSize?.height !== this.size.height
+            ) {
+                this.app.renderer.resize(this.size.width, this.size.height)
+                this.renderedSize = { ...this.size }
+
+                if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true') {
+                    const canvas = this.app.canvas
+                    const mark = `canvas:resize:${canvas.width}x${canvas.height}`
+                    performance.mark(mark)
+                    performance.clearMarks(mark)
+                }
+            }
+
+            if (!webGpuBisect()?.disables('captures')) {
+                const captureStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
+                this.backend.renderCaptures(this.app.renderer)
+
+                if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                    recordTiming?.('canvas:captures', captureStart)
+            }
+
+            this.backend.prepareProjection({
+                x: 0,
+                y: 0,
+                ...this.size,
+            })
+            const drawStart = import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true' ? performance.now() : 0
+            this.app.render()
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:draw', drawStart)
+        } finally {
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                recordTiming?.('canvas:frame', frameStart)
         }
-
-        if (!webGpuBisect()?.disables('captures'))
-            this.backend.renderCaptures(this.app.renderer)
-
-        this.backend.prepareProjection({
-            x: 0,
-            y: 0,
-            ...this.size,
-        })
-        this.app.render()
     }
 
     renderNow(): void {

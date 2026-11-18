@@ -10,7 +10,9 @@ publish = false
 
 [lib]
 name = "lixpi_desktop"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Desktop packaging consumes the executable; an rlib supplies its Rust API.
+# A cdylib unnecessarily exports unused CEF C++ and sandbox bindings.
+crate-type = ["rlib"]
 
 [[bin]]
 name = "lixpi-desktop"
@@ -21,6 +23,8 @@ path = "src/main.rs"
 # diagnostics.log in the app's log directory. Off in normal builds; the desktop
 # builder enables it on request.
 diagnostics = []
+# Adds the native event-loop, webview round-trip and startup frame probes.
+profiling = ["diagnostics"]
 # Lets Vite update the page as soon as web-ui rebuilds a change. Without it the
 # page stays as loaded until it is reloaded. The desktop builder enables it
 # unless the build is asked for without hot reload, as a release build is.
@@ -34,19 +38,18 @@ serde_json = "1"
 tauri = { version = "=3.0.0-alpha.6", features = ["devtools"] }
 tauri-plugin-opener = "=3.0.0-alpha.3"
 tauri-plugin-window-state = "=3.0.0-alpha.2"
-# Tauri 3 separates the core from the runtime. Wry drives the system WebKit view.
-tauri-runtime-wry = { version = "=3.0.0-alpha.6", default-features = false, features = ["devtools"] }
 
-# The local certificate authority is trusted inside the app through WebKit's
-# authentication challenge, and F12 is seen through AppKit's key monitor, which
-# these bindings reach. The versions match the ones wry already uses.
+# F12 is handled before the page through AppKit's local key monitor.
 [target.'cfg(target_os = "macos")'.dependencies]
+base64 = "0.22"
+dirs = "6"
+# The packaged app supports macOS. Portable rules remain testable on Linux.
+# The published runtime with Lixpi's patch, prepared inside each container by
+# gui/tauri/upstream/prepare.sh. It never exists on the host.
+tauri-runtime-cef = { version = "=3.0.0-alpha.7", path = "/opt/tauri-upstream/tauri-runtime-cef", features = ["devtools"] }
 block2 = "=0.6.2"
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "block2", "NSEvent"] }
-objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFArray", "CFData"] }
-objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSURLAuthenticationChallenge", "NSURLProtectionSpace"] }
-objc2-security = { version = "=0.3.2", default-features = false, features = ["std", "objc2", "SecBase", "SecCertificate", "SecTrust"] }
 
 [profile.release]
 codegen-units = 1

@@ -25,6 +25,9 @@ export const measureWorkspaceOpen = <Result>(
     workspaceId: string,
     run: () => Result,
 ): Result => {
+    if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG !== 'true')
+        return run()
+
     const start = performance.now()
 
     try {
@@ -43,6 +46,9 @@ export const measureWorkspaceOpenAsync = async <Result>(
     workspaceId: string,
     run: () => Promise<Result>,
 ): Promise<Result> => {
+    if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG !== 'true')
+        return run()
+
     const start = performance.now()
 
     try {

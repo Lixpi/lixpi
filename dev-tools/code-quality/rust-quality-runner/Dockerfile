@@ -4,7 +4,7 @@ FROM ${RUST_ALPINE_IMAGE_REFERENCE}
 ARG RUST_NIGHTLY_VERSION=2026-11-01
 
 # Crates that bind the system web view link GTK and WebKitGTK on Linux.
-RUN apk add --no-cache musl-dev pkgconf gtk+3.0-dev webkit2gtk-4.1-dev libsoup3-dev
+RUN apk add --no-cache musl-dev pkgconf gtk+3.0-dev webkit2gtk-4.1-dev libsoup3-dev patch
 
 # Clippy runs on the stable toolchain. rustfmt comes from a pinned nightly,
 # because the layout rules in rustfmt.toml use unstable options.

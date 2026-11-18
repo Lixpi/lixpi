@@ -477,11 +477,14 @@ export class WorkspaceMediaLayer {
         )
             throw new RangeError('Viewport must be finite with positive zoom')
 
+        const zoomChanged = viewport.zoom !== this.viewport.zoom
         this.viewport = { ...viewport }
-        this.resize()
+        this.canvas.setViewport(viewport)
         this.marquee.setZoom(viewport.zoom)
         this.selection.setZoom(viewport.zoom)
-        this.publishScene()
+
+        if (zoomChanged)
+            this.syncOutlines()
     }
 
     private resize(): void {

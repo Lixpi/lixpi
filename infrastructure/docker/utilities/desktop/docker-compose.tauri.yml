@@ -7,8 +7,9 @@
 # The app opens web-ui at the stage's ORIGIN_HOST_URL, so each environment file
 # produces an app for that environment. The environment file also sets
 # MACOS_SDK_PATH, LIXPI_DESKTOP_TARGET, LIXPI_DESKTOP_DIAGNOSTICS and
-# LIXPI_DESKTOP_HOT_RELOAD; the dev console overrides the last three with the
-# choices made for a build. A build for the local stack also embeds
+# LIXPI_DESKTOP_HOT_RELOAD; the dev console overrides target, diagnostics,
+# hot reload and profiling with its menu choices. Profiling defaults to false.
+# A build for the local stack also embeds
 # the stack's certificate authority from the caddy-certs volume, which is why
 # the builder shares the application's Compose project, like the certificate
 # generator that writes that volume.
@@ -27,19 +28,27 @@ services:
             # can't bind-mount /Library, but a build context can read it.
             additional_contexts:
                 macos-sdk: ${MACOS_SDK_PATH}
+        mem_limit: 4g
         environment:
+            CEF_PATH: /cef
             LIXPI_WEB_UI_URL: ${ORIGIN_HOST_URL}
             LIXPI_API_URL: ${VITE_API_URL}
             LIXPI_DESKTOP_TARGET: ${LIXPI_DESKTOP_TARGET}
             LIXPI_DESKTOP_DIAGNOSTICS: ${LIXPI_DESKTOP_DIAGNOSTICS}
+            LIXPI_DESKTOP_PROFILING: ${LIXPI_DESKTOP_PROFILING:-false}
             LIXPI_DESKTOP_HOT_RELOAD: ${LIXPI_DESKTOP_HOT_RELOAD}
         volumes:
             - ../../../../gui/tauri:/usr/src/desktop:cached
             - caddy-certs:/usr/src/caddy-certs:ro
             - tauri-builder-cargo-registry:/usr/local/cargo/registry
             - tauri-builder-cargo-target:/cargo-target
+            - tauri-builder-cef:/cef
+            - tauri-builder-signing:/usr/src/signing
 
 volumes:
     caddy-certs:
     tauri-builder-cargo-registry:
     tauri-builder-cargo-target:
+    tauri-builder-cef:
+    # Private local-development signing identity; preserve it across rebuilds.
+    tauri-builder-signing:
