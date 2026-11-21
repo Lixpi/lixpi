@@ -1,0 +1,199 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+// ApplicationPanel - the one docked panel every Lixpi application uses, on the
+// left or the right. The shared resize handle, backdrop, overlay, toggle and
+// slide styles live in components/sidePanel; this file owns the surface and
+// the toggle placement around it.
+
+// The desktop app sets `--window-title-bar-height` on `<html>` together with
+// `data-title-bar="overlay"`, and adds `data-window-fullscreen` in full
+// screen, where macOS shows its own title bar on demand and the page's row
+// goes away. `--window-title-bar-active` is 1 while the row shows and 0
+// otherwise, so a toggle position can pick its desktop or browser value in one
+// `calc()`. `--window-title-bar-inset` is the row's height while it shows.
+:root {
+    // The traffic lights the desktop app places: three 14px buttons with 9px
+    // between them, from 16px to 76px in.
+    --window-controls-start: 16px;
+    --window-controls-width: 60px;
+    --window-controls-button-size: 14px;
+    // Every oval along the top: the traffic light oval and the panel toggles.
+    --window-title-bar-control-size: 34px;
+    // Space between every top oval and the window's top edge. The canvas glass
+    // rim reaches about 6px outside an oval, so this keeps it clear of the edge.
+    --window-title-bar-control-top: 9px;
+    --window-title-bar-active: 0;
+    --window-title-bar-inset: 0px;
+}
+
+:root[data-title-bar="overlay"] {
+    --window-title-bar-active: 1;
+    --window-title-bar-inset: var(--window-title-bar-height);
+}
+
+:root[data-title-bar="overlay"][data-window-fullscreen] {
+    --window-title-bar-active: 0;
+    --window-title-bar-inset: 0px;
+}
+
+// The pane holds the toggle, overlay, backdrop and surface. It takes no box
+// of its own; every layer is fixed to the viewport, or to the nearest
+// ancestor that contains fixed positioning, such as an embedding frame.
+.application-panel-pane {
+    --side-panel-resize-handle-z-index: 9990;
+    --side-panel-overlay-z-index: 10010;
+    --side-panel-backdrop-z-index: 10020;
+    --side-panel-surface-z-index: 10030;
+    --side-panel-toggle-z-index: 10040;
+
+    display: contents;
+    pointer-events: none;
+}
+
+.application-panel-pane .side-panel-overlay,
+.application-panel-pane .side-panel-backdrop,
+.application-panel-pane .side-panel-toggle {
+    position: fixed;
+}
+
+// Body-mounted menus opened from a panel sit above the panel and its backdrop.
+// Pass `popoverClassName: 'application-panel-popover'` to such a dropdown, or
+// give it an ID that starts with `application-panel-`.
+.info-bubble-wrapper.application-panel-popover,
+.info-bubble-wrapper[data-bubble-id^="dropdown-application-panel-"] {
+    z-index: 10050;
+}
+
+// The toggles and the desktop traffic light oval share one size, in the
+// desktop app and in a browser alike. The compound selector outranks the
+// shared action panel rules whatever order the stylesheets load in.
+.action-panel.application-panel-toggle {
+    --action-panel-size: var(--window-title-bar-control-size);
+    // The closed left toggle sits after the traffic light oval, with the gap
+    // the controls beside the prompt input keep between their ovals.
+    --window-title-bar-toggle-left: calc(var(--window-controls-start) + var(--window-controls-width) + (var(--action-panel-size) - var(--window-controls-button-size)) / 2 + 20px);
+}
+
+// The toggle icon is an outline drawing, so the button color strokes it. On
+// the right it is mirrored so the drawn bar sits on the panel's side.
+.application-panel-toggle .side-panel-toggle-button svg {
+    // The icon keeps its proportion to the oval: 18px in a 30px oval.
+    width: calc(var(--action-panel-size) * 0.6);
+    height: calc(var(--action-panel-size) * 0.6);
+    fill: none;
+    stroke: currentColor;
+}
+
+.application-panel-toggle.side-panel-toggle-right .side-panel-toggle-button svg {
+    transform: scaleX(-1);
+}
+
+.application-panel {
+    --application-panel-body-inline-padding: #{themeScope.token("components-navigation-list-base-padding-inline", themePalette.$roles)};
+    --application-panel-separator-gradient: #{themeScope.token("navigation-separator", themePalette.$roles)};
+
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: var(--application-panel-width, calc(themeScope.token("components-navigation-geometry-default-width", themePalette.$roles) * 1px));
+    box-sizing: border-box;
+    z-index: var(--side-panel-surface-z-index, 10030);
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: #{themeScope.token("sidebar-background", themePalette.$roles)};
+    // No overflow clipping: the resize handle straddles the panel's inner
+    // edge, and clipping would cut off its outer half. The body scrolls and
+    // clips its own content.
+}
+
+// The shadow marks the panel's inner edge. The right panel draws the same
+// shadow mirrored onto its left edge.
+.application-panel[data-side="left"] {
+    left: 0;
+    box-shadow: #{themeScope.token("shadow-sidebar", themePalette.$roles)};
+}
+
+.application-panel[data-side="right"] {
+    right: 0;
+}
+
+.application-panel[data-side="right"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    box-shadow: #{themeScope.token("shadow-sidebar", themePalette.$roles)};
+    transform: scaleX(-1);
+    pointer-events: none;
+}
+
+.side-panel-resize-handle.application-panel-resize-handle {
+    --side-panel-resize-handle-width: #{themeScope.token("navigation-resize-handle-width", themePalette.$roles)};
+}
+
+// The header keeps the toggle's row clear above the body, at the height a
+// header control would have.
+.application-panel-header {
+    flex: 0 0 auto;
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    box-sizing: content-box;
+    min-height: #{themeScope.token("components-navigation-new-workspace-button-base-size", themePalette.$roles)};
+    padding: #{themeScope.token("components-navigation-header-base-padding", themePalette.$roles)};
+}
+
+// In the desktop app the header is the window's title bar row.
+:root[data-title-bar="overlay"]:not([data-window-fullscreen]) .application-panel-header {
+    min-height: 0;
+    height: var(--window-title-bar-height);
+    padding-block: 0;
+}
+
+.application-panel-header::after {
+    content: "";
+    position: absolute;
+    inset-inline: #{themeScope.token("components-navigation-header-overlay-base-inline-inset", themePalette.$roles)};
+    bottom: #{themeScope.token("components-navigation-header-overlay-base-bottom", themePalette.$roles)};
+    height: #{themeScope.token("components-navigation-header-overlay-base-height", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-navigation-header-overlay-base-border-radius", themePalette.$roles)};
+    background: var(--application-panel-separator-gradient);
+    pointer-events: none;
+}
+
+.application-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: #{themeScope.token("components-navigation-list-base-gap", themePalette.$roles)};
+    padding-block: #{themeScope.token("components-navigation-list-base-padding-block", themePalette.$roles)};
+    padding-inline: var(--application-panel-body-inline-padding);
+}
+
+.application-panel[data-body="content"] {
+    --application-panel-body-inline-padding: #{themeScope.token("components-navigation-header-base-padding-inline", themePalette.$roles)};
+}
+
+.application-panel-footer {
+    flex: 0 0 auto;
+    background: #{themeScope.token("sidebar-background", themePalette.$roles)};
+    padding: #{themeScope.token("components-navigation-footer-base-padding", themePalette.$roles)};
+}
+
+.application-panel-footer:empty {
+    display: none;
+}
+
+.application-panel-footer-separator {
+    width: #{themeScope.token("components-navigation-footer-separator-base-width", themePalette.$roles)};
+    height: #{themeScope.token("components-navigation-footer-separator-base-height", themePalette.$roles)};
+    margin: #{themeScope.token("components-navigation-footer-separator-base-margin", themePalette.$roles)};
+    border-radius: #{themeScope.token("components-navigation-footer-separator-base-border-radius", themePalette.$roles)};
+    background: var(--application-panel-separator-gradient);
+}

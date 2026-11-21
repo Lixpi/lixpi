@@ -1,5 +1,3 @@
-@use "@lixpi/ui-kit/styles/tokens" as uiTokens;
-
 .canvas-example,
 .canvas-example-stage {
     position: relative;
@@ -12,6 +10,9 @@
 
 .canvas-example-stage {
     isolation: isolate;
+    // Application panels mounted by an example dock to the stage instead of
+    // the window, as they would to an application's own root.
+    contain: layout paint;
     color: var(--canvas-text);
     background: var(--canvas-background);
     font-family: var(--canvas-font-family);
@@ -48,15 +49,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 140px);
     align-items: center;
     gap: 12px;
-
-    input:not([type="checkbox"]),
-    select {
-        min-width: 0;
-        width: 100%;
-        box-sizing: border-box;
-        min-height: var(--canvas-control-height);
-        @include uiTokens.native-form-field;
-    }
 
     input[type="checkbox"] {
         justify-self: end;

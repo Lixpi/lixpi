@@ -21,6 +21,10 @@ import {
     type WorkspaceLibraryPorts,
     type LibraryAssetResult,
 } from './library-ports.ts'
+import {
+    createLibraryButton,
+    createLibraryTitleInput,
+} from './library-controls.ts'
 
 export type MediaLibraryPanelInstance = {
     readonly rootEl: HTMLElement
@@ -314,12 +318,15 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                     <div className="capability-library-row-name">${stripMediaFileExtension(asset.title)}</div>
                     <div className="capability-library-row-summary">${asset.descriptorSummary ?? ''}</div>
                 </div>
-                <button
-                    type="button"
-                    className="capability-library-row-action capability-library-row-action-primary"
-                    data-action="insert"
-                    data-side-panel-no-drag="true"
-                >Add</button>
+                ${createLibraryButton(
+                    this.options.document,
+                    {
+                        label: 'Add',
+                        variant: 'primary',
+                        className: 'capability-library-row-action',
+                        action: 'insert',
+                    },
+                )}
             </article>
         ` as HTMLElement
         const selectAsset = (): void => {
@@ -434,15 +441,15 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 className="media-library-detail"
                 data-side-panel-no-drag="true"
             >
-                <button
-                    type="button"
-                    className="media-library-detail-back"
-                >Back</button>
+                ${createLibraryButton(
+                    this.options.document,
+                    {
+                        label: 'Back',
+                        className: 'media-library-detail-back',
+                    },
+                )}
                 <label>Title</label>
-                <input
-                    type="text"
-                    className="media-library-detail-title"
-                />
+                ${createLibraryTitleInput(this.options.document)}
                 <label>Scope</label>
                 <select className="media-library-detail-scope">
                     <option value="workspace">Workspace</option>
@@ -455,10 +462,13 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 <p className="media-library-detail-descriptor"></p>
                 <p className="media-library-detail-lineage"></p>
                 <p className="media-library-detail-seed"></p>
-                <button
-                    type="button"
-                    className="media-library-detail-remove"
-                >Remove from library</button>
+                ${createLibraryButton(
+                    this.options.document,
+                    {
+                        label: 'Remove from library',
+                        className: 'media-library-detail-remove',
+                    },
+                )}
                 <div
                     className="media-library-detail-content"
                     data-help-tooltip="aria-description"

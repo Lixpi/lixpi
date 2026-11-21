@@ -368,7 +368,7 @@ describe('workspace navigation adapter', () => {
         const packages = resolve(import.meta.dirname, '../../../../packages/lixpi')
         const [bubbleCss, sidebarCss, navigationCss] = await Promise.all([
             compileThemedStylesheet(resolve(packages, 'ui-kit/src/components/bubbleMenu/bubbleMenu.scss')),
-            compileThemedStylesheet(resolve(packages, 'ui-kit/styles/navigation-side-panel.scss')),
+            compileThemedStylesheet(resolve(packages, 'ui-kit/styles/application-panel.scss')),
             compileThemedStylesheet(resolve(import.meta.dirname, 'workspace-navigation.scss')),
         ])
         const stylesheet = document.createElement('style')
@@ -381,7 +381,7 @@ ${navigationCss}`
 
         try {
             const sidebar = document.createElement('div')
-            sidebar.className = 'navigation-side-panel'
+            sidebar.className = 'application-panel'
             document.body.appendChild(sidebar)
             const server = createServer([snapshot('org-a', [{ id: 'one' }])])
             const { container } = await mount(server)

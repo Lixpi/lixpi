@@ -2,6 +2,7 @@
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 
 @import "@lixpi/ui-primitives/styles/transitions";
+@import "@lixpi/ui-kit/styles/button";
 @import "./prompt-reference-colors";
 
 // Emitted once, app-wide: this stylesheet is pulled in by the global
@@ -154,8 +155,7 @@
     color: #{themeScope.token("components-composer-references-picker-badge-skill-base-foreground", themePalette.$roles)};
 }
 
-.prompt-reference-picker-status,
-.prompt-reference-picker-load-more {
+.prompt-reference-picker-status {
     padding: 12px;
     color: #{themeScope.token("components-composer-references-picker-status-base-foreground", themePalette.$roles)};
     font-size: #{themeScope.token("components-composer-references-picker-status-base-font-size", themePalette.$roles)};
@@ -163,16 +163,8 @@
 }
 
 .prompt-reference-picker-load-more {
-    width: 100%;
-    border: 0;
-    border-radius: #{themeScope.token("components-composer-references-picker-load-more-base-border-radius", themePalette.$roles)};
-    background: transparent;
-    cursor: pointer;
-    transition: hoverTransition(background-color);
-
-    &:hover {
-        background: #{themeScope.token("components-composer-references-picker-load-more-hover-background", themePalette.$roles)};
-    }
+    align-self: center;
+    margin: 8px auto;
 }
 
 .prompt-reference-chip {

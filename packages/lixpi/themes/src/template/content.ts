@@ -57,20 +57,6 @@ export type ContentTheme = {
                     foreground: string
                 }
             }
-            modelConfigAddLabel: {
-                base: {
-                    fontSize: string
-                    fontWeight: string
-                    lineHeight: string
-                }
-            }
-            modelConfigAddIcon: {
-                base: {
-                    borderRadius: string
-                    backgroundColor: string
-                    fill: string
-                }
-            }
             modelConfigRemove: {
                 base: {
                     borderRadius: string
@@ -237,14 +223,6 @@ export type ContentTheme = {
                 base: {
                     foreground: string
                     fontSize: string
-                }
-            }
-            pickerLoadMore: {
-                base: {
-                    borderRadius: string
-                }
-                hover: {
-                    background: string
                 }
             }
             chip: {

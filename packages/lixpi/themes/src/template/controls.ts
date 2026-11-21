@@ -1,4 +1,25 @@
 // Complete appearance values for these component domains. No defaults are supplied here.
+export type ButtonSizeName =
+    | 'xxxSmall'
+    | 'xxSmall'
+    | 'xSmall'
+    | 'xMedium'
+    | 'xxMedium'
+    | 'xxxMedium'
+    | 'xLarge'
+    | 'xxLarge'
+    | 'xxxLarge'
+
+// One step of the button size scale.
+export type ButtonSizeGeometry = {
+    height: string
+    paddingInline: string
+    gap: string
+    radius: string
+    fontSize: string
+    iconSize: string
+}
+
 export type ControlTheme = {
     dropdown: {
         menu: {
@@ -242,5 +263,22 @@ export type ControlTheme = {
     }
     shiftingGradient: {
         shiftingColors: [string, string, string, string]
+    }
+    // Geometry shared by every button. Colors come from the preset's semantic
+    // roles, so each preset paints the same shape. Small, medium and large
+    // each have three sizes: `xxx-small`, `xx-small`, `x-small`, `x-medium`,
+    // `xx-medium`, `xxx-medium`, `x-large`, `xx-large` and `xxx-large`.
+    button: {
+        fontWeight: number
+        sizes: Record<ButtonSizeName, ButtonSizeGeometry>
+    }
+    textInput: {
+        base: {
+            height: string
+            paddingInline: string
+            radius: string
+            fontSize: string
+            borderWidth: string
+        }
     }
 }

@@ -255,7 +255,7 @@ describe('Capability library catalog projection', () => {
             onAttach,
         })
         await panel.load()
-        ;(panel.element.querySelector('.capability-library-row-action-primary') as HTMLButtonElement).click()
+        ;(panel.element.querySelector('[data-action="attach"]') as HTMLButtonElement).click()
 
         expect(onAttach).toHaveBeenCalledWith({
             capabilityId: 'character-creator',

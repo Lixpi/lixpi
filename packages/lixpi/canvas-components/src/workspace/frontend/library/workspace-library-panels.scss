@@ -1,4 +1,6 @@
 @import "@lixpi/ui-primitives/styles/transitions";
+@import "@lixpi/ui-kit/styles/button";
+@import "@lixpi/ui-kit/styles/text-input";
 
 .media-library-panel {
     container: media-library / inline-size;
@@ -41,21 +43,7 @@
 
 .media-library-detail-back,
 .media-library-detail-remove {
-    padding: 7px 10px;
-    border: 1px solid var(--canvas-border, rgb(255 255 255 / 14%));
-    border-radius: var(--canvas-control-radius, 8px);
-    background: var(--canvas-surface-raised, rgb(255 255 255 / 6%));
-    color: inherit;
-    cursor: pointer;
-    transition:
-        hoverTransition(background-color),
-        hoverTransition(border-color);
-}
-
-.media-library-detail-back:hover,
-.media-library-detail-remove:hover {
-    border-color: var(--canvas-accent, rgb(184 165 255 / 42%));
-    background: var(--canvas-surface-hover, rgb(184 165 255 / 12%));
+    justify-self: start;
 }
 
 .media-library-inspector {
@@ -98,7 +86,6 @@
     width: 100%;
 }
 
-.media-library-detail-title,
 .media-library-detail-scope {
     padding: 8px 10px;
     border: 1px solid var(--canvas-border, rgb(255 255 255 / 14%));
@@ -245,35 +232,7 @@
 }
 
 .capability-library-row-action {
-    min-width: 56px;
-    height: var(--canvas-control-height, 32px);
-    padding: var(--canvas-control-padding, 0 8px);
-    border: 1px solid var(--canvas-border, rgba(26, 39, 68, 0.1));
-    border-radius: var(--canvas-control-radius, 9px);
-    background: var(--canvas-surface-raised, rgba(255, 255, 255, 0.72));
-    color: var(--canvas-text-muted, rgba(26, 39, 68, 0.64));
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: var(--canvas-title-font-weight, 700);
-    transition:
-        hoverTransition(background-color),
-        hoverTransition(border-color),
-        hoverTransition(color);
-}
-
-.capability-library-row-action:hover {
-    background: var(--canvas-surface-hover, rgba(26, 39, 68, 0.05));
-    color: var(--canvas-text, #1a2744);
-}
-
-.capability-library-row-action-primary {
-    border-color: var(--canvas-accent, rgba(95, 143, 207, 0.3));
-    background: var(--canvas-surface-hover, rgba(95, 143, 207, 0.12));
-    color: var(--canvas-text, #1a2744);
-}
-
-.capability-library-row-action-primary:hover {
-    background: var(--canvas-surface-hover, rgba(95, 143, 207, 0.18));
+    flex: 0 0 auto;
 }
 
 .capability-library-inspector-empty {

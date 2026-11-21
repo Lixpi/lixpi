@@ -3,6 +3,7 @@ import {
     html,
 } from '@lixpi/ui-primitives/dom'
 import { Easing } from '@lixpi/ui-primitives/animation'
+import { createButton } from '@lixpi/ui-kit/components/button'
 import {
     type TravelingOutlineOptions,
 } from '../effects/outline/index.ts'
@@ -57,11 +58,14 @@ export class LoadingOverlay {
                 >
                     <div className="canvas-loading-error-title">${options.errorTitle}</div>
                     ${this.message}
-                    <button
-                        type="button"
-                        className="canvas-loading-error-retry"
-                        onclick=${this.retry}
-                    >${options.retryLabel}</button>
+                    ${
+                        createButton({
+                            label: options.retryLabel,
+                            variant: 'primary',
+                            className: 'canvas-loading-error-retry',
+                            onClick: this.retry,
+                        }).element
+                    }
                 </div>
             </div>
         ` as HTMLDivElement

@@ -25,6 +25,7 @@ import {
     type CapabilityCatalogClient,
 } from '$src/services/capability-catalog-client.ts'
 import { html } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
 
 const createStreamedCapabilityRun = (event: CapabilityRunEvent): CapabilityRun => ({
     runId: event.runId,
@@ -304,18 +305,18 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
             if (this.outputRows.get(assetId) !== row)
                 return
 
-            const button = html`
-                <button
-                    type="button"
-                    onclick=${() => void this.openOutput(
-                        assetId,
-                        button,
-                        error,
-                    )}
-                >
-                    Open ${output.title}
-                </button>
-            ` as HTMLButtonElement
+            // The visible label can end in an ellipsis; the tooltip shows the
+            // whole title.
+            const button = createButton({
+                label: `Open ${output.title}`,
+                ariaLabel: `Open ${output.title}`,
+                onClick: () => void this.openOutput(
+                    assetId,
+                    button,
+                    error,
+                ),
+            }).element
+            button.dataset.helpTooltip = 'aria-label'
             const error = html`
                 <span
                     className="capability-run-step-error"

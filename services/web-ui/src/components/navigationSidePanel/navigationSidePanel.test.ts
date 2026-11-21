@@ -57,7 +57,7 @@ vi.mock('@lixpi/ui-kit/components/dropdown', async importOriginal => {
 
     return {
     createPureDropdown: vi.fn((config: any) => {
-        if (config.id === 'navigation-side-panel-account-menu') {
+        if (config.id === 'application-panel-account-menu') {
             const dropdown = actual.createPureDropdown(config)
             const instance = {
                 ...dropdown,
@@ -106,10 +106,10 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { createAuthStore } from '@lixpi/auth-client'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { navigationSidePanelStore } from '$src/stores/navigationSidePanelStore.ts'
-import { settings } from '$src/settings.ts'
+import { uiKitSettings } from '@lixpi/ui-kit'
 
 const USER_PORTAL_URL = 'https://user-portal.example.test'
-const isPush = settings.navigationSidePanel.placement === 'push'
+const isPush = uiKitSettings.applicationPanel.placement === 'push'
 
 const setCurrentWorkspaceId = (workspaceId: string | undefined): void => {
     router.navigateTo('/workspace/:workspaceId', {
@@ -142,7 +142,7 @@ const mount = (): {
     const panel = createNavigationSidePanel({
         auth,
         contentEl,
-        paneEl,
+        containerEl: paneEl,
         router,
         userPortalUrl: USER_PORTAL_URL,
         workspaceService,
@@ -243,29 +243,28 @@ describe('NavigationSidePanel — mounting', () => {
             instance,
         } = mount()
 
-        expect(paneEl.querySelector('.navigation-side-panel')).not.toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-header')).not.toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-list')).not.toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-footer')).not.toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-resize-handle')).not.toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-toggle')).not.toBeNull()
+        expect(paneEl.querySelector('.application-panel')).not.toBeNull()
+        expect(paneEl.querySelector('.application-panel-header')).not.toBeNull()
+        expect(paneEl.querySelector('.application-panel-body')).not.toBeNull()
+        expect(paneEl.querySelector('.application-panel-footer')).not.toBeNull()
+        expect(paneEl.querySelector('.application-panel-resize-handle')).not.toBeNull()
+        expect(paneEl.querySelector('.application-panel-toggle')).not.toBeNull()
         expect(paneEl.querySelector('.side-panel-overlay')).toBeNull()
         expect(paneEl.querySelector('.side-panel-backdrop')).not.toBeNull()
 
         instance.destroy()
     })
 
-    it('reflects the resolved panel width onto both the pane and panel elements as CSS custom properties', () => {
+    it('reflects the resolved panel width onto the panel layers as CSS custom properties', () => {
         const {
             paneEl,
             instance,
         } = mount()
 
-        // Never resized -> falls back to settings.navigationSidePanel.defaultDimensions.width (280).
-        expect(paneEl.style.getPropertyValue('--workspace-navigation-side-panel-width')).toBe('280px')
-        expect(paneEl.style.getPropertyValue('--side-panel-backdrop-width')).toBe('280px')
-        const panelEl = paneEl.querySelector<HTMLDivElement>('.navigation-side-panel')
-        expect(panelEl?.style.getPropertyValue('--side-panel-backdrop-width')).toBe('280px')
+        // Never resized -> falls back to uiKitSettings.applicationPanel.dimensions.defaultWidth (280).
+        const layers = paneEl.querySelector<HTMLElement>('.application-panel-pane')!
+        expect(layers.style.getPropertyValue('--application-panel-width')).toBe(`${uiKitSettings.applicationPanel.dimensions.defaultWidth}px`)
+        expect(layers.style.getPropertyValue('--side-panel-backdrop-width')).toBe(`${uiKitSettings.applicationPanel.dimensions.defaultWidth}px`)
 
         instance.destroy()
     })
@@ -276,8 +275,9 @@ describe('NavigationSidePanel — mounting', () => {
             instance,
         } = mount()
 
-        expect(paneEl.style.getPropertyValue('--side-panel-backdrop-fill')).toBe(settings.navigationSidePanel.styles.backdropFill)
-        expect(paneEl.style.getPropertyValue('--side-panel-backdrop-fill-opaque')).toBe(settings.navigationSidePanel.styles.backdropFillOpaque)
+        const layers = paneEl.querySelector<HTMLElement>('.application-panel-pane')!
+        expect(layers.style.getPropertyValue('--side-panel-backdrop-fill')).toBe(uiKitSettings.applicationPanel.backdrop.fill)
+        expect(layers.style.getPropertyValue('--side-panel-backdrop-fill-opaque')).toBe(uiKitSettings.applicationPanel.backdrop.fillOpaque)
 
         instance.destroy()
     })
@@ -289,7 +289,7 @@ describe('NavigationSidePanel — mounting', () => {
         } = mount()
 
         expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
-        const panelEl = paneEl.querySelector<HTMLDivElement>('.navigation-side-panel')
+        const panelEl = paneEl.querySelector<HTMLDivElement>('.application-panel')
         expect(panelEl?.style.transform).not.toBe('translate3d(-100%, 0, 0)')
 
         instance.destroy()
@@ -302,7 +302,7 @@ describe('NavigationSidePanel — mounting', () => {
             instance,
         } = mount()
 
-        const panelEl = paneEl.querySelector<HTMLDivElement>('.navigation-side-panel')
+        const panelEl = paneEl.querySelector<HTMLDivElement>('.application-panel')
         expect(panelEl?.style.transform).toBe('translate3d(-100%, 0, 0)')
         const backdropEl = paneEl.querySelector<HTMLDivElement>('.side-panel-backdrop')
         expect(backdropEl?.style.transform).toBe('translate3d(-100%, 0, 0)')
@@ -397,7 +397,7 @@ describe('NavigationSidePanel — avatar', () => {
 
         expect(open).not.toHaveBeenCalled()
         expect(avatar.closest('button')?.getAttribute('aria-expanded')).toBe('true')
-        const menu = document.querySelector('#dropdown-menu-navigation-side-panel-account-menu')!
+        const menu = document.querySelector('#dropdown-menu-application-panel-account-menu')!
         const items = menu.querySelectorAll<HTMLElement>('[role="menuitem"]')
         expect(Array.from(items, item => item.textContent?.trim())).toEqual(['Profile', 'Sign out'])
         items[0].click()
@@ -427,7 +427,7 @@ describe('NavigationSidePanel — avatar', () => {
         await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
         expect(trigger.getAttribute('aria-expanded')).toBe('false')
         instance.destroy()
-        expect(document.querySelector('#dropdown-menu-navigation-side-panel-account-menu')).toBeNull()
+        expect(document.querySelector('#dropdown-menu-application-panel-account-menu')).toBeNull()
     })
 
     it('prevents duplicate sign-out requests and lets the user retry a failed logout', async () => {
@@ -438,7 +438,7 @@ describe('NavigationSidePanel — avatar', () => {
             instance,
         } = mount()
         const trigger = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-account-menu button')!
-        const signOut = document.querySelectorAll<HTMLElement>('#dropdown-menu-navigation-side-panel-account-menu [role="menuitem"]')[1]
+        const signOut = document.querySelectorAll<HTMLElement>('#dropdown-menu-application-panel-account-menu [role="menuitem"]')[1]
         trigger.click()
         signOut.click()
         trigger.click()
@@ -459,7 +459,7 @@ describe('NavigationSidePanel — avatar', () => {
         mocks.navigation.hasPendingChanges.mockReturnValue(true)
         mocks.navigation.flushPendingChanges.mockReturnValueOnce(pending.promise)
         const { instance } = mount()
-        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
+        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'application-panel-account-menu')!
         menu.config.onSelect({ action: 'logout' })
         expect(mocks.navigation.flushPendingChanges).toHaveBeenCalledOnce()
         expect(mocks.logout).not.toHaveBeenCalled()
@@ -473,7 +473,7 @@ describe('NavigationSidePanel — avatar', () => {
         mocks.navigation.hasPendingChanges.mockReturnValue(true)
         mocks.navigation.flushPendingChanges.mockResolvedValue(false)
         const { instance } = mount()
-        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
+        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'application-panel-account-menu')!
         menu.config.onSelect({ action: 'logout' })
         await vi.waitFor(() => expect(menu.setErrorState).toHaveBeenCalledWith({
             title: 'Navigation changes were not saved. Resolve them and try signing out again.',
@@ -519,7 +519,7 @@ describe('NavigationSidePanel — avatar', () => {
         const pending = Promise.withResolvers<void>()
         mocks.logout.mockReturnValueOnce(pending.promise)
         const { instance } = mount()
-        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'navigation-side-panel-account-menu')!
+        const menu = mocks.dropdownInstances.find(entry => entry.config.id === 'application-panel-account-menu')!
         menu.config.onSelect({ action: 'logout' })
         await vi.waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
         instance.destroy()
@@ -542,7 +542,7 @@ describe('NavigationSidePanel — workspace tree navigation', () => {
             instance,
         } = mount()
 
-        expect(mocks.navigationOptions.container).toBe(paneEl.querySelector('.navigation-side-panel-list'))
+        expect(mocks.navigationOptions.container).toBe(paneEl.querySelector('.application-panel-body'))
         expect(mocks.navigationOptions.store).toBe(workspaceTreeStore)
         expect(ports().buildHref('ws-1')).toBe('/workspace/ws-1')
 
@@ -1014,11 +1014,11 @@ describe('NavigationSidePanel — open/close toggle', () => {
         } = mount()
         expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')?.click()
+        paneEl.querySelector<HTMLButtonElement>('.application-panel-toggle .side-panel-toggle-button')?.click()
 
         expect(navigationSidePanelStore.getData('isOpen')).toBe(false)
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')?.click()
+        paneEl.querySelector<HTMLButtonElement>('.application-panel-toggle .side-panel-toggle-button')?.click()
 
         expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
 
@@ -1034,24 +1034,24 @@ describe('NavigationSidePanel — open/close toggle', () => {
                 paneEl,
                 instance,
             } = mount()
-            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')
-            const openWidth = `${settings.navigationSidePanel.defaultDimensions.width}px`
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+            const toggle = paneEl.querySelector<HTMLButtonElement>('.application-panel-toggle .side-panel-toggle-button')
+            const openWidth = `${uiKitSettings.applicationPanel.dimensions.defaultWidth}px`
+            expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe(openWidth)
+            expect(contentEl.style.getPropertyValue('--application-panel-left-inset')).toBe('0px')
 
             toggle?.click()
 
             expect(navigationSidePanelStore.getData('isOpen')).toBe(false)
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
+            expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe(openWidth)
 
             await vi.runAllTimersAsync()
 
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
+            expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe('0px')
 
             toggle?.click()
 
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(openWidth)
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+            expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe(openWidth)
+            expect(contentEl.style.getPropertyValue('--application-panel-left-inset')).toBe('0px')
 
             instance.destroy()
         } finally {
@@ -1068,14 +1068,14 @@ describe('NavigationSidePanel — open/close toggle', () => {
                 paneEl,
                 instance,
             } = mount()
-            const toggle = paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')
+            const toggle = paneEl.querySelector<HTMLButtonElement>('.application-panel-toggle .side-panel-toggle-button')
 
             toggle?.click()
             toggle?.click()
             await vi.runAllTimersAsync()
 
             expect(navigationSidePanelStore.getData('isOpen')).toBe(true)
-            expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe(`${settings.navigationSidePanel.defaultDimensions.width}px`)
+            expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe(`${uiKitSettings.applicationPanel.dimensions.defaultWidth}px`)
 
             instance.destroy()
         } finally {
@@ -1089,13 +1089,13 @@ describe('NavigationSidePanel — open/close toggle', () => {
             paneEl,
             instance,
         } = mount()
-        const openInset = `${settings.navigationSidePanel.defaultDimensions.width}px`
-        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe(openInset)
-        expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
+        const openInset = `${uiKitSettings.applicationPanel.dimensions.defaultWidth}px`
+        expect(contentEl.style.getPropertyValue('--application-panel-left-inset')).toBe(openInset)
+        expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe('0px')
 
-        paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-toggle .side-panel-toggle-button')?.click()
+        paneEl.querySelector<HTMLButtonElement>('.application-panel-toggle .side-panel-toggle-button')?.click()
 
-        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+        expect(contentEl.style.getPropertyValue('--application-panel-left-inset')).toBe('0px')
 
         instance.destroy()
     })
@@ -1107,8 +1107,8 @@ describe('NavigationSidePanel — open/close toggle', () => {
             instance,
         } = mount()
 
-        expect(contentEl.style.getPropertyValue('--navigation-side-panel-dock-width')).toBe('0px')
-        expect(contentEl.style.getPropertyValue('--navigation-side-panel-inset')).toBe('0px')
+        expect(contentEl.style.getPropertyValue('--application-panel-left-dock-width')).toBe('0px')
+        expect(contentEl.style.getPropertyValue('--application-panel-left-inset')).toBe('0px')
 
         instance.destroy()
     })
@@ -1134,7 +1134,7 @@ describe('NavigationSidePanel — open/close toggle', () => {
             cancelable: true,
         }))
 
-        expect(navigationSidePanelStore.getData('isOpen')).toBe(!settings.navigationSidePanel.overlay.closeOnPointerDown)
+        expect(navigationSidePanelStore.getData('isOpen')).toBe(!uiKitSettings.applicationPanel.overlay.closeOnPointerDown)
 
         instance.destroy()
     })
@@ -1153,8 +1153,8 @@ describe('NavigationSidePanel — destroy', () => {
 
         instance.destroy()
 
-        expect(paneEl.querySelector('.navigation-side-panel')).toBeNull()
-        expect(paneEl.querySelector('.navigation-side-panel-toggle')).toBeNull()
+        expect(paneEl.querySelector('.application-panel')).toBeNull()
+        expect(paneEl.querySelector('.application-panel-toggle')).toBeNull()
         expect(paneEl.querySelector('.side-panel-overlay')).toBeNull()
         expect(paneEl.querySelector('.side-panel-backdrop')).toBeNull()
     })

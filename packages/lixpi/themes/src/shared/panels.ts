@@ -115,13 +115,6 @@ export const panelValues: PanelTheme = {
                     fontSize: "12px",
                 },
             },
-            capabilityDescriptionRetry: {
-                base: {
-                    border: palette.blueSlate28,
-                    borderRadius: "6px",
-                    background: palette.white,
-                },
-            },
         },
         styles: {
             controlsColor: palette.blueSlate,
@@ -344,16 +337,6 @@ export const panelValues: PanelTheme = {
                 size: '15px',
             },
         },
-        libraryGeometry: {
-            stageMinWidth: 160,
-            stageMinWidthWithParameters: 240,
-            parametersDefaultWidth: 416,
-            parametersMinWidth: 260,
-            themeDefaultWidth: 320,
-            themeMinWidth: 280,
-            toggleGap: '8px',
-            themeToggleTop: '42px',
-        },
     },
     blockCards: {
         blockCardTilesList: {
@@ -472,34 +455,6 @@ export const panelValues: PanelTheme = {
                 foreground: palette.deepSage,
                 fontSize: "13px",
                 lineHeight: "1.6",
-            },
-        },
-        buttonButton: {
-            base: {
-                border: `1px solid ${palette.nightBlue}`,
-                borderRadius: "12px",
-                background: palette.nightBlue,
-                foreground: palette.white,
-                fontSize: "14px",
-                fontWeight: "550",
-            },
-        },
-        button: {
-            hover: {
-                background: palette.steelBlue,
-                borderColor: palette.steelBlue,
-            },
-        },
-        buttonSecondaryButton: {
-            base: {
-                foreground: palette.nightBlue,
-                borderColor: palette.sageGray,
-            },
-        },
-        buttonSecondary: {
-            hover: {
-                background: palette.paleSageWhite,
-                borderColor: palette.sageSilver,
             },
         },
         footer: {

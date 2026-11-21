@@ -1,10 +1,11 @@
-// NavigationSidePanel - the workspace tree side panel built on the shared
-// SidePanel component.
+// NavigationSidePanel - the workspace tree in the shared ApplicationPanel.
 //
-// Renderer: TypeScript `html` DOM for the panel controls. The workspace tree in
-// the list uses the local workspace adapter; this panel supplies its
-// ports (NATS requests, routing, confirmation, import and export, collapse
-// persistence) and keeps the header, footer and SidePanel shell.
+// Renderer: TypeScript `html` DOM for the panel controls. The panel surface,
+// toggle, resize handle and slide are the shared ApplicationPanel, so this
+// panel looks like every other Lixpi application panel. It fills the body
+// with the workspace tree and the footer with the account menu, and supplies
+// the tree's ports (NATS requests, routing, confirmation, import and export,
+// collapse persistence).
 
 import {
     createWorkspaceNavigation,
@@ -22,12 +23,10 @@ import {
 } from '@lixpi/canvas-components/loading'
 import { html } from '@lixpi/ui-primitives/dom'
 import {
-    createSidePanel,
-    type SidePanelInstance,
-} from '@lixpi/ui-kit/components/side-panel'
+    createApplicationPanel,
+    type ApplicationPanelInstance,
+} from '@lixpi/ui-kit/components/application-panel'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
-import { settings } from '$src/settings.ts'
-import { navigationSidePanelToggleIcon } from '@lixpi/ui-kit/svg'
 import { bindCanvasTheme } from '@lixpi/canvas-components/theme'
 import { canvasThemeStore } from '$src/canvas-adapters/canvas-theme.ts'
 
@@ -36,18 +35,14 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { navigationSidePanelStore } from '$src/stores/navigationSidePanelStore.ts'
 
-const NAVIGATION_SIDE_PANEL_SETTINGS = settings.navigationSidePanel
-
 export type NavigationSidePanelConfig = {
-    // Host element the panel/backdrop/overlay/toggle/resize-handle mount into.
     auth: Pick<AuthClientInstance, 'authStore' | 'getTokenSilently' | 'logout' | 'createSessionHandoffUrl'>
-    // Content area beside the panel. It receives
-    // `--navigation-side-panel-inset`, the width the open panel covers, so
-    // content can keep its own overlays clear of the panel, and
-    // `--navigation-side-panel-dock-width`, the space a `push` panel claims,
-    // so content can shrink beside it.
+    // Content area beside the panel. The shared panel gives it
+    // `--application-panel-left-inset` and
+    // `--application-panel-left-dock-width` to make room.
     contentEl: HTMLElement
-    paneEl: HTMLElement
+    // Positioned element the panel mounts into.
+    containerEl: HTMLElement
     router: Pick<WebClientRouterService, 'cancelRouteLoad' | 'getCurrentRoute' | 'navigateTo' | 'subscribe'>
     userPortalUrl: string
     workspaceService: {
@@ -66,45 +61,46 @@ type PendingWorkspaceSwitch = {
 }
 
 class NavigationSidePanel implements NavigationSidePanelInstance {
-    private readonly contentEl: HTMLElement
-    private readonly paneEl: HTMLElement
     private readonly unsubscribers: Array<() => void> = []
     private readonly navigation: WorkspaceNavigationHandle
-    private readonly panelEl: HTMLDivElement
-    private readonly headerEl: HTMLDivElement
-    private readonly listEl: HTMLDivElement
-    private readonly footerEl: HTMLDivElement
     private readonly avatarEl: HTMLSpanElement
     private readonly accountDropdown: ReturnType<typeof createPureDropdown>
     private readonly importFileInput: HTMLInputElement
-    private readonly sidePanel: SidePanelInstance
+    private readonly panel: ApplicationPanelInstance
     private readonly auth: NavigationSidePanelConfig['auth']
     private readonly router: NavigationSidePanelConfig['router']
     private readonly workspaceService: NavigationSidePanelConfig['workspaceService']
     private importTargetWorkspaceId: string | null = null
-    private width = 0
-    // Whether a `push` panel currently claims its space beside the content.
-    private docked = false
-    // Bumped on every open or close so a superseded close does not undock a
-    // panel the user reopened while it was still sliding out.
-    private motionVersion = 0
     private pendingWorkspaceSwitch: PendingWorkspaceSwitch | null = null
     private signingOut = false
     private destroyed = false
 
     constructor(config: NavigationSidePanelConfig) {
         this.auth = config.auth
-        this.contentEl = config.contentEl
-        this.paneEl = config.paneEl
         this.router = config.router
         this.workspaceService = config.workspaceService
-        this.panelEl = html`<div className="navigation-side-panel"></div>` as HTMLDivElement
-        this.headerEl = html`<div className="navigation-side-panel-header"></div>` as HTMLDivElement
-        this.listEl = html`<div className="navigation-side-panel-list"></div>` as HTMLDivElement
-        this.footerEl = html`<div className="navigation-side-panel-footer"></div>` as HTMLDivElement
+        this.panel = createApplicationPanel({
+            container: config.containerEl,
+            content: config.contentEl,
+            side: 'left',
+            label: 'Navigation',
+            open: navigationSidePanelStore.getData().isOpen,
+            loadState: () => ({ width: navigationSidePanelStore.getData().width }),
+            persistState: state => navigationSidePanelStore.setValues({ width: state.width ?? null }),
+            onOpenChange: open => void this.setOpen(open),
+        })
+
+        // The toggle is the same action panel as the controls beside the prompt
+        // input. It mounts outside the canvas, so it takes the canvas theme's
+        // paint here to look the same.
+        if (this.panel.toggleElement)
+            this.unsubscribers.push(
+                bindCanvasTheme(this.panel.toggleElement, canvasThemeStore),
+            )
+
         this.avatarEl = html`<span className="navigation-side-panel-avatar"></span>` as HTMLSpanElement
         this.accountDropdown = createPureDropdown({
-            id: 'navigation-side-panel-account-menu',
+            id: 'application-panel-account-menu',
             selectedValue: { title: '' },
             options: [
                 {
@@ -142,73 +138,13 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         ` as HTMLInputElement
         this.importFileInput.addEventListener('change', this.handleImportFileSelected)
 
-        this.footerEl.append(html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement, this.accountDropdown.dom)
-        this.panelEl.append(
-            this.headerEl,
-            this.listEl,
-            this.footerEl,
-            this.importFileInput,
-        )
-        this.paneEl.appendChild(this.panelEl)
-
-        this.sidePanel = createSidePanel({
-            root: this.paneEl,
-            side: 'left',
-            offset: NAVIGATION_SIDE_PANEL_SETTINGS.resizeHandle.offset,
-            grabWidth: NAVIGATION_SIDE_PANEL_SETTINGS.resizeHandle.grabWidth,
-            className: 'navigation-side-panel-resize-handle',
-            styles: NAVIGATION_SIDE_PANEL_SETTINGS.resizeHandle.styles,
-            overlay: NAVIGATION_SIDE_PANEL_SETTINGS.overlay,
-            drag: NAVIGATION_SIDE_PANEL_SETTINGS.drag,
-            toggle: {
-                iconSvg: navigationSidePanelToggleIcon,
-                className: 'navigation-side-panel-toggle',
-                motion: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.motion,
-                openAriaLabel: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.openAriaLabel,
-                closedAriaLabel: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.closedAriaLabel,
-                openOffset: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.openOffset,
-                closedTravel: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.closedTravel,
-                top: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.top,
-                onToggle: this.toggleVisibility,
-            },
-            minWidth: NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth,
-            defaultWidth: NAVIGATION_SIDE_PANEL_SETTINGS.defaultDimensions.width,
-            getMaxWidth: this.getMaxWidth,
-            measureWidth: () => this.panelEl.getBoundingClientRect().width || NAVIGATION_SIDE_PANEL_SETTINGS.defaultDimensions.width,
-            loadState: () => ({ width: navigationSidePanelStore.getData().width }),
-            persistState: state => navigationSidePanelStore.setValues({ width: state.width ?? null }),
-            onResize: this.reflectWidth,
-            onResizeEnd: this.reflectWidth,
-            onOpenChange: this.handleOpenChange,
-        })
-
-        this.reflectStyleSettings()
-
-        // The toggle is the same action panel as the controls beside the prompt
-        // input. It mounts outside the canvas, so it takes the canvas theme's
-        // paint here to look the same.
-        if (this.sidePanel.toggleElement) {
-            this.paneEl.appendChild(this.sidePanel.toggleElement)
-            this.unsubscribers.push(
-                bindCanvasTheme(this.sidePanel.toggleElement, canvasThemeStore),
-            )
-        }
-
-        if (this.sidePanel.overlayElement)
-            this.paneEl.appendChild(this.sidePanel.overlayElement)
-
-        this.paneEl.appendChild(this.sidePanel.backdropElement)
-        this.panelEl.appendChild(this.sidePanel.element)
-
-        this.reflectWidth(
-            this.sidePanel.getWidth(),
-        )
-        this.reflectInitialOpenState()
+        this.panel.footer.append(html`<div className="application-panel-footer-separator"></div>` as HTMLDivElement, this.accountDropdown.dom)
+        this.panel.element.append(this.importFileInput)
 
         this.navigation = createWorkspaceNavigation({
-            container: this.listEl,
+            container: this.panel.body,
             store: workspaceTreeStore,
-            scrollContainer: () => this.listEl,
+            scrollContainer: () => this.panel.body,
             ports: {
                 request: async (subject, payload) => await servicesStore.getData('nats')!.request(
                     subject,
@@ -324,76 +260,9 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         }
     }
 
-    private getMaxWidth = (): number => {
-        const paneWidth = this.paneEl.getBoundingClientRect().width || window.innerWidth
-
-        return Math.max(NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth, paneWidth - NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.maxPaneMargin)
-    }
-
-    private reflectWidth = (width: number): void => {
-        const widthValue = `${width}px`
-        this.width = width
-        this.paneEl.style.setProperty('--workspace-navigation-side-panel-width', widthValue)
-        this.paneEl.style.setProperty('--side-panel-backdrop-width', widthValue)
-        this.panelEl.style.setProperty('--side-panel-backdrop-width', widthValue)
-        this.reflectInset()
-    }
-
-    private reflectInset = (): void => {
-        const isPush = NAVIGATION_SIDE_PANEL_SETTINGS.placement === 'push'
-        const coversContent = !isPush && navigationSidePanelStore.getData().isOpen
-        const claimsSpace = isPush && this.docked
-        this.contentEl.style.setProperty('--navigation-side-panel-inset', `${coversContent ? this.width : 0}px`)
-        this.contentEl.style.setProperty('--navigation-side-panel-dock-width', `${claimsSpace ? this.width : 0}px`)
-    }
-
-    private reflectStyleSettings = (): void => {
-        this.paneEl.style.setProperty('--side-panel-backdrop-fill', NAVIGATION_SIDE_PANEL_SETTINGS.styles.backdropFill)
-        this.paneEl.style.setProperty('--side-panel-backdrop-fill-opaque', NAVIGATION_SIDE_PANEL_SETTINGS.styles.backdropFillOpaque)
-    }
-
-    private reflectInitialOpenState(): void {
-        const isOpen = navigationSidePanelStore.getData().isOpen
-
-        if (isOpen)
-            this.sidePanel.mountOpen(this.panelEl)
-        else
-            this.sidePanel.mountClosed(this.panelEl)
-
-        this.docked = isOpen
-        this.reflectInset()
-    }
-
-    private handleOpenChange = (open: boolean): void => void this.setOpen(open)
-
-    private toggleVisibility = (): void => void this.setOpen(!navigationSidePanelStore.getData().isOpen)
-
-    // Opening docks first so a `push` panel slides into its own space.
-    // Closing slides the panel out first and only then releases the space, so
-    // the content does not jump before the panel has left.
     private setOpen = async (open: boolean): Promise<void> => {
-        const version = ++this.motionVersion
         navigationSidePanelStore.setValues({ isOpen: open })
-
-        if (open) {
-            this.docked = true
-            this.reflectInset()
-            await this.sidePanel.playOpen(this.panelEl)
-
-            return
-        }
-
-        this.reflectInset()
-        await this.sidePanel.playClose()
-
-        if (
-            this.destroyed
-            || this.motionVersion !== version
-        )
-            return
-
-        this.docked = false
-        this.reflectInset()
+        await this.panel.setOpen(open)
     }
 
     private reflectActiveWorkspace = (): void => {
@@ -547,8 +416,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             unsubscribe()
 
         this.navigation.destroy()
-        this.sidePanel.destroy()
-        this.panelEl.remove()
+        this.panel.destroy()
     }
 }
 

@@ -90,31 +90,31 @@
     }
 }
 
-.workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
+:is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-node-editor {
     position: relative;
     z-index: 1;
     background: transparent !important;
 }
 
 // Override the white background from ProseMirror.scss - make fully transparent
-.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .editor,
-.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
+:is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-node-editor .editor,
+:is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-node-editor .ProseMirror {
     background: transparent !important;
 }
 
 // Remove bottom padding that was reserved for the in-thread sticky composer.
 // In the workspace canvas the input is a floating element below the node.
-.workspace-ai-chat-thread-node .ai-chat-thread-wrapper {
+:is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-wrapper {
     padding-bottom: 0;
     margin-top: 0;
 }
 
-.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-chat-thread-content {
+:is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-wrapper .ai-chat-thread-content {
     padding-bottom: 0;
 }
 
 // Override global ProseMirror padding/min-height for the canvas thread
-.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
+:is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-node-editor .ProseMirror {
     min-height: 0;
     padding: 0 0 1rem;
 }

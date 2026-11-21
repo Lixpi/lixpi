@@ -6,7 +6,6 @@ import {
     type BoundedZoomScalingOptions,
 } from '@lixpi/canvas-engine/shared'
 import {
-    type UiKitSidePanelPlacement,
     type UiKitSlidingDropdownStyles,
 } from '@lixpi/ui-kit'
 import {
@@ -82,6 +81,9 @@ export type HoverSettings = {
     transitionDurationMs: number
 }
 
+// The conversation panel's content: its default width, which is wider than
+// the shared panel default, and its content inset and type sizes. Its surface,
+// toggle and resize handle are the shared ApplicationPanel.
 export type RightSidePanelSettings = {
     defaultDimensions: {
         width: number
@@ -98,41 +100,6 @@ export type RightSidePanelSettings = {
         tagPillFontSize: number
         tagPillFontWeight: number
     }
-    resizeHandle: {
-        offset: number
-        grabWidth: number
-        styles: {
-            gradient: string
-            width: string
-        }
-    }
-    toggle: {
-        motion?: 'slide' | 'fixed'
-        openAriaLabel: string
-        closedAriaLabel: string
-        openOffset: string
-        closedTravel?: string
-        top: string
-    }
-    overlay: {
-        enabled: boolean
-        closeOnPointerDown: boolean
-        fill: string
-        fillOpaque: string
-        opacity: number
-    }
-    // Slide timing and swipe thresholds come from `uiKitSettings.sidePanel`.
-    drag: {
-        enabled: boolean
-    }
-    styles: {
-        backdropFill: string
-        backdropFillOpaque: string
-    }
-}
-
-export type NavigationSidePanelSettings = Omit<RightSidePanelSettings, 'layout' | 'typography'> & {
-    placement: UiKitSidePanelPlacement
 }
 
 export type RightPanelModeSwitchSettings = {
@@ -262,7 +229,6 @@ export type Settings = LixpiCanvasSettings & {
     helpTooltip: HelpTooltipSettings
     hover: HoverSettings
     rightSidePanel: RightSidePanelSettings
-    navigationSidePanel: NavigationSidePanelSettings
     aiChatThread: AiChatThreadSettings
     aiPromptInput: AiPromptInputSettings
     videoControls: VideoControlsSettings
@@ -273,7 +239,6 @@ export type Settings = LixpiCanvasSettings & {
 export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme): Settings => {
     const components = structuredClone(theme.components)
     const rightPanel = components.rightPanel.geometry
-    const navigation = components.navigation.geometry
 
     return {
         ...createLixpiCanvasSettings(),
@@ -355,7 +320,7 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
             transitionDurationMs: 150,
         },
 
-        // Right side panel surface, resize, toggle, and slide settings.
+        // Conversation panel content width, inset and type sizes.
         rightSidePanel: {
             defaultDimensions: {
                 // Screen-pixel width before the user has resized the panel.
@@ -377,90 +342,6 @@ export const createLixpiUiSettings = (theme: ApplicationTheme = lixpiLightTheme)
                 // Screen-pixel typography for execution-trace tag pills in the sidebar timeline.
                 tagPillFontSize: Number.parseFloat(theme.typography.control.fontSize),
                 tagPillFontWeight: theme.typography.control.fontWeight,
-            },
-            resizeHandle: {
-                ...components.sidePanel.resizeHandle,
-                styles: {
-                    // Background gradient painted on the visible resize-handle line.
-                    gradient: theme.panel.resizeHandle.gradient,
-                    // Visible line width; this does not change the draggable hit target.
-                    width: theme.panel.resizeHandle.width,
-                },
-            },
-            toggle: {
-                openAriaLabel: 'Collapse right side panel',
-                closedAriaLabel: 'Open right side panel',
-                // Position when the panel is open.
-                openOffset: `calc(var(--workspace-right-side-panel-width) + ${rightPanel.toggle.openOffset}px)`,
-                // Travel distance used when the panel is closed.
-                closedTravel: `calc(var(--workspace-right-side-panel-width) - ${rightPanel.toggle.closedTravelInset}px)`,
-                top: rightPanel.toggle.top,
-            },
-            overlay: {
-                // Full-canvas dark glass tint layer behind the side panel.
-                enabled: false,
-                closeOnPointerDown: true,
-                ...components.sidePanel.overlay,
-            },
-            drag: {
-                // Vaul-style horizontal swipe-to-close gesture for pointer/touch input.
-                enabled: true,
-            },
-            styles: {
-                backdropFill: theme.panel.background,
-                backdropFillOpaque: theme.panel.opaqueBackground,
-            },
-        },
-
-        // Navigation side panel (workspace list) surface, resize, toggle, and slide settings.
-        navigationSidePanel: {
-            // `overlay` floats the open panel over the content. `push` gives
-            // the panel its own space, so the content shrinks beside it.
-            placement: 'overlay',
-            defaultDimensions: {
-                // Screen-pixel width before the user has resized the panel.
-                width: navigation.defaultWidth,
-            },
-            dimensions: {
-                // Minimum screen-pixel width while resizing.
-                minWidth: navigation.minWidth,
-                // Remaining pane width kept visible when computing the dynamic max width.
-                maxPaneMargin: navigation.maxPaneMargin,
-            },
-            resizeHandle: {
-                ...components.sidePanel.resizeHandle,
-                styles: {
-                    // Background gradient painted on the visible resize-handle line.
-                    gradient: theme.panel.resizeHandle.gradient,
-                    // Visible line width; this does not change the draggable hit target.
-                    // The theme sets it to zero because the sidebar shadow marks the boundary.
-                    width: theme.navigation.sidebar.resizeHandleWidth,
-                },
-            },
-            toggle: {
-                openAriaLabel: 'Collapse navigation side panel',
-                closedAriaLabel: 'Open navigation side panel',
-                // Keep the navigation toggle anchored; the panel opens underneath
-                // it instead of pushing the button to the panel edge.
-                motion: 'fixed',
-                openOffset: navigation.toggle.openOffset,
-                top: navigation.toggle.top,
-            },
-            overlay: {
-                // The visual overlay is disabled so the workspace list does not dim
-                // the canvas. `closeOnPointerDown` still collapses the panel from
-                // document-level outside clicks.
-                enabled: false,
-                closeOnPointerDown: true,
-                ...components.sidePanel.overlay,
-            },
-            drag: {
-                // Vaul-style horizontal swipe-to-close gesture for pointer/touch input.
-                enabled: true,
-            },
-            styles: {
-                backdropFill: theme.navigation.sidebar.backdrop,
-                backdropFillOpaque: theme.navigation.sidebar.opaqueBackdrop,
             },
         },
 

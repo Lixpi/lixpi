@@ -1,5 +1,6 @@
 @use "@lixpi/themes/scope" as themeScope;
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+@use "@lixpi/ui-kit/styles/button";
 
 // =============================================================================
 // AI PROMPT INPUT — Floating canvas input node
@@ -474,7 +475,6 @@ $ai-prompt-input-ring-width: 4px;
     overflow: visible;
 }
 
-.ai-model-config-add,
 .ai-model-config-remove {
     border: none;
     background: transparent;
@@ -483,45 +483,6 @@ $ai-prompt-input-ring-width: 4px;
     transition:
         hoverTransition(color),
         hoverTransition(background-color);
-}
-
-.ai-model-config-add {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    height: 22px;
-    padding: 0;
-    font: inherit;
-    white-space: nowrap;
-}
-
-.ai-model-config-add-label {
-    font-size: var(--ai-prompt-model-menu-control-label-font-size, #{themeScope.token("components-composer-input-model-config-add-label-base-font-size", themePalette.$roles)});
-    font-weight: var(--ai-prompt-model-menu-control-label-font-weight, #{themeScope.token("components-composer-input-model-config-add-label-base-font-weight", themePalette.$roles)});
-    line-height: var(--ai-prompt-model-menu-control-label-line-height, #{themeScope.token("components-composer-input-model-config-add-label-base-line-height", themePalette.$roles)});
-}
-
-.ai-model-config-add-icon,
-.ai-model-config-add-icon svg {
-    display: block;
-}
-
-.ai-model-config-add-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 12px;
-    width: 12px;
-    height: 12px;
-    border-radius: #{themeScope.token("components-composer-input-model-config-add-icon-base-border-radius", themePalette.$roles)};
-    background-color: var(--canvas-text, #{themeScope.token("components-composer-input-model-config-add-icon-base-background-color", themePalette.$roles)});
-}
-
-.ai-model-config-add-icon svg {
-    width: 8px;
-    height: 8px;
-    fill: #{themeScope.token("components-composer-input-model-config-add-icon-base-fill", themePalette.$roles)};
 }
 
 .ai-model-config-remove {
@@ -545,7 +506,6 @@ $ai-prompt-input-ring-width: 4px;
     fill: currentColor;
 }
 
-.ai-model-config-add:hover:not(:disabled),
 .ai-model-config-remove:hover:not(:disabled) {
     color: var(--ai-prompt-model-menu-section-title-color, #{themeScope.token("components-composer-model-menu-section-title-color", themePalette.$roles)});
 }
@@ -554,12 +514,6 @@ $ai-prompt-input-ring-width: 4px;
     background: #{themeScope.token("components-composer-input-model-config-remove-hover-background", themePalette.$roles)};
 }
 
-.ai-model-config-add:disabled {
-    opacity: 0.38;
-    cursor: default;
-}
-
-.ai-model-config-add:focus-visible,
 .ai-model-config-remove:focus-visible {
     outline: none;
 }

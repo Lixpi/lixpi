@@ -154,8 +154,8 @@ describe('Media library ownership', () => {
         expect(f.panel.rootEl.querySelector('img')?.src).toBe('https://media.test/a/thumbnail?token=encoded')
         expect(f.panel.rootEl.querySelector('.capability-library-row-name')?.textContent).toBe('Reference')
         const insertButton = f.panel.rootEl.querySelector<HTMLButtonElement>('[data-action="insert"]')!
-        expect(insertButton.classList.contains('capability-library-row-action')).toBe(true)
-        expect(insertButton.classList.contains('capability-library-row-action-primary')).toBe(true)
+        expect(insertButton.classList.contains('button')).toBe(true)
+        expect(insertButton.dataset.variant).toBe('primary')
         insertButton.click()
         await vi.waitFor(() => expect(f.options.onInsertAsset).toHaveBeenCalledWith(f.meta))
     })

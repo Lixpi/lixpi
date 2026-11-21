@@ -150,7 +150,7 @@ A separate 50 ms heartbeat counts timer callbacks and records delays of at least
 
 When a long task overlaps an application phase, part of the phase elapsed while the main thread was busy. The API logs the server side of the same request: any NATS reply that takes 250 ms or more appears in `docker logs lixpi-api` as `slow reply on <subject>` with its queue wait and handler time.
 
-Ask the developer to reproduce by default. Use native UI tools to install, relaunch or drive the target app only when the developer explicitly authorizes those actions. Use logs to verify the result. For an authorized WebKit Inspector recording, leave screenshot capture off to avoid adding work to the measurement.
+Ask the developer to reproduce by default. Use native UI tools to install, relaunch or drive the target app only when the developer explicitly authorizes those actions. Use logs to verify the result. For an authorized Chromium DevTools Performance recording, leave screenshot capture off to avoid adding work to the measurement.
 
 ## Deploying to production (Web UI build)
 

@@ -1,0 +1,103 @@
+@use "@lixpi/themes/scope" as themeScope;
+@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+
+// Button - geometry from the theme's `button` size scale, paint from the
+// preset's semantic roles.
+$button-sizes: xxx-small, xx-small, x-small, x-medium, xx-medium, xxx-medium, x-large, xx-large, xxx-large;
+
+@function buttonToken($size, $property) {
+    @return themeScope.token("components-button-sizes-#{$size}-#{$property}", themePalette.$roles);
+}
+
+.button {
+    box-sizing: border-box;
+    display: inline-flex;
+    // A button never grows past its container: it shrinks and a long label
+    // ends in an ellipsis instead of pushing the layout wider.
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    border: 0;
+    font-family: #{themeScope.token("control-font-family", themePalette.$roles)};
+    font-weight: #{themeScope.token("components-button-font-weight", themePalette.$roles)};
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        hoverTransition(background),
+        hoverTransition(color);
+}
+
+@each $size in $button-sizes {
+    .button[data-size="#{$size}"] {
+        gap: buttonToken($size, "gap");
+        height: buttonToken($size, "height");
+        padding: 0 buttonToken($size, "padding-inline");
+        border-radius: buttonToken($size, "radius");
+        font-size: buttonToken($size, "font-size");
+    }
+
+    .button[data-size="#{$size}"] > .button-icon {
+        width: buttonToken($size, "icon-size");
+        height: buttonToken($size, "icon-size");
+    }
+}
+
+.button[data-variant="primary"] {
+    color: #{themeScope.token("button-text", themePalette.$roles)};
+    background: #{themeScope.token("button-background", themePalette.$roles)};
+}
+
+.button[data-variant="primary"]:is(:hover, :focus-visible):not(:disabled) {
+    background: #{themeScope.token("button-hover", themePalette.$roles)};
+}
+
+.button[data-variant="secondary"] {
+    color: #{themeScope.token("text", themePalette.$roles)};
+    background: #{themeScope.token("surface-hover", themePalette.$roles)};
+}
+
+.button[data-variant="secondary"]:is(:hover, :focus-visible):not(:disabled) {
+    background: #{themeScope.token("surface-active", themePalette.$roles)};
+}
+
+.button:disabled {
+    color: #{themeScope.token("text-disabled", themePalette.$roles)};
+    cursor: default;
+}
+
+.button-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.button-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.button-label {
+    min-width: 0;
+    // The label box is trimmed to cap height and baseline, so centering it
+    // centers the letters themselves, level with the icon, instead of the
+    // font's line box with its uneven space above and below.
+    text-box: trim-both cap alphabetic;
+    // The ellipsis needs clipping. The padding keeps ascenders and
+    // descenders inside the clip, and the matching negative margin keeps
+    // them out of the box the button centers.
+    padding-block: 0.35em;
+    margin-block: -0.35em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+// The shared display rule must not override the hidden attribute.
+.button[hidden] {
+    display: none;
+}

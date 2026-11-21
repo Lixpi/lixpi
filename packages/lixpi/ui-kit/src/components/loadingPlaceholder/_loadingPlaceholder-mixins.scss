@@ -52,20 +52,14 @@
     }
 }
 
-// 5) Error State - Error message and retry button styling
+// 5) Error State - Error message. The retry action is the shared Button.
 // --------------------------------------------------------
 @mixin loadingPlaceholderError($config: ()) {
     $defaults: (
         errorTextColor: #dc2626,
         errorTextColorDark: #fca5a5,
-        retryBgColor: #1e3a5f,
-        retryTextColor: #ffffff,
-        retryHoverBgColor: #2d4a6f,
         fontFamily: inherit,
-        fontSize: 14px,
-        buttonPaddingX: 16px,
-        buttonPaddingY: 8px,
-        buttonBorderRadius: 6px
+        fontSize: 14px
     );
 
     $s: map-merge($defaults, $config);
@@ -91,26 +85,6 @@
 
         &.theme-dark .error-message {
             color: map-get($s, errorTextColorDark);
-        }
-
-        .retry-button {
-            font-family: map-get($s, fontFamily);
-            font-size: map-get($s, fontSize);
-            padding: map-get($s, buttonPaddingY) map-get($s, buttonPaddingX);
-            background-color: map-get($s, retryBgColor);
-            color: map-get($s, retryTextColor);
-            border: none;
-            border-radius: map-get($s, buttonBorderRadius);
-            cursor: pointer;
-            transition: hoverTransition(background-color);
-
-            &:hover {
-                background-color: map-get($s, retryHoverBgColor);
-            }
-
-            &:focus {
-                outline: none;
-            }
         }
     }
 }

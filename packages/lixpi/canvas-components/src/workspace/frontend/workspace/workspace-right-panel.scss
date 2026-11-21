@@ -1,6 +1,3 @@
-@use "@lixpi/themes/scope" as themeScope;
-@use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
-
 .workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror {
     padding: 0 0 1rem;
 }
@@ -20,41 +17,9 @@
     line-height: var(--canvas-panel-line-height);
 }
 
-.workspace-ai-chat-floating-panel {
-    position: absolute;
-    top: 0px;
-    right: calc(0px - var(--workspace-canvas-padding-inline));
-    bottom: calc(0px - var(--workspace-canvas-padding-bottom));
-    width: var(--workspace-right-side-panel-width);
-    box-sizing: border-box;
-    height: auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 0 var(--workspace-right-side-panel-content-inset);
-    // The content starts below the desktop app's title bar row, which is 0
-    // elsewhere, while the panel's glass still reaches the window's top edge.
-    padding-top: var(--window-title-bar-inset, 0px);
-    z-index: var(--side-panel-surface-z-index, 10030);
-    pointer-events: auto;
-    border-radius: var(--canvas-panel-radius, #{themeScope.token("components-right-panel-floating-panel-base-border-radius", themePalette.$roles)});
-    background: transparent;
-    overflow: visible;
-
-    &[data-thread-empty="true"] {
-        visibility: visible;
-        pointer-events: auto;
-    }
-}
-
-// The right panel's toggle shows the navigation panel's outline icon, mirrored
-// so its bar sits on the panel's side. It stays mirrored whether the panel is
-// open or closed, unlike the shared toggle's flipping chevron.
-.side-panel-toggle.workspace-ai-chat-panel-toggle .side-panel-toggle-button svg {
-    fill: none;
-    stroke: currentColor;
-    transform: scaleX(-1);
-}
+// The panel surface, toggle and resize handle are the shared ApplicationPanel
+// (`@lixpi/ui-kit/styles/application-panel`). The rules here style only the
+// conversation content inside its body.
 
 // Top-level Capabilities / Media / AI Threads switch at the top of the right side panel.
 .workspace-right-panel-mode-switch {

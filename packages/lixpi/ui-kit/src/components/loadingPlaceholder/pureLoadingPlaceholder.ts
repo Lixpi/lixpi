@@ -1,4 +1,8 @@
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+import {
+    createButton,
+    type ButtonInstance,
+} from '../button/button.ts'
 
 type PlaceholderConfig = {
     document?: Document
@@ -28,10 +32,17 @@ const classes = (config: PlaceholderConfig): string =>
 class ErrorPlaceholder implements ErrorPlaceholderInstance {
     readonly dom: HTMLElement
     private readonly message: HTMLElement
-    private readonly retry: HTMLButtonElement
+    private readonly retryButton: ButtonInstance
 
     constructor(private readonly config: ErrorPlaceholderConfig) {
         const html = createDocumentHtml(config.document ?? document)
+        this.retryButton = createButton({
+            label: config.retryLabel ?? 'Retry',
+            variant: 'primary',
+            className: 'retry-button',
+            document: config.document,
+            onClick: () => this.config.onRetry?.(),
+        })
         this.dom = html`
             <div
                 className=${`${classes(config)} error-state`}
@@ -39,18 +50,11 @@ class ErrorPlaceholder implements ErrorPlaceholderInstance {
             >
             <div className="error-content">
                 <span className="error-message">${config.message ?? 'Failed to load content'}</span>
-                <button
-                    className="retry-button"
-                    type="button"
-                >${config.retryLabel ?? 'Retry'}</button>
+                ${this.retryButton.element}
             </div>
         </div>
         ` as HTMLElement
         this.message = this.dom.querySelector('.error-message')!
-        this.retry = this.dom.querySelector('.retry-button')!
-
-        if (config.onRetry)
-            this.retry.addEventListener('click', config.onRetry)
     }
 
     show(): void {
@@ -63,9 +67,7 @@ class ErrorPlaceholder implements ErrorPlaceholderInstance {
         this.message.textContent = message
     }
     destroy(): void {
-        if (this.config.onRetry)
-            this.retry.removeEventListener('click', this.config.onRetry)
-
+        this.retryButton.destroy()
         this.dom.remove()
     }
 }

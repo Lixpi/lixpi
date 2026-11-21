@@ -10,9 +10,9 @@
 // placement the loading overlay starts at the open panel's edge, so a
 // workspace switch never frosts the panel's glass.
 .workspace-main-pane {
-    --canvas-loading-layer-inset-inline-start: var(--navigation-side-panel-inset, 0px);
+    --canvas-loading-layer-inset-inline-start: var(--application-panel-left-inset, 0px);
 
-    margin-inline-start: var(--navigation-side-panel-dock-width, 0px);
+    margin-inline-start: var(--application-panel-left-dock-width, 0px);
     position: relative;
     isolation: isolate;
     height: 100%;

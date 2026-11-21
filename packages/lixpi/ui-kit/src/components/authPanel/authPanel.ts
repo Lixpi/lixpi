@@ -1,4 +1,5 @@
 import { html } from '@lixpi/ui-primitives/dom'
+import { createButton } from '../button/button.ts'
 import { lixpiLightTheme } from '@lixpi/themes'
 import {
     createShiftingGradientBackground,
@@ -30,13 +31,13 @@ export class AuthPanel {
 
     constructor(config: AuthPanelConfig) {
         this.buttons = config.actions.map(
-            action => html`
-                <button
-                    className=${action.secondary ? 'auth-panel-button auth-panel-button-secondary' : 'auth-panel-button'}
-                    type="button"
-                    onclick=${action.onClick}
-                >${action.label}</button>
-            ` as HTMLButtonElement,
+            action => createButton({
+                label: action.label,
+                variant: action.secondary ? 'secondary' : 'primary',
+                size: 'xxx-large',
+                className: 'auth-panel-button',
+                onClick: action.onClick,
+            }).element,
         )
         this.dom = html`
             <section

@@ -2,6 +2,7 @@ import {
     type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
 import { operationStatusDismissIcon } from '@lixpi/ui-kit/svg'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { isMediaGenerationReferenceResolutionOperation } from '../../shared/generation/reference-resolution-presentation.ts'
@@ -131,13 +132,11 @@ export class OperationStatusNode {
         label: string,
         action: () => Promise<void>,
     ): void {
-        const html = this.html
-        const button = html`
-            <button
-                type="button"
-                className="workspace-media-operation-action nopan"
-            >${label}</button>
-        ` as HTMLButtonElement
+        const button = createButton({
+            label,
+            className: 'workspace-media-operation-action nopan',
+            document: this.element.ownerDocument,
+        }).element
         this.bindAction(button, action)
         this.actionsElement.append(button)
     }

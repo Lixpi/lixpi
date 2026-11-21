@@ -1,6 +1,8 @@
 @use "@lixpi/themes/scope" as themeScope;
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
 @use "@lixpi/ui-kit/styles/tokens" as uiTokens;
+@use "@lixpi/ui-kit/styles/button";
+@use "@lixpi/ui-kit/styles/text-input";
 
 .capability-run-form,
 .capability-run-form-fields,
@@ -9,8 +11,6 @@
     gap: 8px;
 }
 
-.capability-run-form-field textarea,
-.capability-run-form-field input,
 .capability-run-form-field select {
     @include uiTokens.native-form-field;
 }
@@ -76,23 +76,13 @@
     list-style: none;
 }
 
+// An output row may shrink to the thread's width, so a long output title
+// ends in an ellipsis instead of widening the conversation.
+.capability-run-progress-outputs > li {
+    min-width: 0;
+    max-width: 100%;
+}
+
 .capability-run-progress-outputs[hidden] {
     display: none;
-}
-
-.capability-run-progress-outputs button {
-    padding: 3px 0;
-    border: 0;
-    background: transparent;
-    color: var(--canvas-text, #{themeScope.token("text", themePalette.$roles)});
-    font: inherit;
-    font-size: 12px;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    cursor: pointer;
-}
-
-.capability-run-progress-outputs button:disabled {
-    opacity: 0.5;
-    cursor: default;
 }

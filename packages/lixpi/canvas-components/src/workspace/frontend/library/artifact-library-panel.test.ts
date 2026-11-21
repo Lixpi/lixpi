@@ -194,8 +194,8 @@ describe('Artifact library ownership', () => {
         expect(f.shared.assertInitialDocument).toHaveBeenCalledWith({})
         expect(f.shared.buildCatalogMetadata).toHaveBeenCalledWith({})
         const inspectButton = f.panel.rootEl.querySelector<HTMLButtonElement>('[data-action="inspect"]')!
-        expect(inspectButton.classList.contains('capability-library-row-action')).toBe(true)
-        expect(inspectButton.classList.contains('capability-library-row-action-primary')).toBe(false)
+        expect(inspectButton.classList.contains('button')).toBe(true)
+        expect(inspectButton.dataset.variant).toBe('secondary')
         f.panel.rootEl.querySelector<HTMLButtonElement>('.artifact-library-item-host button')!.click()
         await vi.waitFor(() => expect(f.options.onInsertAsset).toHaveBeenCalledWith(f.meta))
         await f.inspect()
@@ -226,8 +226,8 @@ describe('Artifact library ownership', () => {
         }
 
         const acceptButton = f.panel.rootEl.querySelector<HTMLButtonElement>('.artifact-library-detail-review button')!
-        expect(acceptButton.classList.contains('capability-library-row-action')).toBe(true)
-        expect(acceptButton.classList.contains('capability-library-row-action-primary')).toBe(true)
+        expect(acceptButton.classList.contains('button')).toBe(true)
+        expect(acceptButton.dataset.variant).toBe('primary')
         acceptButton.click()
         await vi.waitFor(() => expect(f.options.onAcceptAsset).toHaveBeenCalledWith(f.asset))
     })
