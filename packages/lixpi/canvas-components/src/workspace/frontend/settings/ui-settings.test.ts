@@ -9,42 +9,22 @@ import { createLixpiUiSettings } from './ui-settings.ts'
 describe(
     'UI settings factory',
     () => {
-        it('uses the shared theme geometry without changing the production panel defaults', () => {
+        it('takes the conversation panel sizing from the theme and leaves its surface to the shared application panel', () => {
             const settings = createLixpiUiSettings()
-            const {
-                navigationSidePanel,
-                rightSidePanel,
-            } = settings
+            const geometry = lixpiLightTheme.components.rightPanel.geometry
 
-            expect(navigationSidePanel.defaultDimensions.width).toBe(280)
-            expect(navigationSidePanel.dimensions).toEqual({
-                minWidth: 220,
-                maxPaneMargin: 64,
+            expect(settings.rightSidePanel.defaultDimensions.width).toBe(geometry.defaultWidth)
+            expect(settings.rightSidePanel.dimensions).toEqual({
+                minWidth: geometry.minWidth,
+                maxPaneMargin: geometry.maxPaneMargin,
             })
-            expect(navigationSidePanel.toggle).toMatchObject({
-                motion: 'fixed',
-                openOffset: '20px',
-                top: '20px',
-            })
-            expect(rightSidePanel.defaultDimensions.width).toBe(494)
-            expect(rightSidePanel.dimensions).toEqual({
-                minWidth: 320,
-                maxPaneMargin: 64,
-            })
-            expect(rightSidePanel.toggle).toMatchObject({
-                openOffset: 'calc(var(--workspace-right-side-panel-width) + 5px)',
-                closedTravel: 'calc(var(--workspace-right-side-panel-width) - 10px)',
-                top: '15px',
-            })
+            expect(settings.rightSidePanel.layout.contentInset).toBe(geometry.contentInset)
 
-            const geometry = lixpiLightTheme.components.sidePanel
+            for (const surfaceSetting of ['toggle', 'resizeHandle', 'overlay', 'drag', 'styles'])
+                expect(settings.rightSidePanel).not.toHaveProperty(surfaceSetting)
 
-            for (const panel of [navigationSidePanel, rightSidePanel]) {
-                expect(panel.resizeHandle).toMatchObject(geometry.resizeHandle)
-                expect(panel).not.toHaveProperty('animation')
-            }
-
-            expect(settings.aiChatThread.panelSwitch.height).toBe(lixpiLightTheme.components.rightPanel.geometry.modeSwitchHeight)
+            expect(settings).not.toHaveProperty('navigationSidePanel')
+            expect(settings.aiChatThread.panelSwitch.height).toBe(geometry.modeSwitchHeight)
         })
 
         it(

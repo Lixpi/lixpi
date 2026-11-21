@@ -7,6 +7,11 @@ import {
     type CapabilityInputSchemaProperty,
 } from '$src/services/capability-catalog-client.ts'
 import { html } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
+import {
+    createTextArea,
+    createTextInput,
+} from '@lixpi/ui-kit/components/text-input'
 
 export type CapabilityRunFormInstance = {
     readonly element: HTMLFormElement
@@ -132,10 +137,14 @@ class CapabilityRunForm implements CapabilityRunFormInstance {
             <form className="capability-run-form">
                 <div className="capability-run-form-fields"></div>
                 ${this.errorElement}
-                <button
-                    type="submit"
-                    className="capability-run-form-submit"
-                >${config.submitLabel ?? 'Run Tool'}</button>
+                ${
+                    createButton({
+                        label: config.submitLabel ?? 'Run Tool',
+                        type: 'submit',
+                        variant: 'primary',
+                        className: 'capability-run-form-submit',
+                    }).element
+                }
             </form>
         ` as HTMLFormElement
         const fields = this.element.querySelector('.capability-run-form-fields') as HTMLDivElement
@@ -170,6 +179,21 @@ class CapabilityRunForm implements CapabilityRunFormInstance {
             return
 
         void this.config.onSubmit(result.value)
+    }
+
+    // Shared text fields report through FormData, so they carry the field's
+    // id, name and required state.
+    private namedField<Field extends HTMLInputElement | HTMLTextAreaElement>(
+        field: Field,
+        id: string,
+        name: string,
+        required: boolean,
+    ): Field {
+        field.id = id
+        field.name = name
+        field.required = required
+
+        return field
     }
 
     private buildField(
@@ -223,27 +247,26 @@ class CapabilityRunForm implements CapabilityRunFormInstance {
             property.type === 'string'
             && !name.toLocaleLowerCase().endsWith('id')
         )
-            input = html`
-                <textarea
-                    id=${id}
-                    name=${name}
-                    required=${required}
-                >${String(property.default ?? '')}</textarea>
-            `
+            input = this.namedField(
+                createTextArea({ value: String(property.default ?? '') }).element,
+                id,
+                name,
+                required,
+            )
         else {
             const inputType = property.type === 'number'
                 || property.type === 'integer'
                 ? 'number'
                 : 'text'
-            input = html`
-                <input
-                    id=${id}
-                    name=${name}
-                    type=${inputType}
-                    required=${required}
-                    value=${String(property.default ?? '')}
-                />
-            `
+            input = this.namedField(
+                createTextInput({
+                    type: inputType,
+                    value: String(property.default ?? ''),
+                }).element,
+                id,
+                name,
+                required,
+            )
         }
 
         label.appendChild(input)

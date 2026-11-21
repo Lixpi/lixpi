@@ -1,6 +1,6 @@
 # Error placeholders
 
-`createErrorPlaceholder` renders an accessible error message and retry button for asynchronous content. It accepts an optional document, light/dark theme, overlay, message, retry label and callback. The instance owns its DOM and retry listener; call `destroy()` when removing the surface.
+`createErrorPlaceholder` renders an accessible error message and a retry action, the shared primary Button, for asynchronous content. It accepts an optional document, light/dark theme, overlay, message, retry label and callback. The instance owns its DOM and retry listener; call `destroy()` when removing the surface.
 
 ```typescript
 import { createErrorPlaceholder } from '@lixpi/ui-kit/components/loading-placeholder'

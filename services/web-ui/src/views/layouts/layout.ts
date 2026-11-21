@@ -15,6 +15,9 @@ import {
     type AssetService,
 } from '$src/services/asset-service.ts'
 import { createNavigationSidePanel } from '$src/components/navigationSidePanel/index.ts'
+import '@lixpi/ui-kit/styles/application-panel'
+import '@lixpi/ui-kit/styles/button'
+import '@lixpi/ui-kit/styles/text-input'
 import '@lixpi/ui-kit/styles/navigation-side-panel'
 import '$src/components/navigationSidePanel/workspace-navigation/workspace-navigation.scss'
 
@@ -48,13 +51,9 @@ class Layout implements LayoutInstance {
 
     constructor(config: LayoutConfig) {
         const contentEl = html`<div className="workspace-main-content"></div>` as HTMLDivElement
-        const navigationSidePanelPaneEl = html`<div className="navigation-side-panel-pane"></div>` as HTMLDivElement
         const mainPaneEl = html`<div className="workspace-main-pane">${contentEl}</div>` as HTMLDivElement
         this.el = html`
-            <div className="layout-root">
-                ${navigationSidePanelPaneEl}
-                ${mainPaneEl}
-            </div>
+            <div className="layout-root">${mainPaneEl}</div>
         ` as HTMLElement
 
         this.previousHoverTransitionDuration = document.documentElement.style.getPropertyValue('--default-hover-transition-duration')
@@ -63,7 +62,7 @@ class Layout implements LayoutInstance {
         this.navigationSidePanel = createNavigationSidePanel({
             auth: config.auth,
             contentEl: mainPaneEl,
-            paneEl: navigationSidePanelPaneEl,
+            containerEl: this.el,
             router: config.router,
             userPortalUrl: config.userPortalUrl,
             workspaceService: config.workspaceService,

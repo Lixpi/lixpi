@@ -8,6 +8,7 @@ import {
 } from '@lixpi/constants'
 import { createNewFileIcon } from '@lixpi/ui-kit/svg'
 import { html } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
 import {
     createNestedListItemView,
     deleteNestedListItem,
@@ -906,13 +907,11 @@ class WorkspaceNavigation implements WorkspaceNavigationHandle {
             message.textContent = state.paused === 'stale'
                 ? `${name}: Navigation changed elsewhere. Local edits are retained.`
                 : `${name}: Navigation changes were not saved. Local edits are retained.`
-            const action = html`
-                <button
-                    type="button"
-                    className="workspace-navigation-status-action"
-                    onclick=${() => (state.paused === 'stale' ? void this.offerReload(organizationId) : this.retryOrganization(organizationId))}
-                >${state.paused === 'stale' ? 'Reload' : 'Retry'}</button>
-            ` as HTMLButtonElement
+            const action = createButton({
+                label: state.paused === 'stale' ? 'Reload' : 'Retry',
+                className: 'workspace-navigation-status-action',
+                onClick: () => (state.paused === 'stale' ? void this.offerReload(organizationId) : this.retryOrganization(organizationId)),
+            }).element
             row.append(message, action)
             rows.push(row)
         }

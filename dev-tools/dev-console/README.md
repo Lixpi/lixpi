@@ -66,7 +66,7 @@ A script runs from the repository root. It receives the selected services or pru
 
 The desktop builder's default **Use cache** option builds against the current Dockerfile before compiling the app. Unchanged layers are reused, while required additions such as CMake and Ninja are installed in a new layer. **Rebuild** ignores the image layer cache. Both choices retain the named Cargo and CEF cache volumes.
 
-Local desktop builds also keep their signing certificate and private key in the `tauri-builder-signing` Docker volume. The first build creates the identity, and later builds reuse it so macOS can recognize the app across rebuilds. The key is not written into the repository or printed in logs, and no certificate is installed in the macOS trust store. Preserve this volume when cleaning build caches; deleting it changes the next build's identity and can cause Keychain to request authorization again. This local certificate does not replace Apple Developer ID signing and notarization for distribution.
+Local desktop builds also keep their signing certificate and private key in the `tauri-builder-signing` Docker volume. The first build creates the identity, and later builds reuse it. The key is not written into the repository or printed in logs, and no certificate is installed in the macOS trust store. Preserve this volume when cleaning build caches. Keychain still asks for the login password after each rebuild, because macOS identifies self-signed code by its executable hash; [Desktop App](../../documentation/platform/DESKTOP-APP.md) explains the prompt. This local certificate does not replace Apple Developer ID signing and notarization for distribution.
 
 Every action that needs an environment file uses the same picker. It lists the repository's `.env.*` files and leaves out the `.env.example` template. There is no default environment file, and the console doesn't remember a choice between actions.
 
@@ -145,7 +145,7 @@ infrastructure/docker/
         └── docker-compose.<name>.yml
 ```
 
-`services/` holds what the application runs: the frontends, the API, the brokers, the databases, and developer apps such as the design system. `utilities/` holds what runs on demand from its own file: Pulumi, the local certificate generator, the AWS CLI, the test and quality runners, the configuration wizard and the console itself.
+`services/` holds what the application runs: the frontends, the API, the brokers, the databases, and developer apps such as the documentation service. `utilities/` holds what runs on demand from its own file: Pulumi, the local certificate generator, the AWS CLI, the test and quality runners, the configuration wizard and the console itself.
 
 [`docker-layout.ts`](src/docker-layout.ts) reads the directory and enforces these rules, reporting every broken one at once before the tree is drawn:
 

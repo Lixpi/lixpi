@@ -1,4 +1,6 @@
 @import "@lixpi/ui-primitives/styles/transitions";
+@import "@lixpi/ui-kit/styles/button";
+@import "@lixpi/ui-kit/styles/text-input";
 
 .workspace-canvas {
     --workspace-canvas-padding-top: 32px;
@@ -184,18 +186,6 @@
 
 .workspace-image-submenu-url-input {
     width: 220px;
-    padding: 6px 10px;
-    border: 1px solid var(--canvas-border, #ddd);
-    background: var(--canvas-surface, #fff);
-    color: var(--canvas-text, inherit);
-    border-radius: var(--canvas-control-radius, 6px);
-    font-size: var(--canvas-font-size, 13px);
-    outline: none;
-    box-sizing: border-box;
-
-    &:focus {
-        border-color: var(--canvas-accent, var(--workspace-controls-steel-blue));
-    }
 }
 
 .workspace-image-submenu-url-actions {
@@ -203,34 +193,6 @@
     justify-content: flex-end;
     gap: 6px;
     margin-top: 8px;
-}
-
-.workspace-image-submenu-url-back,
-.workspace-image-submenu-url-insert {
-    padding: 5px 12px;
-    border: none;
-    border-radius: var(--canvas-control-radius, 6px);
-    font-size: var(--canvas-font-size, 12px);
-    cursor: pointer;
-    transition: hoverTransition(background, $defaultHoverTransitionDuration);
-}
-
-.workspace-image-submenu-url-back {
-    background: transparent;
-    color: var(--canvas-text-muted, var(--workspace-controls-steel-blue));
-
-    &:hover {
-        background: var(--canvas-surface-hover, #f0f0f0);
-    }
-}
-
-.workspace-image-submenu-url-insert {
-    background: var(--canvas-accent, var(--workspace-controls-night-blue));
-    color: var(--canvas-on-accent, var(--workspace-controls-off-white));
-
-    &:hover {
-        background: var(--canvas-accent, var(--workspace-controls-insert-hover));
-    }
 }
 
 // Zoom indicator - bottom-right corner

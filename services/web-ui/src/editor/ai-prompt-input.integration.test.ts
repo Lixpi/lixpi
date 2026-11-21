@@ -1120,33 +1120,22 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 const headingMain = section.querySelector('.ai-prompt-model-menu-section-heading-main')!
                 const headingAction = section.querySelector('.ai-prompt-model-menu-section-heading-action')!
                 const addButton = headingAction.querySelector('.ai-model-config-add') as HTMLButtonElement
-                const addLabel = addButton.querySelector('.ai-model-config-add-label') as HTMLElement
-                const addIcon = addButton.querySelector('.ai-model-config-add-icon') as HTMLElement
+                const addLabel = addButton.querySelector('.button-label') as HTMLElement
+                const addIcon = addButton.querySelector('.button-icon') as HTMLElement
 
                 expect(heading.contains(headingMain)).toBe(true)
                 expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(title)
                 expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
-                expect(addButton.getAttribute('aria-label')).toBe('Add model')
-                expect(addButton.dataset.helpTooltip).toBe('aria-label')
+                expect(addButton.classList.contains('button')).toBe(true)
                 expect(addLabel.textContent).toBe('Add model')
-                expect(addButton.children[0]).toBe(addLabel)
-                expect(addButton.children[1]).toBe(addIcon)
+                expect(addButton.children[0]).toBe(addIcon)
+                expect(addButton.children[1]).toBe(addLabel)
                 expect(addIcon.innerHTML).toBe(expectedPlusIcon.innerHTML)
                 expect(section.querySelector('.ai-prompt-model-menu-toggle')).toBeNull()
                 expect(section.querySelector('.ai-prompt-selected-model-tags-row')).toBeNull()
             }
 
             nv.destroy!()
-        })
-
-        it('uses a compact canvas-text circle around the Add model plus icon', async () => {
-            const stylesSource = await promptStylesCss()
-            const iconRule = stylesSource.match(/\.ai-model-config-add-icon \{[\s\S]*?\n\}/)?.[0] ?? ''
-
-            expectSourceToContain(iconRule, 'flex: 0 0 12px;')
-            expectSourceToContain(iconRule, 'width: 12px;')
-            expectSourceToContain(iconRule, 'height: 12px;')
-            expectSourceToContain(iconRule, 'background-color: var(--canvas-text, #42494f);')
         })
 
         it('uses the same row renderer and remove-button slot for reasoning, image, and video models', () => {

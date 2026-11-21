@@ -69,7 +69,7 @@ export class PanelPerformanceScenario {
     }
 
     private findPanel(name: PanelName): Panel | null {
-        const selector = name === 'navigation' ? '.navigation-side-panel-toggle' : '.workspace-ai-chat-panel-toggle'
+        const selector = name === 'navigation' ? '.application-panel-toggle.side-panel-toggle-left' : '.application-panel-toggle.side-panel-toggle-right'
         const buttons = document.querySelectorAll<HTMLButtonElement>(`${selector} .side-panel-toggle-button`)
         const button = buttons[0]
         const element = button?.closest<HTMLElement>(selector)

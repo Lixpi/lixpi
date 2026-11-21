@@ -1,5 +1,6 @@
 @use "@lixpi/themes/scope" as themeScope;
 @use "@lixpi/themes/dist/scss/lixpi-light/palette" as themePalette;
+@use "@lixpi/ui-kit/styles/button";
 
 .context-preview-main,
 .context-preview-tooltip {
@@ -112,10 +113,4 @@
 
 .capability-description-retry {
     justify-self: center;
-    padding: var(--canvas-control-padding, 6px 10px);
-    border: 1px solid var(--canvas-border, #{themeScope.token("components-context-preview-elements-capability-description-retry-base-border", themePalette.$roles)});
-    border-radius: #{themeScope.token("components-context-preview-elements-capability-description-retry-base-border-radius", themePalette.$roles)};
-    background: #{themeScope.token("components-context-preview-elements-capability-description-retry-base-background", themePalette.$roles)};
-    color: inherit;
-    cursor: pointer;
 }

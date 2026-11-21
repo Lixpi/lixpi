@@ -255,7 +255,7 @@ const loadLayout = (): string => readSourceFile('../views/layouts/layout.ts', 'v
 
 const loadNavigationSidePanel = (): string => readSourceFile('../components/navigationSidePanel/navigationSidePanel.ts', 'components/navigationSidePanel/navigationSidePanel.ts')
 
-const loadNavigationSidePanelScss = (): string => readSourceFile('../../packages/lixpi/ui-kit/styles/navigation-side-panel.scss', 'ui-kit/styles/navigation-side-panel.scss')
+const loadApplicationPanelScss = (): string => readSourceFile('../../packages/lixpi/ui-kit/src/components/applicationPanel/application-panel.scss', 'ui-kit/src/components/applicationPanel/application-panel.scss')
 
 const loadSettings = (): string => {
     return [
@@ -1698,22 +1698,22 @@ describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
     const scss = loadScss()
 
     it('zeroes padding-bottom on .ai-chat-thread-wrapper inside workspace thread', () => {
-        const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper')
+        const block = extractBlock(scss, ':is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-wrapper')
         expect(block).toMatch(/padding-bottom:\s*0/)
     })
 
     it('zeroes padding-bottom on .ai-chat-thread-content inside workspace thread', () => {
-        const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-chat-thread-content')
+        const block = extractBlock(scss, ':is(.workspace-ai-chat-thread-node, .workspace-ai-chat-floating-panel) .ai-chat-thread-wrapper .ai-chat-thread-content')
         expect(block).toMatch(/padding-bottom:\s*0/)
     })
 
     it('overrides ProseMirror min-height to 0 inside workspace thread', () => {
         // There are two rules with this selector — search the raw SCSS for
         // the min-height declaration scoped to the workspace thread.
-        expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*min-height:\s*0/)
+        expect(scss).toMatch(/:is\(\.workspace-ai-chat-thread-node, \.workspace-ai-chat-floating-panel\)\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*min-height:\s*0/)
     })
 
-    it('sets ProseMirror padding-bottom to 1rem inside workspace thread', () => void expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*padding:\s*0\s+0\s+1rem/))
+    it('sets ProseMirror padding-bottom to 1rem inside workspace thread', () => void expect(scss).toMatch(/:is\(\.workspace-ai-chat-thread-node, \.workspace-ai-chat-floating-panel\)\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*padding:\s*0\s+0\s+1rem/))
 })
 
 // =============================================================================
@@ -1937,7 +1937,6 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceToContain(ts, 'clear = (): void => {')
         expectSourceToContain(ts, 'getContextNodeIds: () => ports.getPanelState().contextChips,')
         expectExcerptToContain(detachedEditor, 'clearContext: this.context.clear,', 'submitted context tray port')
-        expectSourceToContain(scss, '--workspace-right-side-panel-content-inset')
         expectSourceNotToContain(ts, 'aiChatPanelToggleHistoryIcon')
         expectSourceNotToContain(ts, 'createSlidingTabsSwitch')
         expectSourceNotToContain(ts, 'isSessionHistoryOpen')
@@ -2029,7 +2028,7 @@ describe('Right side panel — TS infrastructure', () => {
 
     it('uses UI-kit controls for the package panel and injects the canvas pan lock', () => {
         const panel = loadRightPanel()
-        expectSourceToContain(panel, "from '@lixpi/ui-kit/components/side-panel'")
+        expectSourceToContain(panel, "from '@lixpi/ui-kit/components/application-panel'")
         expectSourceToContain(panel, "from '@lixpi/ui-kit/components/sliding-switch'")
         expectSourceToContain(ts, 'acquirePanLock: () => this.panZoom?.lock() ?? (() => {}),')
     })
@@ -2045,12 +2044,12 @@ describe('Right side panel — TS infrastructure', () => {
         const workspaceCanvasViewSource = loadWorkspaceCanvasView()
         const layout = loadLayout()
         const navigationSidePanel = loadNavigationSidePanel()
-        const navigationSidePanelScss = loadNavigationSidePanelScss()
+        const applicationPanelScss = loadApplicationPanelScss()
 
         const sidePanelScss = loadSidePanelScss()
         expectSourceToContain(workspaceCanvasViewSource, 'panel: settings.rightSidePanel,')
         expectSourceToContain(workspaceCanvasViewSource, '--workspace-right-side-panel-width')
-        expectSourceToContain(workspaceCanvasViewSource, "'--side-panel-backdrop-width': 'var(--workspace-right-side-panel-width)'")
+        expectSourceNotToContain(workspaceCanvasViewSource, "'--side-panel-backdrop-width': 'var(--workspace-right-side-panel-width)'")
         expectSourceToContain(workspaceCanvasViewSource, "'--workspace-right-sidebar-content-font-size': `${panel.typography.contentFontSize}px`")
         expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-right-side-panel-open')
         // The glass backdrop is owned by the SidePanel component.
@@ -2071,26 +2070,24 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-utility-capsule')
         expectSourceToContain(scss, '.workspace-canvas-right-side-panel-open .workspace-zoom-indicator')
         expectSourceToContain(scss, 'right: calc(var(--workspace-right-side-panel-width) + 5px)')
-        expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
-        expectSourceToContain(scss, 'bottom: calc(0px - var(--workspace-canvas-padding-bottom))')
+        // The conversation panel's surface is the shared application panel;
+        // its own stylesheet styles only the content inside it.
         const rightPanelCss = await compileThemedStylesheet(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components/src/workspace/frontend/workspace/workspace-right-panel.scss'))
-        expectExcerptToContain(extractBlock(rightPanelCss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
-        expectExcerptToContain(extractBlock(rightPanelCss, '.workspace-ai-chat-floating-panel'), 'border-radius: var(--canvas-panel-radius, 10px)', 'outer chat panel')
-        expectExcerptToContain(extractBlock(rightPanelCss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
+        expectSourceNotToContain(rightPanelCss, '.workspace-ai-chat-floating-panel {')
+        expectExcerptToContain(extractBlock(applicationPanelScss, '.application-panel'), 'position: fixed', 'shared panel surface')
         expectSourceToContain(loadWorkspaceComposerStyles(), '.ai-prompt-input-floating.workspace-canvas-global-composer')
         expectExcerptToContain(
             extractBlock(loadWorkspaceComposerStyles(), '.ai-prompt-input-floating.workspace-canvas-global-composer'),
             'width: 100%',
             'global composer',
         )
-        expectSourceToContain(layout, 'navigation-side-panel-pane')
+        expectSourceToContain(layout, 'containerEl: this.el')
         expectSourceToContain(layout, 'createNavigationSidePanel')
         expectSourceNotToContain(layout, 'Resizable.PaneGroup')
         expectSourceNotToContain(layout, 'user-menu-workspace-chat-panel')
         expectSourceToContain(navigationSidePanel, "side: 'left'")
-        expectSourceToContain(navigationSidePanel, 'createSidePanel')
-        expectSourceToContain(navigationSidePanelScss, '.navigation-side-panel {')
-        expectSourceToContain(navigationSidePanelScss, 'position: fixed')
+        expectSourceToContain(navigationSidePanel, 'createApplicationPanel')
+        expectSourceNotToContain(navigationSidePanel, 'createSidePanel')
     })
 
     it('lifts the canvas-hosted side-panel overlay/backdrop above canvas content via workspace-canvas-scoped z-index variables', () => {

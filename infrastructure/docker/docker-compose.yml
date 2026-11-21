@@ -11,7 +11,7 @@ include:
     - services/databases/docker-compose.databases.yml
     - services/auth/docker-compose.auth.yml
     - services/dev-tools/docker-compose.ai-model-registry.yml
-    - services/dev-tools/docker-compose.design-system.yml
+    - services/dev-tools/docker-compose.documentation.yml
 
 volumes:
     aws-config:    # AWS SSO credentials, shared with lixpi-aws-cli and other repositories' containers

@@ -111,13 +111,6 @@ export type PanelTheme = {
                     fontSize: string
                 }
             }
-            capabilityDescriptionRetry: {
-                base: {
-                    border: string
-                    borderRadius: string
-                    background: string
-                }
-            }
         }
         styles: {
             controlsColor: string
@@ -346,16 +339,6 @@ export type PanelTheme = {
                 size: string
             }
         }
-        libraryGeometry: {
-            stageMinWidth: number
-            stageMinWidthWithParameters: number
-            parametersDefaultWidth: number
-            parametersMinWidth: number
-            themeDefaultWidth: number
-            themeMinWidth: number
-            toggleGap: string
-            themeToggleTop: string
-        }
     }
     blockCards: {
         blockCardTilesList: {
@@ -474,34 +457,6 @@ export type PanelTheme = {
                 foreground: string
                 fontSize: string
                 lineHeight: string
-            }
-        }
-        buttonButton: {
-            base: {
-                border: string
-                borderRadius: string
-                background: string
-                foreground: string
-                fontSize: string
-                fontWeight: string
-            }
-        }
-        button: {
-            hover: {
-                background: string
-                borderColor: string
-            }
-        }
-        buttonSecondaryButton: {
-            base: {
-                foreground: string
-                borderColor: string
-            }
-        }
-        buttonSecondary: {
-            hover: {
-                background: string
-                borderColor: string
             }
         }
         footer: {

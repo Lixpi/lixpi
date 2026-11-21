@@ -1,0 +1,37 @@
+services:
+    # Off by default. Tick it in the dev console to browse the documentation.
+    lixpi-documentation:
+        profiles: ["dev"]
+        image: lixpi/documentation
+        build:
+            context: ../../../..
+            dockerfile: services/documentation/Dockerfile
+        container_name: lixpi-documentation
+        init: true
+        ports:
+            - '127.0.0.1:3003:3003'
+        environment:
+            HOST_PACKAGES_DIR: /usr/src/host-packages/lixpi
+            SERVICE_PACKAGES_DIR: /usr/src/service/packages/lixpi
+            PACKAGE_SYNC_INTERVAL: '1'
+        volumes:
+            - ../../../../services/documentation/src:/usr/src/service/src:ro
+            - ../../../../services/documentation/public:/usr/src/service/public:ro
+            - ../../../../services/documentation/index.html:/usr/src/service/index.html:ro
+            - ../../../../services/documentation/vite.config.ts:/usr/src/service/vite.config.ts:ro
+            - ../../../../services/documentation/tsconfig.json:/usr/src/service/tsconfig.json:ro
+            - ../../../../services/documentation/package.json:/usr/src/service/package.json:ro
+            - ../../../../services/documentation/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:ro
+            - ../../../../packages/lixpi:/usr/src/host-packages/lixpi:ro
+            - documentation-node-modules:/usr/src/service/node_modules
+            - documentation-packages:/usr/src/service/packages/lixpi
+        command:
+            - /usr/local/bin/workspace-package-sync.sh
+            - run
+            - sh
+            - -lc
+            - pnpm install --no-frozen-lockfile && pnpm run dev
+
+volumes:
+    documentation-node-modules:
+    documentation-packages:

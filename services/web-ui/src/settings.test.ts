@@ -94,61 +94,13 @@ const expectFiniteNumber = (value: unknown, path: string): void => {
 // =============================================================================
 
 describe('settings - grouped configuration', () => {
-    it('uses the shared package defaults outside the sections web-ui overrides', () => {
-        const sharedSettings = createLixpiUiSettings()
-        const {
-            navigationSidePanel,
-            rightSidePanel,
-            ...rest
-        } = settings
-        const {
-            navigationSidePanel: sharedNavigationSidePanel,
-            rightSidePanel: sharedRightSidePanel,
-            ...sharedRest
-        } = sharedSettings
+    it('uses the shared package settings unchanged', () => void expect(settings).toEqual(createLixpiUiSettings()))
 
-        expect(rest).toEqual(sharedRest)
-        expect(Object.keys(navigationSidePanel).sort()).toEqual(Object.keys(sharedNavigationSidePanel).sort())
-        expect(Object.keys(navigationSidePanel.overlay).sort()).toEqual(Object.keys(sharedNavigationSidePanel.overlay).sort())
-        const {
-            toggle: rightToggle,
-            ...rightRest
-        } = rightSidePanel
-        const {
-            toggle: sharedRightToggle,
-            ...sharedRightRest
-        } = sharedRightSidePanel
+    it('leaves panel placement and look to the shared application panel', () => {
+        expect(settings).not.toHaveProperty('navigationSidePanel')
 
-        expect(rightRest).toEqual(sharedRightRest)
-        expect(Object.keys(rightToggle).sort()).toEqual(Object.keys(sharedRightToggle).sort())
-    })
-
-    it('slides the navigation toggle to just outside the open panel', () => {
-        const toggle = settings.navigationSidePanel.toggle
-        const browser = '* (1 - var(--window-title-bar-active, 0))'
-        const titleBar = '* var(--window-title-bar-active, 0))'
-        const margin = 'var(--window-title-bar-control-top, 0px)'
-        const outsidePanel = 'calc(var(--workspace-navigation-side-panel-width, 0px) + 12px)'
-        const closed = `calc(${margin} ${browser} + var(--window-title-bar-toggle-left, 0px) ${titleBar}`
-
-        expect(toggle.motion).toBe('slide')
-        expect(toggle.top).toBe(margin)
-        expect(toggle.openOffset).toBe(outsidePanel)
-        expect(toggle.closedTravel).toBe(`calc(${outsidePanel} - ${closed})`)
-    })
-
-    it('keeps the right toggle at the same top and edge margin as the navigation toggle', () => {
-        const sharedToggle = createLixpiUiSettings().rightSidePanel.toggle
-        const toggle = settings.rightSidePanel.toggle
-
-        expect(toggle.top).toBe(settings.navigationSidePanel.toggle.top)
-        expect(toggle.openOffset).toBe(sharedToggle.openOffset)
-        expect(toggle.closedTravel).toBe(`calc(${sharedToggle.openOffset} - var(--window-title-bar-control-top, 0px))`)
-    })
-
-    it('exposes the navigation side panel placement and outside-close switch', () => {
-        expect(['overlay', 'push']).toContain(settings.navigationSidePanel.placement)
-        expect(typeof settings.navigationSidePanel.overlay.closeOnPointerDown).toBe('boolean')
+        for (const surfaceSetting of ['toggle', 'resizeHandle', 'overlay', 'drag', 'styles'])
+            expect(settings.rightSidePanel).not.toHaveProperty(surfaceSetting)
     })
 
     it('exports expected sections and avoids getter-based static config', () => {

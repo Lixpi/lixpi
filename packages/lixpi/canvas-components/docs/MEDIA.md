@@ -7,7 +7,7 @@ description: Image registrations, native video and audio playback, source replac
 
 `ImageSurface`, `NativePlayback` and the registration factories consume engine drawing scopes and opaque media descriptors. They do not read application stores, construct Asset URLs or import UI-kit controls.
 
-The component library and Lixpi workspace use the same image and playback registrations. Workspace adapters supply Asset descriptors, pending-frame visibility, appearance and callbacks. Titles, metadata and review actions come from `CanvasNodeShell` around the content; adding those slots does not define another media node or renderer.
+The documentation service and Lixpi workspace use the same image and playback registrations. Workspace adapters supply Asset descriptors, pending-frame visibility, appearance and callbacks. Titles, metadata and review actions come from `CanvasNodeShell` around the content; adding those slots does not define another media node or renderer.
 
 ## Images
 

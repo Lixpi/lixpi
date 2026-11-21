@@ -11,9 +11,9 @@ import {
     type CanvasAiChatPanelState,
 } from '@lixpi/constants'
 import {
-    type SidePanelConfig,
-    type SidePanelInstance,
-} from '@lixpi/ui-kit/components/side-panel'
+    type ApplicationPanelConfig,
+    type ApplicationPanelInstance,
+} from '@lixpi/ui-kit/components/application-panel'
 import {
     type SlidingSwitchConfig,
     type SlidingSwitchInstance,
@@ -24,39 +24,47 @@ import {
 } from './workspace-right-panel.ts'
 
 const mocks = vi.hoisted(() => ({
-    sides: [] as {
-        config: SidePanelConfig
-        instance: SidePanelInstance
+    panels: [] as {
+        config: ApplicationPanelConfig
+        instance: ApplicationPanelInstance
     }[],
     switches: [] as {
         config: SlidingSwitchConfig
         instance: SlidingSwitchInstance
     }[],
 }))
-vi.mock('@lixpi/ui-kit/components/side-panel', () => ({
-    createSidePanel: (config: SidePanelConfig) => {
-        let width = config.loadState?.()?.width ?? config.defaultWidth
+vi.mock('@lixpi/ui-kit/components/application-panel', () => ({
+    createApplicationPanel: (config: ApplicationPanelConfig) => {
+        let width = config.loadState?.()?.width ?? config.defaultWidth ?? 0
+        let open = config.open
+        const pane = document.createElement('div')
+        const element = document.createElement('aside')
+        const header = document.createElement('div')
+        const body = document.createElement('div')
+        const footer = document.createElement('div')
+        element.append(header, body, footer)
+        pane.append(element)
+        config.container.append(pane)
         const instance = {
-            element: document.createElement('div'),
-            toggleElement: document.createElement('div'),
-            backdropElement: document.createElement('div'),
-            overlayElement: document.createElement('div'),
+            element,
+            header,
+            body,
+            footer,
+            pane,
+            toggleElement: null,
+            isOpen: () => open,
+            setOpen: vi.fn(async (next: boolean) => void (open = next)),
             getWidth: () => width,
-            getRawWidth: () => width,
             setWidth: vi.fn((next: number) => {
                 width = next
                 config.onResize?.(next)
+
+                return next
             }),
-            setOpen: vi.fn(),
-            prepareOpen: vi.fn(),
-            mountOpen: vi.fn(),
-            playOpen: vi.fn(async () => {}),
-            playClose: vi.fn(async () => {}),
-            detachPanel: vi.fn(),
             applyConstraints: vi.fn(),
-            destroy: vi.fn(),
-        } as unknown as SidePanelInstance
-        mocks.sides.push({
+            destroy: vi.fn(() => pane.remove()),
+        } as unknown as ApplicationPanelInstance
+        mocks.panels.push({
             config,
             instance,
         })
@@ -106,16 +114,6 @@ const fixture = (isOpen = true) => {
                 maxPaneMargin: 64,
             },
             layout: { contentInset: 10 },
-            resizeHandle: {
-                offset: 0,
-                grabWidth: 20,
-            },
-            toggle: {
-                openAriaLabel: 'Close',
-                closedAriaLabel: 'Open',
-            },
-            overlay: { enabled: false },
-            drag: { enabled: false },
         },
         switchSettings: {
             height: 36,
@@ -160,7 +158,7 @@ const fixture = (isOpen = true) => {
     }
 }
 beforeEach(() => {
-    mocks.sides.length = 0
+    mocks.panels.length = 0
     mocks.switches.length = 0
 })
 afterEach(() => {
@@ -175,7 +173,8 @@ describe('WorkspaceRightPanel', () => {
         const f = fixture()
         f.state.width = 620
         f.owner.render()
-        const side = mocks.sides[0]
+        const side = mocks.panels[0]
+        expect(side.config.side).toBe('right')
         expect(side.config.loadState?.()).toEqual({ width: 620 })
         expect(f.options.mountContent).toHaveBeenCalledWith(expect.any(HTMLElement), 'media', expect.any(AbortSignal))
         expect(f.mounted[0].host.classList.contains('workspace-right-panel-media-host')).toBe(true)
@@ -187,8 +186,21 @@ describe('WorkspaceRightPanel', () => {
         expect(f.options.onWidthChange).toHaveBeenCalledWith(700)
         f.owner.syncState()
         expect(side.instance.setWidth).toHaveBeenCalledWith(700, { persist: false })
-        expect(side.instance.mountOpen).toHaveBeenCalledOnce()
-        expect(side.instance.playOpen).not.toHaveBeenCalled()
+        expect(side.instance.setOpen).toHaveBeenCalledOnce()
+        expect(side.instance.setOpen).toHaveBeenCalledWith(true, { animate: false })
+    })
+
+    it('mounts the thread straight into the panel body so its editor is the flex child that scrolls', () => {
+        const f = fixture()
+        f.state.topLevelMode = 'aiThreads'
+        f.owner.render()
+        const body = mocks.panels[0].instance.body
+
+        expect(f.mounted[0].host).toBe(body)
+        f.state.topLevelMode = 'media'
+        f.owner.render({ preserveModeSwitch: true })
+        expect(f.mounted[1].host.parentElement).toBe(body)
+        expect([...body.children].filter(child => child !== f.mounted[1].host && !child.classList.contains('workspace-right-panel-mode-switch'))).toEqual([])
     })
 
     it('uses a positive configured width when the switch has no measurable client width', () => {
@@ -229,12 +241,12 @@ describe('WorkspaceRightPanel', () => {
         f.owner.render()
         f.state.isOpen = true
         f.owner.render()
-        const side = mocks.sides[0]
-        expect(side.instance.prepareOpen).toHaveBeenCalledOnce()
-        expect(side.instance.playOpen).toHaveBeenCalledOnce()
+        const side = mocks.panels[0]
+        expect(side.instance.setOpen).toHaveBeenCalledOnce()
+        expect(side.instance.setOpen).toHaveBeenCalledWith(true)
         await Promise.resolve()
         let finish!: () => void
-        vi.mocked(side.instance.playClose).mockImplementation(() =>
+        vi.mocked(side.instance.setOpen).mockImplementation(() =>
             new Promise<void>(resolve => void (finish = resolve))
         )
         f.state.isOpen = false
@@ -253,7 +265,7 @@ describe('WorkspaceRightPanel', () => {
         const f = fixture()
         f.owner.render()
         let finish!: () => void
-        vi.mocked(mocks.sides[0].instance.playClose).mockImplementation(() =>
+        vi.mocked(mocks.panels[0].instance.setOpen).mockImplementationOnce(() =>
             new Promise<void>(resolve => void (finish = resolve))
         )
         f.state.isOpen = false
@@ -270,7 +282,7 @@ describe('WorkspaceRightPanel', () => {
     it('releases resize locks, timers, frames and stale content callbacks on disposal', () => {
         const f = fixture()
         f.owner.render()
-        const side = mocks.sides[0]
+        const side = mocks.panels[0]
         const modeSwitch = mocks.switches[0]
         modeSwitch.config.onChange?.('artifacts', modeSwitch.config.id)
         side.config.onResizeStart?.()
@@ -289,7 +301,6 @@ describe('WorkspaceRightPanel', () => {
         modeSwitch.config.onChange?.('aiThreads', modeSwitch.config.id)
         side.config.persistState?.({ width: 800 })
         side.config.onOpenChange?.(true)
-        side.config.toggle?.onToggle()
         side.config.onResize?.(800)
         side.config.onResizeStart?.()
         expect(modeSwitch.instance.resize).toHaveBeenCalledTimes(resizeCount)
@@ -321,7 +332,7 @@ describe('WorkspaceRightPanel', () => {
             throw new Error('release failed')
         })
         expect(() => f.owner.destroy()).toThrow()
-        expect(mocks.sides[0].instance.destroy).toHaveBeenCalledOnce()
+        expect(mocks.panels[0].instance.destroy).toHaveBeenCalledOnce()
         expect(mocks.switches[0].instance.destroy).toHaveBeenCalledOnce()
         expect(f.owner.element).toBeNull()
         expect(f.mounted[0].host.isConnected).toBe(false)
@@ -336,7 +347,7 @@ describe('WorkspaceRightPanel', () => {
         expect(mocks.switches[0].config.id).not.toBe(mocks.switches[1].config.id)
         first.owner.destroy()
         expect(second.owner.element?.isConnected).toBe(true)
-        expect(mocks.sides[1].instance.destroy).not.toHaveBeenCalled()
+        expect(mocks.panels[1].instance.destroy).not.toHaveBeenCalled()
         expect(second.mounted[0].signal.aborted).toBe(false)
     })
 })

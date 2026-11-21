@@ -1,4 +1,5 @@
 @use "@lixpi/ui-primitives/styles/transitions" as transitions;
+@use "@lixpi/ui-kit/styles/button";
 
 .canvas-loading-layer {
     position: fixed;
@@ -127,21 +128,7 @@ $overlayHideDuration: 90ms;
 }
 
 .canvas-loading-error-retry {
-    min-width: 86px;
-    height: var(--canvas-control-height, 32px);
     margin-top: 2px;
-    padding: var(--canvas-control-padding, 0 14px);
-    border: 0;
-    border-radius: var(--canvas-control-radius, 999px);
-    background: var(--canvas-accent, var(--canvas-loading-retry-background, #5d656d));
-    color: var(--canvas-on-accent, var(--canvas-loading-retry-color, #f5f3f3));
-    font-size: var(--canvas-font-size, 13px);
-    font-weight: var(--canvas-title-font-weight, 700);
-    cursor: pointer;
-
-    &:hover {
-        background: var(--canvas-accent, var(--canvas-loading-text-color, #42494f));
-    }
 }
 
 @media (prefers-reduced-transparency: reduce) {

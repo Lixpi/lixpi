@@ -16,6 +16,10 @@ import { runLibraryAction } from './library-action.ts'
 import {
     type WorkspaceLibraryPorts,
 } from './library-ports.ts'
+import {
+    createLibraryButton,
+    createLibraryTitleInput,
+} from './library-controls.ts'
 
 type ArtifactLibraryEntry = {
     meta: AssetMeta
@@ -282,11 +286,14 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
                 className=${`capability-library-row artifact-library-row${this.selectedAssetId === entry.meta.assetId ? ' capability-library-row-selected' : ''}`}
                 tabindex="0"
                 data-side-panel-no-drag="true"
-            ><div className="artifact-library-item-host"></div><button
-                    type="button"
-                    className="capability-library-row-action"
-                    data-action="inspect"
-                >Details</button></article>
+            ><div className="artifact-library-item-host"></div>${createLibraryButton(
+                this.options.document,
+                {
+                    label: 'Details',
+                    className: 'capability-library-row-action',
+                    action: 'inspect',
+                },
+            )}</article>
         ` as HTMLElement
         const itemHost = host.querySelector('.artifact-library-item-host') as HTMLElement
         const view = this.options.frontendRegistry.require(artifactTypeId).createLibraryItemView({
@@ -431,14 +438,14 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
                 className="media-library-detail artifact-library-detail"
                 data-side-panel-no-drag="true"
             >
-            <button
-                type="button"
-                className="media-library-detail-back"
-            >Back</button>
-            <label>Title</label><input
-                    type="text"
-                    className="media-library-detail-title"
-                />
+            ${createLibraryButton(
+                this.options.document,
+                {
+                    label: 'Back',
+                    className: 'media-library-detail-back',
+                },
+            )}
+            <label>Title</label>${createLibraryTitleInput(this.options.document)}
             <label>Scope</label><select className="media-library-detail-scope">
                 <option value="workspace">Workspace</option><option value="user">Mine</option><option value="organization">Organization</option>
             </select>
@@ -457,12 +464,14 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
         state.textContent = `${asset.artifact?.artifactTypeId ?? 'Artifact'} · ${asset.generatedOutputReview?.status ?? 'saved'} · ${asset.states.lifecycle}`
 
         if (asset.generatedOutputReview?.status === 'candidate') {
-            const accept = this.html`
-                <button
-                    type="button"
-                    className="capability-library-row-action capability-library-row-action-primary"
-                >Accept candidate</button>
-            ` as HTMLButtonElement
+            const accept = createLibraryButton(
+                this.options.document,
+                {
+                    label: 'Accept candidate',
+                    variant: 'primary',
+                    className: 'capability-library-row-action',
+                },
+            )
             this.listen(
                 accept,
                 'click',

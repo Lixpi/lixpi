@@ -7,7 +7,7 @@ description: Saved navigation documents, nested workspace hierarchy, inherited a
 
 Each organization saves a ProseMirror navigation document containing ordinary paragraphs, headings and nested lists. Workspace list items bind to real workspaces; plain items can group them without creating workspaces. The nearest enclosing workspace item determines a workspace's actual parent. Access and agent delegation follow that workspace hierarchy, skipping plain visual groups.
 
-`@lixpi/prosemirror` supplies the reusable nested-list schema, plugins, custom item NodeViews, drag reordering and edit sessions. Web-ui supplies workspace bindings, edit policies and the sidebar adapter under its navigation component. The API owns hierarchy, authorization, storage and handlers under its workspace services. The same reusable component powers the design-system navigation, whose sidebar is read-only by default. See [Document Kinds and Editors](../platform/DOCUMENT-EDITORS.md) for the generic extension contract.
+`@lixpi/prosemirror` supplies the reusable nested-list schema, plugins, custom item NodeViews, drag reordering and edit sessions. Web-ui supplies workspace bindings, edit policies and the sidebar adapter under its navigation component. The API owns hierarchy, authorization, storage and handlers under its workspace services. The same reusable component powers the documentation service navigation, whose sidebar is read-only by default. See [Document Kinds and Editors](../platform/DOCUMENT-EDITORS.md) for the generic extension contract.
 
 ## Document structure and domain records
 

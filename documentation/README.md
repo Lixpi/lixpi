@@ -85,7 +85,7 @@ Product behavior and persistence stay in the central workspace guides. Rendering
 | [Workspace Model](canvas/WORKSPACE-MODEL.md) | Core concepts, the `CanvasState`/`CanvasNode`/`WorkspaceEdge` data model, stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, storage durability, lazy loading |
 | [User Flows](canvas/USER-FLOWS.md) | Opening a workspace, creating documents, uploading/converting/saving/deleting/moving/editing media |
 | [Workspace Tree](canvas/WORKSPACE-TREE.md) | Nested workspaces, navigation headings and tags, inherited access, tree subjects and locks, and sidebar editing |
-| [Canvas Component Library](../services/design-system/documentation/CANVAS-LIBRARY.md) | Isolated live examples of canvas interactions, nodes, components and workspace composition |
+| [Documentation Service](../services/documentation/documentation/DOCUMENTATION.md) | Live examples of every canvas and UI package: canvas interactions, nodes and workspace composition, themes, UI kit components, UI primitives, ProseMirror editors and the web client runtime |
 | [Canvas Engine](../packages/lixpi/canvas-engine/README.md) | Rendering, scene contracts, node registration, input, connectors, collisions and resource ownership |
 | [Canvas Components](../packages/lixpi/canvas-components/README.md) | Reusable media surfaces, glass, outlines, loading effects and examples |
 | [Lixpi Canvas Components](../packages/lixpi/canvas-components/docs/workspace/README.md) | Workspace composition, product nodes, media events, host ports and persistence |

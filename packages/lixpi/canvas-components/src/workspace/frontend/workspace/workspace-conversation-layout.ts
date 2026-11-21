@@ -11,6 +11,7 @@ import {
     createSidePanel,
     type SidePanelInstance,
 } from '@lixpi/ui-kit/components/side-panel'
+import { uiKitSettings } from '@lixpi/ui-kit'
 import {
     alignCenterIcon,
     alignLeftIcon,
@@ -46,7 +47,7 @@ type LayoutOptions = {
     element: HTMLElement
     controls?: WorkspaceConversationControls
     storage: Pick<Storage, 'getItem' | 'setItem'>
-    settings: Pick<WorkspaceRightPanelSettings, 'dimensions' | 'resizeHandle'>
+    settings: Pick<WorkspaceRightPanelSettings, 'dimensions'>
     getViewport: () => ViewportSnapshot
 }
 
@@ -201,7 +202,7 @@ export class WorkspaceConversationLayout {
             const handle = createSidePanel({
                 root: options.element,
                 side: edge === 'left' ? 'right' : 'left',
-                ...options.settings.resizeHandle,
+                ...uiKitSettings.applicationPanel.resizeHandle,
                 className: 'workspace-conversation-layout-resize',
                 minWidth: options.settings.dimensions.minWidth,
                 defaultWidth,

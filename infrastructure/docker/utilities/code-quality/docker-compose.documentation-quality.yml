@@ -1,0 +1,19 @@
+# Quality checks for services/documentation, kept in their own Compose project so
+# their caches don't mix with the repository-wide quality runner's.
+name: lixpi-documentation-quality
+
+services:
+    lixpi-documentation-quality:
+        profiles: ["quality"]
+        extends:
+            file: ../../../../dev-tools/code-quality/runner-compose/typescript-quality.base.yml
+            service: typescript-quality-runner-base
+        volumes:
+            - ../../../../services/documentation/src:/usr/src/repository/services/documentation/src:cached
+            - ../../../../services/documentation/vite.config.ts:/usr/src/repository/services/documentation/vite.config.ts:cached
+
+volumes:
+    typescript-quality-runner-node-modules:
+    typescript-quality-runner-debug-tools-node-modules:
+    typescript-quality-runner-pnpm-store:
+    typescript-quality-runner-dprint-cache:

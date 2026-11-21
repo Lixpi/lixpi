@@ -1,4 +1,6 @@
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
+import { createTextInput } from '@lixpi/ui-kit/components/text-input'
 import { chevronDownIcon } from '@lixpi/ui-kit/svg'
 import { BubbleMenu } from '@lixpi/ui-kit/components/bubble-menu'
 import {
@@ -116,32 +118,30 @@ export class WorkspaceConversationPanel {
                 }}
             ></select>
         ` as HTMLSelectElement
-        this.title = this.html`
-            <input
-                class="workspace-conversation-title"
-                type="text"
-                aria-label="Conversation title"
-                maxlength="200"
-                onchange=${() => {
-                    void controller.rename(this.title.value)
-                    this.historyMenu.hide()
-                }}
-                onkeydown=${(event: KeyboardEvent) => {
-                    if (event.key === 'Escape') {
-                        this.title.value = controller.current?.title ?? ''
-                        this.historyMenu.hide()
-                        this.historyTrigger.focus()
-                    }
+        this.title = createTextInput({
+            ariaLabel: 'Conversation title',
+            className: 'workspace-conversation-title',
+            document,
+            onChange: value => {
+                void controller.rename(value)
+                this.historyMenu.hide()
+            },
+        }).element
+        this.title.maxLength = 200
+        this.title.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                this.title.value = controller.current?.title ?? ''
+                this.historyMenu.hide()
+                this.historyTrigger.focus()
+            }
 
-                    if (event.key === 'Enter') {
-                        event.preventDefault()
-                        this.title.blur()
-                    }
+            if (event.key === 'Enter') {
+                event.preventDefault()
+                this.title.blur()
+            }
 
-                    event.stopPropagation()
-                }}
-            />
-        ` as HTMLInputElement
+            event.stopPropagation()
+        })
         this.rename = this.html`
             <label class="workspace-conversation-menu-field">
                 <span>Conversation name</span>
@@ -167,65 +167,62 @@ export class WorkspaceConversationPanel {
                 hidden
             ></div>
         ` as HTMLElement
-        this.newMessages = this.html`
-            <button
-                type="button"
-                class="workspace-conversation-new-messages"
-                hidden
-                onclick=${() => {
-                    this.followBottom = true
-                    this.messages.scrollTop = this.messages.scrollHeight
-                    this.newMessages.hidden = true
-                }}
-            >New messages</button>
-        ` as HTMLButtonElement
-        this.collapse = this.html`
-            <button
-                type="button"
-                class="workspace-conversation-menu-action"
-                aria-label="Collapse conversation"
-                aria-expanded="true"
-                onclick=${() => {
-                    const collapsed = this.element.dataset.collapsed !== 'true'
+        this.newMessages = createButton({
+            label: 'New messages',
+            className: 'workspace-conversation-new-messages',
+            document,
+            onClick: () => {
+                this.followBottom = true
+                this.messages.scrollTop = this.messages.scrollHeight
+                this.newMessages.hidden = true
+            },
+        }).element
+        this.newMessages.hidden = true
+        const collapseButton = createButton({
+            label: 'Hide conversation',
+            ariaLabel: 'Collapse conversation',
+            className: 'workspace-conversation-menu-action',
+            document,
+            onClick: () => {
+                const collapsed = this.element.dataset.collapsed !== 'true'
 
-                    if (collapsed)
-                        this.collapsedScroll = this.messages.scrollTop
+                if (collapsed)
+                    this.collapsedScroll = this.messages.scrollTop
 
-                    this.element.dataset.collapsed = String(collapsed)
-                    this.collapse.textContent = collapsed ? 'Show conversation' : 'Hide conversation'
-                    this.collapse.ariaLabel = collapsed ? 'Expand conversation' : 'Collapse conversation'
-                    this.collapse.ariaExpanded = String(!collapsed)
-                    this.historyMenu.hide()
-                    this.renderState()
+                this.element.dataset.collapsed = String(collapsed)
+                collapseButton.setLabel(collapsed ? 'Show conversation' : 'Hide conversation')
+                this.collapse.ariaLabel = collapsed ? 'Expand conversation' : 'Collapse conversation'
+                this.collapse.ariaExpanded = String(!collapsed)
+                this.historyMenu.hide()
+                this.renderState()
 
-                    if (!collapsed) {
-                        this.messages.scrollTop = this.followBottom ? this.messages.scrollHeight : (this.collapsedScroll ?? this.messages.scrollTop)
-                        this.collapsedScroll = undefined
-                    }
-                }}
-            >Hide conversation</button>
-        ` as HTMLButtonElement
-        this.create = this.html`
-            <button
-                type="button"
-                class="workspace-conversation-menu-action"
-                aria-label="New conversation"
-                onclick=${() => {
-                    this.historyMenu.hide()
-                    void controller.create()
-                }}
-            >New conversation</button>
-        ` as HTMLButtonElement
+                if (!collapsed) {
+                    this.messages.scrollTop = this.followBottom ? this.messages.scrollHeight : (this.collapsedScroll ?? this.messages.scrollTop)
+                    this.collapsedScroll = undefined
+                }
+            },
+        })
+        this.collapse = collapseButton.element
+        this.collapse.ariaExpanded = 'true'
+        this.create = createButton({
+            label: 'New conversation',
+            ariaLabel: 'New conversation',
+            className: 'workspace-conversation-menu-action',
+            document,
+            onClick: () => {
+                this.historyMenu.hide()
+                void controller.create()
+            },
+        }).element
         this.queue = this.html`<div class="workspace-conversation-queue"></div>` as HTMLElement
-        this.stop = this.html`
-            <button
-                type="button"
-                class="workspace-conversation-text-action"
-                aria-label="Stop response"
-                hidden
-                onclick=${() => void controller.stop()}
-            >Stop</button>
-        ` as HTMLButtonElement
+        this.stop = createButton({
+            label: 'Stop',
+            ariaLabel: 'Stop response',
+            className: 'workspace-conversation-text-action',
+            document,
+            onClick: () => void controller.stop(),
+        }).element
+        this.stop.hidden = true
         this.historyTrigger = this.html`
             <button
                 type="button"
@@ -387,13 +384,12 @@ export class WorkspaceConversationPanel {
         }
 
         const link = this.openConversation
-            ? this.html`
-                <button
-                    type="button"
-                    class="workspace-conversation-origin-link"
-                    onclick=${() => this.openConversation!(delegatedBy.workspaceId, delegatedBy.conversationAssetId)}
-                >Open parent conversation</button>
-            ` as HTMLElement
+            ? createButton({
+                label: 'Open parent conversation',
+                className: 'workspace-conversation-origin-link',
+                document: this.element.ownerDocument,
+                onClick: () => this.openConversation!(delegatedBy.workspaceId, delegatedBy.conversationAssetId),
+            }).element
             : null
         this.origin.replaceChildren(
             this.html`<span>${delegatedOriginLabel(delegatedBy.workspaceName)}</span>` as HTMLElement,
@@ -485,11 +481,12 @@ export class WorkspaceConversationPanel {
                 turn => this.html`
                     <div class="workspace-conversation-queued-message">
                         <span>Message queued</span>
-                        <button
-                            type="button"
-                            class="workspace-conversation-text-action"
-                            onclick=${() => void this.controller.queue('cancel-message', [turn.turnId])}
-                        >Cancel</button>
+                        ${createButton({
+                            label: 'Cancel',
+                            className: 'workspace-conversation-text-action',
+                            document: this.element.ownerDocument,
+                            onClick: () => void this.controller.queue('cancel-message', [turn.turnId]),
+                        }).element}
                     </div>
                 ` as HTMLElement,
             ),
@@ -497,13 +494,12 @@ export class WorkspaceConversationPanel {
 
         if (current?.queuePaused)
             this.queue.append(
-                this.html`
-                    <button
-                        type="button"
-                        class="workspace-conversation-text-action"
-                        onclick=${() => void this.controller.queue('resume')}
-                    >Resume queued messages</button>
-                ` as HTMLElement,
+                createButton({
+                    label: 'Resume queued messages',
+                    className: 'workspace-conversation-text-action',
+                    document: this.element.ownerDocument,
+                    onClick: () => void this.controller.queue('resume'),
+                }).element,
             )
 
         this.element.hidden = !hasMessages

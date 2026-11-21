@@ -8,17 +8,17 @@ import {
     ElementStyleLease,
 } from '@lixpi/ui-primitives/dom'
 import {
-    createSidePanel,
-    type SidePanelConfig,
-    type SidePanelInstance,
-} from '@lixpi/ui-kit/components/side-panel'
+    createApplicationPanel,
+    type ApplicationPanelInstance,
+} from '@lixpi/ui-kit/components/application-panel'
 import {
     createSlidingSwitch,
     type SlidingSwitchInstance,
 } from '@lixpi/ui-kit/components/sliding-switch'
-import { navigationSidePanelToggleIcon } from '@lixpi/ui-kit/svg'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 
+// The conversation panel's content sizing. Its surface, toggle, resize handle
+// and slide are the shared ApplicationPanel.
 export type WorkspaceRightPanelSettings = {
     defaultDimensions: { width: number }
     dimensions: {
@@ -26,12 +26,6 @@ export type WorkspaceRightPanelSettings = {
         maxPaneMargin: number
     }
     layout: { contentInset: number }
-    resizeHandle: Pick<SidePanelConfig, 'offset' | 'grabWidth' | 'styles'>
-    toggle: Omit<NonNullable<SidePanelConfig['toggle']>, 'iconSvg' | 'className' | 'onToggle'>
-    // Slide timing and the swipe thresholds the drag config leaves out come
-    // from `uiKitSettings.sidePanel`.
-    overlay: SidePanelConfig['overlay']
-    drag: SidePanelConfig['drag']
 }
 
 export type WorkspaceRightPanelOptions = {
@@ -72,12 +66,14 @@ export type WorkspaceRightPanelRenderOptions = {
 
 const modes: CanvasRightSidePanelMode[] = ['capabilities', 'artifacts', 'media', 'aiThreads']
 
+// The surface stays mounted, parked off its edge while closed. Content mounts
+// into its body while the panel is open and is released when it closes.
 export class WorkspaceRightPanel {
     private readonly lifetime = new Lifetime()
     private content = new Lifetime()
     private widthStyles: ElementStyleLease | null = null
-    private panel: HTMLDivElement | null = null
-    private sidePanel: SidePanelInstance | null = null
+    private panel: ApplicationPanelInstance | null = null
+    private mounted = false
     private modeSwitch: SlidingSwitchInstance<CanvasRightSidePanelMode> | null = null
     private renderedMode: CanvasRightSidePanelMode | null = null
     private rendered = false
@@ -95,8 +91,9 @@ export class WorkspaceRightPanel {
         this.lifetime.own(() => this.clear(true))
     }
 
-    get element(): HTMLDivElement | null {
-        return this.panel
+    // The surface while content is mounted in it.
+    get element(): HTMLElement | null {
+        return this.mounted ? (this.panel?.element ?? null) : null
     }
     get isClosing(): boolean {
         return this.closing
@@ -105,40 +102,25 @@ export class WorkspaceRightPanel {
         return this.rendered
     }
 
-    ensure(): SidePanelInstance {
+    ensure(): ApplicationPanelInstance {
         if (this.lifetime.signal.aborted)
             throw new Error('Workspace right panel is disposed')
 
-        if (this.sidePanel)
-            return this.sidePanel
+        if (this.panel)
+            return this.panel
 
-        const {
-            settings,
-            pane,
-        } = this.options
-        const panel = createSidePanel({
-            root: pane,
+        const { settings } = this.options
+        const panel = createApplicationPanel({
+            container: this.options.pane,
             side: 'right',
-            offset: settings.resizeHandle.offset,
-            grabWidth: settings.resizeHandle.grabWidth,
-            className: 'workspace-ai-chat-side-panel-resize-handle',
-            styles: settings.resizeHandle.styles,
-            overlay: settings.overlay,
-            drag: settings.drag,
-            toggle: {
-                ...settings.toggle,
-                // The navigation panel's icon, mirrored in CSS so its bar sits on the right.
-                iconSvg: navigationSidePanelToggleIcon,
-                className: 'workspace-ai-chat-panel-toggle',
-                onToggle: () => {
-                    if (!this.lifetime.signal.aborted)
-                        this.options.onOpenChange(!this.options.getState().isOpen)
-                },
-            },
-            minWidth: settings.dimensions.minWidth,
+            label: 'Conversation panel',
+            open: false,
+            body: 'content',
+            placement: 'overlay',
             defaultWidth: settings.defaultDimensions.width,
-            getMaxWidth: () => this.maxWidth(),
-            measureWidth: () => this.panel?.getBoundingClientRect().width ?? settings.defaultDimensions.width,
+            minWidth: settings.dimensions.minWidth,
+            // Content scope for the conversation rules, and canvas gesture opt-outs.
+            className: 'workspace-ai-chat-floating-panel nopan nowheel',
             loadState: () => ({ width: this.options.getState().width ?? null }),
             persistState: state => {
                 if (!this.lifetime.signal.aborted)
@@ -148,7 +130,7 @@ export class WorkspaceRightPanel {
                 if (this.lifetime.signal.aborted)
                     return
 
-                this.panel?.classList.add('is-resizing')
+                this.panel?.element.classList.add('is-resizing')
                 this.releasePan ??= this.options.acquirePanLock()
             },
             onResize: width => this.reflectWidth(width),
@@ -158,12 +140,18 @@ export class WorkspaceRightPanel {
                     this.options.onOpenChange(open)
             },
         })
-        this.sidePanel = panel
+        this.panel = panel
 
-        if (panel.toggleElement)
-            pane.appendChild(panel.toggleElement)
+        // Clicks in the panel belong to the panel, not to the canvas under it.
+        for (const type of ['mousedown', 'click']) {
+            const stop = (event: Event) => event.stopPropagation()
+            panel.element.addEventListener(type, stop)
+            this.lifetime.own(() => panel.element.removeEventListener(type, stop))
+        }
 
-        panel.setOpen(this.options.getState().isOpen)
+        for (const [name, value] of Object.entries(this.options.cssProperties))
+            panel.element.style.setProperty(name, value)
+
         this.reflectWidth(
             panel.getWidth(),
         )
@@ -178,16 +166,14 @@ export class WorkspaceRightPanel {
         const state = this.options.getState()
 
         if (state.width != null)
-            this.sidePanel?.setWidth(state.width, { persist: false })
-
-        this.sidePanel?.setOpen(state.isOpen)
+            this.panel?.setWidth(state.width, { persist: false })
     }
 
     applyConstraints(): void {
         if (this.lifetime.signal.aborted)
             return
 
-        this.sidePanel?.applyConstraints()
+        this.panel?.applyConstraints()
         this.resizeSwitch()
     }
 
@@ -208,39 +194,27 @@ export class WorkspaceRightPanel {
 
         if (
             this.opening
-            && this.panel
+            && this.mounted
         )
             return
 
-        const preserve = Boolean(options.preserveModeSwitch || (this.modeTimer !== null && this.modeSwitch && this.panel))
-        const wasMounted = this.panel !== null && !this.closing
+        const preserve = Boolean(options.preserveModeSwitch || (this.modeTimer !== null && this.modeSwitch && this.mounted))
+        const wasMounted = this.mounted && !this.closing
         const animate = !wasMounted
             && this.rendered
             && options.animateOpen !== false
-        const preservedSwitch = preserve ? (this.panel?.querySelector<HTMLDivElement>('.workspace-right-panel-mode-switch') ?? null) : null
+        const preservedSwitch = preserve ? (this.panel?.body.querySelector<HTMLDivElement>('.workspace-right-panel-mode-switch') ?? null) : null
         preservedSwitch?.remove()
-        this.clear(
-            false,
+        this.releaseContent(
             Boolean(preservedSwitch),
         )
         this.suppressResize = preserve
-        const html = createDocumentHtml(this.options.pane.ownerDocument)
-        const panel = html`<div className="workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel"></div>` as HTMLDivElement
-        this.panel = panel
-        this.content.own(() => panel.remove())
-
-        for (const type of ['mousedown', 'click']) {
-            const stop = (event: Event) => event.stopPropagation()
-            panel.addEventListener(type, stop)
-            this.content.own(() => panel.removeEventListener(type, stop))
-        }
 
         try {
-            for (const [name, value] of Object.entries(this.options.cssProperties))
-                panel.style.setProperty(name, value)
-
+            const panel = this.ensure()
+            const html = createDocumentHtml(this.options.pane.ownerDocument)
             const switchElement = preservedSwitch ?? this.createModeSwitch(state.topLevelMode)
-            panel.appendChild(switchElement)
+            panel.body.appendChild(switchElement)
             const hostClass = state.topLevelMode === 'capabilities'
                 ? 'workspace-right-panel-capability-host workspace-right-panel-media-host'
                 : state.topLevelMode === 'artifacts'
@@ -248,10 +222,13 @@ export class WorkspaceRightPanel {
                     : state.topLevelMode === 'media'
                         ? 'workspace-right-panel-media-host'
                         : 'workspace-right-panel-details-host'
-            const host = state.topLevelMode === 'aiThreads' ? panel : (html`<div className=${hostClass}></div>` as HTMLDivElement)
+            // The thread mounts straight into the body, a flex column, so its
+            // editor is the flex child that scrolls, as it did when it
+            // mounted straight into the panel.
+            const host = state.topLevelMode === 'aiThreads' ? panel.body : (html`<div className=${hostClass}></div>` as HTMLDivElement)
 
-            if (host !== panel)
-                panel.appendChild(host)
+            if (host !== panel.body)
+                panel.body.appendChild(host)
 
             this.content.own(
                 this.options.mountContent(
@@ -260,35 +237,29 @@ export class WorkspaceRightPanel {
                     this.content.signal,
                 ),
             )
-            const sidePanel = this.ensure()
-            panel.appendChild(sidePanel.element)
+            this.mounted = true
             this.renderedMode = state.topLevelMode
-
-            if (animate) {
-                this.opening = true
-                sidePanel.prepareOpen(panel)
-            } else
-                sidePanel.mountOpen(panel)
-
-            if (sidePanel.overlayElement)
-                this.options.pane.appendChild(sidePanel.overlayElement)
-
-            this.options.pane.append(sidePanel.backdropElement, panel)
-
-            if (sidePanel.getRawWidth() !== null)
-                this.reflectWidth(
-                    sidePanel.getWidth(),
-                )
-
             this.rendered = true
             this.suppressResize = false
 
-            if (animate)
-                void this.playOpen(
-                    sidePanel,
-                    panel,
-                    this.animationVersion,
-                )
+            // A new switch takes the panel's current width at once; a kept
+            // switch keeps its size through its slide.
+            if (!preservedSwitch)
+                this.resizeSwitch()
+
+            if (
+                !panel.isOpen()
+                || this.closing
+            ) {
+                this.closing = false
+                const version = ++this.animationVersion
+
+                if (animate) {
+                    this.opening = true
+                    void this.playOpen(panel, version)
+                } else
+                    void panel.setOpen(true, { animate: false })
+            }
 
             const content = this.content
             this.resizeFrame = this.options.requestFrame(() => {
@@ -323,7 +294,7 @@ export class WorkspaceRightPanel {
         const version = ++this.animationVersion
 
         try {
-            await this.sidePanel?.playClose()
+            await this.panel?.setOpen(false)
 
             if (
                 version !== this.animationVersion
@@ -332,7 +303,7 @@ export class WorkspaceRightPanel {
                 return
 
             if (!this.options.getState().isOpen)
-                this.clear()
+                this.releaseContent()
         } catch (error) {
             if (
                 !this.lifetime.signal.aborted
@@ -345,15 +316,41 @@ export class WorkspaceRightPanel {
         }
     }
 
+    // Releases the content. The surface parks closed unless the state keeps
+    // it open, and `destroyPanel` removes it for good.
     clear(
-        destroySidePanel = false,
+        destroyPanel = false,
         preserveModeSwitch = false,
     ): void {
         this.animationVersion += 1
         this.opening = false
         this.closing = false
+        const cleanup = new Lifetime()
+        cleanup.own(() => this.releaseContent(preserveModeSwitch))
+        const panel = this.panel
+
+        if (destroyPanel) {
+            this.panel = null
+
+            if (panel)
+                cleanup.own(() => panel.destroy())
+        } else if (
+            panel
+            && !this.options.getState().isOpen
+        )
+            cleanup.own(() => void panel.setOpen(false, { animate: false }))
+
+        cleanup.destroy()
+    }
+
+    destroy(): void {
+        this.lifetime.destroy()
+    }
+
+    private releaseContent(preserveModeSwitch = false): void {
         this.suppressResize = false
         this.renderedMode = null
+        this.mounted = false
         const cleanup = new Lifetime()
         const content = this.content
         this.content = new Lifetime()
@@ -374,28 +371,14 @@ export class WorkspaceRightPanel {
                 cleanup.own(() => modeSwitch.destroy())
         }
 
-        const sidePanel = this.sidePanel
+        // The body holds only this render's content: a kept mode switch is
+        // detached before release and appended again by the next render.
+        const body = this.panel?.body
 
-        if (destroySidePanel) {
-            this.sidePanel = null
+        if (body)
+            cleanup.own(() => body.replaceChildren())
 
-            if (sidePanel)
-                cleanup.own(() => sidePanel.destroy())
-        } else if (sidePanel) {
-            cleanup.own(() => {
-                sidePanel.detachPanel()
-
-                if (!this.options.getState().isOpen)
-                    sidePanel.setOpen(false)
-            })
-        }
-
-        this.panel = null
         cleanup.destroy()
-    }
-
-    destroy(): void {
-        this.lifetime.destroy()
     }
 
     private maxWidth(): number {
@@ -406,7 +389,7 @@ export class WorkspaceRightPanel {
     }
 
     private switchWidth(): number {
-        const width = this.sidePanel?.getWidth() ?? Math.min(
+        const width = this.panel?.getWidth() ?? Math.min(
             this.options.settings.defaultDimensions.width,
             this.maxWidth(),
         )
@@ -438,11 +421,11 @@ export class WorkspaceRightPanel {
         if (
             this.suppressResize
             || !this.modeSwitch
-            || !this.panel
+            || !this.mounted
         )
             return
 
-        const element = this.panel.querySelector<HTMLDivElement>('.workspace-right-panel-mode-switch')
+        const element = this.panel?.body.querySelector<HTMLDivElement>('.workspace-right-panel-mode-switch')
         const measuredWidth = element?.clientWidth ?? 0
         this.modeSwitch.resize(
             0,
@@ -452,27 +435,19 @@ export class WorkspaceRightPanel {
         )
     }
 
+    // The canvas reads the panel width to keep its own controls clear of it.
     private reflectWidth(width: number): void {
         if (this.lifetime.signal.aborted)
             return
 
-        const value = `${width}px`
         const previousStyles = this.widthStyles
-        this.widthStyles = new ElementStyleLease(
-            this.options.widthHost,
-            {
-                '--workspace-right-side-panel-width': value,
-                '--side-panel-backdrop-width': value,
-            },
-        )
+        this.widthStyles = new ElementStyleLease(this.options.widthHost, { '--workspace-right-side-panel-width': `${width}px` })
         previousStyles?.destroy()
-        this.panel?.style.setProperty('--workspace-right-side-panel-width', value)
-        this.panel?.style.setProperty('--side-panel-backdrop-width', value)
         this.resizeSwitch()
     }
 
     private endResize(): void {
-        this.panel?.classList.remove('is-resizing')
+        this.panel?.element.classList.remove('is-resizing')
         const release = this.releasePan
         this.releasePan = null
         release?.()
@@ -562,12 +537,11 @@ export class WorkspaceRightPanel {
     }
 
     private async playOpen(
-        sidePanel: SidePanelInstance,
-        panel: HTMLElement,
+        panel: ApplicationPanelInstance,
         version: number,
     ): Promise<void> {
         try {
-            await sidePanel.playOpen(panel)
+            await panel.setOpen(true)
         } catch (error) {
             if (
                 !this.lifetime.signal.aborted

@@ -10,6 +10,7 @@ import {
 } from '@lixpi/capability-system/frontend'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
+import { createLibraryButton } from './library-controls.ts'
 
 export type CapabilityLibraryPanelConfig = {
     document: Document
@@ -195,12 +196,15 @@ class CapabilityLibraryPanel implements CapabilityLibraryPanelInstance {
                 <div className="capability-library-row-name">${item.name}</div>
                 <div className="capability-library-row-summary">${item.summary}</div>
             </div>
-            <button
-                type="button"
-                className="capability-library-row-action capability-library-row-action-primary"
-                data-action="attach"
-                data-side-panel-no-drag="true"
-            >Use</button>
+            ${createLibraryButton(
+                this.config.document,
+                {
+                    label: 'Use',
+                    variant: 'primary',
+                    className: 'capability-library-row-action',
+                    action: 'attach',
+                },
+            )}
         </article>
         ` as HTMLElement
         const select = (): void => void this.select(item.capabilityId)
@@ -266,20 +270,27 @@ class CapabilityLibraryPanel implements CapabilityLibraryPanelInstance {
                 className="capability-library-inspector-card"
                 data-side-panel-no-drag="true"
             >
-            <button
-                type="button"
-                className="capability-library-row-action capability-library-back"
-            >Back</button>
+            ${createLibraryButton(
+                this.config.document,
+                {
+                    label: 'Back',
+                    className: 'capability-library-back',
+                },
+            )}
             <div className="capability-library-row-meta">
                 <span className="capability-library-row-category">Tool</span>
                 <span className="capability-library-row-scope">${details.scope}</span>
             </div>
             <h2>${details.name}</h2>
             <p className="capability-library-row-detail-summary">${details.summary}</p>
-            <button
-                type="button"
-                className="capability-library-row-action capability-library-row-action-primary capability-library-attach"
-            >Add to prompt</button>
+            ${createLibraryButton(
+                this.config.document,
+                {
+                    label: 'Add to prompt',
+                    variant: 'primary',
+                    className: 'capability-library-attach',
+                },
+            )}
         </section>
         ` as HTMLElement
         this.listen(

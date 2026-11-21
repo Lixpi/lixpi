@@ -67,9 +67,11 @@
 }
 
 // Zero-size first child of a scroll container that holds its scrollbars. Its
-// sticky insets equal the container's padding, so it sits at the visible top
-// left corner both before and after scrolling, and a sticky offset never adds
-// to the scrollable area. `documentScrollbars.ts` sets the custom properties.
+// sticky insets equal the container's padding, so it stays at one place in
+// the visible area both before and after scrolling, and a sticky offset never
+// adds to the scrollable area. `documentScrollbars.ts` sets the custom
+// properties, including the slot's measured offset from the container's
+// visible top left corner.
 .lixpi-scrollbar-slot {
     position: sticky;
     top: var(--lixpi-scrollbar-slot-top, 0px);
@@ -88,20 +90,21 @@
 }
 
 // Inside the slot both scrollbars are placed against the container's visible
-// box, measured as the viewport size, instead of the slot's own zero size.
+// box, measured as the viewport size and the slot's offset into it, instead
+// of the slot's own zero size.
 .lixpi-scrollbar-slot > .os-scrollbar.lixpi-scrollbar.os-scrollbar-vertical {
-    top: calc(-1 * var(--lixpi-scrollbar-slot-top, 0px));
+    top: calc(-1 * var(--lixpi-scrollbar-slot-offset-top, 0px));
     right: auto;
     bottom: auto;
-    left: calc(var(--lixpi-scrollbar-viewport-width, 0px) - var(--lixpi-scrollbar-slot-left, 0px) - var(--os-size) - 2px);
+    left: calc(var(--lixpi-scrollbar-viewport-width, 0px) - var(--lixpi-scrollbar-slot-offset-left, 0px) - var(--os-size) - 2px);
     height: var(--lixpi-scrollbar-viewport-height, 0px);
 }
 
 .lixpi-scrollbar-slot > .os-scrollbar.lixpi-scrollbar.os-scrollbar-horizontal {
-    top: calc(var(--lixpi-scrollbar-viewport-height, 0px) - var(--lixpi-scrollbar-slot-top, 0px) - var(--os-size) - 2px);
+    top: calc(var(--lixpi-scrollbar-viewport-height, 0px) - var(--lixpi-scrollbar-slot-offset-top, 0px) - var(--os-size) - 2px);
     right: auto;
     bottom: auto;
-    left: calc(-1 * var(--lixpi-scrollbar-slot-left, 0px));
+    left: calc(-1 * var(--lixpi-scrollbar-slot-offset-left, 0px));
     width: var(--lixpi-scrollbar-viewport-width, 0px);
 }
 

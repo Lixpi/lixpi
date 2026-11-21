@@ -1,5 +1,7 @@
 import { WorkspacePromptControlRail } from '../composer/workspace-prompt-control-rail.ts'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
+import { createTextInput } from '@lixpi/ui-kit/components/text-input'
 import {
     hslToRgb,
     parseHexColor,
@@ -27,10 +29,6 @@ export type WorkspaceCanvasControlsSettings = {
             contentFontSize: number
             tagPillFontSize: number
             tagPillFontWeight: number
-        }
-        styles: {
-            backdropFill: string
-            backdropFillOpaque: string
         }
     }
     modelMenuHoverBackground: string
@@ -188,13 +186,10 @@ export class WorkspaceCanvasControls {
         )
         const properties = {
             '--workspace-right-side-panel-width': `min(${panel.defaultDimensions.width}px, calc(100vw - ${panel.dimensions.maxPaneMargin}px))`,
-            '--side-panel-backdrop-width': 'var(--workspace-right-side-panel-width)',
             '--workspace-right-side-panel-content-inset': `${panel.layout.contentInset}px`,
             '--workspace-right-sidebar-content-font-size': `${panel.typography.contentFontSize}px`,
             '--workspace-right-sidebar-tag-pill-font-size': `${panel.typography.tagPillFontSize}px`,
             '--workspace-right-sidebar-tag-pill-font-weight': String(panel.typography.tagPillFontWeight),
-            '--side-panel-backdrop-fill': panel.styles.backdropFill,
-            '--side-panel-backdrop-fill-opaque': panel.styles.backdropFillOpaque,
             '--workspace-controls-steel-blue': palette.steelBlue,
             '--workspace-controls-night-blue': palette.nightBlue,
             '--workspace-controls-off-white': palette.offWhite,
@@ -302,38 +297,47 @@ export class WorkspaceCanvasControls {
                 </div>
             ` as HTMLElement
         } else {
-            const input = html`
-                <input
-                    type="url"
-                    className="workspace-image-submenu-url-input"
-                    placeholder="https://example.com/image.jpg"
-                    onkeydown=${(event: KeyboardEvent) => {
-                        if (event.key === 'Enter')
-                            this.submitUrl()
-                    }}
-                    oninput=${(event: Event) => void (this.imageUrl = (event.target as HTMLInputElement).value)}
-                />
-            ` as HTMLInputElement
-            input.value = this.imageUrl
+            const input = createTextInput({
+                type: 'url',
+                ariaLabel: 'Image URL',
+                placeholder: 'https://example.com/image.jpg',
+                value: this.imageUrl,
+                className: 'workspace-image-submenu-url-input',
+                document: this.ports.document,
+                onInput: value => void (this.imageUrl = value),
+            }).element
+            input.addEventListener('keydown', (event: KeyboardEvent) => {
+                if (event.key === 'Enter')
+                    this.submitUrl()
+            })
             menu = html`
                 <div className="workspace-image-submenu">
                     <div className="workspace-image-submenu-url-form">
                         ${input}
                         <div className="workspace-image-submenu-url-actions">
-                            <button
-                                className="workspace-image-submenu-url-back"
-                                onclick=${() => {
-                                    if (this.disposed)
-                                        return
+                            ${
+                                createButton({
+                                    label: 'Back',
+                                    className: 'workspace-image-submenu-url-back',
+                                    document: this.ports.document,
+                                    onClick: () => {
+                                        if (this.disposed)
+                                            return
 
-                                    this.menuMode = 'menu'
-                                    this.renderUploadMenu()
-                                }}
-                            >Back</button>
-                            <button
-                                className="workspace-image-submenu-url-insert"
-                                onclick=${this.submitUrl}
-                            >Add</button>
+                                        this.menuMode = 'menu'
+                                        this.renderUploadMenu()
+                                    },
+                                }).element
+                            }
+                            ${
+                                createButton({
+                                    label: 'Add',
+                                    variant: 'primary',
+                                    className: 'workspace-image-submenu-url-insert',
+                                    document: this.ports.document,
+                                    onClick: this.submitUrl,
+                                }).element
+                            }
                         </div>
                     </div>
                 </div>

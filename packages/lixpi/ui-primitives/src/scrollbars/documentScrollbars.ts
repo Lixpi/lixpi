@@ -302,6 +302,21 @@ class ScrollbarAttachment {
                 '--lixpi-scrollbar-slot-left': this.style.paddingLeft,
             },
         )
+
+        // Engines disagree on where sticky insets start: WebKit counts them
+        // from the scrollport edge, Chromium from inside the container's
+        // padding, which puts the slot a second padding further in. The
+        // scrollbars are placed from where the slot actually sits, so they
+        // stay on the visible edge in every engine.
+        const slotRect = this.slot.getBoundingClientRect()
+        const elementRect = this.element.getBoundingClientRect()
+        applyCssCustomProperties(
+            this.slot,
+            {
+                '--lixpi-scrollbar-slot-offset-top': `${slotRect.top - elementRect.top - this.element.clientTop}px`,
+                '--lixpi-scrollbar-slot-offset-left': `${slotRect.left - elementRect.left - this.element.clientLeft}px`,
+            },
+        )
     }
 
     // A flex gap would open after the slot like after any item.
@@ -360,6 +375,7 @@ class DocumentScrollbars {
     private rootInstance: OverlayScrollbars | null = null
     private lastDiscoveryTarget: EventTarget | null = null
     private sweepFrame: number | null = null
+    private discovering = false
 
     constructor(private readonly document: Document) {
         OverlayScrollbars.plugin(ClickScrollPlugin)
@@ -494,9 +510,28 @@ class DocumentScrollbars {
         )
     }
 
+    // The first OverlayScrollbars call of any kind, even a lookup, measures
+    // the browser by focusing a hidden probe scroller, and every new instance
+    // moves the container's children. The focus and scroll events this fires
+    // synchronously belong to the library. Discovering the probe as a
+    // container would call the library again before its measurement exists,
+    // and recurse until the stack overflows, so no scrollbar could attach.
+    private handleDiscoveryEvent = (event: Event): void => {
+        if (this.discovering)
+            return
+
+        this.discovering = true
+
+        try {
+            this.discover(event)
+        } finally {
+            this.discovering = false
+        }
+    }
+
     // Pointer and wheel events repeat on the same element; only a new target
     // can reveal a scroll container that has not been attached yet.
-    private handleDiscoveryEvent = (event: Event): void => {
+    private discover(event: Event): void {
         const target = event.target
 
         if (

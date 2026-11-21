@@ -21,7 +21,7 @@ type LibraryDiagramOptions = {
     selected?: boolean
 }
 
-export class CanvasLibraryColors {
+export class LibraryColors {
     constructor(private readonly source: CanvasThemeSource) {}
 
     get background(): string {

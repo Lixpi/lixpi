@@ -61,20 +61,6 @@ export const contentValues: ContentTheme = {
                     foreground: palette.smokeSlate,
                 },
             },
-            modelConfigAddLabel: {
-                base: {
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    lineHeight: "1.2",
-                },
-            },
-            modelConfigAddIcon: {
-                base: {
-                    borderRadius: "50%",
-                    backgroundColor: palette.nightBlue,
-                    fill: palette.white,
-                },
-            },
             modelConfigRemove: {
                 base: {
                     borderRadius: "50%",
@@ -241,14 +227,6 @@ export const contentValues: ContentTheme = {
                 base: {
                     foreground: palette.navy58,
                     fontSize: "12px",
-                },
-            },
-            pickerLoadMore: {
-                base: {
-                    borderRadius: "9px",
-                },
-                hover: {
-                    background: palette.cornflowerBlue09,
                 },
             },
             chip: {

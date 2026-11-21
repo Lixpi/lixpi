@@ -33,6 +33,7 @@ import {
     applyStyle,
     html,
 } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
 
 export type PromptReferencePickerMode = 'references' | 'modules'
 
@@ -651,17 +652,16 @@ class PromptReferencePickerMenu {
         }
 
         if (this.cursor) {
-            const loadMore = html`
-                <button
-                    type="button"
-                    className="prompt-reference-picker-load-more"
-                    onmousedown=${(event: MouseEvent) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        void this.loadMore(state.category, state.query)
-                    }}
-                >Load more</button>
-            ` as HTMLButtonElement
+            const loadMore = createButton({
+                label: 'Load more',
+                className: 'prompt-reference-picker-load-more',
+            }).element
+            // Mousedown keeps the editor's selection while loading.
+            loadMore.addEventListener('mousedown', (event: MouseEvent) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void this.loadMore(state.category, state.query)
+            })
             rows.push(loadMore)
         }
 

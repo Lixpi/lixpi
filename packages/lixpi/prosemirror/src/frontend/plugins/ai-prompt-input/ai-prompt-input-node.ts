@@ -8,6 +8,7 @@ import {
 // @ts-ignore - runtime import
 
 import { html } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
 import {
     BubbleMenu,
     type BubbleMenuItem,
@@ -381,22 +382,13 @@ class AddModelButton implements DropdownView {
 
             this.controls.setSelectedModelIds([...selectedModelIds, nextModel.aiModel])
         }
-        this.dom = html`
-            <button
-                type="button"
-                className="ai-model-config-add"
-                aria-label="Add model"
-                data-help-tooltip="aria-label"
-                contenteditable="false"
-                onclick=${handleClick}
-            >
-                <span className="ai-model-config-add-label">Add model</span>
-                <span
-                    className="ai-model-config-add-icon"
-                    innerHTML=${plusIcon}
-                ></span>
-            </button>
-        ` as HTMLButtonElement
+        this.dom = createButton({
+            label: 'Add model',
+            icon: plusIcon,
+            className: 'ai-model-config-add',
+            onClick: handleClick,
+        }).element
+        this.dom.contentEditable = 'false'
         this.unsubscribe = this.services.models.subscribe(() => this.update())
         this.update()
     }

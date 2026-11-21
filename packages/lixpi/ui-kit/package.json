@@ -9,24 +9,41 @@
     },
     "exports": {
         ".": "./src/index.ts",
-        "./canvas-library": "./src/components/canvasLibrary/library-layout.ts",
         "./styles/typography": {
             "types": "./src/styles.d.ts",
             "sass": "./styles/typography.scss",
             "style": "./styles/typography.scss",
             "default": "./styles/typography.scss"
         },
-        "./styles/canvas-library": {
+        "./styles/documentation": {
             "types": "./src/styles.d.ts",
-            "sass": "./styles/canvas-library.scss",
-            "style": "./styles/canvas-library.scss",
-            "default": "./styles/canvas-library.scss"
+            "sass": "./styles/documentation.scss",
+            "style": "./styles/documentation.scss",
+            "default": "./styles/documentation.scss"
         },
         "./styles/navigation-side-panel": {
             "types": "./src/styles.d.ts",
             "sass": "./styles/navigation-side-panel.scss",
             "style": "./styles/navigation-side-panel.scss",
             "default": "./styles/navigation-side-panel.scss"
+        },
+        "./styles/application-panel": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/application-panel.scss",
+            "style": "./styles/application-panel.scss",
+            "default": "./styles/application-panel.scss"
+        },
+        "./styles/button": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/button.scss",
+            "style": "./styles/button.scss",
+            "default": "./styles/button.scss"
+        },
+        "./styles/text-input": {
+            "types": "./src/styles.d.ts",
+            "sass": "./styles/text-input.scss",
+            "style": "./styles/text-input.scss",
+            "default": "./styles/text-input.scss"
         },
         "./styles/tokens": {
             "types": "./src/styles.d.ts",
@@ -87,6 +104,9 @@
         "./components/bubble-menu": "./src/components/bubbleMenu/index.ts",
         "./components/action-panel": "./src/components/actionPanel/index.ts",
         "./components/side-panel": "./src/components/sidePanel/index.ts",
+        "./components/application-panel": "./src/components/applicationPanel/index.ts",
+        "./components/button": "./src/components/button/index.ts",
+        "./components/text-input": "./src/components/textInput/index.ts",
         "./components/help-tooltip": "./src/components/helpTooltip/index.ts",
         "./components/video-controls": "./src/components/videoControls/index.ts",
         "./components/canvas-node-footer": "./src/components/canvasNodeFooter/index.ts",

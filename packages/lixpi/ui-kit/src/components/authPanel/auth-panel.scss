@@ -3,6 +3,7 @@
 
 @use "@lixpi/ui-primitives/styles/transitions" as *;
 @use "../../styles/tokens" as tokens;
+@use "../button/button.scss";
 @import url("https://fonts.cdnfonts.com/css/herculanum-lt-pro");
 
 .auth-panel {
@@ -82,45 +83,6 @@
 
 .auth-panel-button {
     width: 100%;
-    min-height: 48px;
-    padding: 12px 20px;
-    border: #{themeScope.token("components-auth-panel-button-button-base-border", themePalette.$roles)};
-    border-radius: #{themeScope.token("components-auth-panel-button-button-base-border-radius", themePalette.$roles)};
-    background: #{themeScope.token("components-auth-panel-button-button-base-background", themePalette.$roles)};
-    color: #{themeScope.token("components-auth-panel-button-button-base-foreground", themePalette.$roles)};
-    font: inherit;
-    font-size: #{themeScope.token("components-auth-panel-button-button-base-font-size", themePalette.$roles)};
-    font-weight: #{themeScope.token("components-auth-panel-button-button-base-font-weight", themePalette.$roles)};
-    cursor: pointer;
-    transition:
-        hoverTransition(background-color),
-        hoverTransition(border-color),
-        hoverTransition(color);
-
-    &:hover:not(:disabled) {
-        background: #{themeScope.token("components-auth-panel-button-hover-background", themePalette.$roles)};
-        border-color: #{themeScope.token("components-auth-panel-button-hover-border-color", themePalette.$roles)};
-    }
-
-    &:focus-visible {
-        outline: none;
-    }
-
-    &:disabled {
-        opacity: 0.6;
-        cursor: wait;
-    }
-}
-
-.auth-panel-button-secondary {
-    color: #{themeScope.token("components-auth-panel-button-secondary-button-base-foreground", themePalette.$roles)};
-    background: transparent;
-    border-color: #{themeScope.token("components-auth-panel-button-secondary-button-base-border-color", themePalette.$roles)};
-
-    &:hover:not(:disabled) {
-        background: #{themeScope.token("components-auth-panel-button-secondary-hover-background", themePalette.$roles)};
-        border-color: #{themeScope.token("components-auth-panel-button-secondary-hover-border-color", themePalette.$roles)};
-    }
 }
 
 .auth-panel-footer {

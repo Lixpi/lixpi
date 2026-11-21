@@ -8,6 +8,7 @@ import {
 } from '@lixpi/ui-kit/components/preview'
 import { atomIcon } from '@lixpi/ui-kit/svg'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+import { createButton } from '@lixpi/ui-kit/components/button'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     getContextPreviewCanvasPortal,
@@ -183,15 +184,14 @@ class CapabilityPromptReferencePreview implements ContextPreviewTileInstance {
                 return
 
             this.status = 'error'
-            const retry = this.html`
-                <button
-                    type="button"
-                    className="capability-description-retry"
-                >Retry</button>
-            ` as HTMLButtonElement
-            const click = () => void this.load()
-            retry.addEventListener('click', click)
-            this.contentLifetime.own(() => retry.removeEventListener('click', click))
+            const retryButton = createButton({
+                label: 'Retry',
+                className: 'capability-description-retry',
+                document: this.ports.environment.document,
+                onClick: () => void this.load(),
+            })
+            const retry = retryButton.element
+            this.contentLifetime.own(() => retryButton.destroy())
             this.popover.updateContent(
                 this.content(
                     this.html`

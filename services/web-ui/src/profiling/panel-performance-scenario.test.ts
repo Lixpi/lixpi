@@ -17,7 +17,7 @@ describe('panel profiling scenario', () => {
 
     const addPanel = (name: string, open: boolean): HTMLDivElement => {
         const panel = document.createElement('div')
-        panel.className = name === 'navigation' ? 'navigation-side-panel-toggle' : 'workspace-ai-chat-panel-toggle'
+        panel.className = name === 'navigation' ? 'application-panel-toggle side-panel-toggle-left' : 'application-panel-toggle side-panel-toggle-right'
         panel.classList.toggle('side-panel-toggle-open', open)
         const button = document.createElement('button')
         button.className = 'side-panel-toggle-button'
