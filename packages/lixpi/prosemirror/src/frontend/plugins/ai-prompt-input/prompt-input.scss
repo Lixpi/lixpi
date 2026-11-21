@@ -483,9 +483,6 @@ $ai-prompt-input-ring-width: 4px;
     transition:
         hoverTransition(color),
         hoverTransition(background-color);
-}
-
-.ai-model-config-remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -508,9 +505,6 @@ $ai-prompt-input-ring-width: 4px;
 
 .ai-model-config-remove:hover:not(:disabled) {
     color: var(--ai-prompt-model-menu-section-title-color, #{themeScope.token("components-composer-model-menu-section-title-color", themePalette.$roles)});
-}
-
-.ai-model-config-remove:hover:not(:disabled) {
     background: #{themeScope.token("components-composer-input-model-config-remove-hover-background", themePalette.$roles)};
 }
 
