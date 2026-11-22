@@ -1,19 +1,19 @@
 import {
-    getOrthogonalRoutePoints,
-    isOrthogonalRouteClear,
-    isOrthogonalRouteSimple,
     type CanvasEnginePoint,
     type CanvasEngineRect,
+} from '../geometry/index.ts'
+import {
     type CanvasPort,
     type EngineEdge,
     type EngineNode,
-} from '@lixpi/canvas-engine/shared'
+} from '../scene/types.ts'
+import { getOrthogonalRoutePoints } from '../connectors/paths/index.ts'
+import { isOrthogonalRouteClear } from '../connectors/paths/route-clearance.ts'
+import { isOrthogonalRouteSimple } from '../connectors/paths/route-simplicity.ts'
 import {
-    type WorkspaceDiagramEdge,
-    type WorkspaceDiagramNode,
-} from './workspace-diagram.ts'
+    type CanvasGraphEdgeKind,
+} from './types.ts'
 
-type DiagramNode = EngineNode<WorkspaceDiagramNode>
 type Direction = CanvasPort['direction']
 type Obstacle = CanvasEngineRect & { id: string }
 type Escape = {
@@ -26,6 +26,11 @@ type FeedbackRoute = {
     points: CanvasEnginePoint[]
 }
 
+export type CanvasGraphRoutedEdge<EdgeData> = {
+    edge: EngineEdge<EdgeData>
+    kind: CanvasGraphEdgeKind
+}
+
 const routeLength = (points: readonly CanvasEnginePoint[]): number => points.slice(1).reduce(
     (
         length,
@@ -35,64 +40,68 @@ const routeLength = (points: readonly CanvasEnginePoint[]): number => points.sli
     0,
 )
 
-const compareEdgeIds = (
-    a: WorkspaceDiagramEdge,
-    b: WorkspaceDiagramEdge,
-): number => (a.id === b.id
+const compareEdges = <EdgeData>(
+    a: CanvasGraphRoutedEdge<EdgeData>,
+    b: CanvasGraphRoutedEdge<EdgeData>,
+): number => (a.edge.edgeId === b.edge.edgeId
     ? 0
-    : a.id < b.id
+    : a.edge.edgeId < b.edge.edgeId
         ? -1
         : 1)
 
-// This planner owns graph-level port separation and feedback lanes. The engine
-// remains responsible for obstacle checks, point routing and path rounding.
-export class WorkspaceDiagramRouting {
-    private readonly byId: Map<string, DiagramNode>
+// Plans graph-level port separation and exterior feedback lanes. The shared
+// orthogonal planner keeps obstacle checks, point routing and path rounding.
+export class CanvasGraphRouting<NodeData, EdgeData> {
+    private readonly byId: Map<string, EngineNode<NodeData>>
     private readonly occupied = new Map<string, CanvasEnginePoint[]>()
     private readonly connectors: Obstacle[] = []
 
     constructor(
-        private readonly nodes: DiagramNode[],
-        private readonly edges: readonly WorkspaceDiagramEdge[],
+        private readonly nodes: EngineNode<NodeData>[],
+        private readonly edges: readonly CanvasGraphRoutedEdge<EdgeData>[],
         private readonly gap: number,
     ) {
         this.byId = new Map(
             nodes.map(node => [node.nodeId, node]),
         )
 
-        for (const edge of edges) {
-            if (
-                edge.kind
-                && edge.kind !== 'forward'
-            )
+        for (const {
+            edge,
+            kind,
+        } of edges) {
+            if (kind !== 'forward')
                 continue
 
-            this.reserve(this.byId.get(edge.source)!, 'right')
-            this.reserve(this.byId.get(edge.target)!, 'left')
+            this.reserve(this.byId.get(edge.source.nodeId)!, 'right')
+            this.reserve(this.byId.get(edge.target.nodeId)!, 'left')
         }
     }
 
-    route(): EngineEdge<WorkspaceDiagramEdge>[] {
-        const result = new Map<string, EngineEdge<WorkspaceDiagramEdge>>()
-        const ordered = this.edges.toSorted(compareEdgeIds)
+    route(): EngineEdge<EdgeData>[] {
+        const result = new Map<string, EngineEdge<EdgeData>>()
+        const ordered = this.edges.toSorted(compareEdges)
 
-        for (const edge of ordered) {
-            if (edge.kind === 'feedback')
+        for (const routed of ordered) {
+            if (routed.kind === 'feedback')
                 continue
 
-            if (edge.kind !== 'relation') {
-                const routed = this.edge(
-                    edge,
-                    'right',
-                    'left',
+            const edge = routed.edge
+
+            if (routed.kind === 'forward') {
+                result.set(
+                    edge.edgeId,
+                    this.edge(
+                        routed,
+                        'right',
+                        'left',
+                    ),
                 )
-                result.set(edge.id, routed)
                 // The horizontal Bezier's control points remain inside this
                 // endpoint hull. Reserving the hull is deliberately conservative.
-                const start = this.anchor(this.byId.get(edge.source)!, 'right')
-                const end = this.anchor(this.byId.get(edge.target)!, 'left')
+                const start = this.anchor(this.byId.get(edge.source.nodeId)!, 'right')
+                const end = this.anchor(this.byId.get(edge.target.nodeId)!, 'left')
                 this.reserveSegments(
-                    edge.id,
+                    edge.edgeId,
                     [{
                         x: Math.min(start.x, end.x - this.gap),
                         y: start.y,
@@ -105,8 +114,8 @@ export class WorkspaceDiagramRouting {
                 continue
             }
 
-            const source = this.byId.get(edge.source)!
-            const target = this.byId.get(edge.target)!
+            const source = this.byId.get(edge.source.nodeId)!
+            const target = this.byId.get(edge.target.nodeId)!
             const dx = target.position.x + target.dimensions.width / 2 - source.position.x - source.dimensions.width / 2
             const dy = target.position.y + target.dimensions.height / 2 - source.position.y - source.dimensions.height / 2
             const vertical = Math.abs(dy) > Math.abs(dx)
@@ -134,27 +143,27 @@ export class WorkspaceDiagramRouting {
                     : 'top'
                 : facingTargetDirection
             const sharedSourcePort = sourceDirection === 'right'
-                && this.edges.some(candidate => candidate.source === edge.source && (!candidate.kind || candidate.kind === 'forward'))
+                && this.edges.some(candidate => candidate.edge.source.nodeId === source.nodeId && candidate.kind === 'forward')
                 ? source.ports.find(port => port.id === 'right')
                 : undefined
             const sourcePort = sharedSourcePort ?? this.port(
                 source,
                 sourceDirection,
                 'output',
-                `${edge.id}:source`,
+                `${edge.edgeId}:source`,
             )
             const targetPort = this.port(
                 target,
                 targetDirection,
                 'input',
-                `${edge.id}:target`,
+                `${edge.edgeId}:target`,
             )
 
             if (
                 !sourcePort
                 || !targetPort
             )
-                throw new Error(`Workspace diagram relation ${edge.id} has no free ports`)
+                throw new Error(`Graph relation ${edge.edgeId} has no free ports`)
 
             if (vertical) {
                 const left = Math.max(source.position.x, target.position.x)
@@ -199,27 +208,28 @@ export class WorkspaceDiagramRouting {
                 1,
                 this.gap,
             )
-            const routed = this.edge(
-                edge,
+            const relation = this.edge(
+                routed,
                 sourcePort.id,
                 targetPort.id,
             )
-            routed.bendPoints = points.slice(1, -1)
-            result.set(edge.id, routed)
-            this.reserveSegments(edge.id, points)
+            relation.bendPoints = points.slice(1, -1)
+            result.set(edge.edgeId, relation)
+            this.reserveSegments(edge.edgeId, points)
         }
 
-        const feedback = ordered.filter(edge => edge.kind === 'feedback')
-            .sort((a, b) => this.span(a) - this.span(b) || compareEdgeIds(a, b))
+        const feedback = ordered.filter(routed => routed.kind === 'feedback')
+            .sort((a, b) => this.span(a) - this.span(b) || compareEdges(a, b))
         const top = Math.min(...this.nodes.map(node => node.position.y), ...this.connectors.map(obstacle => obstacle.y))
         const bottom = Math.max(
             ...this.nodes.map(node => node.position.y + node.dimensions.height),
             ...this.connectors.map(obstacle => obstacle.y + obstacle.height),
         )
 
-        for (const [index, edge] of feedback.entries()) {
-            const source = this.byId.get(edge.source)!
-            const target = this.byId.get(edge.target)!
+        for (const [index, routed] of feedback.entries()) {
+            const edge = routed.edge
+            const source = this.byId.get(edge.source.nodeId)!
+            const target = this.byId.get(edge.target.nodeId)!
             const candidates: FeedbackRoute[] = []
 
             // Longer returns receive outer lanes. Evaluate both sides and all
@@ -234,14 +244,14 @@ export class WorkspaceDiagramRouting {
                     side,
                     lane,
                     'output',
-                    `${edge.id}:source`,
+                    `${edge.edgeId}:source`,
                 )
                 const targetEscapes = this.escapes(
                     target,
                     side,
                     lane,
                     'input',
-                    `${edge.id}:target`,
+                    `${edge.edgeId}:target`,
                 )
 
                 for (const sourceEscape of sourceEscapes) {
@@ -250,10 +260,10 @@ export class WorkspaceDiagramRouting {
                             ...sourceEscape.points,
                             ...targetEscape.points.toReversed(),
                         ]
-
-                        const excludedNodes = new Set<string>()
-                        excludedNodes.add(source.nodeId)
-                        excludedNodes.add(target.nodeId)
+                        const excludedNodes = new Set([
+                            source.nodeId,
+                            target.nodeId,
+                        ])
 
                         if (
                             !isOrthogonalRouteSimple(points)
@@ -276,32 +286,32 @@ export class WorkspaceDiagramRouting {
                 target,
                 route.target.port,
             )
-            const routed = candidates.toSorted((a, b) => preference(a) - preference(b) || routeLength(a.points) - routeLength(b.points))[0]
+            const selected = candidates.toSorted((a, b) => preference(a) - preference(b) || routeLength(a.points) - routeLength(b.points))[0]
 
-            if (!routed)
-                throw new Error(`Workspace diagram feedback ${edge.id} has no clear exterior route`)
+            if (!selected)
+                throw new Error(`Graph feedback ${edge.edgeId} has no clear exterior route`)
 
-            this.addPort(source, routed.source.port)
-            this.addPort(target, routed.target.port)
+            this.addPort(source, selected.source.port)
+            this.addPort(target, selected.target.port)
             result.set(
-                edge.id,
+                edge.edgeId,
                 {
                     ...this.edge(
-                        edge,
-                        routed.source.port.id,
-                        routed.target.port.id,
+                        routed,
+                        selected.source.port.id,
+                        selected.target.port.id,
                     ),
-                    bendPoints: routed.points.slice(1, -1),
+                    bendPoints: selected.points.slice(1, -1),
                 },
             )
-            this.reserveSegments(edge.id, routed.points)
+            this.reserveSegments(edge.edgeId, selected.points)
         }
 
-        return this.edges.map(edge => result.get(edge.id)!)
+        return this.edges.map(routed => result.get(routed.edge.edgeId)!)
     }
 
     private portPreference(
-        node: DiagramNode,
+        node: EngineNode<NodeData>,
         port: CanvasPort,
     ): number {
         const horizontal = port.direction === 'top' || port.direction === 'bottom'
@@ -312,9 +322,9 @@ export class WorkspaceDiagramRouting {
         return Math.abs(fraction - 0.5)
     }
 
-    private span(edge: WorkspaceDiagramEdge): number {
-        const source = this.byId.get(edge.source)!
-        const target = this.byId.get(edge.target)!
+    private span(routed: CanvasGraphRoutedEdge<EdgeData>): number {
+        const source = this.byId.get(routed.edge.source.nodeId)!
+        const target = this.byId.get(routed.edge.target.nodeId)!
 
         return Math.abs(source.position.x + source.dimensions.width / 2 - target.position.x - target.dimensions.width / 2)
     }
@@ -333,8 +343,8 @@ export class WorkspaceDiagramRouting {
         points: readonly CanvasEnginePoint[],
         excluded: ReadonlySet<string>,
     ): boolean {
-        // Native markerGap is 64. Half of it covers the bounded native arrow
-        // half-width, stroke and the 24-unit renderer's rounded corner deviation.
+        // Half of the gap covers a bounded arrow half-width, its stroke and
+        // the renderer's rounded corner deviation.
         return isOrthogonalRouteClear(
             points,
             this.obstacles(excluded),
@@ -366,7 +376,7 @@ export class WorkspaceDiagramRouting {
     }
 
     private anchor(
-        node: DiagramNode,
+        node: EngineNode<NodeData>,
         portId: string,
     ): CanvasEnginePoint {
         const port = node.ports.find(candidate => candidate.id === portId)!
@@ -378,7 +388,7 @@ export class WorkspaceDiagramRouting {
     }
 
     private reserve(
-        node: DiagramNode,
+        node: EngineNode<NodeData>,
         direction: Direction,
     ): void {
         const port = node.ports.find(candidate => candidate.id === direction)!
@@ -386,7 +396,7 @@ export class WorkspaceDiagramRouting {
     }
 
     private port(
-        node: DiagramNode,
+        node: EngineNode<NodeData>,
         direction: Direction,
         role: CanvasPort['role'],
         id: string,
@@ -426,7 +436,7 @@ export class WorkspaceDiagramRouting {
     }
 
     private addPort(
-        node: DiagramNode,
+        node: EngineNode<NodeData>,
         port: CanvasPort,
     ): void {
         node.ports = [...node.ports, port]
@@ -435,7 +445,7 @@ export class WorkspaceDiagramRouting {
     }
 
     private escapes(
-        node: DiagramNode,
+        node: EngineNode<NodeData>,
         side: 'top' | 'bottom',
         lane: number,
         role: CanvasPort['role'],
@@ -492,7 +502,7 @@ export class WorkspaceDiagramRouting {
                 if (direction === side) {
                     // A vertically blocked port can first enter the inter-row
                     // gap, move around the blocker, then reach the exterior rail.
-                    // Every candidate retains the native outward endpoint lead.
+                    // Every candidate retains the outward endpoint lead.
                     const leads = [...new Set([
                         anchor.y + (side === 'top' ? -this.gap : this.gap),
                         ...corridorObstacles.flatMap(
@@ -565,25 +575,24 @@ export class WorkspaceDiagramRouting {
     }
 
     private edge(
-        edge: WorkspaceDiagramEdge,
+        routed: CanvasGraphRoutedEdge<EdgeData>,
         sourcePort: string,
         targetPort: string,
-    ): EngineEdge<WorkspaceDiagramEdge> {
+    ): EngineEdge<EdgeData> {
         return {
-            edgeId: edge.id,
+            edgeId: routed.edge.edgeId,
             source: {
-                nodeId: edge.source,
+                nodeId: routed.edge.source.nodeId,
                 portId: sourcePort,
             },
             target: {
-                nodeId: edge.target,
+                nodeId: routed.edge.target.nodeId,
                 portId: targetPort,
             },
-            path: edge.kind
-                && edge.kind !== 'forward'
-                ? 'orthogonal'
-                : 'horizontal-bezier',
-            data: edge,
+            path: routed.kind === 'forward'
+                ? 'horizontal-bezier'
+                : 'orthogonal',
+            data: routed.edge.data,
         }
     }
 }

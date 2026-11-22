@@ -28,13 +28,6 @@
             "default": "./src/frontend/loading/loading-overlay.scss"
         },
         "./connectors": "./src/frontend/connectors/connector-settings.ts",
-        "./diagram": "./src/frontend/diagram/diagram-canvas.ts",
-        "./styles/diagram-canvas": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/frontend/diagram/diagram-canvas.scss",
-            "style": "./src/frontend/diagram/diagram-canvas.scss",
-            "default": "./src/frontend/diagram/diagram-canvas.scss"
-        },
         "./nodes/shell": "./src/frontend/nodes/node-shell.ts",
         "./styles/node-shell": {
             "types": "./src/styles.d.ts",
@@ -156,14 +149,6 @@
             "sass": "./src/workspace/frontend/nodes/workspace-node-shells.scss",
             "style": "./src/workspace/frontend/nodes/workspace-node-shells.scss",
             "default": "./src/workspace/frontend/nodes/workspace-node-shells.scss"
-        },
-        "./workspace/diagram": "./src/workspace/frontend/diagram/index.ts",
-        "./workspace/shared/diagram": "./src/workspace/shared/diagram/workspace-diagram.ts",
-        "./styles/workspace/diagram": {
-            "types": "./src/styles.d.ts",
-            "sass": "./src/workspace/frontend/diagram/workspace-diagram.scss",
-            "style": "./src/workspace/frontend/diagram/workspace-diagram.scss",
-            "default": "./src/workspace/frontend/diagram/workspace-diagram.scss"
         },
         "./styles/workspace/theme": {
             "types": "./src/styles.d.ts",

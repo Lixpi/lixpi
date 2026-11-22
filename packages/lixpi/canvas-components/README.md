@@ -10,15 +10,11 @@ Frontend modules, including `src/workspace/frontend`, use native browser console
 
 Image, video and audio each have one content implementation shared by the documentation service and Lixpi workspace. Workspace adapters supply data and behavior to the same image and playback registrations. Metadata belongs to the reusable node shell around that content, so a titled image or video remains the same media node. The documentation's Metadata shell page demonstrates the empty shell and wrapped content variants together.
 
-Primitive entrypoints such as `/media`, `/diagram`, `/effects` and `/nodes/shell` own content, controls and appearance without workspace or Asset contracts. `/workspace` and `/workspace/*` compose those primitives with Lixpi's document, branch, generation and conversation contracts through typed host ports. Workspace modules live under `src/workspace`; they may import primitive modules, while primitives must not import workspace modules. UI-kit supplies generic controls and icons, and [UI Primitives](../ui-primitives/README.md) supplies DOM and drawing helpers. No component imports service code, application stores or Pixi directly.
+Primitive entrypoints such as `/media`, `/effects` and `/nodes/shell` own content, controls and appearance without workspace or Asset contracts. `/workspace` and `/workspace/*` compose those primitives with Lixpi's document, branch, generation and conversation contracts through typed host ports. Workspace modules live under `src/workspace`; they may import primitive modules, while primitives must not import workspace modules. UI-kit supplies generic controls and icons, and [UI Primitives](../ui-primitives/README.md) supplies DOM and drawing helpers. No component imports service code, application stores or Pixi directly.
 
-`/diagram` exports `createDiagramCanvas`, a fixed scene surface backed by the main canvas engine. Insert its `el` into a sized host, call `mount()`, and send `SceneSnapshot` values through `setScene(scene, { size, fitKey })`. The component owns its controller, node registry, fitting, resize observation, native viewport input, node click reporting and optional loading overlay. It pans on drag; clicking inside enables trackpad pan and pinch zoom until the pointer leaves or Escape is pressed. The hint sits below the pane. Scene geometry stays with the host, and geometry, connection and delete intents are ignored. `fitPadding` and `maxFitZoom` default to 32 and 1.2. Set `minFitZoom` to retain readable world text when a scene exceeds its pane; the default is zero. `fitAlignment: 'start'` aligns overflowing axes at the leading padding while centering axes that fit. The default alignment centers both axes. Larger scenes remain available through native panning and zooming. A changed `fitKey` or scene identity refits; resize and `refit()` also fit the supplied scene size. The scene may be supplied before mount. Call `destroy()` when the host unmounts to release the controller, drawing scopes, listeners, observer, hint and DOM root.
+A diagram is an ordinary canvas. A read-only diagram on a documentation page and an editable workspace both use `CanvasController`, and its presentation flags make the difference: `locked` keeps panning and zooming but rejects content changes, `autoFit` keeps the content in view, `scrollCapture: 'on-activate'` leaves page scrolling alone until the canvas is clicked, `layout` places nodes and routes edges from a graph, and `onNodeClick` reports node clicks. The [Canvas Engine README](../canvas-engine/README.md) describes each flag. `LoadingOverlay` from `/loading` covers a canvas root during loading or after an error.
 
-Import `/styles/diagram-canvas` once. Supply the palette through `appearance`, either an object or a callback, and native marker policy through `connectionPolicy`. The default connection settings come from `createCanvasConnectorSettings`, the same factory as the Lixpi workspace. Scientific illustrations such as IDBD explicitly pass `createDiagramConnectorSettings()` from `/connectors` to retain their directional Bezier paths, 1.5px stroke and arrowless zero-gap endpoints. The scientific factory's optional `markers: true` selects a 6px node gap. `connectionSettings: false` disables connectors. Native Lixpi presentations belong to the [workspace diagram adapter](docs/workspace/DIAGRAMS.md), which composes the actual branch content, theme, geometry, layout and marker policy. Pass UI-kit's `createArrowRightMarker()` through `connectionMarker` to use the native arrow artwork. Its reference point and body length let the engine account for the arrow separately from the node gap. Without artwork, connectors have no drawn arrowhead. A scene edge can select the engine's native automatic `orthogonal` path. The optional `theme` source owns live canvas appearance updates. Without a source, consumers can call `refresh()` to reread supplied appearance and repaint retained node views and connections. `setLoading()` and `setError()` retain pre-mount state; optional `loadingOverlay` uses the shared loading component and caller-supplied material. Without an overlay, errors use the diagram's status message. The host controls its loading copy and retry action.
-
-`createDiagramNodeRegistration` supplies fixed geometry, engine-drawn surfaces and the compact `DiagramNodeView` label layout shared with IDBD. `getContent(node)` provides a title, optional tag and short secondary `lines`. The heading and tag share one row; lines sit beneath it with a 2px gap and 8px by 12px padding. Labels do not wrap, so the host must provide enough width for its copy. A title and one or two short lines suit this surface. `getAppearance(node)` is optional; `createDiagramNodeAppearance(shape)` supplies a flat neutral rounded rectangle or centered circle using the current theme's corner radius for rectangles. Appearance can override surface colors, text, tag colors, alignment and a metric heading. Defaults are 18.75px heading, 15px body, 14px tag and 26px metric text at viewport zoom one. Hosts can map `--diagram-node-font-heading`, `--diagram-node-font-body`, `--diagram-node-font-small` and `--diagram-node-font-metric` to their typography tokens. DOM owns accessible labels and browser text; the engine drawing scope owns the background shape.
-
-Nodes have no button role or keyboard action unless `onActivate` is supplied. `selected` and `selectedStyle.fill` support externally selected nodes without drawing a selection outline. Selection does not change the node's border stroke. Supply `onActivate` for Enter and Space activation and the canvas `onNodeClick` callback for pointer activation. `DiagramNodeSurface` exposes the same scoped shape, appearance, selection, bounds and visibility lifecycle for nodes with domain-specific labels. `createFixedDiagramNodeGeometry` supplies immovable measured footprints without duplicating geometry policy in a consumer. Neither adapter owns application state or writes geometry back to the host.
+Connector settings come from `createCanvasConnectorSettings`, the same factory as the Lixpi workspace, or from `canvasThemeConnectorSettings(theme.value)` for a themed canvas. Scientific illustrations such as IDBD pass `createDiagramConnectorSettings()` from `/connectors` to retain their directional Bezier paths, 1.5px stroke and arrowless zero-gap endpoints; the scientific factory's optional `markers: true` selects a 6px node gap. Pass UI-kit's `createArrowRightMarker()` as the connector renderer's `marker`, with `arrowRightMarkerBodyLengthFraction` as `markerBodyLengthFraction`, to draw the native arrow artwork. Its reference point and body length let the engine account for the arrow separately from the node gap. A scene edge can select the engine's automatic `orthogonal` path. A diagram draws its nodes with the same registrations as any other canvas. Lixpi branch markers belong to the [branch marker diagrams](docs/workspace/DIAGRAMS.md), which use the actual branch content, theme, measurement and marker policy.
 
 `GlassBorder` composes a rounded refraction mask, a baked material strip and rim highlights through the drawing resource API. Pass screen-space target rectangles, source groups/layers and appearance settings. Its displacement map uses bounded CPU pixel data. The capture excludes the effect's own output, refreshes only around sampled targets, and pauses when targets disappear. Capture and map textures keep their handles across pane resizing. DOM measurement and target discovery belong to the caller.
 
@@ -58,22 +54,37 @@ Generic panels, menus, tooltips, video controls, footers, preview popovers and D
 
 ```typescript
 import {
+    CanvasController,
+    NodeRegistry,
+} from '@lixpi/canvas-engine/frontend/runtime'
+import { createImageNodeRegistration } from '@lixpi/canvas-components/media'
+import {
     CanvasThemeStore,
+    bindCanvasTheme,
+    canvasThemeConnectorSettings,
     createCanvasThemeFromCss,
 } from '@lixpi/canvas-components/theme'
 
 const theme = new CanvasThemeStore(createCanvasThemeFromCss(host))
-const diagram = createDiagramCanvas({
-    theme,
-    registerNodes: (registry, source) => {
-        registry.register(createDiagramNodeRegistration({
-            type: 'step',
-            theme: source,
-            getContent: node => ({ title: node.data.title }),
-        }))
-    },
+const releaseTheme = bindCanvasTheme(host, theme)
+const canvas = new CanvasController({
+    root: host,
+    registry: new NodeRegistry().register(createImageNodeRegistration({
+        type: 'image',
+        geometry,
+        getMedia: node => node.data.media,
+        getStyle: () => ({
+            radius: theme.value.shape.mediaRadius,
+            placeholder: { color: theme.value.colors.surface },
+        }),
+    })),
+    scene,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    connectors: { settings: canvasThemeConnectorSettings(theme.value) },
+    onIntent: acceptIntent,
     onError: reportError,
 })
+theme.subscribe(next => canvas.setConnectionSettings(canvasThemeConnectorSettings(next)))
 
 theme.update({
     colors: { accent: '#4cd1e0' },
@@ -84,7 +95,7 @@ theme.update({
 
 Palette colors are opaque six-digit hex values shared by DOM and GPU renderers; `colors.background` also accepts `transparent`. Effect and connector colors can reference those roles with `var(--canvas-accent)` and the other canvas color properties; the resolver produces concrete colors before material baking. The explicit `colorScheme` field is `light` or `dark` and applies to native browser controls. Optional `properties` extends the same scoped binding with component-owned CSS custom properties; extension names cannot replace the shared canvas roles. References to extension properties resolve through the same DOM/GPU color resolver. The store validates complete updates, keeps immutable snapshots and notifies subscribers. Partial updates merge nested fields and replace arrays. `bindCanvasTheme(root, theme)` applies scoped `--canvas-*` properties and returns a disposer that restores the root's previous values. Added and removed extension properties follow source updates and are restored on disposal. Different canvases can use independent stores; sharing a store synchronizes them. Destroy components or release bindings when unmounting.
 
-Diagram canvases and node registrations accept the source directly. Diagram theme changes repaint retained nodes and connections. `appearance` and `getAppearance` remain optional local overrides. Custom engine compositions can subscribe to the same source, use `canvasThemeConnectorSettings(theme.value)` for concrete connector colors and `resolveCanvasThemeColors(theme.value, theme.value.effects)` before baking GPU materials. Effects use the same semantic color references as DOM surfaces; shader parameters are explicit data in `effects`.
+Canvas hosts subscribe to the same source, use `canvasThemeConnectorSettings(theme.value)` for concrete connector colors and `resolveCanvasThemeColors(theme.value, theme.value.effects)` before baking GPU materials. Effects use the same semantic color references as DOM surfaces; shader parameters are explicit data in `effects`.
 
 `GlassBorder`, `DomGlassBorder` and `TravelingOutline` expose `setAppearance(style, texture)` for retained resources. `LoadingOverlay` and `LoadingLayer` expose `setAppearance({ outline })`; updating the material and animation settings preserves visibility, errors and active loading leases. Image and playback registrations support style getters so radius and placeholder changes retain loaded media and native players.
 
@@ -108,4 +119,4 @@ The primitive examples use supplied media, appearance and editor ports without a
 
 The [Documentation Service](../../../services/documentation/documentation/DOCUMENTATION.md) runs these components alongside engine interaction examples and Lixpi workspace nodes in a separate Docker service. It imports the packages from its own checkout and supplies local media and typed host fixtures. Each example names the components it demonstrates and releases its resources when replaced.
 
-`/library` owns reusable library presentation adapters for diagram nodes, image placeholders and workspace controls. They consume the same `CanvasTheme` and production UI settings as the components. `CanvasTheme.controls.typography` and `controls.slidingSwitch` preserve compact control labels and native switch paints separately from body typography; panel content uses `typography.panelFontSize` and `panelLineHeight`. Updating body text size does not enlarge these controls. `/styles/library-examples` owns fixture and overview presentation. These compositions live under `src/library`, separate from primitive modules, because they can combine primitive and workspace settings. The service supplies scenes, ports and dynamic geometry; UI Kit owns the documentation layout, navigation and controls.
+`/library` owns reusable library presentation adapters for image placeholders and workspace controls. They consume the same `CanvasTheme` and production UI settings as the components. `CanvasTheme.controls.typography` and `controls.slidingSwitch` preserve compact control labels and native switch paints separately from body typography; panel content uses `typography.panelFontSize` and `panelLineHeight`. Updating body text size does not enlarge these controls. `/styles/library-examples` owns fixture and overview presentation. These compositions live under `src/library`, separate from primitive modules, because they can combine primitive and workspace settings. The service supplies scenes, ports and dynamic geometry; UI Kit owns the documentation layout, navigation and controls.

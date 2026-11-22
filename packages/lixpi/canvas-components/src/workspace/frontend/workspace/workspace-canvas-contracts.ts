@@ -2,6 +2,10 @@ import {
     type CanvasPanZoomConfig,
 } from '@lixpi/canvas-engine/frontend/viewport'
 import {
+    type CanvasScrollCapture,
+} from '@lixpi/canvas-engine/frontend/runtime'
+import {
+    type CanvasFitOptions,
     type ViewportSnapshot as Viewport,
 } from '@lixpi/canvas-engine/shared'
 import {
@@ -90,4 +94,11 @@ export type WorkspaceCanvasOptions = {
     documents: WorkspaceCanvasDocument[]
     aiChatThreads: WorkspaceCanvasConversation[]
     panZoomConfig?: Partial<CanvasPanZoomConfig>
+    // The same presentation flags as the engine canvas. Locked content keeps
+    // pan, zoom and node content but rejects moving, resizing, connecting,
+    // selecting and deleting nodes and connectors.
+    locked?: boolean
+    autoFit?: boolean
+    fit?: CanvasFitOptions
+    scrollCapture?: CanvasScrollCapture
 } & WorkspaceCanvasCallbacks

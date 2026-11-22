@@ -7,13 +7,9 @@ import {
     GlassBorder,
     ClosedGlassStripMaterial,
     CircularGlassMaterial,
-    TravelingSnakeGlassMaterial,
 } from '@lixpi/canvas-components/effects/glass'
 import { TravelingOutline } from '@lixpi/canvas-components/effects/outline'
-import {
-    LoadingOverlay,
-    type LoadingOverlayOptions,
-} from '@lixpi/canvas-components/loading'
+import { LoadingOverlay } from '@lixpi/canvas-components/loading'
 import {
     LoadingLayer,
     type LoadingLease,
@@ -25,30 +21,10 @@ import {
 import { ExampleFrame } from './example-frame.ts'
 import { EngineExample } from './engine-example.ts'
 import { getExampleTheme } from './example-theme.ts'
-
-const outlineAppearance = (theme: CanvasTheme) => {
-    const settings = resolveCanvasThemeColors(theme, theme.effects.generationOutline)
-
-    return {
-        texture: new TravelingSnakeGlassMaterial(
-            settings.colors,
-            settings.tailAlpha,
-            settings.glassMaterial,
-        ).bake(),
-        style: {
-            ...settings,
-            edgeFeatherFraction: settings.glassMaterial.edgeFeatherFraction,
-        },
-    }
-}
-
-const loadingOutline = (theme: CanvasTheme): LoadingOverlayOptions['outline'] => ({
-    ...outlineAppearance(theme),
-    size: theme.effects.loadingOutline.diameter,
-    durationMs: theme.effects.loadingOutline.durationMs,
-    spinCycle: theme.effects.loadingOutline.spinCycle,
-    snakeLengthFraction: theme.effects.loadingOutline.snakeLengthFraction,
-})
+import {
+    loadingOutline,
+    outlineAppearance,
+} from './loading-outline.ts'
 
 const outlineSource = (theme: CanvasTheme): string[] => [
     `const outlineSettings = ${JSON.stringify(

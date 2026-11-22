@@ -13,8 +13,7 @@ import {
     type CanvasConnectionControls,
     type CanvasConnectionOptions,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import { DiagramNodeView } from '@lixpi/canvas-components/diagram'
-import { createLibraryDiagramAppearance } from '@lixpi/canvas-components/library'
+import { ExampleBoxView } from '@lixpi/canvas-components/library'
 import { ExampleFrame } from './example-frame.ts'
 import {
     mergeCanvasTheme,
@@ -86,7 +85,7 @@ export const capabilityNode = (
     data: Partial<CapabilityNodeData> = {},
 ): EngineNode<CapabilityNodeData> => ({
     nodeId,
-    type: 'diagram',
+    type: 'box',
     position: {
         x,
         y,
@@ -171,16 +170,19 @@ export class CapabilityBoard {
         this.theme = this.frame.theme
         const registry = new NodeRegistry()
 
-        for (const type of ['diagram', 'fixed'])
+        for (const type of ['box', 'fixed'])
             registry.register<CapabilityNodeData>({
                 type,
                 geometry: geometry(type !== 'fixed'),
-                mount: (node, context) => new DiagramNodeView(
+                mount: (node, context) => new ExampleBoxView(
                     node,
                     context,
                     {
-                        getContent: current => current.data,
-                        getAppearance: current => createLibraryDiagramAppearance(this.theme.value, { raised: current.type === 'fixed' }),
+                        theme: this.theme,
+                        getContent: current => ({
+                            ...current.data,
+                            raised: current.type === 'fixed',
+                        }),
                     },
                 ),
             })
@@ -219,7 +221,17 @@ export class CapabilityBoard {
                 true,
             )
 
-        this.frame.button('Refit', this.fit)
+        this.frame.attachCanvas(
+            this.canvas,
+            {
+                layout: this.scene.nodes.some(node => node.parentId)
+                    ? undefined
+                    : {
+                        canvas: this.canvas,
+                        options: {},
+                    },
+            },
+        )
         this.zoomInput = this.frame.number(
             'Zoom',
             {
@@ -277,13 +289,17 @@ export class CapabilityBoard {
             ready
             && !this.destroyed
         )
-            this.fit()
+            this.canvas.fitToContent()
     }
 
     private startDrag = (event: MouseEvent): void => {
+        // Locked content and a graph layout own node positions, so the press
+        // stays with the viewport.
         if (
             event.button !== 0
             || event.defaultPrevented
+            || this.canvas.locked
+            || this.canvas.layout
         )
             return
 
@@ -435,32 +451,6 @@ export class CapabilityBoard {
             revision: String(++this.revision),
         }
         this.canvas.setScene(this.scene)
-    }
-
-    fit = (): void => {
-        if (!this.scene.nodes.length)
-            return
-
-        const left = Math.min(...this.scene.nodes.map(node => node.position.x))
-        const top = Math.min(...this.scene.nodes.map(node => node.position.y))
-        const right = Math.max(...this.scene.nodes.map(node => node.position.x + node.dimensions.width))
-        const bottom = Math.max(...this.scene.nodes.map(node => node.position.y + node.dimensions.height))
-        const zoom = Math.max(
-            0.15,
-            Math.min(
-                1,
-                (this.frame.stage.clientWidth - 64) / (right - left),
-                (this.frame.stage.clientHeight - 64) / (bottom - top),
-            ),
-        )
-        this.canvas.setViewport({
-            x: 32 - left * zoom,
-            y: 32 - top * zoom,
-            zoom,
-        })
-
-        if (this.zoomInput)
-            this.zoomInput.value = String(zoom)
     }
 
     destroy(): void {

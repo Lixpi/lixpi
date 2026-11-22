@@ -1,6 +1,6 @@
 import { ElementStyleLease } from '@lixpi/ui-primitives/dom'
 
-export type GestureCancelReason = 'replaced' | 'scene-change' | 'escape' | 'blur' | 'pointer-cancel' | 'destroyed'
+export type GestureCancelReason = 'replaced' | 'scene-change' | 'escape' | 'blur' | 'pointer-cancel' | 'locked' | 'destroyed'
 export type CanvasGestureOptions = {
     root: HTMLElement
     event: MouseEvent | PointerEvent

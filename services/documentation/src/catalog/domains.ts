@@ -51,6 +51,12 @@ export const documentationDomains: readonly DocumentationDomain[] = [
         examples: canvasNodeExamples.map(example => example.id),
     },
     {
+        id: 'diagrams',
+        title: 'Diagrams',
+        section: 'canvas-components',
+        examples: ['workspace-diagram'],
+    },
+    {
         id: 'effects',
         title: 'Effects and loading',
         section: 'canvas-components',

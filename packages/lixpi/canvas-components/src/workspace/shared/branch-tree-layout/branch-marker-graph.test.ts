@@ -1,11 +1,70 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import {
     isOrthogonalRouteClear,
+    layoutCanvasGraph,
+    type CanvasGraphEdgeKind,
+    type CanvasGraphStage,
 } from '@lixpi/canvas-engine/shared'
 import { getBranchConnectionTargetMarker } from '../../frontend/connectors/branch-connection-policy.ts'
-import { layoutWorkspaceDiagram, type WorkspaceDiagram } from './workspace-diagram.ts'
+import {
+    createBranchMarkerEdge,
+    createBranchMarkerGraphLayout,
+    createBranchMarkerNode,
+    type BranchMarkerNodeData,
+} from './branch-marker-node.ts'
 
-const evidenceDiagram: WorkspaceDiagram = {
+type BranchMarkerGraphFixture = {
+    revision: string
+    nodes: readonly (BranchMarkerNodeData & { id: string })[]
+    stages: readonly CanvasGraphStage[]
+    edges: readonly {
+        id: string
+        source: string
+        target: string
+        kind?: CanvasGraphEdgeKind
+    }[]
+}
+
+const layoutBranchMarkerGraph = (
+    fixture: BranchMarkerGraphFixture,
+    sceneKey: string,
+) => {
+    const layout = layoutCanvasGraph(
+        {
+            sceneKey,
+            revision: fixture.revision,
+            nodes: fixture.nodes.map(
+                ({
+                    id,
+                    ...data
+                }) => createBranchMarkerNode(id, data),
+            ),
+            edges: fixture.edges.map(
+                edge => createBranchMarkerEdge(
+                    edge.id,
+                    edge.source,
+                    edge.target,
+                    edge.kind,
+                ),
+            ),
+        },
+        createBranchMarkerGraphLayout(fixture.stages),
+    )
+
+    return {
+        scene: layout.scene,
+        size: {
+            width: layout.bounds.width,
+            height: layout.bounds.height,
+        },
+    }
+}
+
+const evidenceDiagram: BranchMarkerGraphFixture = {
     revision: 'evidence-routing',
     nodes: [
         {
@@ -172,13 +231,13 @@ const evidenceDiagram: WorkspaceDiagram = {
 }
 
 const portFor = (
-    layout: ReturnType<typeof layoutWorkspaceDiagram>,
+    layout: ReturnType<typeof layoutBranchMarkerGraph>,
     nodeId: string,
     portId: string,
 ) => layout.scene.nodes.find(node => node.nodeId === nodeId)!.ports.find(port => port.id === portId)!
 
 const worldAnchor = (
-    layout: ReturnType<typeof layoutWorkspaceDiagram>,
+    layout: ReturnType<typeof layoutBranchMarkerGraph>,
     nodeId: string,
     portId: string,
 ) => {
@@ -193,7 +252,7 @@ const worldAnchor = (
 
 describe('workspace diagram native graph routing', () => {
     it('keeps feedback lanes inside the fit bounds and away from every non-endpoint node', () => {
-        const layout = layoutWorkspaceDiagram(evidenceDiagram, 'evidence-routing')
+        const layout = layoutBranchMarkerGraph(evidenceDiagram, 'evidence-routing')
 
         for (const edge of layout.scene.edges.filter(candidate => candidate.data.kind === 'feedback')) {
             expect(edge.bendPoints?.length).toBeGreaterThan(0)
@@ -220,7 +279,7 @@ describe('workspace diagram native graph routing', () => {
     })
 
     it('keeps ordinary fan-outs and fan-ins on their shared lineage ports while returns use dedicated ports', () => {
-        const layout = layoutWorkspaceDiagram(evidenceDiagram, 'evidence-routing')
+        const layout = layoutBranchMarkerGraph(evidenceDiagram, 'evidence-routing')
         const forward = layout.scene.edges.filter(edge => !edge.data.kind || edge.data.kind === 'forward')
         const feedback = layout.scene.edges.filter(edge => edge.data.kind === 'feedback')
         const relations = layout.scene.edges.filter(edge => edge.data.kind === 'relation')
@@ -264,7 +323,7 @@ describe('workspace diagram edge markers', () => {
 
 describe('workspace diagram stage alignment', () => {
     it('aligns the selected node center and preserves its tree offsets', () => {
-        const alignedDiagram: WorkspaceDiagram = {
+        const alignedDiagram: BranchMarkerGraphFixture = {
             ...evidenceDiagram,
             stages: [
                 ...evidenceDiagram.stages.slice(0, 2),
@@ -274,10 +333,10 @@ describe('workspace diagram stage alignment', () => {
                 },
             ],
         }
-        const unaligned = layoutWorkspaceDiagram(evidenceDiagram, 'unaligned')
-        const aligned = layoutWorkspaceDiagram(alignedDiagram, 'aligned')
+        const unaligned = layoutBranchMarkerGraph(evidenceDiagram, 'unaligned')
+        const aligned = layoutBranchMarkerGraph(alignedDiagram, 'aligned')
         const centerY = (
-            layout: ReturnType<typeof layoutWorkspaceDiagram>,
+            layout: ReturnType<typeof layoutBranchMarkerGraph>,
             nodeId: string,
         ): number => {
             const node = layout.scene.nodes.find(candidate => candidate.nodeId === nodeId)!
@@ -285,7 +344,7 @@ describe('workspace diagram stage alignment', () => {
             return node.position.y + node.dimensions.height / 2
         }
         const treeOffset = (
-            layout: ReturnType<typeof layoutWorkspaceDiagram>,
+            layout: ReturnType<typeof layoutBranchMarkerGraph>,
         ): number => {
             const review = layout.scene.nodes.find(node => node.nodeId === 'review')!
             const record = layout.scene.nodes.find(node => node.nodeId === 'record')!
@@ -298,7 +357,7 @@ describe('workspace diagram stage alignment', () => {
     })
 
     it('rejects an alignment anchor outside its stage', () => {
-        const invalid: WorkspaceDiagram = {
+        const invalid: BranchMarkerGraphFixture = {
             ...evidenceDiagram,
             stages: [
                 ...evidenceDiagram.stages.slice(0, 2),
@@ -309,7 +368,7 @@ describe('workspace diagram stage alignment', () => {
             ],
         }
 
-        expect(() => layoutWorkspaceDiagram(invalid, 'invalid-alignment'))
-            .toThrow('Workspace diagram stage alignment must reference a node in that stage')
+        expect(() => layoutBranchMarkerGraph(invalid, 'invalid-alignment'))
+            .toThrow('Graph layout stage alignment must reference a node in that stage')
     })
 })

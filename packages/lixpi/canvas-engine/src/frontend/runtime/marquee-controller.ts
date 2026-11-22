@@ -20,6 +20,8 @@ export type MarqueeControllerOptions = {
     ) => CanvasEnginePoint
     threshold?: number
     lock?: () => Dispose
+    // A false result ignores the press, for example while canvas content is locked.
+    canStart?: () => boolean
     onStart: () => void
     onChange: (bounds: CanvasEngineRect) => void
     onEnd: (moved: boolean) => void
@@ -58,6 +60,9 @@ export class MarqueeController {
     start(event: MouseEvent | PointerEvent): void {
         if (this.destroyed)
             throw new Error('Marquee controller is disposed')
+
+        if (this.options.canStart?.() === false)
+            return
 
         this.cancel()
         this.startClient = {

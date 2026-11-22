@@ -121,7 +121,7 @@ export class TidyTreeExample {
                 ),
             }
             this.board.publish()
-            this.board.fit()
+            this.board.canvas.fitToContent()
             this.frame.report('Nodes scattered. Tidy tree restores the tree order using the shared layoutTree export.')
         })
         this.frame.code(() => this.sourceCode())
@@ -239,7 +239,7 @@ export class TidyTreeExample {
             }),
         }
         this.board.publish()
-        this.board.fit()
+        this.board.canvas.fitToContent()
         this.frame.report(
             `${result.positions.size} nodes arranged in ${Math.round(result.bounds.width)} by ${Math.round(result.bounds.height)} world pixels. Root: ${result.rootId}.`,
         )

@@ -81,6 +81,7 @@ import {
     createNodeLayerManager,
     lockCanvasScrollLayers,
     type CanvasConnectionControls,
+    type CanvasScrollCapture,
 } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     WorkspaceNodeShells,
@@ -1752,6 +1753,10 @@ export class LixpiWorkspaceCanvas {
                 this.callbacks.own(releaseCommands)
 
             this.initializePanZoom()
+            this.canvasRuntime.setScrollCapture(this.options.scrollCapture ?? 'always')
+            this.canvasRuntime.setFitOptions(this.options.fit ?? {})
+            this.setLocked(this.options.locked ?? false)
+            this.canvasRuntime.setAutoFit(this.options.autoFit ?? false)
             this.syncActiveAiChatPanelFromState()
 
             if (!this.aiChatPanelState.isOpen)
@@ -3898,6 +3903,44 @@ export class LixpiWorkspaceCanvas {
     }
 
     getViewport = () => this.getLiveViewport()
+
+    get locked(): boolean {
+        return this.canvasRuntime.locked
+    }
+
+    setLocked = (locked: boolean): void => {
+        if (this.rendererDestroyed)
+            return
+
+        this.canvasRuntime.setLocked(locked)
+
+        if (!locked)
+            return
+
+        this.selectNode(null)
+        this.selectionController.clearEdgeSelection(true)
+        this.interactions.menu.hide()
+    }
+
+    get autoFit(): boolean {
+        return this.canvasRuntime.autoFit
+    }
+
+    setAutoFit = (enabled: boolean): void => {
+        if (!this.rendererDestroyed)
+            this.canvasRuntime.setAutoFit(enabled)
+    }
+
+    fitToContent = (): boolean => !this.rendererDestroyed && this.canvasRuntime.fitToContent()
+
+    get scrollCapture(): CanvasScrollCapture {
+        return this.canvasRuntime.scrollCapture
+    }
+
+    setScrollCapture = (mode: CanvasScrollCapture): void => {
+        if (!this.rendererDestroyed)
+            this.canvasRuntime.setScrollCapture(mode)
+    }
 
     setViewport = (nextViewport: Viewport) => {
         if (this.rendererDestroyed)

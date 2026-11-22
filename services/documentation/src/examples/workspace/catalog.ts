@@ -1,5 +1,14 @@
 export const workspaceExamples = [
     {
+        id: 'workspace-diagram',
+        title: 'Branch diagram',
+        group: 'Diagrams',
+        summary: 'Workspace branch markers on the ordinary canvas. The graph layout places them from node text and fan-out trees and routes relation and feedback edges; the canvas starts locked and fitted.',
+        source: '@lixpi/canvas-engine/shared',
+        components: ['CanvasController', 'layoutCanvasGraph', 'CanvasGraphRouting', 'createBranchMarkerNode', 'createBranchMarkerEdge', 'createBranchMarkerGraphLayout', 'createBranchMarkerNodeRegistration', 'BranchMarkerNodeView', 'createBranchMarkerConnectionPolicy', 'BranchMarkerContent'],
+        nodes: ['branch-marker'],
+    },
+    {
         id: 'workspace-libraries',
         title: 'Artifact, Media, and Capability libraries',
         group: 'Workspace panels',
