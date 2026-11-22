@@ -48,6 +48,7 @@ export type WorkspaceNodeGesturesPorts = {
     readScope: () => Scope | null
     readState: () => CanvasState | null
     runtime: {
+        readonly locked: boolean
         cancelInteraction: (reason: GestureCancelReason) => void
         startNodeDrag: (options: NodeTransformOptions) => unknown
         startNodeResize: (options: NodeResizeOptions) => unknown
@@ -148,7 +149,10 @@ export class WorkspaceNodeGestures {
     }
 
     suspendPanLock(_nodeId: string): void {
-        if (this.closed)
+        if (
+            this.closed
+            || this.ports.runtime.locked
+        )
             return
 
         if (!this.ports.pane.classList.contains('nopan')) {
@@ -286,6 +290,10 @@ export class WorkspaceNodeGestures {
         nodeId: string,
         options: WorkspaceNodeDragOptions = {},
     ) {
+        // Locked content leaves the press to the viewport, which pans.
+        if (this.ports.runtime.locked)
+            return
+
         const scope = this.begin()
 
         if (!scope)
@@ -781,6 +789,9 @@ export class WorkspaceNodeGestures {
         nodeId: string,
         handlePosition: ResizeHandle,
     ) {
+        if (this.ports.runtime.locked)
+            return
+
         const scope = this.begin()
 
         if (!scope)

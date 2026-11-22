@@ -4,7 +4,6 @@ import {
     applyNodeGeometry,
     computeGeometryChanges,
     buildNodesById,
-    unionRectangles,
     type CanvasIntent,
     type CanvasViewport,
     type EngineNode,
@@ -21,10 +20,9 @@ import {
 import {
     type MediaDescriptor,
 } from '@lixpi/canvas-engine/frontend/media'
-import { DiagramNodeView } from '@lixpi/canvas-components/diagram'
 import {
-    createLibraryDiagramAppearance,
     createLibraryMediaStyle,
+    ExampleBoxView,
 } from '@lixpi/canvas-components/library'
 import {
     createImageNodeRegistration,
@@ -47,7 +45,6 @@ type ExampleNodeData = {
     title: string
     detail: string
     fit?: 'contain' | 'cover' | 'stretch'
-    shape?: 'circle' | 'rounded-rectangle'
     media?: MediaDescriptor
 }
 
@@ -126,7 +123,7 @@ const node = (
     overrides: Partial<EngineNode<ExampleNodeData>> = {},
 ): EngineNode<ExampleNodeData> => ({
     nodeId,
-    type: 'diagram',
+    type: 'box',
     position: {
         x,
         y,
@@ -405,8 +402,8 @@ const initialScene = (
     if (mode === 'engine-theme') {
         nodes = [
             node(
-                'theme-diagram',
-                'Diagram node',
+                'theme-box',
+                'Box',
                 30,
                 110,
                 {
@@ -462,9 +459,9 @@ const initialScene = (
         ]
         edges = [
             {
-                edgeId: 'theme-diagram-image',
+                edgeId: 'theme-box-image',
                 source: {
-                    nodeId: 'theme-diagram',
+                    nodeId: 'theme-box',
                     portId: 'out',
                 },
                 target: {
@@ -513,7 +510,6 @@ const initialScene = (
     if (mode === 'node-shell') {
         const examples = [
             initialScene('node-shell-empty').nodes[0],
-            initialScene('engine-theme').nodes.find(node => node.type === 'diagram')!,
             initialScene('media-images').nodes[0],
             ...initialScene('media-playback').nodes,
         ]
@@ -527,10 +523,6 @@ const initialScene = (
                 y: 100,
             },
             {
-                x: 920,
-                y: 100,
-            },
-            {
                 x: 80,
                 y: 460,
             },
@@ -539,9 +531,9 @@ const initialScene = (
                 y: 460,
             },
         ]
-        const titles = ['Empty shell', 'Diagram inside shell', 'Image inside shell', 'Video inside shell', 'Audio inside shell']
+        const titles = ['Empty shell', 'Image inside shell', 'Video inside shell', 'Audio inside shell']
         nodes = examples.map((example, index) => {
-            const dimensions = index < 3 ? {
+            const dimensions = index < 2 ? {
                 width: 320,
                 height: 180,
             } : example.dimensions
@@ -585,7 +577,7 @@ export class EngineExample {
             (node, index) => ({
                 ...node,
                 position: {
-                    x: 50 + index * (node.dimensions.width + (node.type === "diagram" ? 160 : 30)),
+                    x: 50 + index * (node.dimensions.width + (node.type === "box" ? 160 : 30)),
                     y: 60,
                 },
             }),
@@ -625,7 +617,6 @@ export class EngineExample {
     private zoomParameter?: HTMLInputElement
     private nodeWidthParameter?: HTMLInputElement
     private nodeHeightParameter?: HTMLInputElement
-    private fitObserver?: ResizeObserver
 
     constructor(
         host: HTMLElement,
@@ -649,24 +640,19 @@ export class EngineExample {
         this.acceptedSnapshot = this.snapshot
         const registry = new NodeRegistry().register<ExampleNodeData>(
             this.decorateRegistration({
-                type: 'diagram',
+                type: 'box',
                 geometry,
-                mount: (value, context) => new DiagramNodeView(
+                mount: (value, context) => new ExampleBoxView(
                     value,
                     context,
                     {
+                        theme: this.frame.theme,
                         getContent: current => ({
                             title: current.data.title,
                             tag: current.parentId ? 'child' : undefined,
                             lines: [current.data.detail],
+                            raised: current.nodeId === 'group',
                         }),
-                        getAppearance: current => createLibraryDiagramAppearance(
-                            this.frame.theme.value,
-                            {
-                                shape: current.data.shape,
-                                raised: current.nodeId === 'group',
-                            },
-                        ),
                     },
                 ),
             }),
@@ -767,6 +753,14 @@ export class EngineExample {
             collisions: mode === 'engine-parenting' ? { margin: 20 } : undefined,
             visibilityMargin: 80,
             prefetchBatchSize: 8,
+            // Shell titles and footers extend beyond the node bounds. The shell
+            // page keeps its nodes fitted while the pane resizes. A large scene
+            // zooms out as far as its node count requires.
+            fit: {
+                padding: mode === 'node-shell' ? 136 : 36,
+                minZoom: mode === 'engine-large-scene' ? 0.01 : undefined,
+            },
+            autoFit: mode === 'node-shell',
             connectors: {
                 settings: this.connectionSettings,
                 renderer: { zoomScaling: this.connectorZoomScaling },
@@ -839,21 +833,23 @@ export class EngineExample {
         }
 
         this.frame.onThemeChange(this.refreshTheme)
+        this.frame.attachCanvas(
+            this.canvas,
+            {
+                layout: this.snapshot.nodes.some(node => node.parentId)
+                    ? undefined
+                    : {
+                        canvas: this.canvas,
+                        options: {},
+                    },
+            },
+        )
 
         if (
             options.nodeType
             || mode === 'node-shell'
         )
-            this.fit()
-
-        if (mode === 'node-shell') {
-            this.fitObserver = new ResizeObserver(() => {
-                if (!this.disposed)
-                    this.fit()
-            })
-            this.fitObserver.observe(this.frame.stage)
-            void this.fitSceneAfterReady()
-        }
+            this.canvas.fitToContent()
 
         if (options.controls === false)
             return
@@ -870,7 +866,7 @@ export class EngineExample {
                         edges: [],
                     }
                     this.publish()
-                    this.fit()
+                    this.canvas.fitToContent()
                     this.frame.report(`${nodes.length} nodes generated.`)
                 },
             )
@@ -1038,7 +1034,6 @@ export class EngineExample {
                 zoom: Math.round(Math.min(1, host.clientWidth / 920) * 100) / 100,
             }),
         )
-        this.frame.button('Fit all', this.fit)
         this.frame.button('Zoom in', () => this.zoom(1.25))
         this.frame.button('Zoom out', () => this.zoom(0.8))
         this.frame.button('Add node', () => {
@@ -1186,7 +1181,7 @@ export class EngineExample {
             ready
             && !this.disposed
         ) {
-            this.fit()
+            this.canvas.fitToContent()
             this.updateStressMetrics()
         }
     }
@@ -1351,7 +1346,6 @@ export class EngineExample {
                 '        setSelected: () => {}, setVisible: () => {}, destroy: () => {},',
                 '    }),',
                 '}))',
-                'registry.register(withMetadataShell(diagramRegistration))',
                 'registry.register(withMetadataShell(createImageNodeRegistration({',
                 "    type: 'image', geometry, fit: 'cover',",
                 '    getMedia: node => node.data.media,',
@@ -1394,7 +1388,7 @@ export class EngineExample {
                 '        destroy: () => {},',
                 '    }),',
                 '}))',
-                '// Replace this registration with a diagram or media registration to supply content.',
+                '// Replace this registration with an image or playback registration to supply content.',
             ].join('\n')
 
         if (this.mode === 'engine-large-scene')
@@ -1414,7 +1408,7 @@ export class EngineExample {
                 '    return {',
                 "        sceneKey: 'stress-scene', revision: '0', edges: [],",
                 '        nodes: Array.from({ length: count }, (_, index) => ({',
-                '            nodeId: `tile-${index}`, type: "diagram",',
+                '            nodeId: `tile-${index}`, type: "box",',
                 '            position: { x: index % columns * 270 + 30, y: Math.floor(index / columns) * 150 + 30 },',
                 '            dimensions: { width: 220, height: 100 },',
                 '            ports: structuredClone(ports),',
@@ -1430,7 +1424,7 @@ export class EngineExample {
             return [
                 "import { CanvasThemeStore, createCanvasTheme, bindCanvasTheme, canvasThemeConnectorSettings } from '@lixpi/canvas-components/theme'",
                 '',
-                '// Share one source across diagram, image, playback, connector and DOM components.',
+                '// Share one source across node views, image, playback, connector and DOM components.',
                 `const theme = new CanvasThemeStore(createCanvasTheme(${JSON.stringify(
                     {
                         colors: this.frame.theme.value.colors,
@@ -1442,7 +1436,7 @@ export class EngineExample {
                 )}))`,
                 'const releaseTheme = bindCanvasTheme(root, theme)',
                 'const connectionSettings = canvasThemeConnectorSettings(theme.value)',
-                '// Pass theme to createDiagramCanvas and createDiagramNodeRegistration.',
+                '// Node views read theme.value and repaint when it changes.',
                 '// Media registrations read theme.value in getStyle/getImageStyle.',
                 'const unsubscribe = theme.subscribe(current => {',
                 '    const next = canvasThemeConnectorSettings(current)',
@@ -1518,7 +1512,7 @@ export class EngineExample {
             "import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'",
             '',
             '// Register a view and geometry policy for every node type.',
-            `const registry = new NodeRegistry().register(${registrationStart}diagramRegistration${registrationEnd})`,
+            `const registry = new NodeRegistry().register(${registrationStart}boxRegistration${registrationEnd})`,
             '// The host owns scene data and applies the emitted intents.',
             'scene = {',
             '    ...scene,',
@@ -1548,40 +1542,6 @@ export class EngineExample {
     private setViewport(viewport: CanvasViewport): void {
         this.canvas.setViewport(viewport)
         this.syncParameters()
-    }
-
-    fit = (): void => {
-        const bounds = unionRectangles(
-            this.snapshot.nodes.map(
-                node => ({
-                    ...node.position,
-                    ...node.dimensions,
-                }),
-            ),
-            36,
-        )
-        const size = this.frame.stage.getBoundingClientRect()
-
-        if (
-            !bounds
-            || size.width <= 0
-            || size.height <= 0
-        )
-            return
-
-        const shellPadding = this.mode === 'node-shell' ? 100 : 0
-        const availableWidth = Math.max(1, size.width - shellPadding * 2)
-        const availableHeight = Math.max(1, size.height - shellPadding * 2)
-        const zoom = Math.min(
-            1,
-            availableWidth / bounds.width,
-            availableHeight / bounds.height,
-        )
-        this.setViewport({
-            x: (size.width - bounds.width * zoom) / 2 - bounds.x * zoom,
-            y: (size.height - bounds.height * zoom) / 2 - bounds.y * zoom,
-            zoom,
-        })
     }
 
     private zoom(factor: number): void {
@@ -1720,7 +1680,6 @@ export class EngineExample {
 
     destroy(): void {
         this.disposed = true
-        this.fitObserver?.disconnect()
         this.releaseStressMetrics?.()
         this.playbackControls?.destroy()
         this.playbackControls = null

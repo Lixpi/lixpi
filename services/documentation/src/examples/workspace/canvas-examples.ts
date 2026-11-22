@@ -203,7 +203,7 @@ export class FullWorkspaceExample {
                 fixtureHost.host,
             )
             this.lifetime.own(() => this.renderer.destroy())
-            this.frame.button('Fit all', this.fit)
+            this.frame.attachCanvas(this.renderer, { loadingRoot: surface })
 
             if (isolated) {
                 const first = this.state.nodes[0]
@@ -537,37 +537,19 @@ export class FullWorkspaceExample {
         this.syncNodeParameters()
     }
 
+    // The initial fit runs before the workspace reports viewport changes, so
+    // the fitted viewport is copied into the fixture state here.
     fit = (): void => {
-        const state = this.renderer.getCanvasState() ?? this.state
-        const bounds = unionRectangles(
-            state.nodes.map(
-                node => ({
-                    ...node.position,
-                    ...node.dimensions,
-                }),
-            ),
-            40,
-        )
-        const size = this.controls.viewportMount.getBoundingClientRect()
-
-        if (
-            !bounds
-            || size.width <= 0
-            || size.height <= 0
-        )
+        if (!this.renderer.fitToContent())
             return
 
-        const zoom = Math.min(
-            1,
-            size.width / bounds.width,
-            size.height / bounds.height,
-        )
-        this.state = state
-        this.viewport(
-            (size.width - bounds.width * zoom) / 2 - bounds.x * zoom,
-            (size.height - bounds.height * zoom) / 2 - bounds.y * zoom,
-            zoom,
-        )
+        const viewport = this.renderer.getViewport()
+        this.state = {
+            ...(this.renderer.getCanvasState() ?? this.state),
+            viewport,
+        }
+        this.controls.setZoom(viewport.zoom)
+        this.syncViewportParameters()
     }
 
     private viewport(

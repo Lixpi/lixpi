@@ -11,5 +11,6 @@ export {
     type ReflowStackedBranchMarkersOptions,
 } from './generated-media-rebalance.ts'
 export * from './marker-dimensions.ts'
+export * from './branch-marker-node.ts'
 export * from './media-fitting.ts'
 export * from './pending-media-node-id.ts'

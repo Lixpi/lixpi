@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import {
     computeConnectorDatum,
     type ConnectorDatumStyle,
@@ -8,13 +12,68 @@ import {
 import {
     getAdaptiveBoundedZoomScalingOptions,
     getEdgeScaledSizes,
+    layoutCanvasGraph,
+    type CanvasGraphEdgeKind,
+    type CanvasGraphStage,
 } from '@lixpi/canvas-engine/shared'
 import { createCanvasConnectorSettings } from '@lixpi/canvas-components/connectors'
 import { arrowRightMarkerBodyLengthFraction } from '@lixpi/ui-kit/svg'
 import { getBranchConnectionTargetMarker } from '../../frontend/connectors/branch-connection-policy.ts'
-import { layoutWorkspaceDiagram, type WorkspaceDiagram } from './workspace-diagram.ts'
+import {
+    createBranchMarkerEdge,
+    createBranchMarkerGraphLayout,
+    createBranchMarkerNode,
+    type BranchMarkerNodeData,
+} from './branch-marker-node.ts'
 
-const lifecycle: WorkspaceDiagram = {
+type BranchMarkerGraphFixture = {
+    revision: string
+    nodes: readonly (BranchMarkerNodeData & { id: string })[]
+    stages: readonly CanvasGraphStage[]
+    edges: readonly {
+        id: string
+        source: string
+        target: string
+        kind?: CanvasGraphEdgeKind
+    }[]
+}
+
+const layoutBranchMarkerGraph = (
+    fixture: BranchMarkerGraphFixture,
+    sceneKey: string,
+) => {
+    const layout = layoutCanvasGraph(
+        {
+            sceneKey,
+            revision: fixture.revision,
+            nodes: fixture.nodes.map(
+                ({
+                    id,
+                    ...data
+                }) => createBranchMarkerNode(id, data),
+            ),
+            edges: fixture.edges.map(
+                edge => createBranchMarkerEdge(
+                    edge.id,
+                    edge.source,
+                    edge.target,
+                    edge.kind,
+                ),
+            ),
+        },
+        createBranchMarkerGraphLayout(fixture.stages),
+    )
+
+    return {
+        scene: layout.scene,
+        size: {
+            width: layout.bounds.width,
+            height: layout.bounds.height,
+        },
+    }
+}
+
+const lifecycle: BranchMarkerGraphFixture = {
     revision: 'lifecycle-feedback-routing',
     nodes: [
         {
@@ -212,7 +271,7 @@ const intersects = (a: [Point, Point], b: [Point, Point]): boolean => {
         || Math.abs(four) < 1e-6 && onSegment(r, q, s)
 }
 
-const routeAtZoom = (layout: ReturnType<typeof layoutWorkspaceDiagram>, zoom: number) => {
+const routeAtZoom = (layout: ReturnType<typeof layoutBranchMarkerGraph>, zoom: number) => {
     const { scaling } = createCanvasConnectorSettings()
     const scaled = getEdgeScaledSizes(zoom, {
         baseStrokeWidth: scaling.strokeWidth,
@@ -279,7 +338,7 @@ const routeAtZoom = (layout: ReturnType<typeof layoutWorkspaceDiagram>, zoom: nu
 
 describe('lifecycle feedback connector routing', () => {
     it('keeps the rendered feedback connector clear of every other connector across zoom scales', () => {
-        const layout = layoutWorkspaceDiagram(lifecycle, 'lifecycle-feedback-routing')
+        const layout = layoutBranchMarkerGraph(lifecycle, 'lifecycle-feedback-routing')
 
         for (const zoom of [1, 0.4, 0.2]) {
             const routes = routeAtZoom(layout, zoom)
@@ -295,7 +354,7 @@ describe('lifecycle feedback connector routing', () => {
     })
 
     it('keeps feedback attachments centered when no connector occupies that slot', () => {
-        const layout = layoutWorkspaceDiagram(lifecycle, 'lifecycle-feedback-centering')
+        const layout = layoutBranchMarkerGraph(lifecycle, 'lifecycle-feedback-centering')
         const feedback = layout.scene.edges.find(edge => edge.edgeId === 'continue-execute')!
         const source = layout.scene.nodes.find(node => node.nodeId === feedback.source.nodeId)!
         const target = layout.scene.nodes.find(node => node.nodeId === feedback.target.nodeId)!
@@ -309,12 +368,12 @@ describe('lifecycle feedback connector routing', () => {
 
 describe('lifecycle feedback routing stability', () => {
     it('preserves tree-relative geometry with or without feedback', () => {
-        const withFeedback = layoutWorkspaceDiagram(lifecycle, 'with-feedback')
-        const withoutFeedback = layoutWorkspaceDiagram({
+        const withFeedback = layoutBranchMarkerGraph(lifecycle, 'with-feedback')
+        const withoutFeedback = layoutBranchMarkerGraph({
             ...lifecycle,
             edges: lifecycle.edges.filter(edge => edge.kind !== 'feedback'),
         }, 'without-feedback')
-        const normalized = (layout: ReturnType<typeof layoutWorkspaceDiagram>) =>
+        const normalized = (layout: ReturnType<typeof layoutBranchMarkerGraph>) =>
             layout.scene.nodes.map(node => ({
                 id: node.nodeId,
                 x: node.position.x - layout.scene.nodes.find(candidate => candidate.nodeId === 'request')!.position.x,
@@ -327,12 +386,12 @@ describe('lifecycle feedback routing stability', () => {
     })
 
     it('keeps edge geometry stable when input edge order is reversed', () => {
-        const forward = layoutWorkspaceDiagram(lifecycle, 'ordered')
-        const reversed = layoutWorkspaceDiagram({
+        const forward = layoutBranchMarkerGraph(lifecycle, 'ordered')
+        const reversed = layoutBranchMarkerGraph({
             ...lifecycle,
             edges: [...lifecycle.edges].reverse(),
         }, 'reversed')
-        const geometry = (layout: ReturnType<typeof layoutWorkspaceDiagram>) =>
+        const geometry = (layout: ReturnType<typeof layoutBranchMarkerGraph>) =>
             layout.scene.edges.map(edge => ({
                 id: edge.edgeId,
                 source: edge.source,
@@ -344,7 +403,7 @@ describe('lifecycle feedback routing stability', () => {
     })
 
     it('keeps nested feedback curves clear of all other rendered connectors', () => {
-        const nested = layoutWorkspaceDiagram({
+        const nested = layoutBranchMarkerGraph({
             ...lifecycle,
             edges: [
                 ...lifecycle.edges,
@@ -375,12 +434,12 @@ describe('lifecycle feedback routing stability', () => {
 
 describe('lifecycle rendered route stability', () => {
     it('preserves actual connector paths when semantic edge input order changes', () => {
-        const forward = layoutWorkspaceDiagram(lifecycle, 'rendered-forward')
-        const reversed = layoutWorkspaceDiagram({
+        const forward = layoutBranchMarkerGraph(lifecycle, 'rendered-forward')
+        const reversed = layoutBranchMarkerGraph({
             ...lifecycle,
             edges: [...lifecycle.edges].reverse(),
         }, 'rendered-reversed')
-        const paths = (layout: ReturnType<typeof layoutWorkspaceDiagram>) =>
+        const paths = (layout: ReturnType<typeof layoutBranchMarkerGraph>) =>
             routeAtZoom(layout, 1)
                 .map(route => ({
                     id: route.edge.edgeId,
@@ -392,7 +451,7 @@ describe('lifecycle rendered route stability', () => {
     })
 
     it('keeps nested feedback waypoints finite and inside fit bounds', () => {
-        const nested = layoutWorkspaceDiagram({
+        const nested = layoutBranchMarkerGraph({
             ...lifecycle,
             edges: [
                 ...lifecycle.edges,
@@ -422,7 +481,7 @@ describe('lifecycle rendered route stability', () => {
     })
 })
 
-const evidenceDiagram: WorkspaceDiagram = {
+const evidenceDiagram: BranchMarkerGraphFixture = {
     revision: 'evidence-wide',
     nodes: [
         {
@@ -600,7 +659,7 @@ const evidenceDiagram: WorkspaceDiagram = {
 
 describe('website evidence feedback connector routing', () => {
     it('lays out the exact evidence graph and keeps rendered feedback curves clear', () => {
-        const layout = layoutWorkspaceDiagram(evidenceDiagram, 'evidence-wide')
+        const layout = layoutBranchMarkerGraph(evidenceDiagram, 'evidence-wide')
 
         expect(layout.scene.edges.map(edge => edge.edgeId)).toEqual(evidenceDiagram.edges.map(edge => edge.id))
 

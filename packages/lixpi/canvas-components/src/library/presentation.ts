@@ -1,9 +1,5 @@
 import { lixpiPalette as colorPalette } from '@lixpi/themes'
 import {
-    createDiagramNodeAppearance,
-    type DiagramNodeLabelAppearance,
-} from '../frontend/diagram/diagram-node-view.ts'
-import {
     type CanvasTheme,
     type CanvasThemeSource,
 } from '../frontend/theme/canvas-theme.ts'
@@ -13,13 +9,6 @@ import {
 import {
     type WorkspaceCanvasControlsSettings,
 } from '../workspace/frontend/workspace/workspace-canvas-controls.ts'
-
-type LibraryDiagramOptions = {
-    shape?: DiagramNodeLabelAppearance['shape']
-    raised?: boolean
-    heading?: DiagramNodeLabelAppearance['heading']
-    selected?: boolean
-}
 
 export class LibraryColors {
     constructor(private readonly source: CanvasThemeSource) {}
@@ -47,16 +36,6 @@ export class LibraryColors {
     }
 }
 
-export const createLibraryDiagramAppearance = (
-    theme: CanvasTheme,
-    options: LibraryDiagramOptions = {},
-): DiagramNodeLabelAppearance => ({
-    ...createDiagramNodeAppearance(options.shape, theme),
-    fill: options.raised ? theme.colors.raised : theme.colors.surface,
-    ...(options.heading ? { heading: options.heading } : {}),
-    ...(options.selected !== undefined ? { selected: options.selected } : {}),
-})
-
 export const createLibraryMediaStyle = (theme: CanvasTheme) => ({
     radius: theme.shape.mediaRadius,
     placeholder: { color: theme.colors.surface },
@@ -67,3 +46,9 @@ export const createLibraryWorkspaceControlsSettings = (settings: ReturnType<type
     modelMenuHoverBackground: settings.aiPromptInput.modelMenu.styles.triggerActiveBackground,
     palette: colorPalette,
 })
+
+export {
+    ExampleBoxView,
+    type ExampleBoxContent,
+    type ExampleBoxViewOptions,
+} from './example-box-node.ts'

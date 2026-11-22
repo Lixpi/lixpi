@@ -4,9 +4,11 @@ import {
 } from '@lixpi/ui-primitives/dom'
 import {
     buildNodesById,
+    computeCanvasFitViewport,
     computeDragPlan,
     computeGeometryChanges,
     getIntersectingNodeIds,
+    layoutCanvasGraph,
     rectangleContainsPoint,
     unionRectangles,
     validateScene,
@@ -14,6 +16,8 @@ import {
     type CanvasEnginePoint,
     type CanvasEngineRect,
     type CanvasEngineSize,
+    type CanvasFitOptions,
+    type CanvasGraphLayoutOptions,
     type CanvasIntent,
     type CanvasViewport,
     type CollisionOptions,
@@ -57,6 +61,13 @@ import {
     type MarqueeControllerOptions,
 } from './marquee-controller.ts'
 import { NodeHandles } from './node-handles.ts'
+import { CanvasNodeClicks } from './node-clicks.ts'
+import {
+    CanvasScrollActivation,
+    defaultCanvasActivationHint,
+    type CanvasActivationHint,
+    type CanvasScrollCapture,
+} from './scroll-activation.ts'
 import {
     NodeTransformController,
     type NodeTransformOptions,
@@ -112,6 +123,19 @@ export type CanvasOptions = {
     mediaResolver?: CanvasRendererOptions['mediaResolver']
     visibilityMargin?: number
     prefetchBatchSize?: number
+    // Locked content keeps pan, zoom and node clicks but rejects moving,
+    // resizing, connecting, selecting and deleting.
+    locked?: boolean
+    // Keeps the whole content fitted on resize and whenever node geometry or
+    // routes change. fitToContent() applies the same fit once.
+    autoFit?: boolean
+    fit?: CanvasFitOptions
+    scrollCapture?: CanvasScrollCapture
+    activationHint?: CanvasActivationHint | false
+    // Places nodes and routes edges from the scene's graph. Positions, ports
+    // and routes in supplied snapshots are replaced by the layout.
+    layout?: CanvasGraphLayoutOptions | false
+    onNodeClick?: (nodeId: string) => void
     onIntent: (intent: CanvasIntent) => void
     onError: (
         error: unknown,
@@ -143,6 +167,15 @@ export class CanvasController {
     private selectedEdge: string | null = null
     private transforming = new Set<string>()
     private destroyed = false
+    private contentLocked: boolean
+    private panOnDragBeforeLock: boolean | null = null
+    private fitContent: boolean
+    private fitOptions: CanvasFitOptions
+    private fittedContent = ''
+    private scrollMode: CanvasScrollCapture
+    private scrollActivation: CanvasScrollActivation | null = null
+    private graphLayout: CanvasGraphLayoutOptions | false
+    private sourceScene: SceneSnapshot
 
     constructor(private readonly options: CanvasOptions) {
         validateScene(options.scene)
@@ -150,6 +183,12 @@ export class CanvasController {
             ...options.interaction,
             marquee: options.interaction?.marquee ? { ...options.interaction.marquee } : undefined,
         }
+        this.contentLocked = options.locked ?? false
+        this.fitContent = options.autoFit ?? false
+        this.fitOptions = { ...options.fit }
+        this.scrollMode = options.scrollCapture ?? 'always'
+        this.graphLayout = options.layout ?? false
+        this.sourceScene = options.scene
         const html = createDocumentHtml(options.root.ownerDocument)
         this.pane = html`<div className="canvas-engine-pane"></div>` as HTMLDivElement
 
@@ -192,6 +231,22 @@ export class CanvasController {
             if (options.connectors)
                 this.installConnections(options.connectors)
 
+            if (options.onNodeClick) {
+                const clicks = new CanvasNodeClicks({
+                    root: options.root,
+                    nodeAt: event => this.hitNode(event)?.nodeId ?? null,
+                    onNodeClick: options.onNodeClick,
+                })
+                this.lifetime.own(() => clicks.destroy())
+            }
+
+            this.lifetime.own(() => {
+                this.scrollActivation?.destroy()
+                this.scrollActivation = null
+                delete options.root.dataset.canvasLocked
+            })
+            this.setScrollCapture(this.scrollMode)
+            options.root.dataset.canvasLocked = String(this.contentLocked)
             const resize = new ResizeObserver(() => this.resize())
             this.lifetime.own(() => resize.disconnect())
             resize.observe(options.root)
@@ -362,6 +417,7 @@ export class CanvasController {
                     target.closest('[data-canvas-node-id]'),
                 ),
                 ...options.policy,
+                isEditable: () => !this.contentLocked,
                 paneEl: this.options.root as HTMLDivElement,
                 viewportEl: this.scene.worldElement as HTMLDivElement,
                 settings: options.settings,
@@ -448,6 +504,8 @@ export class CanvasController {
         })
         this.viewport = viewport
         this.lifetime.own(() => viewport.destroy())
+        this.applyViewportLock()
+        this.scrollActivation?.disarm()
 
         return viewport
     }
@@ -476,6 +534,7 @@ export class CanvasController {
 
         const marquee = new MarqueeController({
             ...options,
+            canStart: () => !this.contentLocked && (options.canStart?.() ?? true),
             root: this.options.root,
             gestures: this.gestures,
             getWorldPoint: (x, y) => this.clientToWorld({
@@ -497,6 +556,7 @@ export class CanvasController {
 
         const keyboard = new CanvasKeyboardController({
             ...options,
+            onDelete: () => !this.contentLocked && options.onDelete(),
             root: this.options.root,
         })
         this.keyboard = keyboard
@@ -505,11 +565,21 @@ export class CanvasController {
         return keyboard
     }
 
-    startNodeDrag(options: NodeTransformOptions): CanvasGesture {
+    // Locked content cancels the request with the 'locked' reason and returns null.
+    startNodeDrag(options: NodeTransformOptions): CanvasGesture | null {
+        if (this.rejectLockedTransform(options))
+            return null
+
         return this.startTransform(options, wrapped => this.transforms.startDrag(wrapped))
     }
 
-    startNodeResize(options: NodeResizeOptions): CanvasGesture {
+    startNodeResize(options: NodeResizeOptions): CanvasGesture | null {
+        if (this.rejectLockedTransform({
+            ...options,
+            targets: [options.target],
+        }))
+            return null
+
         return this.startTransform(
             {
                 ...options,
@@ -573,6 +643,17 @@ export class CanvasController {
         }
     }
 
+    private rejectLockedTransform(options: NodeTransformOptions): boolean {
+        this.assertAlive()
+
+        if (!this.contentLocked)
+            return false
+
+        options.onCancel('locked')
+
+        return true
+    }
+
     private assertAlive(): void {
         if (this.destroyed)
             throw new Error('Canvas controller is disposed')
@@ -634,10 +715,12 @@ export class CanvasController {
             this.emit(intent)
     }
 
-    setScene(snapshot: SceneSnapshot): void {
+    setScene(source: SceneSnapshot): void {
         if (this.destroyed)
             return
 
+        const snapshot = this.arrange(source)
+        this.sourceScene = source
         const changedScene = snapshot.sceneKey !== this.scene.scene.sceneKey
         this.scene.setScene(snapshot)
 
@@ -669,6 +752,235 @@ export class CanvasController {
             ),
         )
         this.refreshPresentation()
+
+        if (this.fitContent)
+            this.followContent()
+    }
+
+    get layout(): CanvasGraphLayoutOptions | false {
+        return this.graphLayout
+    }
+
+    // Replaces the layout and arranges the given snapshot, or the last
+    // supplied one, so a host can swap stages and scene together. Removing a
+    // layout reports the positions it assigned as a geometry intent, so a
+    // host that accepts it keeps the arranged diagram.
+    setLayout(
+        layout: CanvasGraphLayoutOptions | false,
+        source: SceneSnapshot = this.sourceScene,
+    ): void {
+        this.assertAlive()
+        const arranged = this.graphLayout ? this.scene.scene : null
+        this.graphLayout = layout
+        this.cancelInteraction('scene-change')
+        this.setScene(source)
+
+        if (
+            layout
+            || !arranged
+        )
+            return
+
+        const positions = new Map(
+            arranged.nodes.map(node => [node.nodeId, node.position]),
+        )
+        const changes = source.nodes.flatMap(node => {
+            const position = positions.get(node.nodeId)
+
+            return position
+                && (position.x !== node.position.x || position.y !== node.position.y)
+                ? [{
+                    nodeId: node.nodeId,
+                    position: { ...position },
+                    dimensions: { ...node.dimensions },
+                }]
+                : []
+        })
+
+        if (changes.length)
+            this.emit({
+                kind: 'geometry',
+                sceneKey: source.sceneKey,
+                revision: source.revision,
+                changes,
+            })
+    }
+
+    private arrange(source: SceneSnapshot): SceneSnapshot {
+        if (!this.graphLayout)
+            return source
+
+        const arranged = layoutCanvasGraph(source, this.graphLayout).scene
+
+        return {
+            ...arranged,
+            revision: `${source.revision}:layout`,
+        }
+    }
+
+    get locked(): boolean {
+        return this.contentLocked
+    }
+
+    setLocked(locked: boolean): void {
+        this.assertAlive()
+
+        if (locked === this.contentLocked)
+            return
+
+        this.contentLocked = locked
+        this.options.root.dataset.canvasLocked = String(locked)
+
+        if (locked) {
+            this.cancelInteraction('locked')
+            this.connections?.deselect()
+            this.setSelected([])
+        }
+
+        this.applyViewportLock()
+        this.refreshPresentation()
+    }
+
+    // Locked content pans from any press, including a press on a node.
+    private applyViewportLock(): void {
+        if (!this.viewport)
+            return
+
+        if (this.contentLocked) {
+            this.panOnDragBeforeLock ??= this.viewport.getConfig().panOnDrag
+            this.viewport.updateConfig({ panOnDrag: true })
+        } else if (this.panOnDragBeforeLock !== null) {
+            this.viewport.updateConfig({ panOnDrag: this.panOnDragBeforeLock })
+            this.panOnDragBeforeLock = null
+        }
+    }
+
+    get scrollCapture(): CanvasScrollCapture {
+        return this.scrollMode
+    }
+
+    setScrollCapture(mode: CanvasScrollCapture): void {
+        this.assertAlive()
+        this.scrollMode = mode
+        this.scrollActivation?.destroy()
+        this.scrollActivation = mode === 'on-activate'
+            ? new CanvasScrollActivation({
+                root: this.options.root,
+                hint: this.options.activationHint ?? defaultCanvasActivationHint,
+                getNoWheelClassName: () => this.viewport?.getConfig().noWheelClassName ?? 'nowheel',
+            })
+            : null
+    }
+
+    get autoFit(): boolean {
+        return this.fitContent
+    }
+
+    setAutoFit(enabled: boolean): void {
+        this.assertAlive()
+        this.fitContent = enabled
+        this.fittedContent = ''
+
+        if (enabled)
+            this.followContent()
+    }
+
+    get fit(): CanvasFitOptions {
+        return { ...this.fitOptions }
+    }
+
+    setFitOptions(options: CanvasFitOptions): void {
+        this.assertAlive()
+        this.fitOptions = { ...options }
+
+        if (this.fitContent)
+            this.fitToContent()
+    }
+
+    // World bounds of every node's visual footprint and every route point.
+    getContentBounds(): CanvasEngineRect | null {
+        const snapshot = this.scene.scene
+
+        return unionRectangles([
+            ...snapshot.nodes.flatMap(node => {
+                const geometry = this.scene.getNodeGeometry(node.nodeId)
+
+                return geometry ? [geometry.visualBounds] : []
+            }),
+            ...snapshot.edges.flatMap(edge => edge.bendPoints ?? []).map(
+                point => ({
+                    ...point,
+                    width: 0,
+                    height: 0,
+                }),
+            ),
+        ])
+    }
+
+    // Shows the whole content once. Returns false when there is no content,
+    // the canvas has no area, or a gesture holds the viewport.
+    fitToContent(): boolean {
+        if (this.destroyed)
+            return false
+
+        const content = this.getContentBounds()
+        const bounds = this.options.root.getBoundingClientRect()
+
+        if (!content)
+            return false
+
+        const viewport = computeCanvasFitViewport(
+            content,
+            {
+                width: bounds.width,
+                height: bounds.height,
+            },
+            this.fitOptions,
+        )
+
+        if (!viewport)
+            return false
+
+        if (this.viewport) {
+            if (this.viewport.locked)
+                return false
+
+            // The installed viewport reports the change through its owner's
+            // transform callback, so host state follows the fitted viewport.
+            void this.viewport.setViewport(viewport)
+        } else {
+            this.setViewport(viewport)
+            this.emit({
+                kind: 'viewport',
+                sceneKey: this.scene.scene.sceneKey,
+                viewport,
+            })
+        }
+
+        return true
+    }
+
+    // Raw scene geometry decides when content changed. Measured footprints can
+    // depend on zoom, and refitting on them could chase its own viewport.
+    private followContent(): void {
+        const snapshot = this.scene.scene
+        const parts = [snapshot.sceneKey]
+
+        for (const node of snapshot.nodes)
+            parts.push(
+                `${node.nodeId}:${node.parentId ?? ''}:${node.position.x},${node.position.y},${node.dimensions.width},${node.dimensions.height}`,
+            )
+
+        for (const edge of snapshot.edges)
+            parts.push(`${edge.edgeId}:${(edge.bendPoints ?? []).map(point => `${point.x},${point.y}`).join(' ')}`)
+
+        const key = parts.join('|')
+
+        if (
+            key !== this.fittedContent
+            && this.fitToContent()
+        )
+            this.fittedContent = key
     }
 
     setViewport(viewport: CanvasViewport): void {
@@ -690,6 +1002,9 @@ export class CanvasController {
         this.renderer.resize(size)
         this.scene.setViewport(this.scene.viewport, size)
         this.refreshPresentation()
+
+        if (this.fitContent)
+            this.fitToContent()
     }
 
     private size(): CanvasEngineSize {
@@ -807,11 +1122,17 @@ export class CanvasController {
         const nodes = this.scene.scene.nodes
 
         for (const [id, handles] of this.handles) {
-            if (!nodes.some(node => node.nodeId === id)) {
+            if (
+                this.contentLocked
+                || !nodes.some(node => node.nodeId === id)
+            ) {
                 handles.destroy()
                 this.handles.delete(id)
             }
         }
+
+        if (this.contentLocked)
+            return
 
         for (const node of nodes) {
             let handles = this.handles.get(node.nodeId)
@@ -864,6 +1185,7 @@ export class CanvasController {
             event.button !== 0
             || event.defaultPrevented
             || !this.interaction
+            || this.contentLocked
         )
             return
 
@@ -940,7 +1262,8 @@ export class CanvasController {
             nodes,
             primaryNodeId: nodeId,
             selectedNodeIds: this.selection.nodeIds,
-            canDrag: node => this.options.registry.get(node.type)?.geometry.movable ?? false,
+            // A graph layout owns node positions.
+            canDrag: node => !this.graphLayout && (this.options.registry.get(node.type)?.geometry.movable ?? false),
         })
 
         if (!plan.draggedNodeIds.length) {

@@ -1,3 +1,40 @@
+@use "@lixpi/ui-primitives/styles/transitions" as transitions;
+
+[data-canvas-scroll-capture] {
+    transition: transitions.standardTransition(box-shadow);
+}
+
+[data-canvas-scroll-capture="armed"] {
+    box-shadow: inset 0 0 2px 0 var(--canvas-accent, currentColor), 0 0 2px 0 var(--canvas-accent, currentColor);
+}
+
+// An idle canvas leaves scrolling to the page. Its root and the layers placed
+// directly in it clip their content, which makes them scroll containers, so
+// they must let a scroll chain to the page. The shared scrollbar styles set
+// overscroll-behavior: none on every element, which would end the chain here.
+[data-canvas-scroll-capture="idle"],
+[data-canvas-scroll-capture="idle"] > * {
+    overscroll-behavior: auto;
+}
+
+[data-canvas-locked="true"] .canvas-engine-pane {
+    cursor: grab;
+}
+
+.canvas-engine-activation-hint {
+    position: absolute;
+    z-index: 10002;
+    right: 12px;
+    bottom: 8px;
+    left: 12px;
+    pointer-events: none;
+    color: var(--canvas-text-muted, currentColor);
+    font-family: var(--canvas-font-family, inherit);
+    font-size: var(--canvas-control-font-size, 13px);
+    line-height: 1.5;
+    text-align: center;
+}
+
 .canvas-engine-pane {
     position: absolute;
     inset: 0;

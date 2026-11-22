@@ -87,7 +87,7 @@ export class CollisionExample {
                     nodes: this.board.scene.nodes.map(
                         node => node.nodeId === 'anchor' ? {
                             ...node,
-                            type: value ? 'fixed' : 'diagram',
+                            type: value ? 'fixed' : 'box',
                             data: {
                                 ...node.data,
                                 lines: [value ? 'Fixed while other boxes move' : 'Movable collision box'],
@@ -230,7 +230,7 @@ export class CollisionExample {
             nodes: [
                 {
                     ...anchor,
-                    type: this.fixed ? 'fixed' : 'diagram',
+                    type: this.fixed ? 'fixed' : 'box',
                 },
                 capabilityNode(
                     'a',
@@ -363,7 +363,7 @@ export class CollisionExample {
     private reset(): void {
         this.board.scene = this.initialScene()
         this.board.publish()
-        this.board.fit()
+        this.board.canvas.fitToContent()
         this.frame.report('Overlapping input restored. Choose Resolve collisions or drag a node.')
     }
 

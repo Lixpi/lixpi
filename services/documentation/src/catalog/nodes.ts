@@ -16,12 +16,6 @@ export type CanvasNodePage = {
 
 export const canvasNodePages: readonly CanvasNodePage[] = [
     {
-        id: 'node-diagram',
-        title: 'Diagram',
-        nodeType: 'diagram',
-        mode: 'engine-playground',
-    },
-    {
         id: 'node-image',
         title: 'Image',
         nodeType: 'image',
@@ -70,12 +64,6 @@ export const canvasNodePages: readonly CanvasNodePage[] = [
         nodeType: 'capabilityArtifact',
         mode: 'workspace-canvas',
     },
-    {
-        id: 'node-lixpi-diagram-branch',
-        title: 'Workspace diagram branch',
-        nodeType: 'workspace-diagram-branch',
-        mode: 'workspace-diagram',
-    },
 ]
 
 export const workspaceCanvasNodeTypes: readonly CanvasNode['type'][] = canvasNodePages.filter(page => page.mode === 'workspace-canvas').flatMap(
@@ -83,7 +71,6 @@ export const workspaceCanvasNodeTypes: readonly CanvasNode['type'][] = canvasNod
 )
 
 const nodeDescriptions: Record<string, string> = {
-    'node-diagram': 'DiagramNodeView registration and an embedded adapter with metric content, activation, fitting and loading.',
     'node-image': 'One image registration supports contain, cover and stretch. Change the fit, resize the image or retry a failed load.',
     'node-video': 'Native video with shared PlaybackControls and UI-kit SVG controls.',
     'node-audio': 'Native audio with shared PlaybackControls and UI-kit SVG controls.',
@@ -92,7 +79,6 @@ const nodeDescriptions: Record<string, string> = {
     'node-lixpi-operation': 'The original operation-status canvas node plus upload and generation progress, failure and required-action presentations.',
     'node-lixpi-branches': 'Origin, fork and continuation markers together with their native parent relationships, plus reference-resolution and review variants.',
     'node-lixpi-artifact': 'The original Capability Artifact canvas nodes plus registered module views and the editable-module lease state.',
-    'node-lixpi-diagram-branch': 'The original workspace diagram branch view, native marker measurement, tree/collision layout and routed relations.',
 }
 
 export const canvasNodeExamples: readonly DocumentationExample[] = [
@@ -100,10 +86,10 @@ export const canvasNodeExamples: readonly DocumentationExample[] = [
         id: 'node-shell',
         title: 'Metadata shell',
         group: 'Nodes',
-        summary: 'An empty shell alongside wrapped Diagram, Image, Video and Audio nodes, sharing title, metadata and action slots.',
+        summary: 'An empty shell alongside wrapped Image, Video and Audio nodes, sharing title, metadata and action slots.',
         source: '@lixpi/canvas-components/nodes/shell',
         components: componentCoverage['node-shell'],
-        nodes: ['empty', 'diagram', 'image', 'video', 'audio'],
+        nodes: ['empty', 'image', 'video', 'audio'],
     },
     ...canvasNodePages.map(
         page => ({
@@ -113,11 +99,7 @@ export const canvasNodeExamples: readonly DocumentationExample[] = [
             summary: nodeDescriptions[page.id],
             source: page.mode === 'workspace-canvas'
                 ? '@lixpi/canvas-components/workspace'
-                : page.mode === 'workspace-diagram'
-                    ? '@lixpi/canvas-components/workspace/diagram'
-                    : page.nodeType === 'diagram'
-                        ? '@lixpi/canvas-components/diagram'
-                        : '@lixpi/canvas-components/media',
+                : '@lixpi/canvas-components/media',
             components: componentCoverage[page.id],
             nodes: page.nodeTypes ?? [page.nodeType],
         }),

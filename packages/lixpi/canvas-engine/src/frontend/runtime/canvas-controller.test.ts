@@ -994,3 +994,261 @@ describe('CanvasController', () => {
         expect(canvas.scene.viewport.zoom).toBe(2)
     })
 })
+
+// =============================================================================
+// PRESENTATION FLAGS
+// =============================================================================
+
+const pointer = (target: EventTarget, type: string, x: number, y: number, extra: PointerEventInit = {}) => {
+    target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        buttons: type === 'pointerup' ? 0 : 1,
+        clientX: x,
+        clientY: y,
+        ...extra,
+    }))
+}
+const pressAndMove = (start: EventTarget, root: HTMLElement, from: number, to: number) => {
+    pointer(start, 'pointerdown', from, from)
+    mouse(start, 'mousedown', from, from)
+    pointer(root, 'pointermove', to, to)
+    mouse(document, 'mousemove', to, to)
+    pointer(root, 'pointerup', to, to)
+    mouse(document, 'mouseup', to, to)
+}
+const linkedNodes = (): EngineNode[] => ['a', 'b'].map(
+    (nodeId, index) => ({
+        ...node(nodeId, 20 + index * 40),
+        ports: [
+            {
+                id: 'left',
+                role: 'both' as const,
+                direction: 'left' as const,
+                anchor: {
+                    x: 0,
+                    y: 40,
+                },
+            },
+            {
+                id: 'right',
+                role: 'both' as const,
+                direction: 'right' as const,
+                anchor: {
+                    x: 100,
+                    y: 40,
+                },
+            },
+        ],
+    }),
+)
+const linkedScene = (): SceneSnapshot => ({
+    ...snapshot(linkedNodes()),
+    edges: [{
+        edgeId: 'a-b',
+        source: {
+            nodeId: 'a',
+            portId: 'right',
+        },
+        target: {
+            nodeId: 'b',
+            portId: 'left',
+        },
+        path: 'horizontal-bezier',
+        data: null,
+    }],
+})
+
+describe('CanvasController presentation flags', () => {
+    it('pans from a node press while content is locked and moves the node again once unlocked', () => {
+        const {
+            canvas,
+            root,
+            contexts,
+            onIntent,
+        } = fixture(undefined, { locked: true })
+        expect(root.dataset.canvasLocked).toBe('true')
+        pressAndMove(contexts.get('a')!.contentRoot, root, 30, 60)
+        expect(onIntent.mock.calls.map(([intent]) => intent.kind)).toEqual(['viewport'])
+
+        onIntent.mockClear()
+        canvas.setLocked(false)
+        expect(root.dataset.canvasLocked).toBe('false')
+        pressAndMove(contexts.get('a')!.contentRoot, root, 30, 60)
+        expect(onIntent.mock.calls.map(([intent]) => intent.kind)).toEqual(['geometry'])
+    })
+
+    it('rejects host-driven transforms and deletion while content is locked', () => {
+        const {
+            canvas,
+            root,
+            onIntent,
+        } = fixture(undefined, { locked: true })
+        const onCancel = vi.fn()
+        const gesture = canvas.startNodeDrag({
+            event: new MouseEvent('mousedown'),
+            targets: [{
+                nodeId: 'a',
+                bounds: canvas.scene.getNodeGeometry('a')!.worldBounds,
+            }],
+            onChange: vi.fn(),
+            onEnd: vi.fn(),
+            onCancel,
+        })
+        expect(gesture).toBeNull()
+        expect(onCancel).toHaveBeenCalledExactlyOnceWith('locked')
+
+        canvas.setSelected(['a'])
+        root.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Delete',
+            bubbles: true,
+        }))
+        expect(onIntent).not.toHaveBeenCalled()
+
+        canvas.setLocked(false)
+        canvas.setSelected(['a'])
+        root.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Delete',
+            bubbles: true,
+        }))
+        expect(onIntent).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+            kind: 'delete',
+            nodeIds: ['a'],
+        }))
+    })
+
+    it('fits the content on request and reports the fitted viewport', () => {
+        const {
+            canvas,
+            onIntent,
+        } = fixture()
+        expect(canvas.fitToContent()).toBe(true)
+        expect(canvas.scene.viewport).toEqual({
+            x: 230,
+            y: 140,
+            zoom: 1,
+        })
+        expect(onIntent).toHaveBeenLastCalledWith(expect.objectContaining({
+            kind: 'viewport',
+            viewport: canvas.scene.viewport,
+        }))
+    })
+
+    it('keeps the content fitted while auto fit is on and leaves the viewport alone once it is off', () => {
+        const { canvas } = fixture(undefined, { autoFit: true })
+        expect(canvas.scene.viewport.x).toBe(230)
+
+        canvas.setScene({
+            ...snapshot([node('a', 300)]),
+            revision: '2',
+        })
+        expect(canvas.scene.viewport.x).toBe(-50)
+
+        canvas.setAutoFit(false)
+        canvas.setScene({
+            ...snapshot([node('a', 20)]),
+            revision: '3',
+        })
+        expect(canvas.scene.viewport.x).toBe(-50)
+    })
+
+    it('passes page scrolling through until a press activates the canvas', () => {
+        const {
+            canvas,
+            root,
+        } = fixture(undefined, { scrollCapture: 'on-activate' })
+        expect(root.classList.contains('nowheel')).toBe(true)
+        expect(root.dataset.canvasScrollCapture).toBe('idle')
+        expect(root.querySelector('.canvas-engine-activation-hint')?.textContent).not.toBe('')
+
+        pointer(root, 'pointerdown', 300, 300)
+        expect(root.classList.contains('nowheel')).toBe(false)
+        expect(root.dataset.canvasScrollCapture).toBe('armed')
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+        expect(root.classList.contains('nowheel')).toBe(true)
+
+        canvas.setScrollCapture('always')
+        expect(root.classList.contains('nowheel')).toBe(false)
+        expect(root.dataset.canvasScrollCapture).toBeUndefined()
+        expect(root.querySelector('.canvas-engine-activation-hint')).toBeNull()
+    })
+
+    it('reports a node click but not a drag that starts on the node', () => {
+        const onNodeClick = vi.fn()
+        const {
+            root,
+            contexts,
+        } = fixture(undefined, {
+            locked: true,
+            onNodeClick,
+        })
+        const content = contexts.get('a')!.contentRoot
+        pointer(content, 'pointerdown', 30, 30)
+        pointer(content, 'pointerup', 32, 31)
+        expect(onNodeClick).toHaveBeenCalledExactlyOnceWith('a')
+
+        pressAndMove(content, root, 30, 80)
+        expect(onNodeClick).toHaveBeenCalledOnce()
+    })
+
+    it('places nodes with a graph layout and reports the arranged positions when the layout is removed', () => {
+        const {
+            canvas,
+            onIntent,
+        } = fixture(undefined, {
+            scene: linkedScene(),
+            layout: {},
+        })
+        const [a, b] = canvas.scene.scene.nodes
+        expect(b.position.x).toBeGreaterThanOrEqual(a.position.x + a.dimensions.width)
+        expect(canvas.scene.scene.edges[0].path).toBe('horizontal-bezier')
+
+        canvas.setLayout(false)
+        expect(onIntent).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'geometry',
+            changes: expect.arrayContaining([
+                expect.objectContaining({
+                    nodeId: 'b',
+                    position: b.position,
+                }),
+            ]),
+        }))
+        expect(canvas.layout).toBe(false)
+    })
+
+    it('replaces the layout and the scene together', () => {
+        const { canvas } = fixture(undefined, {
+            scene: linkedScene(),
+            layout: {},
+        })
+        const reversed = linkedScene()
+        reversed.edges = [{
+            ...reversed.edges[0],
+            edgeId: 'b-a',
+            source: {
+                nodeId: 'b',
+                portId: 'right',
+            },
+            target: {
+                nodeId: 'a',
+                portId: 'left',
+            },
+        }]
+        // These stages are invalid for the current scene, whose only edge
+        // runs from a to b, so they must be applied to the new scene only.
+        canvas.setLayout(
+            { stages: [{ trees: [{
+                rootId: 'b',
+                children: { b: ['a'] },
+            }] }] },
+            reversed,
+        )
+        const [a, b] = canvas.scene.scene.nodes
+        expect(a.position.x).toBeGreaterThanOrEqual(b.position.x + b.dimensions.width)
+        expect(canvas.scene.scene.edges.map(edge => edge.edgeId)).toEqual(['b-a'])
+    })
+})

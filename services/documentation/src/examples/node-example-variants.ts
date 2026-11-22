@@ -175,12 +175,6 @@ const canvasNodeVariant = (page: CanvasNodePage): Variant => ({
             return ownFrame(example)
         }
 
-        if (page.mode === 'workspace-diagram') {
-            const { mountWorkspaceExample } = await import('./workspace/index.ts')
-
-            return ownFrame(await mountWorkspaceExample(host, page.mode))
-        }
-
         const { FullWorkspaceExample } = await import('./workspace/canvas-examples.ts')
 
         if (page.nodeType === 'mediaDocument') {
@@ -223,19 +217,7 @@ const uploadedDocumentInstructions = (): HTMLElement =>
 const nodeVariants = (page: CanvasNodePage): Variant[] => {
     const variants = [canvasNodeVariant(page)]
 
-    if (page.id === 'node-diagram')
-        variants.push({
-            id: 'embedded-diagram',
-            title: 'Embedded diagram adapter',
-            mount: async host => {
-                const { DiagramExample } = await import('./diagram-example.ts')
-
-                return ownFrame(
-                    new DiagramExample(host),
-                )
-            },
-        })
-    else if (page.id === 'node-lixpi-document')
+    if (page.id === 'node-lixpi-document')
         variants.push({
             id: 'editor-states',
             title: 'Editor lease, loading and retry',
@@ -297,7 +279,7 @@ export const mountMetadataShellExample = async (host: HTMLElement): Promise<Docu
         )
         const description = html`
             <section className="canvas-example-instructions">
-                <p>Compare the empty shell with the shells around the diagram, image, video and audio. Turn off <strong>Show shell</strong> to see the underlying nodes. A playing video keeps its position when you turn the shell back on.</p>
+                <p>Compare the empty shell with the shells around the image, video and audio. Turn off <strong>Show shell</strong> to see the underlying nodes. A playing video keeps its position when you turn the shell back on.</p>
                 <p><code>withNodeShell</code> takes an existing node registration. The registered view still draws its content and handles resizing or playback. <code>CanvasNodeShell</code> places a title above that content and two slots below it for metadata and actions. These slots follow the node when you pan or zoom. On a video or audio node, the footer sits below the player controls.</p>
                 <p>The host decides what to mount in each slot. Here the title is plain text, the metadata shows dimensions and media version where available, and the footer offers Select and Delete. The empty example leaves the content area vacant so you can inspect those slots on their own.</p>
                 <p>In the Lixpi workspace, the title slot can host a ProseMirror editor. The editor integration handles document changes and persistence. The shell passes updates to the mounted slots and releases them with the child view when the node is removed.</p>
@@ -305,7 +287,7 @@ export const mountMetadataShellExample = async (host: HTMLElement): Promise<Docu
         ` as HTMLElement
         example.frame.setInstructions(description)
 
-        example.fit()
+        example.canvas.fitToContent()
 
         return ownFrame(example)
     } catch (error) {

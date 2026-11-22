@@ -20,6 +20,11 @@ import {
 } from '@lixpi/canvas-components/theme'
 import { getExampleTheme } from './example-theme.ts'
 import { FixtureEditor } from './workspace/fixture-editor.ts'
+import {
+    ExampleCanvasControls,
+    type ExampleCanvas,
+    type ExampleCanvasControlsOptions,
+} from './canvas-controls.ts'
 
 type ParameterOption = DropdownOption & { value: string }
 
@@ -42,6 +47,15 @@ export class ExampleFrame {
         ></div>
     ` as HTMLDivElement
     readonly parameters = html`<div className="canvas-example-parameters"></div>` as HTMLDivElement
+    // Every canvas instance shows the same lock, fit, layout, scrolling and
+    // loading controls here, apart from the example's own parameters.
+    readonly canvasParameters = html`<div className="canvas-example-parameters"></div>` as HTMLDivElement
+    readonly canvasControls = html`
+        <div
+            className="canvas-example-controls"
+            aria-label="Canvas actions"
+        ></div>
+    ` as HTMLDivElement
     readonly status = html`
         <output
             className="canvas-example-status"
@@ -88,6 +102,11 @@ export class ExampleFrame {
                 ${this.instructionsElement}
                 ${this.status}
                 ${this.controlError}
+                <section className="canvas-example-canvas">
+                    <h3>Canvas</h3>
+                    ${this.canvasParameters}
+                    ${this.canvasControls}
+                </section>
                 ${this.parameters}
                 <section className="canvas-example-actions">
                     <h3>Actions</h3>
@@ -120,16 +139,31 @@ export class ExampleFrame {
         return release
     }
 
+    // Adds the shared Canvas section controls for one canvas instance.
+    attachCanvas(
+        canvas: ExampleCanvas,
+        options?: ExampleCanvasControlsOptions,
+    ): void {
+        this.widgets.add(
+            new ExampleCanvasControls(
+                this,
+                canvas,
+                options,
+            ),
+        )
+    }
+
     button(
         label: string,
         action: () => void,
+        container: HTMLElement = this.controls,
     ): HTMLButtonElement {
         const button = createButton({
             label,
             onClick: () => void this.runControl(action),
         })
         this.widgets.add(button)
-        this.controls.append(button.element)
+        container.append(button.element)
 
         return button.element
     }
@@ -194,6 +228,7 @@ export class ExampleFrame {
         value: string,
         options: Readonly<Record<string, string>>,
         onChange: (value: string) => void,
+        container: HTMLElement = this.parameters,
     ): PureDropdownInstance<ParameterOption> {
         const dropdown = createPureDropdown<ParameterOption>({
             id: `${this.controlPrefix}-${this.controlSequence++}`,
@@ -215,7 +250,11 @@ export class ExampleFrame {
             onSelect: option => void this.runControl(() => onChange(option.value)),
         })
         this.widgets.add(dropdown)
-        this.field(label, dropdown.dom)
+        this.field(
+            label,
+            dropdown.dom,
+            container,
+        )
 
         return dropdown
     }
@@ -224,6 +263,7 @@ export class ExampleFrame {
         label: string,
         value: boolean,
         onChange: (value: boolean) => void,
+        container: HTMLElement = this.parameters,
     ): ToggleSwitchInstance {
         const host = html`<span className="canvas-example-toggle"></span>` as HTMLSpanElement
         const svg = select(host)
@@ -303,7 +343,11 @@ export class ExampleFrame {
             host.style.setProperty('--canvas-example-toggle-height', `${geometry.host.height}px`)
         })
         this.widgets.add(toggle)
-        this.field(label, host)
+        this.field(
+            label,
+            host,
+            container,
+        )
 
         return toggle
     }
@@ -327,9 +371,10 @@ export class ExampleFrame {
     private field(
         label: string,
         input: HTMLElement,
+        container: HTMLElement = this.parameters,
     ): HTMLLabelElement {
         const field = html`<label className="canvas-example-parameter"><span>${label}</span>${input}</label>` as HTMLLabelElement
-        this.parameters.append(field)
+        container.append(field)
 
         return field
     }

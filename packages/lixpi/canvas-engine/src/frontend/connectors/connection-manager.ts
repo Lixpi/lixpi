@@ -284,6 +284,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         }
     }
 
+    private editable(): boolean {
+        return this.config.isEditable?.() ?? true
+    }
+
     public updateSettings(settings: ConnectionSettings): void {
         if (this.destroyed)
             return
@@ -389,7 +393,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     }
 
     public startConnectionFromMenu(nodeId: string) {
-        if (this.destroyed)
+        if (
+            this.destroyed
+            || !this.editable()
+        )
             return
 
         this.cancelTransientConnection()
@@ -710,7 +717,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         event: MouseEvent | TouchEvent,
         meta: HandleMeta,
     ) {
-        if (this.destroyed)
+        if (
+            this.destroyed
+            || !this.editable()
+        )
             return
 
         this.cancelTransientConnection()
@@ -950,7 +960,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     }
 
     public selectEdge(edgeId: string | null) {
-        if (this.destroyed)
+        if (
+            this.destroyed
+            || (edgeId !== null && !this.editable())
+        )
             return
 
         this.selectedEdgeId = edgeId
@@ -959,7 +972,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     }
 
     public deleteSelectedEdge() {
-        if (!this.selectedEdgeId)
+        if (
+            !this.selectedEdgeId
+            || !this.editable()
+        )
             return
 
         const toDelete = this.selectedEdgeId
@@ -1637,7 +1653,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         this.paneClickHandler = (e: MouseEvent) => {
             const target = e.target as HTMLElement
 
-            if (this.config.isNodeTarget?.(target))
+            if (
+                this.config.isNodeTarget?.(target)
+                || !this.editable()
+            )
                 return
 
             const edgeId = this.findEdgeIdAtClientPoint(e.clientX, e.clientY)
@@ -1664,7 +1683,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
 
             const target = e.target as HTMLElement
 
-            if (this.config.isNodeTarget?.(target)) {
+            if (
+                this.config.isNodeTarget?.(target)
+                || !this.editable()
+            ) {
                 this.config.paneEl.classList.remove('is-hovering-edge')
 
                 return
@@ -1695,7 +1717,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     ) {
         const draggedNode = this.nodes.find(n => n.nodeId === nodeId)
 
-        if (!draggedNode)
+        if (
+            !draggedNode
+            || !this.editable()
+        )
             return
 
         let closestCandidate: ProximityCandidate | null = null
@@ -1738,7 +1763,10 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     }
 
     public commitProximityConnection() {
-        if (!this.proximityCandidate)
+        if (
+            !this.proximityCandidate
+            || !this.editable()
+        )
             return
 
         const newEdge: ConnectionEdge = {

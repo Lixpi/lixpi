@@ -70,6 +70,9 @@ export type ConnectionManagerConfig<Node extends ConnectionNode> = {
     onSelectedEdgeChange?: (edgeId: string | null) => void
     onConnectorGeometry?: (edges: ConnectorRenderDatum[]) => void
     onSettingsChange?: (settings: ConnectionSettings) => void
+    // A false result rejects new, changed, selected and deleted connections
+    // while existing connectors keep rendering.
+    isEditable?: () => boolean
     settings: ConnectionSettings
     markerBodyLengthFraction: number
 } & ConnectionPolicy<Node>

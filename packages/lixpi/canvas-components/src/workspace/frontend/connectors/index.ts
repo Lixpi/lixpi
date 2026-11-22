@@ -1,4 +1,7 @@
-export { getBranchConnectionTargetMarker } from './branch-connection-policy.ts'
+export {
+    createBranchMarkerConnectionPolicy,
+    getBranchConnectionTargetMarker,
+} from './branch-connection-policy.ts'
 export * from './workspace-connection-manager.ts'
 export * from './workspace-edge-ports.ts'
 export * from './workspace-connection-projection.ts'

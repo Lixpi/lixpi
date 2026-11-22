@@ -32,7 +32,7 @@ export type ViewportControllerOptions = {
 export class ViewportController {
     private readonly backend: ViewportInput
     private readonly locks = new InteractionLocks()
-    private readonly config: CanvasPanZoomConfig
+    private config: CanvasPanZoomConfig
     private viewport: CanvasViewport
     private destroyed = false
 
@@ -53,30 +53,49 @@ export class ViewportController {
         })
 
         try {
-            this.locks.subscribe(
-                state =>
-                    this.backend.update(
-                        state.locked
-                            ? {
-                                ...this.config,
-                                panOnDrag: false,
-                                panOnScroll: false,
-                                zoomOnScroll: false,
-                                zoomOnPinch: false,
-                                zoomOnDoubleClick: false,
-                                userSelectionActive: true,
-                                connectionInProgress: true,
-                                selectionOnDrag: state.selection,
-                            }
-                            : this.config,
-                    ),
-            )
+            this.locks.subscribe(() => this.apply())
         } catch (error) {
             this.backend.destroy()
             this.locks.destroy()
 
             throw error
         }
+    }
+
+    private apply(): void {
+        const state = this.locks.state
+        this.backend.update(
+            state.locked
+                ? {
+                    ...this.config,
+                    panOnDrag: false,
+                    panOnScroll: false,
+                    zoomOnScroll: false,
+                    zoomOnPinch: false,
+                    zoomOnDoubleClick: false,
+                    userSelectionActive: true,
+                    connectionInProgress: true,
+                    selectionOnDrag: state.selection,
+                }
+                : this.config,
+        )
+    }
+
+    getConfig(): Readonly<CanvasPanZoomConfig> {
+        return { ...this.config }
+    }
+
+    // Applies changed input policy without replacing the viewport or its locks.
+    updateConfig(config: Partial<Omit<CanvasPanZoomConfig, 'onTransformChange'>>): void {
+        if (this.destroyed)
+            return
+
+        this.config = {
+            ...this.config,
+            ...config,
+            onTransformChange: this.onTransformChange,
+        }
+        this.apply()
     }
 
     private validate = assertViewport

@@ -115,7 +115,7 @@ export class ProximityExample {
             this.board.connections?.cancelTransientConnection()
             this.board.scene = this.initialScene()
             this.board.publish()
-            this.board.fit()
+            this.board.canvas.fitToContent()
         })
         this.frame.code(
             () => [

@@ -116,6 +116,7 @@ const setup = (nodes: CanvasNode[] = [image()]) => {
         }),
         readState: () => state,
         runtime: {
+            locked: false,
             cancelInteraction: vi.fn(),
             startNodeDrag: vi.fn(options => void drags.push(options)),
             startNodeResize: vi.fn(options => void resizes.push(options)),

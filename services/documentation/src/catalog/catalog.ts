@@ -350,14 +350,6 @@ export const mountDocumentationExample = async (
         }
     }
 
-    if (id === 'diagram') {
-        const { DiagramExample } = await import('../examples/diagram-example.ts')
-
-        return ownExample(
-            new DiagramExample(host),
-        )
-    }
-
     if (
         id.startsWith('loading-')
         || id.startsWith('effects-')

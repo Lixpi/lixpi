@@ -2,32 +2,32 @@ import {
     type CanvasEngineRect,
     type CanvasViewport,
     type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
 import {
     type ComponentContext,
     type NodeRegistration,
     type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import { createFixedDiagramNodeGeometry } from '@lixpi/canvas-components/diagram'
 import {
     applyStyle,
     createDocumentHtml,
 } from '@lixpi/ui-primitives/dom'
 import {
-    WORKSPACE_DIAGRAM_NODE_TYPE,
-    type WorkspaceDiagramNode,
-} from '../../shared/diagram/workspace-diagram.ts'
-import { BranchMarkerContent } from '../nodes/branch-marker-content.ts'
+    BRANCH_MARKER_NODE_TYPE,
+    type BranchMarkerNodeData,
+} from '../../shared/branch-tree-layout/branch-marker-node.ts'
+import { BranchMarkerContent } from './branch-marker-content.ts'
 
-// Presentation only: native shell/content receive labels, without fabricated
-// generation, conversation, model or persisted lineage state.
-export class WorkspaceDiagramNodeView implements NodeView<WorkspaceDiagramNode> {
+// Draws the workspace branch shell and content from a prompt and an optional
+// response line, without generation, conversation, model or lineage state.
+export class BranchMarkerNodeView implements NodeView<BranchMarkerNodeData> {
     private readonly shell: HTMLDivElement
     private content: BranchMarkerContent | null = null
-    private data: WorkspaceDiagramNode | null = null
+    private data: BranchMarkerNodeData | null = null
 
     constructor(
-        node: EngineNode<WorkspaceDiagramNode>,
+        node: EngineNode<BranchMarkerNodeData>,
         context: ComponentContext,
     ) {
         const html = createDocumentHtml(context.contentRoot.ownerDocument)
@@ -54,7 +54,7 @@ export class WorkspaceDiagramNodeView implements NodeView<WorkspaceDiagramNode> 
         }
     }
 
-    update(node: EngineNode<WorkspaceDiagramNode>): void {
+    update(node: EngineNode<BranchMarkerNodeData>): void {
         const data = node.data
         const role = data.role === 'continuation' ? 'line' : data.role
         this.shell.className = `workspace-branch-${role}-node`
@@ -75,7 +75,7 @@ export class WorkspaceDiagramNodeView implements NodeView<WorkspaceDiagramNode> 
                 text: data.prompt,
             }],
             renderReference: () => {
-                throw new Error('Workspace diagram labels do not contain prompt references')
+                throw new Error('Branch marker nodes do not contain prompt references')
             },
             reasoningModel: null,
             mediaModels: [],
@@ -122,8 +122,35 @@ export class WorkspaceDiagramNodeView implements NodeView<WorkspaceDiagramNode> 
     }
 }
 
-export const createWorkspaceDiagramNodeRegistration = (): NodeRegistration<WorkspaceDiagramNode> => ({
-    type: WORKSPACE_DIAGRAM_NODE_TYPE,
-    geometry: createFixedDiagramNodeGeometry<WorkspaceDiagramNode>(),
-    mount: (node, context) => new WorkspaceDiagramNodeView(node, context),
+// A marker's footprint is its scene rectangle. Markers move unless the canvas
+// locks its content or a graph layout owns their positions.
+const branchMarkerGeometry: NodeGeometryPolicy<BranchMarkerNodeData> = {
+    measure: node => {
+        const bounds = {
+            ...node.position,
+            ...node.dimensions,
+        }
+
+        return {
+            visualBounds: bounds,
+            hitBounds: bounds,
+            selectionBounds: bounds,
+            collisionBounds: bounds,
+            connectorBounds: bounds,
+        }
+    },
+    resize: {
+        min: {
+            width: 1,
+            height: 1,
+        },
+        preserveAspectRatio: true,
+    },
+    movable: true,
+}
+
+export const createBranchMarkerNodeRegistration = (): NodeRegistration<BranchMarkerNodeData> => ({
+    type: BRANCH_MARKER_NODE_TYPE,
+    geometry: branchMarkerGeometry,
+    mount: (node, context) => new BranchMarkerNodeView(node, context),
 })

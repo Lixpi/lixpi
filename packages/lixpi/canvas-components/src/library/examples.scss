@@ -24,11 +24,6 @@
     overflow: auto;
 }
 
-.canvas-example-stage > .diagram-canvas {
-    width: 100%;
-    height: 100%;
-}
-
 .canvas-example-instructions {
     margin: 0 0 24px;
 }
@@ -69,6 +64,14 @@
     }
 }
 
+.canvas-example-canvas {
+    margin-bottom: 24px;
+
+    &:has(> .canvas-example-parameters:empty) {
+        display: none;
+    }
+}
+
 .canvas-example-code {
     margin-bottom: 24px;
 }
@@ -85,6 +88,47 @@
     &:empty {
         display: none;
     }
+}
+
+.canvas-example-box {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 12px;
+    color: var(--canvas-text);
+    font: var(--canvas-font-size) / var(--canvas-line-height) var(--canvas-font-family);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.canvas-example-box-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.canvas-example-box-tag {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--canvas-surface-raised);
+    color: var(--canvas-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.canvas-example-box-title {
+    font-size: var(--canvas-title-font-size);
+    font-weight: var(--canvas-title-font-weight);
+}
+
+.canvas-example-box-line {
+    color: var(--canvas-text-muted);
 }
 
 .canvas-example-glass-target {
@@ -176,6 +220,7 @@
 }
 
 .canvas-example-actions h3,
+.canvas-example-canvas h3,
 .canvas-example-code h3 {
     margin: 0 0 10px;
 }

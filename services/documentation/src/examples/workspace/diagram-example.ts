@@ -1,105 +1,185 @@
-import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
-    createWorkspaceDiagramCanvas,
-    type WorkspaceDiagram,
-} from '@lixpi/canvas-components/workspace/diagram'
+    CanvasController,
+    Lifetime,
+    NodeRegistry,
+} from '@lixpi/canvas-engine/frontend/runtime'
+import {
+    type CanvasEnginePoint,
+    type CanvasGraphEdgeKind,
+    type CanvasGraphStage,
+    type SceneSnapshot,
+} from '@lixpi/canvas-engine/shared'
+import {
+    arrowRightMarkerBodyLengthFraction,
+    createArrowRightMarker,
+} from '@lixpi/ui-kit/svg'
+import {
+    createBranchMarkerEdge,
+    createBranchMarkerGraphLayout,
+    createBranchMarkerNode,
+    type BranchMarkerNodeData,
+} from '@lixpi/canvas-components/workspace/shared'
+import { createBranchMarkerNodeRegistration } from '@lixpi/canvas-components/workspace/nodes'
+import { createBranchMarkerConnectionPolicy } from '@lixpi/canvas-components/workspace/connectors'
+import {
+    applyWorkspaceCanvasTheme,
+    createLixpiCanvasSettings,
+    resolveLixpiCanvasTheme,
+} from '@lixpi/canvas-components/workspace/settings'
 import { ExampleFrame } from '../example-frame.ts'
 
-const diagram: WorkspaceDiagram = {
-    revision: 'fixture-diagram-1',
-    nodes: [
-        {
-            id: 'origin',
-            prompt: 'Prepare the reference',
-            response: 'The supplied Asset is ready.',
-            role: 'origin',
-        },
-        {
-            id: 'fork-a',
-            prompt: 'Explore the first branch',
-            response: 'A local candidate is ready.',
-            role: 'fork',
-        },
-        {
-            id: 'fork-b',
-            prompt: 'Explore another branch',
-            response: 'A second candidate is ready.',
-            role: 'fork',
-        },
-        {
-            id: 'continuation',
-            prompt: 'Refine the selected candidate',
-            response: 'The result retains its source relationship.',
-            role: 'continuation',
-        },
-    ],
-    stages: [{
-        trees: [{
-            rootId: 'origin',
-            children: {
-                origin: ['fork-a', 'fork-b'],
-                'fork-a': ['continuation'],
-            },
-        }],
-    }],
-    edges: [
-        {
-            id: 'origin-a',
-            source: 'origin',
-            target: 'fork-a',
-        },
-        {
-            id: 'origin-b',
-            source: 'origin',
-            target: 'fork-b',
-        },
-        {
-            id: 'a-continuation',
-            source: 'fork-a',
-            target: 'continuation',
-        },
-        {
-            id: 'b-continuation',
-            source: 'fork-b',
-            target: 'continuation',
-            kind: 'relation',
-        },
-        {
-            id: 'feedback',
-            source: 'continuation',
-            target: 'origin',
-            kind: 'feedback',
-        },
-    ],
-}
+const nodes: readonly (BranchMarkerNodeData & { id: string })[] = [
+    {
+        id: 'origin',
+        prompt: 'Prepare the reference',
+        response: 'The supplied Asset is ready.',
+        role: 'origin',
+    },
+    {
+        id: 'fork-a',
+        prompt: 'Explore the first branch',
+        response: 'A local candidate is ready.',
+        role: 'fork',
+    },
+    {
+        id: 'fork-b',
+        prompt: 'Explore another branch',
+        response: 'A second candidate is ready.',
+        role: 'fork',
+    },
+    {
+        id: 'continuation',
+        prompt: 'Refine the selected candidate',
+        response: 'The result retains its source relationship.',
+        role: 'continuation',
+    },
+]
 
+const stages: readonly CanvasGraphStage[] = [{
+    trees: [{
+        rootId: 'origin',
+        children: {
+            origin: ['fork-a', 'fork-b'],
+            'fork-a': ['continuation'],
+        },
+    }],
+}]
+
+const edges: readonly {
+    id: string
+    source: string
+    target: string
+    kind: CanvasGraphEdgeKind
+}[] = [
+    {
+        id: 'origin-a',
+        source: 'origin',
+        target: 'fork-a',
+        kind: 'forward',
+    },
+    {
+        id: 'origin-b',
+        source: 'origin',
+        target: 'fork-b',
+        kind: 'forward',
+    },
+    {
+        id: 'a-continuation',
+        source: 'fork-a',
+        target: 'continuation',
+        kind: 'forward',
+    },
+    {
+        id: 'b-continuation',
+        source: 'fork-b',
+        target: 'continuation',
+        kind: 'relation',
+    },
+    {
+        id: 'feedback',
+        source: 'continuation',
+        target: 'origin',
+        kind: 'feedback',
+    },
+]
+
+// Workspace branch markers on the ordinary canvas. The graph layout places
+// the markers and routes relation and feedback edges; the canvas starts
+// locked, fitted and inactive for page scrolling until clicked.
 export class WorkspaceDiagramExample {
     private readonly lifetime = new Lifetime()
     readonly frame: ExampleFrame
-    private readonly canvas: ReturnType<typeof createWorkspaceDiagramCanvas>
+    readonly canvas: CanvasController
+    private readonly moved = new Map<string, CanvasEnginePoint>()
+    private readonly layout = createBranchMarkerGraphLayout(stages)
     private prompt = 'Prepare the reference'
     private relations = true
     private feedback = true
-    private state: 'ready' | 'loading' | 'error' = 'ready'
     private revision = 0
 
     constructor(host: HTMLElement) {
         try {
             this.frame = new ExampleFrame(
                 host,
-                'WorkspaceDiagramCanvas renders semantic branch graphs using the workspace marker, connector policy and native layout. The host supplies node text, fan-out trees, relations and feedback edges. setDiagram recalculates geometry when those inputs change.',
+                'Workspace branch markers drawn by the ordinary canvas. Auto layout places them with the tidy-tree and collision solvers and routes the relation and the feedback return around the markers. The canvas starts locked and fitted, and page scrolling passes through until you click inside. Turn Auto layout off to keep the current positions and move markers by hand on an unlocked canvas.',
             )
             this.lifetime.own(() => this.frame.destroy())
-            this.canvas = createWorkspaceDiagramCanvas({
-                ariaLabel: 'Workspace branch diagram',
-                sceneKey: 'documentation-workspace-diagram',
-                theme: this.frame.theme,
+            const defaults = createLixpiCanvasSettings()
+            const settings = resolveLixpiCanvasTheme(this.frame.theme.value, defaults)
+            applyWorkspaceCanvasTheme(this.frame.stage, settings)
+            this.canvas = new CanvasController({
+                root: this.frame.stage,
+                registry: new NodeRegistry().register(
+                    createBranchMarkerNodeRegistration(),
+                ),
+                scene: this.scene(),
+                viewport: {
+                    x: 0,
+                    y: 0,
+                    zoom: 1,
+                },
+                connectors: {
+                    settings: settings.connector,
+                    renderer: {
+                        marker: createArrowRightMarker(),
+                        zoomScaling: settings.connector.scaling.zoomScaling,
+                    },
+                    markerBodyLengthFraction: arrowRightMarkerBodyLengthFraction,
+                    policy: createBranchMarkerConnectionPolicy(),
+                },
+                interaction: {},
+                locked: true,
+                autoFit: true,
+                scrollCapture: 'on-activate',
+                layout: this.layout,
+                onNodeClick: nodeId => this.frame.report(`Clicked ${nodeId}.`),
+                onIntent: intent => {
+                    if (intent.kind !== 'geometry')
+                        return
+
+                    for (const change of intent.changes)
+                        this.moved.set(change.nodeId, change.position)
+
+                    this.update()
+                },
                 onError: this.frame.error,
             })
             this.lifetime.own(() => this.canvas.destroy())
-            this.frame.stage.append(this.canvas.el)
-            this.update()
-            this.canvas.mount()
+            this.frame.onThemeChange(theme => {
+                const next = resolveLixpiCanvasTheme(theme, defaults)
+                applyWorkspaceCanvasTheme(this.frame.stage, next)
+                this.canvas.setConnectionSettings(next.connector)
+                this.update()
+            })
+            this.frame.attachCanvas(
+                this.canvas,
+                {
+                    layout: {
+                        canvas: this.canvas,
+                        options: this.layout,
+                    },
+                },
+            )
             this.frame.text(
                 'Origin prompt',
                 this.prompt,
@@ -124,28 +204,7 @@ export class WorkspaceDiagramExample {
                     this.update()
                 },
             )
-            this.frame.select(
-                'Loading state',
-                this.state,
-                {
-                    ready: 'Ready',
-                    loading: 'Loading',
-                    error: 'Error',
-                },
-                state => this.status(state as typeof this.state),
-            )
-            this.frame.button('Fit diagram', () => this.canvas.refit())
-            this.frame.code(
-                () => ["import {", "    createWorkspaceDiagramCanvas,", "    type WorkspaceDiagram,", "    type WorkspaceDiagramCanvasOptions,", "} from '@lixpi/canvas-components/workspace/diagram'", "", "// The host supplies semantic topology; the package computes marker geometry.", "// options.theme supplies the same CanvasThemeSource as the surrounding components.", "const mount=(", "    host: HTMLElement,", "    graph: WorkspaceDiagram,", "    options: WorkspaceDiagramCanvasOptions,", ") => {", "    const canvas=createWorkspaceDiagramCanvas({ ...options, theme: options.theme })", "    host.append(canvas.el)", "    canvas.setDiagram({", "        ...graph,", `        revision: '${  String(
-                    (this.revision),
-                )  }',`, "        nodes: graph.nodes.map(node => node.id==='origin'", `            ? { ...node, prompt: ${  String(
-                    (JSON.stringify(this.prompt)),
-                )  } }`, "            :node),", "        edges: graph.edges.filter(edge =>", `            (edge.kind!=='relation'||${  String(
-                    (this.relations),
-                )  })`, `            &&(edge.kind!=='feedback'||${  String((this.feedback))  }),`, "        ),", "    })", `    canvas.setLoading(${  String(
-                    (this.state === 'loading'),
-                )  })`, `    canvas.setError(${  String((this.state === 'error' ? "'Simulated diagram loading error.'" : 'null'))  })`, "    canvas.mount()", "    return () => canvas.destroy()", "}"].join('\n'),
-            )
+            this.frame.code(() => this.source())
         } catch (error) {
             this.lifetime.destroy()
 
@@ -153,31 +212,89 @@ export class WorkspaceDiagramExample {
         }
     }
 
-    private update(): void {
-        this.revision += 1
-        this.canvas.setDiagram({
-            ...diagram,
-            revision: String(this.revision),
-            nodes: diagram.nodes.map(
-                node => node.id === 'origin'
-                    ? {
+    private scene(): SceneSnapshot {
+        return {
+            sceneKey: 'documentation-branch-diagram',
+            revision: String(++this.revision),
+            nodes: nodes.map(
+                ({
+                    id,
+                    ...data
+                }) => {
+                    const node = createBranchMarkerNode(
+                        id,
+                        id === 'origin'
+                            ? {
+                                ...data,
+                                prompt: this.prompt,
+                            }
+                            : data,
+                    )
+
+                    return {
                         ...node,
-                        prompt: this.prompt,
+                        position: this.moved.get(id) ?? node.position,
                     }
-                    : node,
+                },
             ),
-            edges: diagram.edges.filter(
+            edges: edges.filter(
                 edge =>
                     (edge.kind !== 'relation' || this.relations)
                     && (edge.kind !== 'feedback' || this.feedback),
+            ).map(
+                edge => createBranchMarkerEdge(
+                    edge.id,
+                    edge.source,
+                    edge.target,
+                    edge.kind,
+                ),
             ),
-        })
+        }
     }
 
-    private status(state: typeof this.state): void {
-        this.state = state
-        this.canvas.setLoading(state === 'loading')
-        this.canvas.setError(state === 'error' ? 'Simulated diagram loading error.' : null)
+    private update(): void {
+        if (this.canvas)
+            this.canvas.setScene(
+                this.scene(),
+            )
+    }
+
+    private source(): string {
+        return [
+            "import { CanvasController, NodeRegistry } from '@lixpi/canvas-engine/frontend/runtime'",
+            "import { createBranchMarkerEdge, createBranchMarkerGraphLayout, createBranchMarkerNode } from '@lixpi/canvas-components/workspace/shared'",
+            "import { createBranchMarkerNodeRegistration } from '@lixpi/canvas-components/workspace/nodes'",
+            "import { createBranchMarkerConnectionPolicy } from '@lixpi/canvas-components/workspace/connectors'",
+            '',
+            '// Node text and fan-out trees are the only inputs; the layout',
+            '// computes positions, ports and connector routes.',
+            'const canvas = new CanvasController({',
+            '    root: host,',
+            '    registry: new NodeRegistry().register(createBranchMarkerNodeRegistration()),',
+            '    scene: {',
+            "        sceneKey: 'branches',",
+            `        revision: '${this.revision}',`,
+            '        nodes: [',
+            `            createBranchMarkerNode('origin', { prompt: ${JSON.stringify(this.prompt)}, role: 'origin' }),`,
+            '            // ...',
+            '        ],',
+            '        edges: [',
+            "            createBranchMarkerEdge('origin-a', 'origin', 'fork-a'),",
+            ...this.relations ? ["            createBranchMarkerEdge('b-continuation', 'fork-b', 'continuation', 'relation'),"] : [],
+            ...this.feedback ? ["            createBranchMarkerEdge('feedback', 'continuation', 'origin', 'feedback'),"] : [],
+            '        ],',
+            '    },',
+            '    viewport: { x: 0, y: 0, zoom: 1 },',
+            '    connectors: { settings, policy: createBranchMarkerConnectionPolicy() },',
+            '    interaction: {},',
+            `    locked: ${this.canvas.locked},`,
+            `    autoFit: ${this.canvas.autoFit},`,
+            `    scrollCapture: '${this.canvas.scrollCapture}',`,
+            `    layout: ${this.canvas.layout ? 'createBranchMarkerGraphLayout(stages)' : 'false'},`,
+            '    onIntent: acceptIntent,',
+            '    onError: reportError,',
+            '})',
+        ].join('\n')
     }
 
     destroy(): void {
