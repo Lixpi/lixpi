@@ -4,6 +4,7 @@ import '@lixpi/web-client-service-factory/styles/foundation'
 import '$src/sass/styles.scss'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/canvas-components/styles/loading-overlay'
+import { mountDesktopReloadFrame } from './desktop-reload-frame.ts'
 import { WebUiStartup } from './startup.ts'
 import { mountWindowTitleBar } from '$src/components/windowTitleBar/windowTitleBar.ts'
 
@@ -35,9 +36,10 @@ mountWindowTitleBar(document.body)
 // visit that never needs them still fetches them, which costs nothing it
 // waits on; the failure, if any, is reported where the module is used.
 const workspaceModule = import('./workspaceApplication.ts')
+const connectionModule = import('./workspaceConnection.ts')
 void (async () => {
     try {
-        await workspaceModule
+        await Promise.all([workspaceModule, connectionModule])
     } catch {}
 })()
 
@@ -57,11 +59,21 @@ const auth = createAuthClient({
 
 const startup = new WebUiStartup({
     auth,
+    onStartupSettled: mountDesktopReloadFrame(window),
     target: document.getElementById('app')!,
     loadWorkspace: async config => {
-        const { createWorkspaceApplication } = await workspaceModule
+        const { beginWorkspaceConnection } = await connectionModule
+        const connection = beginWorkspaceConnection(config)
 
-        return createWorkspaceApplication(config)
+        try {
+            const { createWorkspaceApplication } = await workspaceModule
+
+            return createWorkspaceApplication(config, connection)
+        } catch (error) {
+            await connection.destroy()
+
+            throw error
+        }
     },
 })
 

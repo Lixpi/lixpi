@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import  { type Message, type MessageCreateParamsNonStreaming, type RawMessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'
-import { type ConversationAcknowledgement, type ConversationSubmitRequest, type ConversationTurn, type ConversationMessage } from '@lixpi/constants'
+import { type ConversationAcknowledgement, type ConversationSubmitRequest, type ConversationTurn, type ConversationMessage, type CanvasCollaborationSnapshot } from '@lixpi/constants'
 import {
     CapabilityModuleCatalog,
+    createWorkspaceCanvasModule,
     mediaPipelineSaveInputSchema,
+    type CapabilityModuleDefinition,
     type CapabilityAgentTool,
     type CapabilityAgentExpert,
 } from '@lixpi/capability-system/backend'
@@ -26,6 +28,9 @@ import {
     agentArtifactEditKey,
 } from './agent-execution-scope.ts'
 import AssetModel from '../../models/asset.ts'
+import { canvasCollaboration } from '../../services/canvas-collaboration.ts'
+import { canvasHandoffAccess } from '../../capability-system/canvas-handoff-adapter.ts'
+import { canvasAgentAccess } from '../../capability-system/canvas-agent-adapter.ts'
 import { capabilityArtifactBackendRegistry } from '../../capability-system/capability-artifacts.ts'
 import  { type ConversationMediaOperations } from './agent-pending-tools.ts'
 
@@ -33,6 +38,7 @@ const fixture = vi.hoisted(() => ({
     respond: vi.fn(),
     afterStreamBlock: vi.fn(),
     resolveReferences: vi.fn(),
+    verifyHumanAction: vi.fn(),
     profile: {
         provider: 'anthropic',
         model: 'test-model',
@@ -85,7 +91,10 @@ vi.mock('../../services/workspace-tree.ts', () => ({
 }))
 vi.mock('../../models/capability.ts', async importOriginal => ({
     ...await importOriginal<typeof import('../../models/capability.ts')>(),
-    getAuthorizedCapabilityRecords: async () => new Map([['global.test-runtime', {}]]),
+    getAuthorizedCapabilityRecords: async () => new Map([
+        ['global.test-runtime', {}],
+        ['global.workspace-canvas', {}],
+    ]),
 }))
 vi.mock('./conversation-adapters.ts', () => ({ ConversationAdapters: class {
     authorize = fixture.authorize
@@ -182,13 +191,14 @@ const ask = (question: string): Message => response([{
     input: { question },
 }])
 
-const runtimeFixture = async (tools: CapabilityAgentTool[] = [], operations?: ConversationMediaOperations, limits: Record<string, string> = {}, families: ReturnType<CapabilityModuleCatalog['listOperationFamilies']> = [], experts: CapabilityAgentExpert[] = []) => {
+const runtimeFixture = async (tools: CapabilityAgentTool[] = [], operations?: ConversationMediaOperations, limits: Record<string, string> = {}, families: ReturnType<CapabilityModuleCatalog['listOperationFamilies']> = [], experts: CapabilityAgentExpert[] = [], installed?: CapabilityModuleDefinition) => {
     const database = new AtomicConversationTestDatabase()
     database.pageSize = 100
     const repository = new ConversationRepository(database as unknown as ConstructorParameters<typeof ConversationRepository>[0], 'Conversations')
     let id = 0
     const service = new ConversationService(repository, {
         authorize: fixture.authorize,
+        verifyHumanAction: fixture.verifyHumanAction,
         resolveReferences: async () => [],
         activate: async (_meta, writes) => await repository.commit(writes),
         publish: async () => {},
@@ -212,6 +222,9 @@ const runtimeFixture = async (tools: CapabilityAgentTool[] = [], operations?: Co
         completeRequest: vi.fn(async () => {}),
     }
     const catalog = new CapabilityModuleCatalog()
+
+    if (installed)
+        catalog.registerModule(installed)
 
     if (
         tools.length
@@ -304,6 +317,7 @@ beforeEach(() => {
     fixture.respond.mockReset()
     fixture.afterStreamBlock.mockReset()
     fixture.resolveReferences.mockReset().mockResolvedValue([])
+    fixture.verifyHumanAction.mockReset().mockResolvedValue(undefined)
     vi.spyOn(ConversationProjector.prototype, 'project').mockResolvedValue()
     vi.spyOn(AgentSkills.prototype, 'load').mockResolvedValue(new Map())
     vi.spyOn(AgentSkills.prototype, 'assertCurrent').mockResolvedValue()
@@ -671,6 +685,73 @@ describe('conversation runtime with durable ownership and checkpoints', () => {
         expect((await test.repository.query<ConversationTurn>(test.partition, 'TURN#')).items.map(turn => turn.state)).toEqual(['queued'])
         expect((await test.repository.query<ConversationMessage>(test.partition, 'MESSAGE#')).items.filter(message => message.role === 'configuration')).toHaveLength(82)
         expect(ConversationProjector.prototype.project).toHaveBeenCalledOnce()
+    })
+
+    it('pauses a canvas file handoff until the requesting human supplies a verified upload', async () => {
+        const module = createWorkspaceCanvasModule(canvasAgentAccess, {
+            storeResource: vi.fn(),
+            seedBuiltInCapability: vi.fn(),
+        }, undefined, canvasHandoffAccess)
+        fixture.verifyHumanAction.mockImplementation(async (action, result, access) =>
+            action.kind === 'file'
+                && access.userId === 'user'
+                && result.assetId === action.assetId
+                ? {
+                    kind: 'file',
+                    assetId: result.assetId,
+                }
+                : undefined,
+        )
+        const test = await runtimeFixture([], undefined, {}, [], [], module)
+        let uploadedAssetId = ''
+        fixture.respond.mockImplementationOnce(async () => response([{
+            type: 'tool_use',
+            id: 'local-upload',
+            name: 'request_canvas_file',
+            input: {},
+        }]))
+        fixture.respond.mockImplementationOnce(async (request: MessageCreateParamsNonStreaming) => {
+            expect(JSON.stringify(request.messages)).toContain(uploadedAssetId)
+
+            return answer('I received the file.')
+        })
+
+        const requested = await test.service.submit(test.request('choose-file', 'Put a file from my device on the canvas.'), 'user')
+        await test.runtime.execute(await test.dispatch(requested))
+        const run = (await test.meta()).run!
+        expect(run).toMatchObject({
+            state: 'waiting-input',
+            humanAction: {
+                kind: 'file',
+                userId: 'user',
+            },
+        })
+        const interruptId = run.interruptId
+
+        if (run.humanAction?.kind !== 'file')
+            throw new Error('Expected a file handoff.')
+
+        uploadedAssetId = run.humanAction.assetId
+        expect((await test.service.submit(test.request('untrusted-text', 'I uploaded it.', { interruptId }), 'user'))).toMatchObject({
+            status: 'rejected',
+            error: { code: 'CONVERSATION_HUMAN_ACTION_INCOMPLETE' },
+        })
+        expect((await test.service.submit(test.request('untrusted-asset', 'Selected a file.', {
+            interruptId,
+            humanActionResult: { assetId: 'forged-asset' },
+        }), 'user'))).toMatchObject({
+            status: 'rejected',
+            error: { code: 'CONVERSATION_HUMAN_ACTION_INCOMPLETE' },
+        })
+        const accepted = await test.service.submit(test.request('real-upload', 'Selected a file.', {
+            interruptId,
+            humanActionResult: { assetId: uploadedAssetId },
+        }), 'user')
+        expect(accepted.status).toBe('accepted')
+        expect(await test.runtime.execute(await test.dispatch(accepted))).toBe('done')
+        expect((await test.meta()).run).toMatchObject({ state: 'completed' })
+        expect((await test.meta()).run?.humanAction).toBeUndefined()
+        expect(fixture.respond).toHaveBeenCalledTimes(2)
     })
 
     it('admits one necessary answer beyond a full queue and prevents cancelling that durable answer', async () => {
@@ -1418,6 +1499,122 @@ describe('conversation runtime with durable ownership and checkpoints', () => {
         })
         expect(fixture.respond).toHaveBeenCalledTimes(5)
         expect(readSource).toHaveBeenCalledExactlyOnceWith(source.assetId, undefined, 1000)
+    })
+
+    it('executes a model-selected canvas Tool from an accepted natural-language conversation turn', async () => {
+        const snapshot: CanvasCollaborationSnapshot = {
+            workspaceId: 'workspace',
+            actorId: 'canvas-agent',
+            revision: 1,
+            canvasRevision: 10,
+            actors: [],
+            ownership: [],
+            queue: [],
+            canvasState: {
+                viewport: {
+                    x: 0,
+                    y: 0,
+                    zoom: 1,
+                },
+                nodes: [{
+                    nodeId: 'canvas-document',
+                    type: 'document',
+                    assetId: 'document-asset',
+                    position: {
+                        x: 10,
+                        y: 20,
+                    },
+                    dimensions: {
+                        width: 400,
+                        height: 350,
+                    },
+                }],
+                edges: [],
+            },
+        }
+        vi.spyOn(canvasCollaboration, 'joinAgent').mockResolvedValue(snapshot)
+        vi.spyOn(canvasCollaboration, 'syncAgentCanvas').mockResolvedValue(snapshot)
+        vi.spyOn(canvasCollaboration, 'updateAgentPresence').mockResolvedValue(snapshot)
+        vi.spyOn(canvasCollaboration, 'leaveAgent').mockResolvedValue()
+        const acquire = vi.spyOn(canvasCollaboration, 'acquireAgentLease').mockResolvedValue({
+            actorId: 'canvas-agent',
+            target: 'node:canvas-document',
+            leaseId: 'geometry-lease',
+        })
+        const release = vi.spyOn(canvasCollaboration, 'releaseAgentLease').mockResolvedValue()
+        const commit = vi.spyOn(canvasCollaboration, 'commitAgent').mockImplementation(async (_actor, input, fences) => {
+            await fences?.()
+
+            return {
+                ...snapshot,
+                canvasRevision: snapshot.canvasRevision + 1,
+                canvasState: {
+                    ...snapshot.canvasState!,
+                    nodes: input.changes.nodes ?? [],
+                },
+            }
+        })
+        const workspaceCanvas = createWorkspaceCanvasModule(canvasAgentAccess, {
+            storeResource: vi.fn(),
+            seedBuiltInCapability: vi.fn(),
+        })
+        const test = await runtimeFixture([], undefined, {}, [], [], workspaceCanvas)
+        const instruction = 'Move the document 40 canvas units right and 25 down.'
+        fixture.respond.mockImplementationOnce(async (request: MessageCreateParamsNonStreaming) => {
+            expect(JSON.stringify(request.messages)).toContain(instruction)
+            expect(request.tools?.map(tool => tool.name)).toContain('edit_canvas_geometry')
+
+            return response([{
+                type: 'tool_use',
+                id: 'geometry-call',
+                name: 'edit_canvas_geometry',
+                input: { nodes: [{
+                    nodeId: 'canvas-document',
+                    offset: {
+                        x: 40,
+                        y: 25,
+                    },
+                }] },
+            }])
+        }).mockImplementationOnce(async (request: MessageCreateParamsNonStreaming) => {
+            expect(JSON.stringify(request.messages)).toContain('geometry-call')
+            expect(JSON.stringify(request.messages)).toContain('completed')
+
+            return answer('Moved the document.')
+        })
+
+        const accepted = await test.service.submit(test.request('canvas-geometry-request', instruction), 'user')
+
+        expect(await test.runtime.execute(await test.dispatch(accepted))).toBe('done')
+        expect((await test.meta()).run?.state).toBe('completed')
+        expect(acquire).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({
+                workspaceId: 'workspace',
+                userId: 'user',
+            }),
+            'node:canvas-document',
+            expect.any(String),
+            expect.any(AbortSignal),
+        )
+        expect(commit).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({
+                workspaceId: 'workspace',
+                userId: 'user',
+            }),
+            expect.objectContaining({
+                baseCanvasRevision: 10,
+                changes: { nodes: [expect.objectContaining({
+                    nodeId: 'canvas-document',
+                    position: {
+                        x: 50,
+                        y: 45,
+                    },
+                })] },
+                leases: { 'node:canvas-document': 'geometry-lease' },
+            }),
+            expect.any(Function),
+        )
+        expect(release).toHaveBeenCalledOnce()
     })
 
     it('sends the accepted greeting to the main agent with native inspection and scratch tools', async () => {

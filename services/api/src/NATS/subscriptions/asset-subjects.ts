@@ -17,6 +17,7 @@ import {
 } from '@lixpi/prosemirror'
 
 import AssetModel, { buildAssetScopeAndOwnerKey } from '../../models/asset.ts'
+import { canvasCollaboration } from '../../services/canvas-collaboration.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import {
@@ -377,9 +378,31 @@ export const assetSubjects = createNatsSubscriptions(
             return result
         },
         [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.UPDATE_METADATA)]: async (data: any) => {
+            const requester = await getRequesterContext(data.user.userId)
+
+            if (data.workspaceId !== undefined) {
+                const boundary = await authorizeAssetWorkspaceBoundary({
+                    assetId: data.assetId,
+                    workspaceId: data.workspaceId,
+                    requester,
+                })
+
+                if ('error' in boundary)
+                    return boundary
+            }
+
             const result = await AssetModel.updateMetadata({
                 assetId: data.assetId,
-                requester: await getRequesterContext(data.user.userId),
+                requester,
+                ...(data.workspaceId ? {
+                    withWrite: <T>(write: () => Promise<T>) =>
+                        canvasCollaboration.withHumanAssetWrite(
+                            data.workspaceId,
+                            requester.userId,
+                            data.assetId,
+                            write,
+                        ),
+                } : {}),
                 expectedRevision: data.expectedRevision,
                 ...(data.title !== undefined ? { title: data.title } : {}),
                 ...(data.descriptor !== undefined ? { descriptor: data.descriptor } : {}),
@@ -624,6 +647,12 @@ export const assetSubjects = createNatsSubscriptions(
             return await AssetDocumentService.submitSteps({
                 payload: data,
                 requester,
+                withWrite: write => canvasCollaboration.withHumanAssetWrite(
+                    data.workspaceId,
+                    requester.userId,
+                    data.assetId,
+                    write,
+                ),
             })
         },
         [getNatsSubjectPath(subjects => subjects.ASSET_SUBJECTS.DOCUMENT_RESUME)]: async (data: any) => {

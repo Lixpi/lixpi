@@ -50,6 +50,9 @@ export const getNatsUserSubjectToken = (userId: string): string => [...new TextE
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
 
+export const getCanvasCollaborationEventSubject = (userId: string): string =>
+    `${NATS_SUBJECTS.WORKSPACE_SUBJECTS.CANVAS_EVENTS}.${getNatsUserSubjectToken(userId)}`
+
 export const getNatsUserInboxPrefix = (userId: string): string => {
     if (!userId)
         throw new Error('A user identity is required for a NATS reply inbox')

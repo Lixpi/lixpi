@@ -1,6 +1,7 @@
 import {
     type CanvasNode,
     type CanvasState,
+    type CanvasCollaborationPresence,
     type WorkspaceEdge,
 } from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
@@ -22,6 +23,8 @@ import {
     type CanvasConnectionControls,
 } from '@lixpi/canvas-engine/frontend/runtime'
 import {
+    ConnectorRenderer,
+    computeConnectorDatum,
     type ConnectorMarker,
     type ConnectionSettings,
 } from '@lixpi/canvas-engine/frontend/connectors'
@@ -76,7 +79,7 @@ export type GeneratingMediaOutlineTarget = TravelingOutlineDirection | Generatin
 export type GeneratingMediaOutlineTargets = Set<string> | Map<string, GeneratingMediaOutlineTarget>
 export type WorkspaceRendererHealth = 'initializing' | 'ready' | 'failed' | 'destroyed'
 
-export type WorkspaceMediaLayerOptions = Pick<WorkspaceMediaNodesOptions, 'onImageIntrinsicSize' | 'onVideoIntrinsicSize' | 'onPlaybackReady'> & {
+export type WorkspaceMediaLayerOptions = Pick<WorkspaceMediaNodesOptions, 'onImageIntrinsicSize' | 'onVideoIntrinsicSize' | 'onPlaybackReady' | 'onPlaybackPresence'> & {
     paneEl: HTMLElement
     viewportEl: HTMLElement
     nodes: Pick<WorkspaceNodeRegistryOptions, 'geometry' | 'mountDom'> & {
@@ -88,6 +91,7 @@ export type WorkspaceMediaLayerOptions = Pick<WorkspaceMediaNodesOptions, 'onIma
     marker: ConnectorMarker
     onEdgesChange: (edges: WorkspaceEdge[]) => void
     onEdgeSelectionChange?: (edgeId: string | null) => void
+    onConnectionDraft?: (draft: CanvasCollaborationPresence['connector']) => void
     settings: WorkspaceLoadingSettings & {
         connector: ConnectionSettings
         canvasControls: { glassBorder: Omit<GlassBorderStyle, 'edgeFeatherFraction'> & {
@@ -109,6 +113,11 @@ export class WorkspaceMediaLayer {
     readonly connections: CanvasConnectionControls
     private readonly connectionProjection: WorkspaceConnectionProjection<WorkspaceRegisteredNodeData>
     private readonly drawing: CanvasDrawingScope
+    private remoteConnectorRenderer: ConnectorRenderer | null = null
+    private remoteConnectors: ReadonlyArray<{
+        actorId: string
+        draft: NonNullable<CanvasCollaborationPresence['connector']>
+    }> = []
     private readonly sources: WorkspaceMediaSources
     private readonly outlines: TravelingOutline
     private readonly glass: DomGlassBorder
@@ -197,6 +206,7 @@ export class WorkspaceMediaLayer {
                 markerBodyLengthFraction: arrowRightMarkerBodyLengthFraction,
                 policy: createWorkspaceConnectionPolicy(),
                 onSelectionChange: options.onEdgeSelectionChange,
+                onDraftChange: options.onConnectionDraft,
                 onEdgesChange: edges => {
                     if (this.state)
                         options.onEdgesChange(
@@ -206,6 +216,7 @@ export class WorkspaceMediaLayer {
             })
             this.drawing = this.canvas.renderer.createScope()
             this.lifetime.own(() => this.drawing.destroy())
+            this.lifetime.own(() => this.remoteConnectorRenderer?.destroy())
             const outline = this.getOutlineAppearance()
             this.outlines = new TravelingOutline({
                 ...outline,
@@ -467,6 +478,79 @@ export class WorkspaceMediaLayer {
         this.publishScene()
     }
 
+    setRemoteConnectors(connectors: typeof this.remoteConnectors): void {
+        if (this.destroyed)
+            return
+
+        this.remoteConnectors = connectors
+
+        if (connectors.length)
+            this.remoteConnectorRenderer ??= new ConnectorRenderer({
+                surface: this.drawing,
+                marker: this.options.marker,
+            })
+
+        this.renderRemoteConnectors()
+    }
+
+    private renderRemoteConnectors(): void {
+        const settings = this.options.settings.connector
+        const data = this.remoteConnectors.flatMap(({
+            actorId,
+            draft,
+        }) => {
+            const nodes = new Map([
+                ['from', {
+                    id: 'from',
+                    shape: 'rect' as const,
+                    ...draft.source,
+                    width: 0,
+                    height: 0,
+                }],
+                ['to', {
+                    id: 'to',
+                    shape: 'rect' as const,
+                    ...draft.target,
+                    width: 0,
+                    height: 0,
+                }],
+            ])
+            const datum = computeConnectorDatum(
+                {
+                    id: actorId,
+                    source: {
+                        nodeId: 'from',
+                        position: 'center',
+                    },
+                    target: {
+                        nodeId: 'to',
+                        position: 'center',
+                    },
+                    pathType: draft.pathType,
+                    lineStyle: draft.lineStyle,
+                },
+                nodes,
+                {
+                    selected: false,
+                    color: settings.styles.lineDefaultColor,
+                    selectedColor: settings.styles.lineFocusColor,
+                    strokeWidth: settings.scaling.strokeWidth,
+                    markerSize: settings.scaling.markerSize,
+                    markerOffset: {
+                        source: 0,
+                        target: 0,
+                    },
+                    worldMarkerSize: 0,
+                    markerBodyLengthFraction: 0,
+                },
+            )
+
+            return datum ? [datum] : []
+        })
+
+        this.remoteConnectorRenderer?.render(data, this.viewport)
+    }
+
     setViewport(viewport: CanvasViewport): void {
         if (this.destroyed)
             return
@@ -480,6 +564,10 @@ export class WorkspaceMediaLayer {
         const zoomChanged = viewport.zoom !== this.viewport.zoom
         this.viewport = { ...viewport }
         this.canvas.setViewport(viewport)
+
+        if (this.remoteConnectors.length)
+            this.renderRemoteConnectors()
+
         this.marquee.setZoom(viewport.zoom)
         this.selection.setZoom(viewport.zoom)
 

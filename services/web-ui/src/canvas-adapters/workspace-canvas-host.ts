@@ -35,6 +35,7 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import {
     type AssetService,
 } from '$src/services/asset-service.ts'
+import { openWorkspaceExport } from '$src/utils/workspace-export.ts'
 import { loadWorkspaceRouteData } from '$src/routes.ts'
 import { createDefaultCapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
 import { createPromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
@@ -94,10 +95,12 @@ export const createWorkspaceCanvasHost = ({
             read: assetId => assetsStore.get(assetId),
             upsert: asset => assetsStore.upsert(asset),
             subscribe: changed => assetsStore.subscribe(changed),
+            subscribeDocuments: changed => assetDocumentsStore.subscribe(changed),
             readDocument: (assetId, role) => assetDocumentsStore.get(assetId, role),
             create: request => assetService.create(request),
             get: (assetId, workspaceId) => assetService.get(assetId, workspaceId),
             refresh: (assetId, workspaceId) => assetService.refresh(assetId, workspaceId),
+            hydrateArtifact: (assetId, workspaceId) => assetService.hydrateArtifact(assetId, workspaceId),
             loadWorkspaceAssets: workspaceId => assetService.loadWorkspaceAssets(workspaceId),
             ensureAssetsLoaded: assetIds => assetService.ensureAssetsLoaded(assetIds),
             updateMetadata: (
@@ -108,6 +111,7 @@ export const createWorkspaceCanvasHost = ({
                 assetId,
                 revision,
                 patch,
+                workspaceStore.getData('workspaceId') ?? undefined,
             ),
             changeScope: (
                 assetId,
@@ -161,6 +165,12 @@ export const createWorkspaceCanvasHost = ({
                 }),
             ),
             reload: loadWorkspaceRouteData,
+            exportArchive: workspaceId => openWorkspaceExport({
+                workspaceId,
+                apiBaseUrl,
+                getToken: () => auth.getTokenSilently(),
+                window,
+            }),
             ...(openWorkspace
                 ? {
                     // The conversation controller restores the active

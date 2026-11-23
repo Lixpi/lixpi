@@ -2,6 +2,7 @@ import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     type ConversationModelPreferences,
+    type CanvasCollaborationPresence,
 } from '@lixpi/constants'
 import {
     createAiPromptComposer,
@@ -14,6 +15,7 @@ export type WorkspacePromptComposerOptions = Pick<AiPromptComposerConfig, 'docum
     userId?: string
     conversationAssetId?: string
     storage: Pick<Storage, 'getItem' | 'setItem'>
+    onDraftChange?: (draft: CanvasCollaborationPresence['composer']) => void
     mountContextTray: () => {
         element: HTMLElement
         destroy: () => void
@@ -26,9 +28,14 @@ export class WorkspacePromptComposer {
     private readonly lifetime = new Lifetime()
     private draftKey: string
     private initialSelection = true
+    private conversationAssetId: string | null
+    private previewing = false
+    private ownContent: object | null = null
+    private previewKey = ''
     private conversationMount: { element: HTMLElement } | null = null
 
     constructor(private readonly options: WorkspacePromptComposerOptions) {
+        this.conversationAssetId = options.conversationAssetId ?? null
         this.draftKey = options.userId
             ? `lixpi:conversation-draft:${options.userId}:${options.workspaceId}:${options.conversationAssetId ?? 'new'}`
             : `lixpi:canvas-global-composer-draft:${options.workspaceId}`
@@ -65,8 +72,20 @@ export class WorkspacePromptComposer {
                 mountEditor: options.mountEditor,
                 className: 'workspace-canvas-global-composer',
                 initialContent: this.readDraft(),
-                onContentChange: content => this.writeDraft(content),
-                onSubmit: options.onSubmit,
+                onContentChange: content => {
+                    if (this.previewing)
+                        return
+
+                    this.writeDraft(content)
+                    options.onDraftChange?.({
+                        conversationAssetId: this.conversationAssetId,
+                        content,
+                    })
+                },
+                onSubmit: data => {
+                    if (!this.previewing)
+                        return options.onSubmit(data)
+                },
                 onSubmitError: options.onSubmitError,
             })
             this.lifetime.own(() => this.input.destroy())
@@ -75,6 +94,56 @@ export class WorkspacePromptComposer {
             this.lifetime.destroy()
 
             throw error
+        }
+    }
+
+    getDraft(): CanvasCollaborationPresence['composer'] {
+        const content = this.previewing ? this.ownContent : this.input.readContent()
+
+        return content ? {
+            conversationAssetId: this.conversationAssetId,
+            content,
+        } : null
+    }
+
+    setFollowedDraft(
+        following: boolean,
+        draft: CanvasCollaborationPresence['composer'],
+    ): void {
+        if (
+            following
+            && !this.previewing
+        )
+            this.ownContent = this.input.readContent()
+
+        if (
+            !following
+            && !this.previewing
+        )
+            return
+
+        const content = following ? draft?.content : this.ownContent
+        const key = JSON.stringify(content) ?? ''
+        const changed = following !== this.previewing || key !== this.previewKey
+        this.previewKey = key
+        this.previewing = following
+
+        if (!changed)
+            return
+
+        try {
+            const next = content
+                && Object.keys(content).length
+                ? content
+                : this.input.emptyContent()
+
+            if (next)
+                this.input.restoreContent(next)
+        } catch {
+            // A draft from another editor schema cannot replace this preview.
+        } finally {
+            if (!following)
+                this.ownContent = null
         }
     }
 
@@ -132,11 +201,12 @@ export class WorkspacePromptComposer {
         if (!this.options.userId)
             return
 
-        const current = this.input.readContent()
+        const current = this.previewing ? this.ownContent : this.input.readContent()
 
         if (current)
             this.writeDraft(current)
 
+        this.conversationAssetId = conversationAssetId || null
         this.draftKey = `lixpi:conversation-draft:${this.options.userId}:${this.options.workspaceId}:${conversationAssetId || 'new'}`
         let draft = this.readDraft()
         const hasSavedDraft = Object.keys(draft).length > 0
@@ -152,6 +222,12 @@ export class WorkspacePromptComposer {
 
         this.initialSelection = false
 
+        if (this.previewing) {
+            this.ownContent = draft
+
+            return
+        }
+
         if (Object.keys(draft).length)
             this.input.restoreContent(draft)
         else {
@@ -166,6 +242,10 @@ export class WorkspacePromptComposer {
             && models?.reasoningModelIds.length
         )
             this.input.applyModelPreferences(models)
+
+        this.options.onDraftChange?.(
+            this.getDraft(),
+        )
     }
 
     destroy(): void {

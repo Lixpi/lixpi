@@ -6,6 +6,7 @@ import {
 } from '@lixpi/constants'
 
 import {
+    canvasRoomKey,
     workspaceHeadingPointerPartitionKey,
     workspaceTreePartitionKey,
     WORKSPACE_HEADING_POINTER_SORT_KEY,
@@ -845,6 +846,11 @@ export class DynamoDbWorkspaceTreeRepository implements WorkspaceTreeRepository 
                     type: 'delete',
                     tableName: this.tables.workspacesMeta,
                     key: { workspaceId: change.workspaceId },
+                },
+                {
+                    type: 'delete',
+                    tableName: this.tables.workspaceTree,
+                    key: canvasRoomKey(change.workspaceId),
                 },
             ]
 

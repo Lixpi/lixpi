@@ -1,6 +1,7 @@
 import {
     type CanvasState,
 } from '@lixpi/constants'
+import { mergeConcurrentCanvasChanges } from './merge-concurrent-canvas-changes.ts'
 
 export type CanvasVersion = {
     updatedAt?: number
@@ -39,6 +40,7 @@ export type CanvasPersistencePublication = {
 
 export type CanvasPersistencePorts = {
     read: (workspaceId: string) => WorkspaceCanvasSnapshot | null
+    mergeConcurrentWrites?: (workspaceId: string) => boolean
     save: (request: {
         workspaceId: string
         canvasState: CanvasState
@@ -54,6 +56,7 @@ type SaveRequest = {
     canvasState: CanvasState
     persistViewport: boolean
     sequence: number
+    baseState?: CanvasState
 }
 
 class CanvasWriteLock {
@@ -106,6 +109,7 @@ export class CanvasPersistenceController {
     private epoch = 0
     private staleRetryCount = 0
     private failure: Error | null = null
+    private reconnectRetryPending = false
     private closing = false
 
     constructor(
@@ -121,8 +125,16 @@ export class CanvasPersistenceController {
         persistViewport = false,
     ): void {
         this.assertOpen()
+        const baseState = this.pending?.baseState
+            ?? this.active?.canvasState
+            ?? this.snapshot?.canvasState
+            ?? this.ports.read(this.workspaceId)?.canvasState
         this.pending = {
             canvasState: structuredClone(canvasState),
+            ...(this.mergeConcurrentWrites
+                && baseState
+                ? { baseState: structuredClone(baseState) }
+                : {}),
             persistViewport: persistViewport || this.pending?.persistViewport === true,
             sequence: ++this.sequence,
         }
@@ -193,6 +205,7 @@ export class CanvasPersistenceController {
         this.staleRetryCount = 0
         this.failure = null
         this.snapshot = structuredClone(snapshot)
+        this.reconnectRetryPending = false
         this.pending = viewport
             ? {
                 canvasState: {
@@ -214,10 +227,69 @@ export class CanvasPersistenceController {
         return true
     }
 
+    adoptCollaborative(snapshot: WorkspaceCanvasSnapshot): void {
+        void this.lock.run(async () => {
+            if (this.closing)
+                return
+
+            this.refreshVersion()
+            const current = versionToken(this.snapshot?.version ?? {}) ?? -Infinity
+            const incoming = versionToken(snapshot.version) ?? -Infinity
+
+            if (incoming <= current)
+                return
+
+            this.snapshot = structuredClone(snapshot)
+
+            if (this.pending)
+                this.pending = this.rebaseRequest(this.pending, snapshot.canvasState)
+
+            this.publish({
+                canvasState: this.pending?.canvasState ?? this.snapshot.canvasState,
+                version: this.snapshot.version,
+                requiresSave: Boolean(this.pending),
+                origin: 'authoritative',
+            })
+        })
+    }
+
+    private rebaseRequest(
+        request: SaveRequest,
+        currentState: CanvasState,
+    ): SaveRequest {
+        return request.baseState
+            ? {
+                ...request,
+                baseState: structuredClone(currentState),
+                canvasState: mergeConcurrentCanvasChanges(
+                    request.baseState,
+                    request.canvasState,
+                    currentState,
+                ),
+            }
+            : request
+    }
+
     async flush(): Promise<void> {
         this.failure = null
         this.startPump()
         await this.drain()
+    }
+
+    async retryInterruptedWrite(): Promise<void> {
+        // Reconnect can finish while the original transport still owes a timeout.
+        while (this.pumping)
+            await this.pumping
+
+        if (
+            this.closing
+            || !this.pending
+            || !this.reconnectRetryPending
+        )
+            return
+
+        this.reconnectRetryPending = false
+        await this.flush()
     }
 
     async drain(): Promise<void> {
@@ -272,6 +344,10 @@ export class CanvasPersistenceController {
         })
     }
 
+    private get mergeConcurrentWrites(): boolean {
+        return Boolean(this.active?.baseState || this.pending?.baseState || this.ports.mergeConcurrentWrites?.(this.workspaceId))
+    }
+
     private refreshVersion(): CanvasVersion {
         const supplied = this.ports.read(this.workspaceId)
 
@@ -282,7 +358,7 @@ export class CanvasPersistenceController {
             if (
                 !this.snapshot
                 || localToken === undefined
-                || (suppliedToken !== undefined && suppliedToken >= localToken)
+                || (suppliedToken !== undefined && (this.mergeConcurrentWrites ? suppliedToken > localToken : suppliedToken >= localToken))
             )
                 this.snapshot = structuredClone(supplied)
         }
@@ -318,20 +394,26 @@ export class CanvasPersistenceController {
         let refetchedViewport = false
 
         while (this.pending) {
-            const request = this.pending
+            const requested = this.pending
+            const version = this.refreshVersion()
+            const request = this.snapshot
+                && requested.baseState
+                ? this.rebaseRequest(requested, this.snapshot.canvasState)
+                : requested
             this.pending = null
-            this.active = request
+            this.active = requested
             const epoch = this.epoch
+            this.reconnectRetryPending = false
+            let awaitingSave = true
 
             try {
                 const result = await this.ports.save({
                     workspaceId: this.workspaceId,
                     canvasState: request.canvasState,
-                    expectedCanvasStateUpdatedAt: versionToken(
-                        this.refreshVersion(),
-                    ),
+                    expectedCanvasStateUpdatedAt: versionToken(version),
                     persistViewport: request.persistViewport,
                 })
+                awaitingSave = false
 
                 if (epoch !== this.epoch)
                     continue
@@ -344,7 +426,39 @@ export class CanvasPersistenceController {
 
                 if (result.status === 'stale') {
                     if (
-                        Number.isFinite(result.current.canvasStateUpdatedAt)
+                        request.baseState
+                        && this.staleRetryCount < 3
+                    ) {
+                        const fresh = await this.ports.fetch(this.workspaceId)
+
+                        if (epoch !== this.epoch)
+                            continue
+
+                        this.staleRetryCount += 1
+                        const pending = this.readPending()
+                        this.snapshot = structuredClone(fresh)
+                        this.pending = this.rebaseRequest(
+                            {
+                                ...request,
+                                ...pending,
+                                baseState: requested.baseState,
+                                persistViewport: Boolean(pending?.persistViewport || request.persistViewport),
+                            },
+                            fresh.canvasState,
+                        )
+                        this.publish({
+                            canvasState: this.pending.canvasState,
+                            version: fresh.version,
+                            requiresSave: true,
+                            origin: 'authoritative',
+                        })
+
+                        continue
+                    }
+
+                    if (
+                        !request.baseState
+                        && Number.isFinite(result.current.canvasStateUpdatedAt)
                         && this.staleRetryCount < 3
                     ) {
                         this.staleRetryCount += 1
@@ -413,6 +527,22 @@ export class CanvasPersistenceController {
                 if (epoch !== this.epoch)
                     continue
 
+                if (
+                    awaitingSave
+                    && requested.baseState
+                ) {
+                    const pending = this.readPending()
+                    this.pending = pending ? {
+                        ...pending,
+                        baseState: requested.baseState,
+                        persistViewport: pending.persistViewport || request.persistViewport,
+                    } : request
+                    this.reconnectRetryPending = true
+                    this.recordFailure(error)
+
+                    return
+                }
+
                 if (this.pending) {
                     this.recordFailure(error)
 
@@ -424,7 +554,7 @@ export class CanvasPersistenceController {
 
                 return
             } finally {
-                if (this.active === request)
+                if (this.active === requested)
                     this.active = null
             }
         }

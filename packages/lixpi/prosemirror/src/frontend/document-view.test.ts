@@ -21,7 +21,9 @@ import {
 } from './core-features.ts'
 import {
     DOCUMENT_REPLACE_META,
+    getDocumentCaretRect,
     mountDocumentView,
+    readDocumentCaret,
     type DocumentViewFeature,
     type DocumentViewHandle,
 } from './document-view.ts'
@@ -74,6 +76,17 @@ const mount = (
 // =============================================================================
 
 describe('mountDocumentView', () => {
+    it('resolves a caret inside its mounted editor and rejects stale positions', () => {
+        const handle = mount([])
+        const paragraph = handle.view.dom.querySelector('p')!
+        expect(readDocumentCaret(paragraph)).toEqual({
+            anchor: 1,
+            head: 1,
+        })
+        expect(getDocumentCaretRect(paragraph, 99)).toBeNull()
+        expect(readDocumentCaret(document.body)).toBeNull()
+    })
+
     it('uses the kind schema from the registry and keeps feature order as plugin order', () => {
         const handle = mount([
             namedPluginFeature('first'),

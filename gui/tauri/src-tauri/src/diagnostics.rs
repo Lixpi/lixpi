@@ -92,6 +92,42 @@ pub(crate) const INITIALIZATION_SCRIPTS: &[&str] = &[
     profiling::RENDERING_SCRIPT,
 ];
 
+// Tauri's application log resolver is unavailable until CEF is initialized.
+#[cfg(target_os = "macos")]
+#[derive(Clone)]
+pub(crate) struct NativeStartup {
+    log_file: Option<PathBuf>,
+}
+
+#[cfg(target_os = "macos")]
+impl NativeStartup {
+    pub(crate) fn new(identifier: &str) -> Self {
+        let log_file = dirs::home_dir().and_then(|home| {
+            let directory = home.join("Library/Logs").join(identifier);
+
+            match fs::create_dir_all(&directory) {
+                Ok(()) => Some(directory.join("diagnostics.log")),
+                Err(error) => {
+                    eprintln!("Could not create the native startup log directory: {error}");
+
+                    None
+                },
+            }
+        });
+
+        Self {
+            log_file,
+        }
+    }
+
+    pub(crate) fn record(
+        &self,
+        stage: &str,
+    ) {
+        write_line(self.log_file.as_ref(), &format!("[{}] native startup: {stage}", unix_milliseconds()));
+    }
+}
+
 const LOG_QUEUE_CAPACITY: usize = 64;
 
 enum LogPayload {

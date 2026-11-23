@@ -168,6 +168,52 @@ describe('durable conversation acceptance', () => {
         }, 'user-1')).conversations).toHaveLength(1)
     })
 
+    it('commits a delegated turn, its source charge and agent authorship exactly once', async () => {
+        const sourcePartition = conversationPartition('org-1', 'source-conversation')
+        const prepareDelegation = vi.fn(async () => ({
+            delegation: {
+                access: 'act' as const,
+                parentWorkspaceId: 'workspace-1',
+                parentWorkspaceName: 'Studio',
+                parentConversationAssetId: 'source-conversation',
+                parentTurnId: 'source-turn',
+                operationId: 'delegation:composer',
+                allowedOperationFamilies: ['workspace-canvas'],
+                budgetLimits: {
+                    maxModelCalls: 3,
+                    maxToolCalls: 4,
+                    maxSpecialistCalls: 0,
+                    maxDelegationCalls: 0,
+                },
+            },
+            operations: () => [repository.put(sourcePartition, 'DELEGATION_CHARGE', { calls: 1 })],
+        }))
+        const request = submit('agent-message')
+        const first = await service.submit(request, 'user-1', { prepareDelegation })
+        const duplicate = await service.submit(request, 'user-1', { prepareDelegation })
+
+        expect(first.status).toBe('accepted')
+        expect(duplicate.status).toBe('duplicate')
+        expect(prepareDelegation).toHaveBeenCalledTimes(1)
+
+        const acceptance = database.commits.at(-1)!.filter(operation => operation.type === 'put')
+        expect(acceptance).toEqual(expect.arrayContaining([
+            expect.objectContaining({ item: expect.objectContaining({
+                pk: sourcePartition,
+                sk: 'DELEGATION_CHARGE',
+                calls: 1,
+            }) }),
+            expect.objectContaining({
+                item: expect.objectContaining({
+                    sk: expect.stringMatching(/^TURN#/),
+                    midRunPolicy: 'queue',
+                    delegation: expect.objectContaining({ parentConversationAssetId: 'source-conversation' }),
+                }),
+            }),
+            expect.objectContaining({ item: expect.objectContaining({ authorLabel: 'Studio agent' }) }),
+        ]))
+    })
+
     it('waits for legacy migration only until a full pass completes, then lists without waiting', async () => {
         let finishMigration: (complete: boolean) => void = () => undefined
         const migrate = vi.fn(async () => await new Promise<boolean>(resolve => void (finishMigration = resolve)))

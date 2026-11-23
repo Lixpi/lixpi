@@ -21,6 +21,7 @@ import {
     AssetFileRejectedError,
     ingestAssetFile,
 } from '../services/asset-ingest.ts'
+import { bindCanvasFileUpload } from '../capability-system/canvas-handoff-adapter.ts'
 import { fetchPublicRemoteFile } from '../services/public-remote-file.ts'
 
 const router = Router()
@@ -94,12 +95,42 @@ router.post(
         if (!req.file)
             return res.status(400).json({ error: 'No file provided' })
 
+        const conversationAssetId = req.body?.conversationAssetId
+        const interruptId = req.body?.interruptId
+        const handoff = conversationAssetId !== undefined || interruptId !== undefined
+        let binding: Awaited<ReturnType<typeof bindCanvasFileUpload>> | undefined
+
+        if (handoff) {
+            if (
+                typeof conversationAssetId !== 'string'
+                || typeof interruptId !== 'string'
+                || !/^[a-zA-Z0-9_.:-]{1,192}$/u.test(conversationAssetId)
+                || !/^[a-zA-Z0-9_.:-]{1,192}$/u.test(interruptId)
+            )
+                return res.status(400).json({ error: 'Invalid conversation file upload.' })
+
+            try {
+                binding = await bindCanvasFileUpload(
+                    {
+                        organizationId,
+                        workspaceId,
+                        userId,
+                    },
+                    conversationAssetId,
+                    interruptId,
+                )
+            } catch {
+                return res.status(409).json({ error: 'This conversation is no longer waiting for a file.' })
+            }
+        }
+
         try {
             return res.json(
                 await ingestAssetFile({
                     organizationId,
                     workspaceId,
                     ownerUserId: userId,
+                    ...binding,
                     buffer: req.file.buffer,
                     originalName: normalizeUploadedFilename(req.file.originalname),
                     ...(req.body?.expectedKind === 'image' ? { expectedKind: 'image' as const } : {}),

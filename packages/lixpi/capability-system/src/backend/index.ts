@@ -14,6 +14,23 @@ export * from './capability-resolver.ts'
 export * from './capability-trace-recorder.ts'
 export * from './capability-workflow-runner.ts'
 export * from './instruction-skill.ts'
+export { containsCanvasMediaUrl } from '../capabilities/workspace-canvas/backend/canvas-media-source.ts'
+export type { CanvasHandoffAccess } from '../capabilities/workspace-canvas/backend/handoff-tools.ts'
+export {
+    canvasRegenerationNodes,
+    type CanvasGenerationRecoveryAccess,
+} from '../capabilities/workspace-canvas/backend/canvas-generation-recovery-tools.ts'
+export type { CanvasComposerAccess } from '../capabilities/workspace-canvas/backend/canvas-composer-ports.ts'
+export { createWorkspaceCanvasModule } from '../capabilities/workspace-canvas/backend/index.ts'
+export type {
+    CanvasExtendedAccess,
+    CanvasExtendedSession,
+} from '../capabilities/workspace-canvas/backend/canvas-extended-agent-ports.ts'
+export type {
+    CanvasAgentAccess,
+    CanvasAgentDocumentRole,
+    CanvasAgentSession,
+} from '../capabilities/workspace-canvas/backend/canvas-agent-ports.ts'
 export * from '../capabilities/character-creator/backend/index.ts'
 export * from '../capabilities/character-creator/shared/character-sheet-layout.ts'
 export * from '../capabilities/character-creator/shared/character-sheet-media-plan.ts'

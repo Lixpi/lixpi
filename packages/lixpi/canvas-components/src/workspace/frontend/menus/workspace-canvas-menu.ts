@@ -1,5 +1,6 @@
 import {
     type CanvasNode,
+    type CanvasCollaborationPresence,
 } from '@lixpi/constants'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { BubbleMenu } from '@lixpi/ui-kit/components/bubble-menu'
@@ -21,6 +22,7 @@ export type WorkspaceCanvasMenuPorts = {
     getEdgeRect: (edgeId: string) => DOMRect | null
     getVisualScale: () => number
     actions: MenuActions
+    onChanged?: (menu: CanvasCollaborationPresence['menu']) => void
 }
 
 const contexts: Partial<Record<CanvasNode['type'], string>> = {
@@ -35,6 +37,7 @@ export class WorkspaceCanvasMenu {
     private readonly lifetime = new Lifetime()
     private readonly items: CanvasBubbleMenuItems
     private readonly menu: BubbleMenu
+    private snapshot: CanvasCollaborationPresence['menu'] = null
 
     constructor(private readonly ports: WorkspaceCanvasMenuPorts) {
         try {
@@ -69,6 +72,25 @@ export class WorkspaceCanvasMenu {
         }
     }
 
+    getSnapshot(): CanvasCollaborationPresence['menu'] {
+        return this.menu.isVisible ? this.snapshot : null
+    }
+
+    setSnapshot(menu: CanvasCollaborationPresence['menu']): void {
+        if (
+            menu?.kind === 'node'
+            && menu.nodeId
+        )
+            this.showNode(menu.nodeId)
+        else if (
+            menu?.kind === 'edge'
+            && (menu.edgeId ?? menu.nodeId)
+        )
+            this.showEdge((menu.edgeId ?? menu.nodeId)!)
+        else
+            this.hide(true)
+    }
+
     showNode(nodeId: string): void {
         if (this.lifetime.signal.aborted)
             return
@@ -98,6 +120,10 @@ export class WorkspaceCanvasMenu {
             },
         )
         this.menu.refreshState()
+        this.changed({
+            kind: 'node',
+            nodeId,
+        })
     }
 
     showEdge(edgeId: string): void {
@@ -121,6 +147,10 @@ export class WorkspaceCanvasMenu {
                 placement: 'below',
             },
         )
+        this.changed({
+            kind: 'edge',
+            edgeId,
+        })
     }
 
     repositionNode(nodeId: string | null): void {
@@ -174,10 +204,24 @@ export class WorkspaceCanvasMenu {
             this.menu.forceHide()
         else
             this.menu.hide()
+
+        this.changed(null)
     }
 
     destroy(): void {
         this.lifetime.destroy()
+    }
+
+    private changed(snapshot: CanvasCollaborationPresence['menu']): void {
+        if (
+            snapshot?.kind === this.snapshot?.kind
+            && snapshot?.nodeId === this.snapshot?.nodeId
+            && snapshot?.edgeId === this.snapshot?.edgeId
+        )
+            return
+
+        this.snapshot = snapshot
+        this.ports.onChanged?.(snapshot)
     }
 
     private nodeRect(nodeId: string): DOMRect | null {

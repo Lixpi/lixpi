@@ -11,12 +11,14 @@ import {
     type MediaPipelineSource,
 } from '../shared/media-pipeline.ts'
 import { getExecutableMediaPipelineOperations, inspectMediaPipelineExecutability } from './media-pipeline-catalog.ts'
+import { regeneratePipelineOutputs } from './media-pipeline-regeneration.ts'
 import { createMediaPipelineImageHandler } from './media-pipeline-image.ts'
 import {
     type MediaPipelineCatalog,
     type MediaPipelineContext,
     type MediaPipelineExecution,
     type MediaPipelineOperationReceipt,
+    type MediaPipelineOperationRequest,
     type MediaPipelinePorts,
     type MediaPipelineStoredArtifact,
 } from './media-pipeline-ports.ts'
@@ -222,6 +224,105 @@ class Harness {
         })
     }
 }
+
+describe('regenerating a completed pipeline output', () => {
+    const sourceSnapshot = {
+        ...source('original'),
+        renditionId: 'canonical',
+    }
+    const operation: MediaPipelineOperationRequest = {
+        operationId: 'original-operation',
+        executionId: 'prior-execution',
+        pipelineId: 'old-pipeline',
+        pipelineRevision: 4,
+        inputHash: 'prior-input',
+        context: {
+            ...context,
+            runId: 'old-run',
+        },
+        node: {
+            ...node('prior-variant'),
+            operationKey: 'image.generate',
+            parameters: {
+                prompt: 'Sealed prompt.',
+                imageSize: '16:9',
+            },
+            inputs: [{
+                portId: 'reference-1',
+                kind: 'image',
+                required: false,
+            }],
+        },
+        inputs: { 'reference-1': sourceSnapshot },
+    }
+    const setup = () => {
+        const harness = new Harness()
+        harness.modelCatalog.operations = [createMediaPipelineImageHandler({
+            ensure: harness.ports.ensureOperation,
+            read: harness.ports.readOperation,
+        }).definition]
+        harness.modelCatalog.modelRoutes[0]!.operationKeys = ['image.generate']
+
+        return harness
+    }
+
+    it('queues the sealed prompt, parameters and frozen reference under the current actor', async () => {
+        const harness = setup()
+        const input = {
+            regenerationId: 'regen-exact',
+            mode: 'existing-prompt' as const,
+            sources: [{ operation }],
+            admit: async <T>(write: () => Promise<T>) => await write(),
+        }
+        const submitted = await regeneratePipelineOutputs(harness.service, harness.ports, context, input)
+        expect(await regeneratePipelineOutputs(harness.service, harness.ports, context, input)).toEqual(submitted)
+        const execution = harness.executions.get(submitted.operationId)!
+        expect(execution.context).toEqual(context)
+        expect(execution.pipeline.nodes).toEqual([{
+            ...operation.node,
+            nodeId: 'variant-1',
+        }])
+        expect(execution.pipeline.sources).toEqual([{
+            ...sourceSnapshot,
+            sourceId: 'variant-1-reference-1',
+        }])
+        expect(harness.ports.ensureOperation).not.toHaveBeenCalled()
+    })
+
+    it('uses the retained reasoning model only for an explicit new prompt', async () => {
+        const harness = setup()
+        const prepare = vi.fn(async () => 'Fresh prompt.')
+        harness.ports.promptModel = {
+            validateModels: vi.fn(async () => {}),
+            prepare,
+        }
+        const input = {
+            regenerationId: 'regen-fresh',
+            mode: 'regenerate-prompt' as const,
+            sources: [{ operation }],
+            admit: async <T>(write: () => Promise<T>) => await write(),
+        }
+        await expect(regeneratePipelineOutputs(harness.service, harness.ports, context, input)).rejects.toThrow('CANVAS_REGENERATION_ORIGINAL_INSTRUCTION_UNAVAILABLE')
+        expect(prepare).not.toHaveBeenCalled()
+        const submitted = await regeneratePipelineOutputs(harness.service, harness.ports, context, {
+            ...input,
+            sources: [{
+                operation,
+                instruction: 'Original user instruction.',
+                reasoningModelId: 'reasoner',
+            }],
+        })
+        expect(prepare).toHaveBeenCalledWith(context, expect.objectContaining({
+            modelId: 'reasoner',
+            userPrompt: 'Original user instruction.',
+            sources: [sourceSnapshot],
+        }))
+        expect(harness.executions.get(submitted.operationId)?.pipeline.nodes[0]?.parameters).toEqual({
+            prompt: 'Fresh prompt.',
+            imageSize: '16:9',
+        })
+    })
+})
 
 describe('reviewable pipeline matrices', () => {
     const input = (): MediaPipelineMatrixInput => ({

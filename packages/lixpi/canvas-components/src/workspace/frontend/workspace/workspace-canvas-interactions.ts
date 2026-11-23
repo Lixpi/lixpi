@@ -9,6 +9,7 @@ import { WorkspaceCanvasMenu } from '@lixpi/canvas-components/workspace/menus'
 import {
     type CanvasNode,
     type CanvasState,
+    type CanvasCollaborationPresence,
     type WorkspaceEdgePathType,
 } from '@lixpi/constants'
 import {
@@ -94,6 +95,7 @@ export type WorkspaceCanvasInteractionsPorts = {
     commit: (state: CanvasState) => void
     defaultConnectorCurve: WorkspaceEdgePathType
     getMenuVisualScale: () => number
+    onMenuChange?: (menu: CanvasCollaborationPresence['menu']) => void
 }
 
 export class WorkspaceCanvasInteractions {
@@ -117,6 +119,7 @@ export class WorkspaceCanvasInteractions {
                 onTriggerConnection: nodeId => ports.getConnections()?.startConnectionFromMenu(nodeId),
             },
             getVisualScale: ports.getMenuVisualScale,
+            onChanged: ports.onMenuChange,
         })
         ports.pane.addEventListener(
             'pointerdown',

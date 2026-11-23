@@ -10,7 +10,9 @@ import {
 } from '@lixpi/canvas-engine/shared'
 import {
     type AudioCanvasNode,
+    type CanvasCollaborationPresence,
     type CanvasState,
+    type ConversationFileUploadCoordinate,
     type CapabilityArtifactCanvasNode,
     type DocumentCanvasNode,
     type DocumentMediaCanvasNode,
@@ -38,6 +40,18 @@ export type DragStartOptions = {
 
 export type WorkspaceCanvasCallbacks = {
     onViewportChange?: (viewport: Viewport) => void
+    onPresenceChange?: (presence: CanvasCollaborationPresence) => void
+    onConnectionDraft?: (connector: CanvasCollaborationPresence['connector']) => void
+    onComposerPresence?: (draft: CanvasCollaborationPresence['composer']) => void
+    onPlaybackPresence?: (
+        playback: CanvasCollaborationPresence['playback'],
+        terminal: boolean,
+    ) => void
+    onGeometryPreview?: (geometry: NonNullable<CanvasCollaborationPresence['geometry']>) => void
+    onGeometryFinish?: (
+        nodeIds: readonly string[],
+        committed: boolean,
+    ) => void
     onCanvasStateChange?: (state: CanvasState) => void
     onAuthoritativeCanvasStateChange?: (params: {
         canvasState: CanvasState
@@ -80,6 +94,10 @@ export type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nod
 export type WorkspaceCanvasOptions = {
     composer?: boolean
     conversationPanel?: boolean
+    uploadConversationFile?: (
+        file: File,
+        conversationFile: ConversationFileUploadCoordinate,
+    ) => Promise<{ assetId: string }>
     sidePanel?: boolean
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement

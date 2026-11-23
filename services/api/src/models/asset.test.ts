@@ -171,6 +171,150 @@ describe('Asset lease account ownership', () => {
     })
 })
 
+describe('Asset.replaceCanvasPlacement', () => {
+    const replacementId = 'asset-2'
+    const workspace = {
+        organizationId: 'organization-1',
+        canvasStateUpdatedAt: 100,
+        canvasState: {
+            ...canvasState(10),
+            edges: [{
+                edgeId: 'edge-1',
+                sourceNodeId: 'node-1',
+                targetNodeId: 'node-2',
+            }],
+        },
+    }
+    const makeMediaAsset = (assetId: string): Asset => ({
+        ...asset,
+        assetId,
+        states: {
+            ...asset.states,
+            lifecycle: 'active',
+            media: 'ready',
+        },
+        media: {
+            kind: 'image',
+            originalName: 'image.png',
+            sourceMimeType: 'image/png',
+            modelSafe: true,
+            renditions: {
+                original: {
+                    name: 'original',
+                    status: 'ready',
+                    blobHash: 'a'.repeat(64),
+                    mimeType: 'image/png',
+                    byteSize: 100,
+                    updatedAt: 20,
+                },
+            },
+        },
+    })
+    const request = {
+        workspaceId: 'workspace-1',
+        nodeId: 'node-1',
+        previousAssetId: 'asset-1',
+        assetId: replacementId,
+        expectedCanvasStateUpdatedAt: 100,
+        requester,
+    }
+
+    it('swaps one placement and both references and catalog projections in the same commit', async () => {
+        const existingReplacement = {
+            ...reference,
+            assetId: replacementId,
+            nodeIds: ['node-2'],
+            surfaceIds: ['same-workspace-surface'],
+        }
+        dynamo.getItem.mockImplementation(async input => {
+            if (input.origin === 'Asset.replace.getWorkspace')
+                return workspace
+
+            if (input.key.referenceKey?.startsWith('catalog#'))
+                return { referenceKey: input.key.referenceKey }
+
+            if (input.key.referenceKey)
+                return input.key.assetId === replacementId ? existingReplacement : reference
+
+            return makeMediaAsset(input.key.assetId)
+        })
+
+        await expect(AssetModel.replaceCanvasPlacement(request)).resolves.toEqual({ success: true })
+
+        expect(dynamo.transactWrite).toHaveBeenCalledOnce()
+        const [{ operations }] = dynamo.transactWrite.mock.calls[0]!
+        expect(operations[0]).toMatchObject({
+            key: { workspaceId: 'workspace-1' },
+            updates: {
+                canvasState: {
+                    ...workspace.canvasState,
+                    nodes: [{
+                        ...workspace.canvasState.nodes[0],
+                        assetId: replacementId,
+                    }],
+                },
+            },
+        })
+        expect(operations).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'delete',
+                key: {
+                    assetId: 'asset-1',
+                    referenceKey: reference.referenceKey,
+                },
+            }),
+            expect.objectContaining({
+                type: 'put',
+                item: {
+                    ...existingReplacement,
+                    nodeIds: ['node-2', 'node-1'],
+                    updatedAt: expect.any(Number),
+                },
+            }),
+            expect.objectContaining({
+                type: 'update',
+                key: { assetId: 'asset-1' },
+                updates: expect.objectContaining({
+                    referenceCount: 1,
+                    revision: 4,
+                }),
+            }),
+            expect.objectContaining({
+                type: 'update',
+                key: { assetId: replacementId },
+                updates: expect.objectContaining({
+                    referenceCount: 2,
+                    revision: 4,
+                }),
+            }),
+            expect.objectContaining({
+                type: 'put',
+                item: expect.objectContaining({
+                    assetId: 'asset-1',
+                    scopeAndOwner: 'workspace#workspace-1',
+                }),
+            }),
+            expect.objectContaining({
+                type: 'put',
+                item: expect.objectContaining({
+                    assetId: replacementId,
+                    scopeAndOwner: 'workspace#workspace-1',
+                }),
+            }),
+        ]))
+    })
+
+    it('rejects a stale workspace revision before writing either reference', async () => {
+        dynamo.getItem.mockResolvedValueOnce({
+            ...workspace,
+            canvasStateUpdatedAt: 101,
+        })
+
+        await expect(AssetModel.replaceCanvasPlacement(request)).rejects.toThrow('STALE_CANVAS_STATE')
+        expect(dynamo.transactWrite).not.toHaveBeenCalled()
+    })
+})
+
 describe('Asset.attachWorkspaceReference', () => {
     it('rebuilds the attachment from the latest Asset when rendition completion races the first commit', async () => {
         const completed: Asset = {

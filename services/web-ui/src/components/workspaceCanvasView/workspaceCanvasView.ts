@@ -1,3 +1,7 @@
+import {
+    LoadingStatus,
+    type CanvasCollaborationEvent,
+} from '@lixpi/constants'
 import { lixpiPalette as colorPalette } from '@lixpi/themes'
 import {
     WorkspaceCanvasSurface,
@@ -21,6 +25,11 @@ import {
     bindCanvasTheme,
     type CanvasThemeSource,
 } from '@lixpi/canvas-components/theme'
+import {
+    getDocumentCaretRect,
+    getDocumentSelectionRects,
+    readDocumentCaret,
+} from '@lixpi/prosemirror/frontend/document-view'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { initializeCanvasThemeStore } from '$src/canvas-adapters/canvas-theme.ts'
@@ -49,6 +58,7 @@ class WorkspaceCanvasView implements WorkspaceCanvasViewInstance {
     readonly el: HTMLDivElement
     private readonly lifetime = new Lifetime()
     private readonly connectionObserver: MutationObserver
+    private stopWaitingForWorkspace: (() => void) | null = null
     private mounted = false
 
     constructor(private readonly config: WorkspaceCanvasViewConfig) {
@@ -65,6 +75,13 @@ class WorkspaceCanvasView implements WorkspaceCanvasViewInstance {
                 subtree: true,
             },
         )
+        const stopWorkspace = workspaceStore.subscribe(this.mountWhenConnected)
+        const stopRoute = config.router.subscribe(this.mountWhenConnected)
+        this.stopWaitingForWorkspace = () => {
+            stopWorkspace()
+            stopRoute()
+        }
+        this.lifetime.own(() => this.stopWaitingForWorkspace?.())
         this.mountWhenConnected()
     }
 
@@ -76,8 +93,20 @@ class WorkspaceCanvasView implements WorkspaceCanvasViewInstance {
         )
             return
 
+        const workspaceId = this.config.router.getCurrentRoute().routeParams.workspaceId
+        const status = workspaceStore.getMeta('loadingStatus')
+
+        if (
+            !workspaceId
+            || workspaceStore.getData('workspaceId') !== workspaceId
+            || (status !== LoadingStatus.success && status !== LoadingStatus.error)
+        )
+            return
+
         this.mounted = true
         this.connectionObserver.disconnect()
+        this.stopWaitingForWorkspace?.()
+        this.stopWaitingForWorkspace = null
 
         try {
             const theme = this.config.theme ?? initializeCanvasThemeStore(this.el)
@@ -110,6 +139,27 @@ class WorkspaceCanvasView implements WorkspaceCanvasViewInstance {
             },
             {
                 document,
+                caret: {
+                    read: readDocumentCaret,
+                    rects: (
+                        node,
+                        anchor,
+                        head,
+                    ) => {
+                        const editor = node.matches('.ProseMirror') ? node : node.querySelector('.ProseMirror')
+
+                        return editor ? getDocumentSelectionRects(
+                            editor,
+                            anchor,
+                            head,
+                        ) : []
+                    },
+                    rect: (node, position) => {
+                        const editor = node.matches('.ProseMirror') ? node : node.querySelector('.ProseMirror')
+
+                        return editor ? getDocumentCaretRect(editor, position) : null
+                    },
+                },
                 readSnapshot: () => ({
                     workspaceId: String(router.getCurrentRoute().routeParams.workspaceId ?? ''),
                     loadedWorkspaceId: workspaceStore.getData('workspaceId'),
@@ -133,6 +183,28 @@ class WorkspaceCanvasView implements WorkspaceCanvasViewInstance {
 
                     return sessions.get(workspaceId)
                 },
+                ...(servicesStore.getData('workspaceService')?.collaborate ? {
+                    collaborate: (workspaceId: string, changed: (
+                        event: CanvasCollaborationEvent,
+                        actorId: string,
+                    ) => void) => {
+                        const service = servicesStore.getData('workspaceService')
+
+                        if (!service)
+                            throw new Error('CANVAS_COLLABORATION_UNAVAILABLE')
+
+                        return service.collaborate(
+                            auth,
+                            workspaceId,
+                            changed,
+                        )
+                    },
+                    cameraStorage: {
+                        get: (key: string) => sessionStorage.getItem(key),
+                        set: (key: string, value: string) => sessionStorage.setItem(key, value),
+                    },
+                    cameraStorageKey: (workspaceId: string) => `lixpi:canvas-camera:${auth.userStore.getData('userId')}:${workspaceId}`,
+                } : {}),
                 membership: {
                     attach: request => assetService.attach(request),
                     detach: request => assetService.detach(request),

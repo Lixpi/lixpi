@@ -34,6 +34,7 @@ export type WorkspaceCapabilityNodePorts = {
         version: number
     } | undefined
     refreshAsset: (assetId: string) => Promise<Asset | { error: string }>
+    subscribeContent?: (changed: () => void) => () => void
     ensureAssetsLoaded: (assetIds: readonly string[]) => Promise<readonly Asset[]>
     getDefinitions: (artifactTypeId: string) => {
         frontend: CapabilityArtifactFrontendDefinition
@@ -57,6 +58,8 @@ export class WorkspaceCapabilityNode {
     private readonly lifetime = new Lifetime()
     private content: Lifetime
     private referenceLoad = false
+    private waitingForContent = true
+    private stopWaitingForContent: (() => void) | undefined
     private heightFrame: number | null = null
 
     constructor(
@@ -85,8 +88,19 @@ export class WorkspaceCapabilityNode {
         try {
             ports.ensureStyles(this.element.ownerDocument)
 
-            if (!this.render())
-                void this.refresh()
+            if (!this.render()) {
+                const stop = ports.subscribeContent?.(this.renderWhenReady)
+
+                if (stop) {
+                    if (this.waitingForContent)
+                        this.stopWaitingForContent = this.lifetime.own(stop)
+                    else
+                        stop()
+                }
+
+                if (this.waitingForContent)
+                    void this.refresh()
+            }
         } catch (error) {
             this.lifetime.destroy()
 
@@ -101,6 +115,16 @@ export class WorkspaceCapabilityNode {
         this.host.replaceChildren()
 
         return this.content
+    }
+
+    private renderWhenReady = (): void => {
+        if (
+            this.waitingForContent
+            && !this.lifetime.signal.aborted
+            && this.ports.getAsset(this.node.assetId)
+            && this.ports.getDocument(this.node.assetId)
+        )
+            this.render()
     }
 
     private render(): boolean {
@@ -120,6 +144,10 @@ export class WorkspaceCapabilityNode {
 
             return false
         }
+
+        this.waitingForContent = false
+        this.stopWaitingForContent?.()
+        this.stopWaitingForContent = undefined
 
         try {
             const {
@@ -197,7 +225,10 @@ export class WorkspaceCapabilityNode {
         try {
             const asset = await this.ports.refreshAsset(this.node.assetId)
 
-            if (this.lifetime.signal.aborted)
+            if (
+                this.lifetime.signal.aborted
+                || !this.waitingForContent
+            )
                 return
 
             if ('error' in asset)
@@ -205,10 +236,16 @@ export class WorkspaceCapabilityNode {
 
             await this.ports.ensureAssetsLoaded(asset.lineage?.sourceAssetIds ?? [])
 
-            if (!this.lifetime.signal.aborted)
+            if (
+                !this.lifetime.signal.aborted
+                && this.waitingForContent
+            )
                 this.render()
         } catch (error) {
-            if (!this.lifetime.signal.aborted) {
+            if (
+                !this.lifetime.signal.aborted
+                && this.waitingForContent
+            ) {
                 this.showError(
                     error,
                     'This Artifact could not be loaded',

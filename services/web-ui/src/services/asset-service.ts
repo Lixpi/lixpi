@@ -1,7 +1,7 @@
 import {
     WorkspaceAssetProjection,
     WorkspaceAssetSynchronization,
-} from '@lixpi/canvas-components/workspace/shared'
+} from '@lixpi/canvas-components/workspace'
 import {
     getAssetEventSubject,
     NATS_SUBJECTS,
@@ -20,6 +20,7 @@ import {
     type AssetDocSnapshot,
     type AssetDocSnapshotReference,
 } from '@lixpi/prosemirror'
+import { fetchRetryableGet } from '@lixpi/canvas-engine/frontend/media'
 import {
     type AuthTokenProvider,
     type UserStateStore,
@@ -72,14 +73,24 @@ const mapWithConcurrency = async <T, R>(
 
 export class AssetService {
     private readonly workspaceAssets: WorkspaceAssetProjection
+    private readonly workspaceAssetReads = new Map<string, Promise<Asset | { error: string }>>()
+    private readonly workspaceDocumentReads = new Map<string, Promise<AssetDocumentSnapshot>>()
 
     constructor(private readonly config: AssetServiceConfig) {
         this.workspaceAssets = new WorkspaceAssetProjection({
-            get: (assetId, workspaceId) => this.get(assetId, workspaceId),
-            hasDocument: (assetId, role) => Boolean(
-                assetDocumentsStore.get(assetId, role),
-            ),
-            resumeDocument: coordinate => this.resumeDocumentSnapshot(coordinate),
+            get: (assetId, workspaceId) => this.readWorkspaceAsset(assetId, workspaceId),
+            hasDocument: (
+                assetId,
+                role,
+                version,
+            ) => {
+                const cached = assetDocumentsStore.get(assetId, role)
+
+                return Boolean(cached && cached.version >= version)
+            },
+            loadDocument: coordinate => this.loadWorkspaceDocument(coordinate),
+            readAsset: assetId => assetsStore.get(assetId),
+            publishAsset: asset => assetsStore.upsert(asset),
             publishAssets: (workspaceId, assets) => assetsStore.setAssets(workspaceId, assets),
             publishDocuments: snapshots => assetDocumentsStore.setMany(snapshots),
             setLoading: workspaceId => assetsStore.setLoading(workspaceId),
@@ -139,8 +150,8 @@ export class AssetService {
         return results.filter((result): result is Asset => !('error' in result))
     }
 
-    async fetchDocumentSnapshot(reference: AssetDocSnapshotReference): Promise<AssetDocSnapshot> {
-        const response = await fetch(
+    async fetchDocumentSnapshot(reference: Pick<AssetDocSnapshotReference, 'url' | 'assetId' | 'organizationId' | 'role'>): Promise<AssetDocSnapshot> {
+        const response = await fetchRetryableGet(
             `${API_BASE_URL}${reference.url}`,
             {
                 headers: { Authorization: `Bearer ${await this.config.auth.getTokenSilently()}` },
@@ -160,6 +171,87 @@ export class AssetService {
             throw new Error('ASSET_DOCUMENT_SNAPSHOT_COORDINATE_MISMATCH')
 
         return snapshot
+    }
+
+    private async readWorkspaceAsset(
+        assetId: string,
+        workspaceId: string,
+    ): Promise<Asset | { error: string }> {
+        const key = JSON.stringify([workspaceId, assetId])
+        const request = this.workspaceAssetReads.get(key) ?? this.get(assetId, workspaceId)
+        this.workspaceAssetReads.set(key, request)
+
+        try {
+            return await request
+        } finally {
+            if (this.workspaceAssetReads.get(key) === request)
+                this.workspaceAssetReads.delete(key)
+        }
+    }
+
+    private async loadWorkspaceDocument(coordinate: Pick<AssetDocSnapshotReference, 'assetId' | 'organizationId' | 'role'>): Promise<AssetDocumentSnapshot> {
+        const key = JSON.stringify([coordinate.organizationId, coordinate.assetId, coordinate.role])
+        const request = this.workspaceDocumentReads.get(key) ?? this.readWorkspaceDocument(coordinate)
+        this.workspaceDocumentReads.set(key, request)
+
+        try {
+            return await request
+        } finally {
+            if (this.workspaceDocumentReads.get(key) === request)
+                this.workspaceDocumentReads.delete(key)
+        }
+    }
+
+    private async readWorkspaceDocument(coordinate: Pick<AssetDocSnapshotReference, 'assetId' | 'organizationId' | 'role'>): Promise<AssetDocumentSnapshot> {
+        const snapshot = await this.fetchDocumentSnapshot({
+            ...coordinate,
+            url: `/api/assets/${encodeURIComponent(coordinate.assetId)}/documents/${coordinate.role}/snapshot`,
+        })
+
+        return {
+            assetId: snapshot.assetId,
+            role: snapshot.role,
+            version: snapshot.version,
+            doc: snapshot.doc,
+        }
+    }
+
+    async hydrateArtifact(
+        assetId: string,
+        workspaceId: string,
+    ): Promise<Asset | { error: string }> {
+        const current = (): boolean => workspaceStore.getData('workspaceId') === workspaceId
+        const asset = await this.readWorkspaceAsset(assetId, workspaceId)
+
+        if (!current())
+            return { error: 'WORKSPACE_CHANGED' }
+
+        if ('error' in asset)
+            return asset
+
+        const pointer = asset.documents.capabilityArtifact
+
+        if (!pointer)
+            return { error: 'DOCUMENT_SNAPSHOT_NOT_FOUND' }
+
+        assetsStore.upsert(asset)
+        const cached = assetDocumentsStore.get(assetId, 'capabilityArtifact')
+
+        if (
+            !cached
+            || cached.version < pointer.version
+        ) {
+            const snapshot = await this.loadWorkspaceDocument({
+                organizationId: asset.organizationId,
+                assetId,
+                role: 'capabilityArtifact',
+            })
+
+            if (current())
+                assetDocumentsStore.set(snapshot)
+        }
+
+        return asset
     }
 
     async get(
@@ -275,6 +367,15 @@ export class AssetService {
                         throw error
                     }
                 },
+                onReconnect: listener => servicesStore.getData('nats')?.onReconnect?.(() => {
+                    this.workspaceAssetReads.clear()
+                    this.workspaceDocumentReads.clear()
+                    listener()
+                }) ?? (() => {}),
+                needsRecovery: () => workspaceStore.getData('workspaceId') === workspaceId
+                    && this.workspaceAssets.needsHydration(
+                        workspaceStore.getData('canvasState'),
+                    ),
                 setInterval: (callback, delay) => {
                     const timer = setInterval(callback, delay)
 
@@ -378,30 +479,6 @@ export class AssetService {
         return result
     }
 
-    private async resumeDocumentSnapshot({
-        organizationId,
-        assetId,
-        role,
-        localVersion = 0,
-        localStreamSeq = 0,
-    }: {
-        organizationId: string
-        assetId: string
-        role: AssetDocumentRole
-        localVersion?: number
-        localStreamSeq?: number
-    }): Promise<AssetDocumentSnapshot | null> {
-        const { snapshot } = await this.requestDocumentResume({
-            organizationId,
-            assetId,
-            role,
-            localVersion,
-            localStreamSeq,
-        })
-
-        return snapshot
-    }
-
     private async requestDocumentResume({
         organizationId,
         assetId,
@@ -494,12 +571,14 @@ export class AssetService {
             title?: string
             descriptor?: Asset['descriptor']
         },
+        workspaceId?: string,
     ): Promise<Asset | { error: string }> {
         const result = await this.request<Asset | { error: string }>(
             ASSET_SUBJECTS.UPDATE_METADATA,
             {
                 assetId,
                 expectedRevision,
+                ...(workspaceId ? { workspaceId } : {}),
                 ...updates,
             },
         )

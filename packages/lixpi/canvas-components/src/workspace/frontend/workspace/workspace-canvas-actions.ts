@@ -1,6 +1,7 @@
 import {
     MAX_UPLOAD_FILE_SIZE,
     type AudioCanvasNode,
+    type ConversationFileUploadCoordinate,
     type CanvasState,
     type DocumentCanvasNode,
     type DocumentMediaCanvasNode,
@@ -24,6 +25,7 @@ export type CanvasIngestResult = {
 export type CanvasIngestReply = CanvasIngestResult | { error: string } | null
 export type CanvasUploadRequest = {
     workspaceId: string
+    conversationFile?: ConversationFileUploadCoordinate
     onStart: () => boolean
 }
 export type WorkspaceCanvasActionScope = {

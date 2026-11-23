@@ -16,12 +16,14 @@ export type CapabilityLibraryPanelConfig = {
     document: Document
     client: Pick<CapabilityCatalogClient, 'list' | 'get' | 'invalidate'>
     onAttach?: (reference: CapabilityPromptReference & { displayName: string }) => void
+    onSelectionChange?: (capabilityId: string | null) => void
 }
 
 export type CapabilityLibraryPanelInstance = {
     readonly element: HTMLElement
     load: () => Promise<void>
     refresh: () => Promise<void>
+    showCapability: (capabilityId: string | null) => void
     destroy: () => void
 }
 
@@ -207,7 +209,7 @@ class CapabilityLibraryPanel implements CapabilityLibraryPanelInstance {
             )}
         </article>
         ` as HTMLElement
-        const select = (): void => void this.select(item.capabilityId)
+        const select = (): void => void this.showCapability(item.capabilityId)
         this.listen(
             row,
             'keydown',
@@ -237,6 +239,21 @@ class CapabilityLibraryPanel implements CapabilityLibraryPanelInstance {
         )
 
         return row
+    }
+
+    showCapability(capabilityId: string | null): void {
+        if (this.destroyed)
+            return
+
+        this.config.onSelectionChange?.(capabilityId)
+
+        if (capabilityId)
+            void this.select(capabilityId)
+        else {
+            this.detailsSequence += 1
+            this.selected = null
+            this.render()
+        }
     }
 
     private async select(capabilityId: string): Promise<void> {
@@ -296,10 +313,7 @@ class CapabilityLibraryPanel implements CapabilityLibraryPanelInstance {
         this.listen(
             inspector.querySelector<HTMLElement>('.capability-library-back')!,
             'click',
-            () => {
-                this.selected = null
-                this.render()
-            },
+            () => this.showCapability(null),
         )
         this.listen(
             inspector.querySelector<HTMLElement>('.capability-library-attach')!,

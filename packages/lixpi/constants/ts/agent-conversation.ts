@@ -132,6 +132,57 @@ export type ConversationMessagesRequest = ConversationCommandBase & {
     limit?: number
 }
 
+export type ConversationHumanAction = {
+    userId: string
+    issuedAt: number
+} & (
+    | {
+        kind: 'file'
+        assetId: string
+    }
+    | {
+        kind: 'download'
+        assetId: string
+        title: string
+        rendition: 'original' | 'canonical' | 'preview'
+    }
+    | {
+        kind: 'workspace-export'
+        workspaceId: string
+    }
+    | {
+        kind: 'attestation'
+        assetId: string
+        assetRevision: number
+        title: string
+        classification: 'self' | 'authorized-real-person'
+    }
+    | {
+        kind: 'provider-verification'
+        assetId: string
+        generationRequestId: string
+        generationRun: number
+        requestRevision: number
+    }
+)
+
+export type ConversationHumanActionResult = { assetId?: string }
+
+export type ConversationFileUploadCoordinate = {
+    conversationAssetId: string
+    interruptId: string
+}
+
+export type ConversationHumanActionAnswer =
+    | {
+        kind: Exclude<ConversationHumanAction['kind'], 'workspace-export'>
+        assetId: string
+    }
+    | {
+        kind: 'workspace-export'
+        workspaceId: string
+    }
+
 export type ConversationSubmitRequest = ConversationCommandBase & {
     clientMessageId: string
     fragment: ConversationMessageNode
@@ -139,6 +190,7 @@ export type ConversationSubmitRequest = ConversationCommandBase & {
     settingsRevision: number
     midRunPolicy?: ConversationMidRunPolicy
     interruptId?: string
+    humanActionResult?: ConversationHumanActionResult
 }
 
 export type ConversationSettingsRequest = ConversationCommandBase & {
@@ -199,6 +251,7 @@ export type ConversationTurn = {
     state: ConversationRunState
     createdAt: number
     interruptId?: string
+    humanActionAnswer?: ConversationHumanActionAnswer
     // Set on a turn another workspace's agent submitted.
     delegation?: ConversationTurnDelegation
 }
@@ -253,6 +306,7 @@ export type ConversationRun = {
     budget: AgentTurnBudget
     operationIds: string[]
     interruptId?: string
+    humanAction?: ConversationHumanAction
     error?: ConversationFailure
     updatedAt: number
 }

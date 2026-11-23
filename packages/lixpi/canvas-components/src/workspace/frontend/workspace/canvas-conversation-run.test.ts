@@ -183,6 +183,24 @@ const setup = (overrides: Partial<CanvasConversationRunPorts> = {}, options: Par
 }
 
 describe('canvas conversation run', () => {
+    it('submits a retained generation with the review options rather than retriggering the persisted editor message', async () => {
+        const regeneration = {
+            mode: 'regenerate-prompt',
+            forceFreshLineage: true,
+        } as const
+        const fixture = setup({}, {
+            sourceGenerationRequestId: 'retained-request',
+            regeneration,
+        })
+        await fixture.run.submitRegeneration()
+
+        expect(fixture.editor.submitPersisted).not.toHaveBeenCalled()
+        expect(fixture.transport.send).toHaveBeenCalledWith(expect.objectContaining({
+            sourceGenerationRequestId: 'retained-request',
+            regeneration,
+        }))
+    })
+
     it('forwards media events only for the live workspace and conversation', () => {
         const fixture = setup()
         fixture.callbacks.onSegment({

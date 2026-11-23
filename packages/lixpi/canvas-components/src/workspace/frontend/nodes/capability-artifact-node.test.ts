@@ -103,6 +103,7 @@ const fixture = () => {
     } as unknown as CapabilityArtifactSharedDefinition
     const frontend = { createCanvasNodeView } as unknown as CapabilityArtifactFrontendDefinition
     const ports = {
+        subscribeContent: vi.fn<NonNullable<WorkspaceCapabilityNodePorts['subscribeContent']>>(() => vi.fn()),
         beginLoading: vi.fn(() => ({ destroy: vi.fn() })),
         ensureStyles: vi.fn(),
         getAsset: vi.fn<WorkspaceCapabilityNodePorts['getAsset']>(() => asset),
@@ -183,6 +184,28 @@ describe('WorkspaceCapabilityNode', () => {
         await vi.waitFor(() => expect(test.createCanvasNodeView).toHaveBeenCalledOnce())
         expect(test.ports.ensureAssetsLoaded).toHaveBeenCalledWith(['source'])
         expect(test.ports.beginLoading.mock.results[0].value.destroy).toHaveBeenCalledOnce()
+    })
+
+    it('mounts a failed Artifact from a later authorized snapshot without replacing the recovered editor', async () => {
+        const test = fixture()
+        const stop = vi.fn()
+        let publish = () => {}
+        test.ports.getDocument.mockReturnValue(undefined)
+        test.ports.refreshAsset.mockRejectedValueOnce(new Error('NATS connection closed'))
+        test.ports.subscribeContent.mockImplementation(changed => {
+            publish = changed
+
+            return stop
+        })
+        test.mount()
+
+        await vi.waitFor(() => expect(test.ports.onError).toHaveBeenCalledOnce())
+        test.ports.getDocument.mockReturnValue(snapshot)
+        publish()
+        publish()
+        expect(test.createCanvasNodeView).toHaveBeenCalledOnce()
+        test.shells.clear()
+        expect(stop).toHaveBeenCalledOnce()
     })
 
     it('ignores an Asset response after shell disposal', async () => {

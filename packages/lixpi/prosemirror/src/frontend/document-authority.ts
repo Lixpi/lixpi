@@ -602,9 +602,16 @@ export class DocumentAuthority {
             return
         }
 
-        if (event.clientId === this.clientId)
+        if (event.clientId === this.clientId) {
+            // A live echo can arrive before the submit reply or during recovery
+            // from a partially accepted batch. Retire exactly the accepted step.
+            const pendingIndex = this.pendingLocalSteps.findIndex(pending => pending.msgId === event.msgId)
+
+            if (pendingIndex >= 0)
+                this.pendingLocalSteps.splice(pendingIndex, 1)
+
             this.localVersion = event.version
-        else if (!this.applyRemoteStep(event)) {
+        } else if (!this.applyRemoteStep(event)) {
             void this.requestResume()
 
             return
@@ -646,6 +653,7 @@ export class DocumentAuthority {
         try {
             const remoteStep = Step.fromJSON(view.state.schema, event.step)
             let transaction = view.state.tr
+            let selectionMapping = transaction.mapping
 
             if (this.pendingLocalSteps.length > 0) {
                 for (let index = this.pendingLocalSteps.length - 1; index >= 0; index -= 1) {
@@ -656,19 +664,33 @@ export class DocumentAuthority {
                 }
 
                 transaction = transaction.step(remoteStep)
-                const mapping = new Mapping([remoteStep.getMap()])
+                // Each pending step uses the document produced by its predecessors.
+                // Pair each inverse map with its replay so later edits inside a
+                // locally inserted range keep their original offsets.
+                const mapping = new Mapping(
+                    transaction.mapping.maps.slice(),
+                )
+                selectionMapping = mapping
                 const rebased: PendingLocalStep[] = []
+                let inverseIndex = this.pendingLocalSteps.length
 
                 for (const pending of this.pendingLocalSteps) {
-                    const mapped = pending.step.map(mapping)
+                    const mapped = pending.step.map(
+                        mapping.slice(inverseIndex),
+                    )
+                    inverseIndex -= 1
 
                     if (!mapped)
                         continue
 
                     const beforeDoc = transaction.doc
-                    transaction = transaction.step(mapped)
+
+                    if (transaction.maybeStep(mapped).failed)
+                        continue
+
                     mapping.appendMap(
                         mapped.getMap(),
+                        inverseIndex,
                     )
                     rebased.push({
                         ...pending,
@@ -687,18 +709,18 @@ export class DocumentAuthority {
 
             const selection = view.state.selection
 
-            if (
-                selection instanceof TextSelection
-                && !selection.empty
-            ) {
+            if (selection instanceof TextSelection) {
                 const forward = selection.anchor < selection.head
                 transaction.setSelection(
                     TextSelection.between(
                         transaction.doc.resolve(
-                            transaction.mapping.map(selection.anchor, forward ? 1 : -1),
+                            selectionMapping.map(selection.anchor, selection.empty
+                                || forward
+                                ? 1
+                                : -1),
                         ),
                         transaction.doc.resolve(
-                            transaction.mapping.map(selection.head, forward ? -1 : 1),
+                            selectionMapping.map(selection.head, forward ? -1 : 1),
                         ),
                     ),
                 )
@@ -809,7 +831,14 @@ export class DocumentAuthority {
                 }
 
                 this.localVersion = Math.max(this.localVersion, result.version)
-                this.pendingLocalSteps.splice(0, batch.length)
+                const acceptedIds = new Set(
+                    batch.map(pending => pending.msgId),
+                )
+
+                for (let index = this.pendingLocalSteps.length - 1; index >= 0; index -= 1) {
+                    if (acceptedIds.has(this.pendingLocalSteps[index]!.msgId))
+                        this.pendingLocalSteps.splice(index, 1)
+                }
             }
         } finally {
             this.submitting = false

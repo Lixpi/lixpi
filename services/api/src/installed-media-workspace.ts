@@ -1,5 +1,8 @@
 import {
     createMediaPipelineModule,
+    regeneratePipelineOutputs,
+    type CapabilityActionAuthorizationContext,
+    type MediaPipelineRegenerationAdmission,
     type CapabilityModuleCatalog,
     type InstructionSkillStorage,
     type MediaPipelineModuleExtension,
@@ -15,13 +18,16 @@ import {
     type ConversationMediaOperations,
 } from './llm/agent/agent-pending-tools.ts'
 import { setAgentStateRetentionResolver } from './llm/agent/agent-state-maintenance.ts'
+import {
+    type Asset,
+} from '@lixpi/constants'
 import { ConversationRepository } from './llm/agent/conversation-repository.ts'
 
 export const installMediaWorkspace = (
     catalog: CapabilityModuleCatalog,
     capabilityStorage: InstructionSkillStorage,
     metrics?: ProviderUsageClient,
-): void => {
+) => {
     const repository = new ConversationRepository()
     setAgentStateRetentionResolver(row => MediaPipelineAdapter.retainedPayloads(row, row.sk))
     const images = metrics ? new StabilityPipelineExecutor(repository, metrics) : undefined
@@ -61,8 +67,9 @@ export const installMediaWorkspace = (
         acknowledge: async (owner, operationId) => await pipelines.acknowledgeCompletion(owner, operationId),
         cancel: async owner => await pipelines.cancelForRun(owner),
     }
+    const ports = pipelines.ports()
     const module = createMediaPipelineModule({
-        ports: pipelines.ports(),
+        ports,
         capabilityStorage,
         resolveContext: async context => pipelines.resolveContext(context),
     })
@@ -71,5 +78,45 @@ export const installMediaWorkspace = (
         operations,
     }
     catalog.registerModule(module)
-    pipelines.bind(catalog.getExtension<MediaPipelineModuleExtension>('media-pipeline', 'media-pipeline')!.service)
+    const { service } = catalog.getExtension<MediaPipelineModuleExtension>('media-pipeline', 'media-pipeline')!
+    pipelines.bind(service)
+
+    return async (
+        authorization: CapabilityActionAuthorizationContext,
+        input: {
+            assets: Asset[]
+            regenerationId: string
+            mode: 'existing-prompt' | 'regenerate-prompt'
+            admit: MediaPipelineRegenerationAdmission
+        },
+    ): Promise<{
+        status: 'pending'
+        operationId: string
+    }> => {
+        const context = pipelines.resolveContext(authorization)
+
+        if (!context)
+            throw new Error('CANVAS_REGENERATION_HISTORY_UNAVAILABLE')
+
+        const sources = await Promise.all(
+            input.assets.map(
+                async asset =>
+                    await pipelines.readRegenerationSource(
+                        context,
+                        asset,
+                        input.mode === 'regenerate-prompt',
+                    ),
+            ),
+        )
+
+        return await regeneratePipelineOutputs(
+            service,
+            ports,
+            context,
+            {
+                ...input,
+                sources,
+            },
+        )
+    }
 }

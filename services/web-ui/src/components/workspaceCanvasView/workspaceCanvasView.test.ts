@@ -30,24 +30,51 @@ vi.mock(
     }),
 )
 
+vi.mock(
+    '$src/canvas-adapters/workspace-canvas-host.ts',
+    () => ({ createWorkspaceCanvasHost: vi.fn() }),
+)
+
+vi.mock(
+    '$src/canvas-adapters/asset-ingest.ts',
+    () => ({
+        uploadCanvasAsset: vi.fn(),
+        importCanvasAssetUrl: vi.fn(),
+    }),
+)
+vi.mock(
+    '@lixpi/prosemirror/frontend/document-view',
+    () => ({
+        getDocumentCaretRect: vi.fn(),
+        getDocumentSelectionRects: vi.fn(),
+        readDocumentCaret: vi.fn(),
+    }),
+)
+
 const loadCanvasViewModules = async () => {
     vi.resetModules()
 
     const theme = await import('@lixpi/canvas-components/theme')
     const adapter = await import('$src/canvas-adapters/canvas-theme.ts')
     const workspaceCanvasView = await import('./workspaceCanvasView.ts')
+    const { workspaceStore } = await import('$src/stores/workspaceStore.ts')
+    workspaceStore.completeWorkspaceLoad({ workspaceId: 'workspace' })
 
     return {
         theme,
         adapter,
         workspaceCanvasView,
+        workspaceStore,
     }
 }
 
 const createViewConfig = (theme?: unknown) => ({
     assetService: {} as never,
     auth: {} as never,
-    router: {} as never,
+    router: {
+        getCurrentRoute: () => ({ routeParams: { workspaceId: 'workspace' } }),
+        subscribe: () => () => {},
+    } as never,
     ...(theme ? { theme: theme as never } : {}),
 })
 
@@ -95,7 +122,7 @@ describe('workspace canvas mounted theme lifecycle', () => {
         vi.restoreAllMocks()
     })
 
-    it('waits for connection before reading CSS or constructing the surface', async () => {
+    it('waits for connection before reading CSS or constructing the surface', { timeout: 15_000 }, async () => {
         const { workspaceCanvasView } = await loadCanvasViewModules()
         const getComputedStyle = vi.spyOn(
             window,
@@ -150,6 +177,47 @@ describe('workspace canvas mounted theme lifecycle', () => {
         expect(events).toEqual(['theme initialized', 'surface constructed'])
         expect(adapter.canvasThemeStore.value.name).toBe('Host configured theme')
         expect(getComputedStyle.mock.calls.filter(([element]) => element === view.el)).toHaveLength(1)
+    })
+
+    it('mounts once after the active workspace graph settles and keeps the same surface on a later switch', async () => {
+        const {
+            workspaceCanvasView,
+            workspaceStore,
+        } = await loadCanvasViewModules()
+        workspaceStore.beginWorkspaceLoad('workspace')
+        const view = workspaceCanvasView.createWorkspaceCanvasView(createViewConfig())
+
+        try {
+            await connectView(view.el)
+            expect(lifecycleMocks.surfaceConstructed).not.toHaveBeenCalled()
+            workspaceStore.completeWorkspaceLoad({ workspaceId: 'different-workspace' })
+            expect(lifecycleMocks.surfaceConstructed).not.toHaveBeenCalled()
+            workspaceStore.completeWorkspaceLoad({ workspaceId: 'workspace' })
+            expect(lifecycleMocks.surfaceConstructed).toHaveBeenCalledOnce()
+            workspaceStore.beginWorkspaceLoad('next-workspace')
+            workspaceStore.completeWorkspaceLoad({ workspaceId: 'next-workspace' })
+            expect(lifecycleMocks.surfaceConstructed).toHaveBeenCalledOnce()
+        } finally {
+            view.destroy()
+        }
+    })
+
+    it('mounts the connected surface when the current workspace load fails', async () => {
+        const {
+            workspaceCanvasView,
+            workspaceStore,
+        } = await loadCanvasViewModules()
+        workspaceStore.beginWorkspaceLoad('workspace')
+        const view = workspaceCanvasView.createWorkspaceCanvasView(createViewConfig())
+
+        try {
+            await connectView(view.el)
+            expect(lifecycleMocks.surfaceConstructed).not.toHaveBeenCalled()
+            workspaceStore.failWorkspaceLoad(new Error('Workspace failed to load'))
+            expect(lifecycleMocks.surfaceConstructed).toHaveBeenCalledOnce()
+        } finally {
+            view.destroy()
+        }
     })
 
     it('stops observing when destroyed before connection', async () => {

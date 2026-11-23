@@ -33,6 +33,12 @@ import { validateCapabilityManifest } from '@lixpi/capability-system/shared'
 
 The host constructs expert execution with an isolated checkpoint and private scratch, the selected reasoning model, current source admission, and an allowance narrowed from its caller. Generic host code owns persistence, cancellation, pending-operation recovery and provider-usage integration. The Capability module owns domain reasoning instructions, tool selection and controlled workflow behavior. See [Tools, Skills, and Capability Modules](../../../documentation/library/TOOLS-AND-SKILLS.md#agent-discovery-and-domain-experts) for the registration contract and [agent execution](../../../services/api/src/llm/README.md#agent-reasoning-and-execution) for the main loop.
 
+The Workspace Canvas module gives a conversation agent typed access to the active workspace graph and live participant state. Layout and connections use the shared canvas revision and target leases. Placement membership, names and rich text use the Asset APIs. Agent operations use the current conversation owner, and a human can take a canvas target while other agents are waiting for it. Composer Tools use the existing workspace conversation commands to read history, choose models and settings, manage the queue, and send to another conversation. The receiving conversation records the source agent as the author, and the existing delegation runtime accounts for the receiving turn's execution.
+
+Canvas inspection lists one viewer per human account and identifies the currently active device for each viewer. The actor list includes individual devices and agents for presence and ownership. Following a human viewer tracks their most recently active device.
+
+Canvas agents can resolve a missing Asset reference and resume the existing generation request. Regenerating variants reuses the retained prompt, model, parameters and source references. Generating a fresh prompt also needs the original instruction and an identifiable reasoning model. If the required history is missing, the tool reports which input is unavailable. Media downloads and workspace ZIP exports use the signed-in requester’s download control.
+
 ## Runtime boundaries
 
 ### `src/shared`

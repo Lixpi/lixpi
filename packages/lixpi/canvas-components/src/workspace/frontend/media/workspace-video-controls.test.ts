@@ -117,6 +117,29 @@ afterEach(() => {
 })
 
 describe('WorkspaceVideoControls', () => {
+    it('expands the existing video in the follower pane and restores its original control surface', () => {
+        const {
+            controls,
+            video,
+        } = fixture()
+        const pane = document.createElement('div')
+        const requestFullscreen = vi.fn(async () => {})
+        video.requestFullscreen = requestFullscreen
+        document.body.append(pane)
+        controls.sync([node])
+
+        controls.setExpandedPreview(node.nodeId, pane)
+
+        expect(pane.querySelector('video')).toBe(video)
+        expect(pane.querySelector<HTMLElement>('.workspace-canvas-follow-media')?.inert).toBe(true)
+        expect(requestFullscreen).not.toHaveBeenCalled()
+
+        controls.setExpandedPreview(null, pane)
+
+        expect(pane.querySelector('video')).toBeNull()
+        expect(controls.element.querySelector('video')).toBe(video)
+    })
+
     it('mounts audible audio controls inside the node and preserves playback across updates', async () => {
         const {
             controls,

@@ -239,6 +239,31 @@ export class CanvasConversationRun {
             this.editor?.submitPersisted()
     }
 
+    async submitRegeneration(): Promise<void> {
+        const data = this.options.submittedData
+
+        if (
+            !data
+            || !this.options.regeneration
+            || !this.options.sourceGenerationRequestId
+        )
+            throw new Error('This output does not have a retained generation request.')
+
+        const {
+            imageOptions,
+            ...submission
+        } = data
+
+        await this.submit({
+            ...submission,
+            ...(imageOptions ? { imageOptions: {
+                ...imageOptions,
+                imageGenerationSize: imageOptions.imageGenerationSize as ImageGenerationSize,
+            } } : {}),
+            messages: [],
+        })
+    }
+
     private contentChanged(
         content: object,
         streaming: boolean,
@@ -442,6 +467,7 @@ export class CanvasConversationRun {
                 videoDuration: videoOptions?.videoDuration,
                 videoConfigGroups: videoOptions?.configGroups,
                 regeneration,
+                sourceGenerationRequestId: this.options.sourceGenerationRequestId,
                 videoSourceForExtension,
                 mediaBranchCandidateSnapshot,
                 workspaceContextSnapshot,

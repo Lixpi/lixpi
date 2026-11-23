@@ -9,6 +9,7 @@ import {
     type MediaPipelineOperationRequest,
     type MediaPipelinePorts,
     type MediaPipelineService,
+    type MediaPipelineRegenerationSource,
 } from '@lixpi/capability-system/backend'
 import {
     createMediaPipelineDocument,
@@ -22,6 +23,8 @@ import {
     type TransactOperation,
 } from '@lixpi/dynamodb-service'
 import {
+    type Asset,
+    type ConversationMessageNode,
     type ConversationTurn,
     type AgentOperation,
 } from '@lixpi/constants'
@@ -84,6 +87,10 @@ export type MediaPipelineAdapterPorts = {
     ) => Promise<void>
     payloads?: (context: MediaPipelineContext) => AgentPayloadPort
 }
+
+const fragmentText = (node: ConversationMessageNode): string => node.text ?? node.content?.map(fragmentText).join(
+    node.type === 'paragraph' ? '' : '\n',
+) ?? ''
 
 const terminal = new Set([
     'succeeded',
@@ -1071,6 +1078,73 @@ export class MediaPipelineAdapter {
                 assetId: pipeline.pipelineId,
             },
         )
+    }
+
+    async readRegenerationSource(
+        context: MediaPipelineContext,
+        asset: Asset,
+        fresh: boolean,
+    ): Promise<MediaPipelineRegenerationSource> {
+        await this.assertContext(context)
+        const operationId = asset.lineage?.mediaRunId
+        const conversationAssetId = asset.lineage?.sourceConversationAssetId
+
+        if (
+            !operationId
+            || !conversationAssetId
+            || asset.states.provenance !== 'sealed'
+        )
+            throw new Error('CANVAS_REGENERATION_HISTORY_UNAVAILABLE')
+
+        const sourceContext = {
+            ...context,
+            conversationAssetId,
+        }
+        const sourcePartition = partition(sourceContext)
+        const record = await this.repository.read<OperationRecord>(
+            sourcePartition,
+            operationKey(operationId),
+        )
+
+        if (
+            !record
+            || record.receipt.state !== 'succeeded'
+            || record.receipt.outputs.image?.assetId !== asset.assetId
+        )
+            throw new Error('CANVAS_REGENERATION_HISTORY_UNAVAILABLE')
+
+        const operation = await this.decodeOperation(sourceContext, record)
+
+        if (
+            operation.context.userId !== context.userId
+            || operation.context.organizationId !== context.organizationId
+            || operation.context.workspaceId !== context.workspaceId
+            || operation.context.conversationAssetId !== conversationAssetId
+            || operation.operationId !== operationId
+            || operation.inputHash !== asset.lineage?.promptFingerprint
+            || operation.node.modelId !== asset.lineage?.mediaModelId
+        )
+            throw new Error('CANVAS_REGENERATION_HISTORY_UNAVAILABLE')
+
+        if (!fresh)
+            return { operation }
+
+        const turn = await this.repository.read<ConversationTurn>(sourcePartition, `TURN#${operation.context.turnId}`)
+        const modelIds = turn?.settings.models.reasoningModelIds
+        const instruction = turn ? fragmentText(turn.fragment).trim() : undefined
+
+        if (
+            !modelIds
+            || modelIds.length !== 1
+            || !instruction
+        )
+            throw new Error('CANVAS_REGENERATION_ORIGINAL_INSTRUCTION_UNAVAILABLE')
+
+        return {
+            operation,
+            instruction,
+            reasoningModelId: modelIds[0],
+        }
     }
 
     private async decodeOperation(

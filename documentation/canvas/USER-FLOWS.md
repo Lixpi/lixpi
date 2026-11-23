@@ -303,7 +303,7 @@ sequenceDiagram
 
 ## Moving a Document
 
-Dragging a node disables pan and updates the node's DOM position live; on mouse-up the canvas reports the new positions, the store updates, and `WorkspaceService.updateCanvasState()` persists them immediately (unlike pan/zoom, which is debounced).
+Dragging a node disables pan and updates its position locally on each frame. Other participants receive coalesced previews over NATS. On release, the workspace saves the final geometry and broadcasts the accepted canvas revision. Camera motion follows the participant-view rules in [Workspace Model](WORKSPACE-MODEL.md#participant-views-and-shared-edits).
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%

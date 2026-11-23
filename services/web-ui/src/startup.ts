@@ -27,6 +27,7 @@ type WorkspaceConfig = {
 type StartupConfig = {
     auth: AuthClientInstance
     target: HTMLElement
+    onStartupSettled?: () => void
     loadWorkspace: (config: WorkspaceConfig) => Promise<WebClientServiceInstance>
 }
 
@@ -120,6 +121,7 @@ export class WebUiStartup {
     }
 
     private clearView(): void {
+        this.config.onStartupSettled?.()
         this.signIn.destroy()
         this.loading?.destroy()
         this.loading = undefined

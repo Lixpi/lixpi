@@ -1,6 +1,7 @@
 import {
     type AudioCanvasNode,
     type CanvasNode,
+    type CanvasCollaborationPresence,
     type DocumentMediaCanvasNode,
     type ImageCanvasNode,
     type VideoCanvasNode,
@@ -28,6 +29,10 @@ export type WorkspaceMediaNodeData = {
     media: MediaDescriptor | null
     framePending: boolean
 }
+type PlaybackView = NonNullable<CanvasCollaborationPresence['playback']>
+type MediaElement = HTMLVideoElement | HTMLAudioElement
+const playbackEvents = ['play', 'pause', 'ended', 'seeked', 'ratechange', 'volumechange', 'timeupdate', 'loadedmetadata'] as const
+
 export type WorkspaceMediaNodesOptions = {
     sources: WorkspaceMediaSources
     radius: number
@@ -44,6 +49,10 @@ export type WorkspaceMediaNodesOptions = {
         height: number
     }) => void
     onPlaybackReady?: (nodeId: string) => void
+    onPlaybackPresence?: (
+        playback: CanvasCollaborationPresence['playback'],
+        terminal: boolean,
+    ) => void
     onError: (error: unknown) => void
 }
 
@@ -78,6 +87,13 @@ const geometry: NodeGeometryPolicy<WorkspaceMediaNodeData> = {
 export class WorkspaceMediaNodes {
     readonly registry = new NodeRegistry()
     private readonly players = new Map<string, NativePlayback>()
+    private readonly unwatchPlayer = new Map<string, () => void>()
+    private following = false
+    private followedPlayback: PlaybackView | null = null
+    private savedPlayback: PlaybackView | null = null
+    private requestedPlay: MediaElement | null = null
+    private publishedPlayerId: string | null = null
+    private fullscreenPlayerId: string | null = null
     private readonly transient = new Map<string, string>()
     private readonly assetIds = new Map<string, string>()
     private readonly promoteOriginal = new Set<string>()
@@ -154,14 +170,14 @@ export class WorkspaceMediaNodes {
                     },
                     isImageVisible: node => Boolean(node.data.node.assetId),
                     onPlayback: (node, playback) => {
-                        if (playback)
-                            this.players.set(node.nodeId, playback)
-                        else
-                            this.players.delete(node.nodeId)
+                        this.setPlayer(node.nodeId, playback)
 
                         options.onPlaybackReady?.(node.nodeId)
                     },
-                    onReady: node => options.onPlaybackReady?.(node.nodeId),
+                    onReady: node => {
+                        this.reflectPlayback(node.nodeId, true)
+                        options.onPlaybackReady?.(node.nodeId)
+                    },
                     onIntrinsicSize: kind === 'video' ? (node, size) => options.onVideoIntrinsicSize?.({
                         nodeId: node.nodeId,
                         ...size,
@@ -250,6 +266,183 @@ export class WorkspaceMediaNodes {
         }
     }
 
+    private setPlayer(
+        nodeId: string,
+        player: NativePlayback | null,
+    ): void {
+        this.unwatchPlayer.get(nodeId)?.()
+        this.unwatchPlayer.delete(nodeId)
+
+        if (!player) {
+            this.players.delete(nodeId)
+
+            if (this.publishedPlayerId === nodeId) {
+                this.publishedPlayerId = null
+                this.options.onPlaybackPresence?.(null, true)
+            }
+
+            return
+        }
+
+        this.players.set(nodeId, player)
+
+        if (!this.options.onPlaybackPresence)
+            return
+
+        const listener = (event: Event) => {
+            if (event.type === 'loadedmetadata') {
+                this.reflectPlayback(nodeId, true)
+
+                return
+            }
+
+            if (
+                this.following
+                || (event.type === 'timeupdate' && this.publishedPlayerId !== nodeId)
+            )
+                return
+
+            this.publishedPlayerId = nodeId
+            const terminal = event.type !== 'timeupdate' && event.type !== 'volumechange'
+            this.options.onPlaybackPresence?.(
+                this.readPlayback(nodeId, player.element),
+                terminal,
+            )
+        }
+
+        const document = player.element.ownerDocument
+        const fullscreen = () => {
+            const active = document.fullscreenElement === player.element
+
+            if (
+                this.following
+                || (!active && this.fullscreenPlayerId !== nodeId)
+            )
+                return
+
+            this.fullscreenPlayerId = active ? nodeId : null
+            this.publishedPlayerId = nodeId
+            this.options.onPlaybackPresence?.(
+                this.readPlayback(nodeId, player.element),
+                true,
+            )
+        }
+
+        for (const event of playbackEvents)
+            player.element.addEventListener(event, listener)
+
+        document.addEventListener('fullscreenchange', fullscreen)
+
+        this.unwatchPlayer.set(nodeId, () => {
+            for (const event of playbackEvents)
+                player.element.removeEventListener(event, listener)
+
+            document.removeEventListener('fullscreenchange', fullscreen)
+        })
+        this.reflectPlayback(nodeId)
+    }
+
+    private readPlayback(
+        nodeId: string,
+        element: MediaElement,
+    ): PlaybackView {
+        return {
+            nodeId,
+            time: element.currentTime,
+            paused: element.paused || element.ended,
+            rate: element.playbackRate,
+            volume: element.volume,
+            muted: element.muted,
+            fullscreen: element.ownerDocument.fullscreenElement === element,
+        }
+    }
+
+    setFollowedPlayback(
+        following: boolean,
+        state: CanvasCollaborationPresence['playback'],
+    ): void {
+        const saved = this.savedPlayback
+        this.following = following
+        this.followedPlayback = following ? (state ?? null) : null
+
+        if (
+            saved
+            && saved.nodeId !== this.followedPlayback?.nodeId
+        ) {
+            this.savedPlayback = null
+            this.requestedPlay = null
+            const player = this.players.get(saved.nodeId)
+
+            if (player)
+                this.applyPlayback(
+                    player,
+                    saved,
+                    true,
+                )
+        }
+
+        if (this.followedPlayback)
+            this.reflectPlayback(this.followedPlayback.nodeId)
+    }
+
+    private reflectPlayback(
+        nodeId: string,
+        retry = false,
+    ): void {
+        const state = this.followedPlayback
+        const player = this.players.get(nodeId)
+
+        if (
+            !player
+            || state?.nodeId !== nodeId
+        )
+            return
+
+        this.savedPlayback ??= this.readPlayback(nodeId, player.element)
+        this.applyPlayback(
+            player,
+            state,
+            retry,
+        )
+    }
+
+    private applyPlayback(
+        player: NativePlayback,
+        state: PlaybackView,
+        retry: boolean,
+    ): void {
+        const element = player.element
+        const tolerance = state.paused ? 0.025 : 0.3
+
+        if (element.playbackRate !== state.rate)
+            element.playbackRate = state.rate
+
+        if (element.volume !== state.volume)
+            element.volume = state.volume
+
+        if (element.muted !== state.muted)
+            element.muted = state.muted
+
+        if (
+            element.readyState
+            && Math.abs(element.currentTime - state.time) > tolerance
+        )
+            element.currentTime = Number.isFinite(element.duration) ? Math.min(state.time, element.duration) : state.time
+
+        if (state.paused) {
+            this.requestedPlay = null
+
+            if (player.isPlaying)
+                player.pause()
+        } else if (
+            !player.isPlaying
+            && (retry || this.requestedPlay !== element)
+        ) {
+            this.requestedPlay = element
+            void player.play()
+        }
+    }
+
     getVideoElement(nodeId: string): HTMLVideoElement | null {
         const element = this.players.get(nodeId)?.element
 
@@ -282,6 +475,17 @@ export class WorkspaceMediaNodes {
         this.transient.clear()
         this.assetIds.clear()
         this.promoteOriginal.clear()
+
+        for (const stop of this.unwatchPlayer.values())
+            stop()
+
+        this.unwatchPlayer.clear()
+        this.followedPlayback = null
+        this.savedPlayback = null
+        this.requestedPlay = null
+        this.publishedPlayerId = null
+        this.fullscreenPlayerId = null
+        this.following = false
         this.players.clear()
     }
 }

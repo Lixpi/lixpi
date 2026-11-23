@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import {
     createConversationSettings,
+    type ConversationEvent,
+    type ConversationRun,
     type ConversationCreateRequest,
     type ConversationGetRequest,
     type ConversationListRequest,
@@ -33,7 +35,7 @@ const commandFields: Record<keyof ConversationRequests, string[]> = {
     list: ['cursor', 'limit'],
     get: ['conversationAssetId', 'clientMessageId'],
     messages: ['conversationAssetId', 'cursor', 'limit'],
-    submit: ['conversationAssetId', 'clientMessageId', 'fragment', 'references', 'settingsRevision', 'midRunPolicy', 'interruptId'],
+    submit: ['conversationAssetId', 'clientMessageId', 'fragment', 'references', 'settingsRevision', 'midRunPolicy', 'interruptId', 'humanActionResult'],
     settings: ['conversationAssetId', 'expectedRevision', 'patch'],
     stop: ['conversationAssetId', 'runId', 'clientCommandId'],
     queue: ['conversationAssetId', 'expectedRevision', 'clientCommandId', 'action', 'turnIds'],
@@ -258,6 +260,19 @@ export class ConversationProtocol {
             if (data.interruptId !== undefined)
                 assertConversationId(data.interruptId)
 
+            if (data.humanActionResult !== undefined) {
+                const result = record(data.humanActionResult)
+
+                if (
+                    !data.interruptId
+                    || Object.keys(result).some(key => key !== 'assetId')
+                )
+                    throw new Error('INVALID_CONVERSATION_HUMAN_ACTION')
+
+                if (result.assetId !== undefined)
+                    assertConversationId(result.assetId)
+            }
+
             this.validateFragment(data.fragment)
 
             if (
@@ -377,6 +392,34 @@ export class ConversationProtocol {
             throw new Error('EMPTY_CONVERSATION_MESSAGE')
     }
 }
+
+export const conversationRunForViewer = (
+    run: ConversationRun,
+    userId: string,
+): ConversationRun => {
+    if (
+        !run.humanAction
+        || run.humanAction.userId === userId
+    )
+        return run
+
+    const {
+        humanAction: _humanAction,
+        interruptId: _interruptId,
+        ...visible
+    } = run
+
+    return visible
+}
+
+export const conversationEventForViewer = (
+    event: ConversationEvent,
+    userId: string,
+): ConversationEvent =>
+    event.type === 'run.state' ? {
+        ...event,
+        payload: conversationRunForViewer(event.payload, userId),
+    } : event
 
 export const conversationMessageText = (node: ConversationMessageNode): string => node.text ?? (node.content ?? []).map(conversationMessageText).join(
     node.type === 'aiUserMessage' ? '\n' : '',

@@ -37,6 +37,76 @@
     background: var(--canvas-background, transparent);
 }
 
+.workspace-canvas-follow {
+    --workspace-follow-left-inset: var(--application-panel-left-inset, 0px);
+    --workspace-follow-right-inset: 0px;
+    --workspace-follow-min-viewport: 64px;
+    --workspace-follow-available: max(
+        min(var(--workspace-follow-min-viewport), calc(100% - var(--workspace-follow-left-inset))),
+        calc(100% - var(--workspace-follow-left-inset) - var(--workspace-follow-right-inset))
+    );
+    --workspace-follow-margin: clamp(0px, calc((var(--workspace-follow-available) - var(--workspace-follow-min-viewport)) / 2), 12px);
+
+    position: absolute;
+    inset-block-start: calc(max(var(--window-title-bar-inset, 0px), var(--window-title-bar-control-top, 9px) + var(--window-title-bar-control-size, 34px)) + 8px);
+    inset-inline-start: calc(var(--workspace-follow-left-inset) + var(--workspace-follow-margin));
+    z-index: calc(var(--side-panel-surface-z-index, 10030) + 1);
+    inline-size: var(--workspace-follow-width);
+    max-inline-size: calc(var(--workspace-follow-available) - 2 * var(--workspace-follow-margin));
+    overflow-x: auto;
+    scrollbar-width: thin;
+    overscroll-behavior-inline: contain;
+    border-radius: var(--canvas-control-radius, 9999px);
+    background: var(--canvas-surface-raised, #fff);
+}
+
+.workspace-canvas-follow svg {
+    display: block;
+}
+
+.workspace-canvas-right-side-panel-open .workspace-canvas-follow {
+    --workspace-follow-right-inset: var(--workspace-right-side-panel-width, 0px);
+}
+
+.workspace-canvas-follow-caret,
+.workspace-canvas-follow-caret-mark,
+.workspace-canvas-awareness {
+    position: absolute;
+    inset: 0 auto auto 0;
+    z-index: 9993;
+    pointer-events: none;
+}
+
+.workspace-canvas-follow-caret-mark {
+    background: var(--canvas-accent, #366cf2);
+}
+
+.workspace-canvas-follow-range {
+    opacity: 0.3;
+}
+
+.workspace-canvas-follow-media {
+    position: absolute;
+    inset: 0;
+    z-index: 9994;
+    overflow: hidden;
+    background: #000;
+    pointer-events: none;
+}
+
+.workspace-canvas-follow-composer-focus {
+    outline: 1px solid var(--canvas-accent, #366cf2);
+    outline-offset: 2px;
+}
+
+.workspace-canvas-awareness-selection {
+    position: absolute;
+    inset: 0 auto auto 0;
+    outline: 2px dashed var(--canvas-accent, #366cf2);
+    outline-offset: 3px;
+    border-radius: var(--canvas-control-radius, 6px);
+}
+
 // Bottom action panels flank the centered "Talk to me" composer pill. They are
 // the shared ui-kit action panel, smaller than the composer and vertically
 // centered on it; these rules only place them.

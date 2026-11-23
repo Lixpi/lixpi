@@ -17,6 +17,7 @@ import {
 import { AsyncLocalStorageProviderSingleton } from '@langchain/core/singletons'
 import {
     type ConversationTurn,
+    type ConversationHumanAction,
 } from '@lixpi/constants'
 import {
     type ConversationRepository,
@@ -96,7 +97,10 @@ export class AgentInput {
 }
 
 export class AgentInputPending extends Error {
-    constructor(readonly interruptId: string) {
+    constructor(
+        readonly interruptId: string,
+        readonly humanAction?: ConversationHumanAction,
+    ) {
         super('AGENT_INPUT_PENDING')
     }
 }
@@ -104,6 +108,7 @@ export class AgentInputPending extends Error {
 type InputResult = {
     payload: AgentPayload
     responseMessageId: string
+    admittedAssetId?: string
 }
 
 // The harness saves the native request tool result before reaching this boundary.
@@ -121,6 +126,7 @@ export class AgentInputTools {
                 threadId: string
             }
             answer: (interruptId: string) => Promise<ConversationTurn | undefined>
+            admit?: (assetId: string) => void
             question: (question: string) => Promise<void>
             responseId: (answer: ConversationTurn) => string
             selectResponse: (messageId: string) => Promise<void>
@@ -131,14 +137,18 @@ export class AgentInputTools {
         const resolved: BaseMessage[] = []
 
         for (const message of messages) {
-            const question = this.question(message)
+            const request = this.request(message)
 
-            if (!question) {
+            if (!request) {
                 resolved.push(message)
 
                 continue
             }
 
+            const {
+                question,
+                humanAction,
+            } = request
             const native = message as ToolMessage
             const identity = createHash('sha256')
                 .update(
@@ -166,7 +176,7 @@ export class AgentInputTools {
                 ) {
                     await this.ports.question(question)
 
-                    throw new AgentInputPending(state.interruptId)
+                    throw new AgentInputPending(state.interruptId, humanAction)
                 }
 
                 if (answer)
@@ -176,7 +186,7 @@ export class AgentInputTools {
                         signal: this.owner.abort.signal,
                         answer: {
                             interruptId: answer.interruptId!,
-                            text: conversationMessageText(answer.fragment),
+                            text: answer.humanActionAnswer ? JSON.stringify(answer.humanActionAnswer) : conversationMessageText(answer.fragment),
                         },
                     })
 
@@ -195,7 +205,7 @@ export class AgentInputTools {
                     Buffer.from(
                         JSON.stringify({
                             status: 'completed',
-                            answer: state.answer,
+                            ...(accepted.humanActionAnswer ? { result: accepted.humanActionAnswer } : { answer: state.answer }),
                         }),
                     ),
                     key,
@@ -203,6 +213,7 @@ export class AgentInputTools {
                 result = {
                     payload: prepared.payload,
                     responseMessageId: this.ports.responseId(accepted),
+                    ...(accepted.humanActionAnswer?.kind === 'file' ? { admittedAssetId: accepted.humanActionAnswer.assetId } : {}),
                 }
                 await this.owner.completeInputAnswer(
                     accepted,
@@ -222,6 +233,9 @@ export class AgentInputTools {
                 )
             }
 
+            if (result.admittedAssetId)
+                this.ports.admit?.(result.admittedAssetId)
+
             await this.ports.selectResponse(result.responseMessageId)
             resolved.push(
                 new ToolMessage({
@@ -237,10 +251,12 @@ export class AgentInputTools {
         return resolved
     }
 
-    private question(message: BaseMessage): string | undefined {
+    private request(message: BaseMessage): {
+        question: string
+        humanAction?: ConversationHumanAction
+    } | undefined {
         if (
             message.getType() !== 'tool'
-            || (message as ToolMessage).name !== 'request_user_input'
             || typeof message.content !== 'string'
         )
             return undefined
@@ -248,12 +264,42 @@ export class AgentInputTools {
         try {
             const value = JSON.parse(message.content)
 
-            return value?.status === 'input-required'
-                && typeof value.question === 'string'
-                && value.question.trim()
-                && value.question.length <= 2000
-                ? value.question
-                : undefined
+            if (
+                value?.status !== 'input-required'
+                || typeof value.question !== 'string'
+                || !value.question.trim()
+                || value.question.length > 2000
+            )
+                return undefined
+
+            const name = (message as ToolMessage).name
+
+            if (name === 'request_user_input')
+                return { question: value.question }
+
+            const expected = name === 'download_canvas_media'
+                ? 'download'
+                : name === 'export_canvas_workspace'
+                    ? 'workspace-export'
+                    : name === 'request_canvas_file'
+                        ? 'file'
+                        : name === 'request_canvas_identity_attestation'
+                            ? 'attestation'
+                            : name === 'request_canvas_provider_verification'
+                                ? 'provider-verification'
+                                : undefined
+
+            if (
+                !expected
+                || value.humanAction?.kind !== expected
+                || value.humanAction.userId !== this.owner.job.userId
+            )
+                return undefined
+
+            return {
+                question: value.question,
+                humanAction: value.humanAction,
+            }
         } catch {
             return undefined
         }

@@ -10,6 +10,10 @@ export * from './workspace-canvas-editors.ts'
 export * from './workspace-canvas-host.ts'
 export * from './workspace-canvas-contracts.ts'
 export * from './workspace-canvas-assets.ts'
+export {
+    WorkspaceAssetProjection,
+    WorkspaceAssetSynchronization,
+} from '../../shared/assets/workspace-assets.ts'
 export * from './workspace-canvas-cleanup.ts'
 export * from './workspace-canvas-context.ts'
 export * from './workspace-canvas-interactions.ts'

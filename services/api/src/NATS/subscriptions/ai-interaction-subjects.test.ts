@@ -292,6 +292,51 @@ describe('AI interaction message routing', () => {
         )
     })
 
+    it('loads the original accepted instruction for an authorized legacy canvas regeneration', async () => {
+        const oldPrompt = {
+            type: 'aiUserMessage',
+            content: [{
+                type: 'paragraph',
+                content: [{
+                    type: 'text',
+                    text: 'The original accepted instruction',
+                }],
+            }],
+        }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue({
+            generationRequestId: 'retained',
+            conversationAssetId: 'conv-1',
+            organizationId: 'org-1',
+            userId: 'user-1',
+            status: 'completed',
+        })
+        mocks.mediaRequestService.getCheckpoint.mockResolvedValue({ promptDocument: oldPrompt })
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            sourceGenerationRequestId: 'retained',
+            mediaGenerationRequest: {
+                generationRequestId: 'new-request',
+                reasoningModelIds: baseMessageData.aiReasoningModels,
+                imageModelIds: [],
+                videoModelIds: [],
+                regeneration: {
+                    mode: 'regenerate-prompt',
+                    forceFreshLineage: true,
+                },
+            },
+        })
+        await flushPromises()
+
+        expect(mocks.mediaRequestModel.getAuthorized).toHaveBeenCalledWith({
+            generationRequestId: 'retained',
+            workspaceId: 'workspace-1',
+            userId: 'user-1',
+        })
+        expect(mocks.mediaRequestService.create).toHaveBeenCalledWith(expect.objectContaining({
+            checkpoint: expect.objectContaining({ promptDocument: oldPrompt }),
+        }))
+    })
+
     it('forwards video selections without accepting browser-supplied Capability runtime state', async () => {
         const mediaGenerationRequest = {
             generationRequestId: 'video-request',

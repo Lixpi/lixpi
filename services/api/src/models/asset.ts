@@ -858,7 +858,46 @@ const buildChangedAssetSearchKeyDeletes = async (
     )
 }
 
-const getWorkspaceMutationOperations = async ({
+type AssetMutationWorkspace = {
+    organizationId?: string
+    canvasState?: AssetWorkspaceMutation['canvasState']
+    canvasStateUpdatedAt?: number
+    updatedAt?: number
+    deletingAt?: number
+}
+
+const readAssetMutationWorkspace = async (
+    workspaceId: string,
+    operation: 'attach' | 'detach' | 'replace',
+): Promise<AssetMutationWorkspace | undefined> =>
+    (await dynamoDBService.getItem({
+        tableName: getDynamoDbTableStageName(
+            'WORKSPACES',
+            ORG_NAME,
+            STAGE,
+        ),
+        key: { workspaceId },
+        consistentRead: true,
+        origin: `Asset.${operation}.getWorkspace`,
+    })) as AssetMutationWorkspace | undefined
+
+const assertAssetMutationWorkspace = (
+    workspace: AssetMutationWorkspace | undefined,
+    expectedCanvasStateUpdatedAt: number,
+): AssetMutationWorkspace => {
+    if (!workspace)
+        throw new Error('WORKSPACE_NOT_FOUND')
+
+    if (workspace.deletingAt)
+        throw new Error('WORKSPACE_DELETING')
+
+    if ((workspace.canvasStateUpdatedAt ?? workspace.updatedAt) !== expectedCanvasStateUpdatedAt)
+        throw new Error('STALE_CANVAS_STATE')
+
+    return workspace
+}
+
+export const getWorkspaceMutationOperations = async ({
     workspaceId,
     mutation,
     assetId,
@@ -873,32 +912,7 @@ const getWorkspaceMutationOperations = async ({
     operation: 'attach' | 'detach'
     allowExistingTargetMembership?: boolean
 }): Promise<TransactOperation[]> => {
-    const workspace = (await dynamoDBService.getItem({
-        tableName: getDynamoDbTableStageName(
-            'WORKSPACES',
-            ORG_NAME,
-            STAGE,
-        ),
-        key: { workspaceId },
-        consistentRead: true,
-        origin: `Asset.${operation}.getWorkspace`,
-    })) as
-        | {
-            canvasState?: { nodes?: AssetCanvasNode[] }
-            canvasStateUpdatedAt?: number
-            updatedAt?: number
-            deletingAt?: number
-        }
-        | undefined
-
-    if (!workspace)
-        throw new Error('WORKSPACE_NOT_FOUND')
-
-    if (workspace.deletingAt)
-        throw new Error('WORKSPACE_DELETING')
-
-    if ((workspace.canvasStateUpdatedAt ?? workspace.updatedAt) !== mutation.expectedCanvasStateUpdatedAt)
-        throw new Error('STALE_CANVAS_STATE')
+    const workspace = assertAssetMutationWorkspace(await readAssetMutationWorkspace(workspaceId, operation), mutation.expectedCanvasStateUpdatedAt)
 
     assertSingleAssetMembershipMutation({
         beforeNodes: workspace.canvasState?.nodes ?? [],
@@ -917,40 +931,107 @@ const getWorkspaceMutationOperations = async ({
         }
     }
 
-    return [
-        {
-            type: 'update',
-            tableName: getDynamoDbTableStageName(
-                'WORKSPACES',
-                ORG_NAME,
-                STAGE,
-            ),
-            key: { workspaceId },
-            updates: {
-                canvasState: mutation.canvasState,
-                canvasStateUpdatedAt: mutation.canvasStateUpdatedAt,
-                updatedAt: mutation.canvasStateUpdatedAt,
-            },
-            conditionExpression: '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt)) AND attribute_not_exists(#deletingAt)',
-            expressionAttributeNames: {
-                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
-                '#updatedAt': 'updatedAt',
-                '#deletingAt': 'deletingAt',
-            },
-            expressionAttributeValues: { ':expectedCanvasStateUpdatedAt': mutation.expectedCanvasStateUpdatedAt },
-        },
-        {
-            type: 'update',
-            tableName: getDynamoDbTableStageName(
-                'WORKSPACES_META',
-                ORG_NAME,
-                STAGE,
-            ),
-            key: { workspaceId },
-            updates: { updatedAt: mutation.canvasStateUpdatedAt },
-        },
-    ]
+    return buildAssetWorkspaceWrite(workspaceId, mutation)
 }
+
+const buildAssetWorkspaceWrite = (
+    workspaceId: string,
+    mutation: AssetWorkspaceMutation,
+): TransactOperation[] => [
+    {
+        type: 'update',
+        tableName: getDynamoDbTableStageName(
+            'WORKSPACES',
+            ORG_NAME,
+            STAGE,
+        ),
+        key: { workspaceId },
+        updates: {
+            canvasState: mutation.canvasState,
+            canvasStateUpdatedAt: mutation.canvasStateUpdatedAt,
+            updatedAt: mutation.canvasStateUpdatedAt,
+        },
+        conditionExpression: '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt)) AND attribute_not_exists(#deletingAt)',
+        expressionAttributeNames: {
+            '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+            '#updatedAt': 'updatedAt',
+            '#deletingAt': 'deletingAt',
+        },
+        expressionAttributeValues: { ':expectedCanvasStateUpdatedAt': mutation.expectedCanvasStateUpdatedAt },
+    },
+    {
+        type: 'update',
+        tableName: getDynamoDbTableStageName(
+            'WORKSPACES_META',
+            ORG_NAME,
+            STAGE,
+        ),
+        key: { workspaceId },
+        updates: { updatedAt: mutation.canvasStateUpdatedAt },
+    },
+]
+
+const buildCanvasPlacementReferenceOperation = (
+    previous: AssetReference | undefined,
+    next: AssetReference,
+): TransactOperation => {
+    const {
+        assetId,
+        referenceKey,
+    } = next
+
+    if (
+        !next.nodeIds?.length
+        && !next.surfaceIds?.length
+    )
+        return {
+            type: 'delete',
+            tableName: assetReferencesTableName(),
+            key: {
+                assetId,
+                referenceKey,
+            },
+            conditionExpression: '#updatedAt = :expectedUpdatedAt',
+            expressionAttributeNames: { '#updatedAt': 'updatedAt' },
+            expressionAttributeValues: { ':expectedUpdatedAt': previous?.updatedAt },
+        }
+
+    return {
+        type: 'put',
+        tableName: assetReferencesTableName(),
+        item: next,
+        conditionExpression: previous ? '#updatedAt = :expectedUpdatedAt' : 'attribute_not_exists(#referenceKey)',
+        expressionAttributeNames: previous ? { '#updatedAt': 'updatedAt' } : { '#referenceKey': 'referenceKey' },
+        ...(previous ? { expressionAttributeValues: { ':expectedUpdatedAt': previous.updatedAt } } : {}),
+    }
+}
+
+const buildCanvasPlacementAssetOperations = async (
+    previous: Asset,
+    next: Asset,
+): Promise<TransactOperation[]> => [
+    {
+        type: 'update',
+        tableName: assetsTableName(),
+        key: { assetId: next.assetId },
+        updates: {
+            referenceCount: next.referenceCount,
+            states: next.states,
+            revision: next.revision,
+            updatedAt: next.updatedAt,
+        },
+        conditionExpression: '#revision = :expectedRevision AND #referenceCount = :expectedReferenceCount',
+        expressionAttributeNames: {
+            '#revision': 'revision',
+            '#referenceCount': 'referenceCount',
+        },
+        expressionAttributeValues: {
+            ':expectedRevision': previous.revision,
+            ':expectedReferenceCount': previous.referenceCount,
+        },
+    },
+    ...await buildAssetProjectionOperations(next),
+]
 
 type CreateAssetInput =
     & Pick<
@@ -1737,6 +1818,7 @@ const AssetModel = {
         }
     },
     updateMetadata: async ({
+        withWrite,
         assetId,
         requester,
         expectedRevision,
@@ -1750,6 +1832,7 @@ const AssetModel = {
         title?: string
         descriptor?: Asset['descriptor']
         depictionMedium?: Asset['depictionMedium']
+        withWrite?: <T>(write: () => Promise<T>) => Promise<T>
     }): Promise<Asset | { error: string }> => {
         const authorized = await getAuthorizedAsset({
             assetId,
@@ -1792,7 +1875,7 @@ const AssetModel = {
             revision: authorized.revision + 1,
             updatedAt: now,
         }
-        await dynamoDBService.transactWrite({
+        const write = async () => await dynamoDBService.transactWrite({
             operations: [
                 {
                     type: 'update',
@@ -1814,6 +1897,12 @@ const AssetModel = {
             ],
             origin: 'Asset.updateMetadata',
         })
+
+        if (withWrite)
+            await withWrite(write)
+        else
+            await write()
+
         publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
 
         return next
@@ -3063,12 +3152,196 @@ const AssetModel = {
             deleting,
         }
     },
+    replaceCanvasPlacement: async ({
+        workspaceId,
+        nodeId,
+        previousAssetId,
+        assetId,
+        expectedCanvasStateUpdatedAt,
+        requester,
+    }: {
+        workspaceId: string
+        nodeId: string
+        previousAssetId: string
+        assetId: string
+        expectedCanvasStateUpdatedAt: number
+        requester: AssetRequesterContext
+    }): Promise<{ success: true } | { error: string }> => {
+        if (!requester.editableWorkspaceIds.includes(workspaceId))
+            return { error: 'PERMISSION_DENIED' }
+
+        const workspace = assertAssetMutationWorkspace(await readAssetMutationWorkspace(workspaceId, 'replace'), expectedCanvasStateUpdatedAt)
+        const canvasState = workspace.canvasState
+        const node = canvasState?.nodes.find(item => item.nodeId === nodeId)
+
+        if (
+            !canvasState
+            || !node
+        )
+            return { error: 'CANVAS_NODE_NOT_FOUND' }
+
+        if (
+            node.assetId === assetId
+            && previousAssetId === assetId
+        )
+            return { success: true }
+
+        if (
+            node.assetId !== previousAssetId
+            || !['image', 'video', 'audio', 'mediaDocument'].includes(node.type ?? '')
+            || node.generatedBy
+            || node.generationProgress
+        )
+            return { error: 'CANVAS_MEDIA_NODE_NOT_REPLACEABLE' }
+
+        const [previous, replacement] = await Promise.all([
+            getAuthorizedAsset({
+                assetId: previousAssetId,
+                requester,
+            }),
+            getAuthorizedAsset({
+                assetId,
+                requester,
+            }),
+        ])
+
+        if ('error' in previous)
+            return previous
+
+        if ('error' in replacement)
+            return replacement
+
+        if (
+            previous.organizationId !== workspace.organizationId
+            || replacement.organizationId !== workspace.organizationId
+        )
+            return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+
+        if (
+            replacement.scope === 'workspace'
+            && replacement.scopeOwnerId !== workspaceId
+        )
+            return { error: 'SCOPE_DENIES_WORKSPACE' }
+
+        const kind = node.type === 'mediaDocument' ? 'document' : node.type
+
+        if (
+            replacement.media?.kind !== kind
+            || previous.media?.kind !== kind
+        )
+            return { error: 'CANVAS_MEDIA_KIND_MISMATCH' }
+
+        if (
+            replacement.states.lifecycle !== 'active'
+            || replacement.media?.renditions.original?.status !== 'ready'
+        )
+            return { error: 'CANVAS_MEDIA_NOT_READY' }
+
+        const referenceKey = buildAssetWorkspaceReferenceKey(workspaceId)
+        const [previousReference, replacementReference] = await Promise.all([
+            getReference(previousAssetId, referenceKey),
+            getReference(assetId, referenceKey),
+        ])
+
+        if (
+            !previousReference?.nodeIds?.includes(nodeId)
+            || replacementReference?.nodeIds?.includes(nodeId)
+        )
+            return { error: 'CANVAS_ASSET_REFERENCE_MISMATCH' }
+
+        const now = Math.max(
+            Date.now(),
+            expectedCanvasStateUpdatedAt + 1,
+            previousReference.updatedAt + 1,
+            (replacementReference?.updatedAt ?? 0) + 1,
+        )
+        const remainingNodeIds = previousReference.nodeIds.filter(id => id !== nodeId)
+        const removesReference = !remainingNodeIds.length && !previousReference.surfaceIds?.length
+        const referenceCount = previous.referenceCount - (removesReference ? 1 : 0)
+
+        if (referenceCount < 0)
+            return { error: 'REFERENCE_COUNT_CORRUPT' }
+
+        const previousAfter: Asset = {
+            ...previous,
+            referenceCount,
+            revision: previous.revision + 1,
+            updatedAt: now,
+            states: referenceCount === 0 ? {
+                ...previous.states,
+                lifecycle: 'deleting',
+            } : previous.states,
+        }
+        const replacementAfter: Asset = {
+            ...replacement,
+            referenceCount: replacement.referenceCount + (replacementReference ? 0 : 1),
+            revision: replacement.revision + 1,
+            updatedAt: now,
+        }
+        const operations = [
+            ...buildAssetWorkspaceWrite(
+                workspaceId,
+                {
+                    expectedCanvasStateUpdatedAt,
+                    canvasStateUpdatedAt: now,
+                    canvasState: {
+                        ...canvasState,
+                        nodes: canvasState.nodes.map(
+                            item => item.nodeId === nodeId ? {
+                                ...item,
+                                assetId,
+                            } : item,
+                        ),
+                    },
+                },
+            ),
+            buildCanvasPlacementReferenceOperation(
+                previousReference,
+                {
+                    ...previousReference,
+                    nodeIds: remainingNodeIds,
+                    updatedAt: now,
+                },
+            ),
+            buildCanvasPlacementReferenceOperation(
+                replacementReference,
+                {
+                    assetId,
+                    referenceKey,
+                    type: 'workspace',
+                    workspaceId,
+                    nodeIds: [...replacementReference?.nodeIds ?? [], nodeId],
+                    surfaceIds: replacementReference?.surfaceIds ?? [],
+                    createdAt: replacementReference?.createdAt ?? now,
+                    updatedAt: now,
+                },
+            ),
+            ...await buildCanvasPlacementAssetOperations(previous, previousAfter),
+            ...await buildCanvasPlacementAssetOperations(replacement, replacementAfter),
+        ]
+        await dynamoDBService.transactWrite({
+            operations,
+            origin: 'Asset.replaceCanvasPlacement',
+        })
+        publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, previousAfter)
+        publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, replacementAfter)
+
+        if (referenceCount === 0)
+            await enqueueAssetDeletion({
+                organizationId: previous.organizationId,
+                assetId: previousAssetId,
+            })
+
+        return { success: true }
+    },
     detachCatalogReference: async ({
         assetId,
         requester,
+        expectedRevision,
     }: {
         assetId: string
         requester: AssetRequesterContext
+        expectedRevision?: number
     }): Promise<{
         success: true
         deleting: boolean
@@ -3083,6 +3356,9 @@ const AssetModel = {
 
         if (authorized.ownerUserId !== requester.userId)
             return { error: 'PERMISSION_DENIED' }
+
+        if (expectedRevision !== undefined && expectedRevision !== authorized.revision)
+            return { error: 'REVISION_CONFLICT' }
 
         const referenceKey = buildAssetCatalogReferenceKey(authorized.scope, authorized.scopeOwnerId)
         const reference = await getReference(assetId, referenceKey)

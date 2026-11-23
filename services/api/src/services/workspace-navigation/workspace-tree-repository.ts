@@ -152,13 +152,13 @@ export type WorkspaceTreeChange =
 // How many storage items a change writes, so a caller can split a large
 // change set into commits that fit one transaction.
 export const workspaceTreeChangeItemCount = (change: WorkspaceTreeChange): number => {
-    if (change.type === 'createWorkspace')
-        return 3
-
     if (
-        change.type === 'patchWorkspace'
+        change.type === 'createWorkspace'
         || change.type === 'deleteWorkspace'
     )
+        return 3
+
+    if (change.type === 'patchWorkspace')
         return 2
 
     return 1

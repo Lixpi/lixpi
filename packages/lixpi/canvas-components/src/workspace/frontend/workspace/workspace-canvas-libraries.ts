@@ -1,6 +1,7 @@
 import {
     type AssetMeta,
     type CanvasGeometryUpdate,
+    type CanvasCollaborationPresence,
     type CanvasRightSidePanelMode,
     type CanvasState,
 } from '@lixpi/constants'
@@ -27,6 +28,8 @@ import {
     type WorkspaceCanvasNodeInsertion,
 } from './workspace-canvas-contracts.ts'
 
+type LibraryView = NonNullable<CanvasCollaborationPresence['library']>
+
 export type WorkspaceCanvasLibrariesPorts = {
     host: WorkspaceCanvasHost
     document: Document
@@ -44,6 +47,7 @@ export type WorkspaceCanvasLibrariesPorts = {
     }) => Promise<CanvasState>
     commit: (state: CanvasState) => void
     applyGeometry: (geometry: CanvasGeometryUpdate) => void
+    onViewChange?: (view: CanvasCollaborationPresence['library']) => void
 }
 
 export class WorkspaceCanvasLibraries {
@@ -51,6 +55,14 @@ export class WorkspaceCanvasLibraries {
     private artifact: ArtifactLibraryPanelInstance | null = null
     private capability: CapabilityLibraryPanelInstance | null = null
     private generation = 0
+    private following = false
+    private followed: LibraryView | null = null
+    private readonly localViews = new Map<LibraryView['kind'], LibraryView>()
+    private mounted: {
+        kind: LibraryView['kind']
+        element: HTMLElement
+    } | null = null
+    private displayedSelection: string | null | undefined
 
     constructor(private readonly ports: WorkspaceCanvasLibrariesPorts) {}
 
@@ -66,14 +78,29 @@ export class WorkspaceCanvasLibraries {
                 lifetime.own(() => this.destroyCapability())
                 host.appendChild(library.element)
                 void library.load()
+                this.observeView(
+                    'capabilities',
+                    library.element,
+                    lifetime,
+                )
             } else if (mode === 'artifacts') {
                 const library = this.ensureArtifact()
                 lifetime.own(() => library.unmount())
                 library.mountInto(host)
+                this.observeView(
+                    'artifacts',
+                    library.rootEl,
+                    lifetime,
+                )
             } else if (mode === 'media') {
                 const library = this.ensureMedia()
                 lifetime.own(() => library.unmount())
                 library.mountInto(host)
+                this.observeView(
+                    'media',
+                    library.rootEl,
+                    lifetime,
+                )
             } else
                 return null
         } catch (error) {
@@ -83,6 +110,177 @@ export class WorkspaceCanvasLibraries {
         }
 
         return () => lifetime.destroy()
+    }
+
+    setFollowedView(
+        following: boolean,
+        view: CanvasCollaborationPresence['library'],
+    ): void {
+        const changed = following !== this.following
+        this.following = following
+        this.followed = view ?? null
+
+        if (
+            following
+            || changed
+        )
+            this.reflectView()
+    }
+
+    private readView(kind: LibraryView['kind']): LibraryView {
+        const source = this.following ? this.followed : this.localViews.get(kind)
+
+        return source?.kind === kind ? source : {
+            kind,
+            selectedId: null,
+        }
+    }
+
+    private scrollElement(view: LibraryView): HTMLElement | null {
+        return this.mounted?.element.querySelector<HTMLElement>(view.selectedId ? '.media-library-inspector' : '.media-library-browser') ?? null
+    }
+
+    private rememberSelection(
+        kind: LibraryView['kind'],
+        selectedId: string | null,
+    ): void {
+        if (this.following)
+            return
+
+        this.displayedSelection = selectedId
+        const view = {
+            kind,
+            selectedId,
+            scrollTop: 0,
+        }
+        this.localViews.set(kind, view)
+
+        if (kind === this.mounted?.kind)
+            this.ports.onViewChange?.(view)
+    }
+
+    private observeView(
+        kind: LibraryView['kind'],
+        element: HTMLElement,
+        lifetime: Lifetime,
+    ): void {
+        if (!this.ports.onViewChange)
+            return
+
+        const mounted = {
+            kind,
+            element,
+        }
+        this.mounted = mounted
+        this.displayedSelection = undefined
+        const scroll = (event: Event) => {
+            if (
+                this.following
+                || this.mounted !== mounted
+            )
+                return
+
+            const current = this.readView(kind)
+            const target = this.scrollElement(current)
+
+            if (
+                !target
+                || event.target !== target
+            )
+                return
+
+            const view = {
+                ...current,
+                scrollTop: target.scrollTop,
+            }
+            this.localViews.set(kind, view)
+            this.ports.onViewChange?.(view)
+        }
+        const observer = new MutationObserver(() => {
+            if (
+                this.following
+                && this.mounted === mounted
+            )
+                this.reflectScroll(
+                    this.readView(kind),
+                )
+        })
+        observer.observe(
+            element,
+            {
+                childList: true,
+                subtree: true,
+            },
+        )
+        element.addEventListener(
+            'scroll',
+            scroll,
+            true,
+        )
+        lifetime.own(() => {
+            observer.disconnect()
+            element.removeEventListener(
+                'scroll',
+                scroll,
+                true,
+            )
+
+            if (this.mounted !== mounted)
+                return
+
+            this.mounted = null
+
+            if (!this.following)
+                this.ports.onViewChange?.(null)
+        })
+
+        this.reflectView()
+
+        if (!this.following)
+            this.ports.onViewChange(
+                this.readView(kind),
+            )
+    }
+
+    private reflectView(): void {
+        const kind = this.mounted?.kind
+
+        if (!kind)
+            return
+
+        const view = this.readView(kind)
+
+        if (view.selectedId !== this.displayedSelection) {
+            this.displayedSelection = view.selectedId
+
+            switch (kind) {
+                case 'media':
+                    this.media?.showAsset(view.selectedId)
+
+                    break
+                case 'artifacts':
+                    this.artifact?.showAsset(view.selectedId)
+
+                    break
+                case 'capabilities':
+                    this.capability?.showCapability(view.selectedId)
+
+                    break
+            }
+        }
+
+        this.reflectScroll(view)
+    }
+
+    private reflectScroll(view: LibraryView): void {
+        const element = this.scrollElement(view)
+
+        if (
+            element
+            && view.scrollTop !== undefined
+            && Math.abs(element.scrollTop - view.scrollTop) > 1
+        )
+            element.scrollTop = view.scrollTop
     }
 
     showMediaAsset(assetId: string): void {
@@ -95,6 +293,8 @@ export class WorkspaceCanvasLibraries {
 
     release(): void {
         this.generation++
+        this.localViews.clear()
+        this.displayedSelection = undefined
         const cleanup = new Lifetime()
         const media = this.media
         const artifact = this.artifact
@@ -119,6 +319,7 @@ export class WorkspaceCanvasLibraries {
             this.media = createMediaLibraryPanel({
                 ...this.ports.createLibraryPorts(),
                 tooltipHideDelayMs: this.ports.host.settings.helpTooltip.interactiveHideDelayMs,
+                onSelectionChange: assetId => this.rememberSelection('media', assetId),
                 mountEditor: this.ports.createAssetViewPorts().mountEditor,
                 attestSubjectIdentity: (
                     assetId,
@@ -193,6 +394,7 @@ export class WorkspaceCanvasLibraries {
             this.artifact = createArtifactLibraryPanel({
                 ...this.ports.createLibraryPorts(),
                 frontendRegistry: this.ports.host.capabilities.frontend,
+                onSelectionChange: assetId => this.rememberSelection('artifacts', assetId),
                 sharedRegistry: this.ports.host.capabilities.shared,
                 ensureStyles: this.ports.host.capabilities.ensureStyles,
                 onInsertAsset: async (item: AssetMeta) => {
@@ -271,6 +473,7 @@ export class WorkspaceCanvasLibraries {
             const generation = this.generation
             const workspaceId = this.ports.getWorkspaceId()
             this.capability = createCapabilityLibraryPanel({
+                onSelectionChange: capabilityId => this.rememberSelection('capabilities', capabilityId),
                 document: this.ports.document,
                 client: this.ports.host.capabilities.catalog(
                     this.ports.getWorkspaceId(),

@@ -296,6 +296,7 @@ export class ProviderVerificationCoordinator {
             : normalizeProviderExpiresAt(providerSession.expiresAt)
         const session: ProviderVerificationSession = {
             sessionId,
+            requestedByUserId: userId,
             generationRun,
             provider: 'BytePlus',
             assetId,

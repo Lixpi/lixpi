@@ -85,6 +85,11 @@ export type WorkspaceNodeGesturesPorts = {
         dimensions: Size,
     ) => void
     commit: (state: CanvasState) => void
+    preview?: (bounds: ReadonlyMap<string, Rect>) => void
+    finishPreview?: (
+        nodeIds: readonly string[],
+        committed: boolean,
+    ) => void
     setTimer: (
         callback: () => void,
         delay: number,
@@ -410,6 +415,7 @@ export class WorkspaceNodeGestures {
             }
         }
 
+        let committed = false
         const handleMouseMove = (bounds: ReadonlyMap<string, Rect>) => {
             if (!this.isCurrent(scope))
                 return
@@ -447,6 +453,7 @@ export class WorkspaceNodeGestures {
                     return
             }
 
+            this.ports.preview?.(bounds)
             const primaryNodeEntry = draggedNodeEntries.get(resolvedNodeId)
 
             if (!primaryNodeEntry)
@@ -716,6 +723,7 @@ export class WorkspaceNodeGestures {
                 ...releaseState,
                 nodes: updatedNodes,
             })
+            committed = true
 
             if (!this.isCurrent(scope))
                 return
@@ -754,8 +762,20 @@ export class WorkspaceNodeGestures {
                     activateDragVisuals()
                 },
                 onChange: handleMouseMove,
-                onEnd: handleMouseUp,
+                onEnd: (
+                    event,
+                    bounds,
+                    moved,
+                ) => {
+                    handleMouseUp(
+                        event,
+                        bounds,
+                        moved,
+                    )
+                    this.ports.finishPreview?.([...draggedNodeEntries.keys()], committed)
+                },
                 onCancel: reason => {
+                    this.ports.finishPreview?.([...draggedNodeEntries.keys()], false)
                     cleanup()
 
                     if (!this.isCurrent(scope))
@@ -859,10 +879,12 @@ export class WorkspaceNodeGestures {
             aspectRatio: aspectRatio ?? undefined,
         }
 
+        let resizeCommitted = false
         const handleMouseMove = (boundsById: ReadonlyMap<string, Rect>) => {
             if (!this.isCurrent(scope))
                 return
 
+            this.ports.preview?.(boundsById)
             const bounds = boundsById.get(nodeId)!
             const liveResizePosition = {
                 x: bounds.x,
@@ -984,6 +1006,8 @@ export class WorkspaceNodeGestures {
             if (!this.isCurrent(scope))
                 return
 
+            resizeCommitted = true
+
             // Final reposition at new size
             this.ports.repositionMenu()
         }
@@ -999,8 +1023,12 @@ export class WorkspaceNodeGestures {
                 constraints,
                 lock: () => this.ports.lockPan(),
                 onChange: handleMouseMove,
-                onEnd: handleMouseUp,
+                onEnd: () => {
+                    handleMouseUp()
+                    this.ports.finishPreview?.([nodeId], resizeCommitted)
+                },
                 onCancel: reason => {
+                    this.ports.finishPreview?.([nodeId], false)
                     cleanup()
 
                     if (!this.isCurrent(scope))

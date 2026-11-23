@@ -6,6 +6,8 @@ import {
     type ConversationGetRequest,
     type ConversationListRequest,
     type ConversationMessageNode,
+    type ConversationHumanAction,
+    type ConversationHumanActionResult,
     type ConversationMessage,
     type ConversationMessagesPage,
     type ConversationMessagesRequest,
@@ -68,7 +70,7 @@ export class WorkspaceConversationController {
 
     constructor(
         readonly workspaceId: string,
-        userId: string,
+        private readonly userId: string,
         readonly ports: WorkspaceConversationPorts,
         private readonly storage: Pick<Storage, 'getItem' | 'setItem'>,
         private readonly createId: () => string,
@@ -353,16 +355,81 @@ export class WorkspaceConversationController {
         this.fail(error)
     }
 
+    get pendingHumanAction(): {
+        interruptId: string
+        action: ConversationHumanAction
+    } | undefined {
+        const run = this.current?.run
+
+        if (
+            run?.state === 'waiting-input'
+            && run.interruptId
+            && run.humanAction?.userId === this.userId
+        )
+            return {
+                interruptId: run.interruptId,
+                action: run.humanAction,
+            }
+
+        return undefined
+    }
+
+    async completeHumanAction(
+        interruptId: string,
+        result: ConversationHumanActionResult,
+    ): Promise<void> {
+        const current = this.current
+        const pending = this.pendingHumanAction
+
+        if (
+            !current
+            || !pending
+            || pending.interruptId !== interruptId
+        )
+            throw new Error('This action is no longer active.')
+
+        const response = {
+            file: 'Selected a file.',
+            attestation: 'Confirmed the subject identity.',
+            'provider-verification': 'Completed provider verification.',
+            download: 'Started the media download.',
+            'workspace-export': 'Started the workspace export.',
+        }
+
+        await this.submit(
+            {
+                type: 'aiUserMessage',
+                content: [{
+                    type: 'paragraph',
+                    content: [{
+                        type: 'text',
+                        text: response[pending.action.kind],
+                    }],
+                }],
+            },
+            [],
+            current.settings.models,
+            result,
+        )
+    }
+
     async submit(
         fragment: ConversationMessageNode,
         references: ConversationReference[],
         models: ConversationSettings['models'],
+        humanActionResult?: ConversationHumanActionResult,
     ): Promise<void> {
         if (this.submitting)
             throw new Error('A message is awaiting acknowledgement.')
 
         if (this.selecting)
             throw new Error('The selected conversation is loading.')
+
+        if (
+            this.pendingHumanAction
+            && !humanActionResult
+        )
+            throw new Error('Use the requested action in this conversation to continue.')
 
         if (references.length > 24) {
             this.error = 'Attach at most 24 references to one message.'
@@ -396,6 +463,7 @@ export class WorkspaceConversationController {
                 fragment: structuredClone(fragment),
                 references: structuredClone(references),
                 settingsRevision: this.current.settingsRevision,
+                ...(humanActionResult ? { humanActionResult } : {}),
                 ...(this.current.run?.state === 'waiting-input'
                     && this.current.run.interruptId
                     ? { interruptId: this.current.run.interruptId }
@@ -405,6 +473,8 @@ export class WorkspaceConversationController {
             this.pendingSubmission = previous
                 && previous.conversationAssetId === conversationAssetId
                 && JSON.stringify(previous.fragment) === JSON.stringify(fragment)
+                && previous.interruptId === request.interruptId
+                && JSON.stringify(previous.humanActionResult) === JSON.stringify(request.humanActionResult)
                 && JSON.stringify(previous.references) === JSON.stringify(references)
                 ? previous
                 : request

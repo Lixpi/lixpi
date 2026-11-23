@@ -295,7 +295,7 @@ export class ConversationRuntime {
                     }
 
                     if (error instanceof AgentInputPending) {
-                        await owner.waitForInput(error.interruptId)
+                        await owner.waitForInput(error.interruptId, error.humanAction)
                         await this.projector.project(owner)
 
                         return 'defer'
@@ -776,6 +776,7 @@ export class ConversationRuntime {
                     }
                 },
                 answer: interruptId => this.inputAnswer(owner, interruptId),
+                admit: assetId => void execution.createdAssetIds.add(assetId),
                 question: async question => {
                     await textBatch.flush()
                     await owner.message({

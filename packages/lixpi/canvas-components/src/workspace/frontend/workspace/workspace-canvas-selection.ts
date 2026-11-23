@@ -14,6 +14,7 @@ import {
 import {
     type CanvasNode,
     type CanvasState,
+    type CanvasCollaborationPresence,
 } from '@lixpi/constants'
 import {
     type WorkspaceMediaLayer,
@@ -53,6 +54,7 @@ export type WorkspaceCanvasSelectionPorts = {
     suppressPaneClick: () => void
     addContext: (nodeIds: Iterable<string>) => void
     scheduleEdges: () => void
+    onChanged?: (selection: NonNullable<CanvasCollaborationPresence['selection']>) => void
     menu: {
         showNode: (nodeId: string) => void
         showEdge: (edgeId: string) => void
@@ -129,6 +131,25 @@ export class WorkspaceCanvasSelection {
         return this.edgeId
     }
 
+    getSnapshot(): NonNullable<CanvasCollaborationPresence['selection']> {
+        return {
+            nodeIds: Array.from(this.selection.nodeIds),
+            edgeIds: this.edgeId ? [this.edgeId] : [],
+        }
+    }
+
+    setSnapshot(selection: CanvasCollaborationPresence['selection']): void {
+        this.setNodes(
+            new Set(selection?.nodeIds),
+        )
+        const edgeId = selection?.edgeIds[0] ?? null
+
+        if (edgeId)
+            this.ports.getConnections()?.selectEdge(edgeId)
+        else if (this.edgeId)
+            this.clearEdgeSelection(true)
+    }
+
     getSingleNodeId(): string | null {
         return this.selection.nodeIds.size === 1 ? (Array.from(this.selection.nodeIds)[0] ?? null) : null
     }
@@ -172,6 +193,10 @@ export class WorkspaceCanvasSelection {
             this.ports.menu.showEdge(edgeId)
         } else
             this.ports.menu.hide()
+
+        this.ports.onChanged?.(
+            this.getSnapshot(),
+        )
     }
 
     clearEdgeSelection(force = false): void {
@@ -184,6 +209,9 @@ export class WorkspaceCanvasSelection {
         this.edgeId = null
         this.ports.getConnections()?.deselect()
         this.ports.menu.hide()
+        this.ports.onChanged?.(
+            this.getSnapshot(),
+        )
     }
 
     restoreEdgeSelection(): void {
@@ -360,6 +388,9 @@ export class WorkspaceCanvasSelection {
         this.updateSelectionDrivenUi()
         this.ports.media.setSelectedImageNodes(this.selection.nodeIds)
         this.ports.scheduleEdges()
+        this.ports.onChanged?.(
+            this.getSnapshot(),
+        )
     }
 
     private updateNodeClasses(

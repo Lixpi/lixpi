@@ -687,6 +687,8 @@ export class WorkspaceOutputReview {
         await this.ports.submit(
             submitData,
             {
+                sourceConversationAssetId: outputNodes[0]?.generatedBy?.conversationAssetId,
+                sourceGenerationRequestId: outputNodes[0]?.generatedBy?.generationRequestId,
                 explicitContextNodeIds,
                 excludedCanvasNodeIds,
                 ...(regeneratePrompt

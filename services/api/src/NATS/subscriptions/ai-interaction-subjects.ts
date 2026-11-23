@@ -17,6 +17,7 @@ import {
     aiGeneratedVideoNodeType,
     aiResponseMessageNodeType,
     aiUserMessageNodeType,
+    aiChatThreadNodeType,
     collectProseMirrorPromptReferences,
     findAiChatThreadContentNode,
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
@@ -32,6 +33,7 @@ import {
     getMediaGenerationUserEventSubject,
     NATS_SUBJECTS,
     type AiInteractionChatSendMessagePayload,
+    type AiInteractionMediaGenerationRequest,
     type AiModelId,
     type AssetRequesterContext,
     type CapabilityJsonValue,
@@ -169,7 +171,7 @@ type SealedMediaReplayTrace = {
     }
 }
 
-const findSealedMediaReplayTrace = (
+export const findSealedMediaReplayTrace = (
     doc: object,
     expected: {
         reasoningRunId?: string
@@ -899,6 +901,13 @@ const mergePromptReferenceMediaCandidates = ({
     })
 }
 
+type FrozenRegenerationInput = {
+    prompt: object
+    sourceNodeIds: string[]
+    admit?: <T>(write: () => Promise<T>) => Promise<T>
+}
+const frozenRegenerationInputs = new WeakMap<object, FrozenRegenerationInput>()
+
 export const aiInteractionSubjects = createNatsSubscriptions(
     'ai-interaction',
     {
@@ -921,6 +930,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                 canvasVisibleArea,
                 mediaGenerationRequest,
                 generationRequestId: submittedGenerationRequestId,
+                sourceGenerationRequestId,
                 resumeGenerationRequestId,
                 resolvedBranchTargetAssetId,
             } = data as {
@@ -949,6 +959,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
             const aiImageModel = aiImageModels?.[0]
             const aiVideoModel = aiVideoModels?.[0]
 
+            let frozenRegeneration = frozenRegenerationInputs.get(data)
             const natsService = await NATS_Service.getInstance()
             const requesterResponseSubject = getAiInteractionResponseSubject(
                 userId,
@@ -1019,6 +1030,44 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                 let resolvedRegeneration = regeneration
 
                 if (
+                    sourceGenerationRequestId !== undefined
+                    && !frozenRegeneration
+                ) {
+                    if (
+                        typeof sourceGenerationRequestId !== 'string'
+                        || !regeneration
+                        || conversationAsset.conversationRuntime === 'deep-agents'
+                    )
+                        return rejectSend('REGENERATION_SOURCE_NOT_FOUND')
+
+                    const sourceRequest = await MediaGenerationRequestModel.getAuthorized({
+                        workspaceId,
+                        userId,
+                        generationRequestId: sourceGenerationRequestId,
+                    })
+
+                    if (
+                        'error' in sourceRequest
+                        || sourceRequest.conversationAssetId !== conversationAssetId
+                        || sourceRequest.userId !== userId
+                        || sourceRequest.organizationId !== organizationId
+                        || !['completed', 'completed-with-errors'].includes(sourceRequest.status)
+                    )
+                        return rejectSend('REGENERATION_SOURCE_NOT_FOUND')
+
+                    const sourceCheckpoint = await new MediaGenerationRequestService().getCheckpoint(sourceRequest)
+                    const sourcePrompt = parseProseMirrorJsonContent(sourceCheckpoint.promptDocument)
+
+                    if (sourcePrompt?.type !== aiUserMessageNodeType)
+                        return rejectSend('REGENERATION_ORIGINAL_INSTRUCTION_UNAVAILABLE')
+
+                    frozenRegeneration = {
+                        prompt: sourcePrompt,
+                        sourceNodeIds: [],
+                    }
+                }
+
+                if (
                     regeneration
                     && regeneration.mode !== 'existing-prompt'
                     && regeneration.mode !== 'regenerate-prompt'
@@ -1079,7 +1128,12 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                         if (
                             'error' in sourceAsset
                             || !isAssetAvailableInWorkspaceScope(sourceAsset, workspace)
-                            || (!sourceNode && (sourceAsset.generatedOutputReview?.status !== 'superseded'
+                            || (!sourceNode && !frozenRegeneration?.sourceNodeIds.some(
+                                nodeId => workspaceNodes.some(
+                                    node =>
+                                        node.nodeId === nodeId && (node.type === 'image' || node.type === 'video') && node.assetId === sourceAsset.assetId && node.generatedBy?.branchId === regeneration.branchId,
+                                ),
+                            ) && (sourceAsset.generatedOutputReview?.status !== 'superseded'
                                 || sourceAsset.generatedOutputReview?.regenerationMode !== 'existing-prompt'))
                             || sourceAsset.states.provenance !== 'sealed'
                             || sourceAsset.lineage?.reasoningModelId !== replayPrompt.reasoningModelId
@@ -1274,8 +1328,16 @@ export const aiInteractionSubjects = createNatsSubscriptions(
 
                 const authoritativeProseMirrorInitialDoc = conversationSnapshot.doc
                 const authoritativeProseMirrorBaseVersion = conversationSnapshot.version
-                const authoritativeMessages = buildAuthoritativeConversationMessages(authoritativeProseMirrorInitialDoc, conversationAssetId)
-                const submittedPromptReferences = extractLatestUserPromptReferences(authoritativeProseMirrorInitialDoc, conversationAssetId)
+                const promptDocument = frozenRegeneration ? {
+                    type: 'doc',
+                    content: [{
+                        type: aiChatThreadNodeType,
+                        attrs: { threadId: conversationAssetId },
+                        content: [frozenRegeneration.prompt],
+                    }],
+                } : authoritativeProseMirrorInitialDoc
+                const authoritativeMessages = buildAuthoritativeConversationMessages(promptDocument, conversationAssetId)
+                const submittedPromptReferences = extractLatestUserPromptReferences(promptDocument, conversationAssetId)
                 const latestAuthoritativeUserMessage = [...authoritativeMessages]
                     .reverse().find(message => message.role === 'user')
 
@@ -1283,7 +1345,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
 
                 const authoritativePromptText = latestAuthoritativeUserMessage.content
-                const capabilityInputs = readAuthoritativeCapabilityInputs(authoritativeProseMirrorInitialDoc, conversationAssetId)
+                const capabilityInputs = readAuthoritativeCapabilityInputs(promptDocument, conversationAssetId)
                 const moduleCatalog = getLlmModule().capabilityModuleCatalog
                 const authorizedPromptReferences = await authorizePromptReferences({
                     references: submittedPromptReferences,
@@ -1412,7 +1474,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                             assets: referencedAssets,
                             selectedNodeIds,
                         })
-                    const latestUserMessageNode = getLatestAuthoritativeUserMessageNode(authoritativeProseMirrorInitialDoc, conversationAssetId)
+                    const latestUserMessageNode = getLatestAuthoritativeUserMessageNode(promptDocument, conversationAssetId)
                     const compiled = compileMediaReferenceIntent({
                         prompt: latestUserMessageNode,
                         bindings: mediaReferenceBindings,
@@ -1491,7 +1553,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                     if (persistedRequest)
                         durableMediaRequest = persistedRequest
                     else {
-                        durableMediaRequest = await new MediaGenerationRequestService().create({
+                        const createRequest = async () => await new MediaGenerationRequestService().create({
                             generationRequestId,
                             workspaceId,
                             organizationId,
@@ -1517,6 +1579,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                                         videoDuration,
                                     },
                                     resumePayload,
+                                    ...(frozenRegeneration ? { serverRegenerationSourceNodeIds: frozenRegeneration.sourceNodeIds } : {}),
                                 },
                             },
                             bindings: mediaReferenceBindings,
@@ -1526,6 +1589,7 @@ export const aiInteractionSubjects = createNatsSubscriptions(
                             ...(canvasVisibleArea ? { canvasVisibleArea } : {}),
                             onCanvasGeometryProjected: canvasGeometry => void (initialMediaCanvasGeometry = canvasGeometry),
                         })
+                        durableMediaRequest = frozenRegeneration?.admit ? await frozenRegeneration.admit(createRequest) : await createRequest()
                     }
 
                     if (
@@ -2282,6 +2346,70 @@ export const aiInteractionSubjects = createNatsSubscriptions(
     },
 )
 
+export const startAiInteractionCanvasRegeneration = async ({
+    original,
+    generation,
+    prompt,
+    sourceNodeIds,
+    resumePayload,
+    admit,
+}: {
+    original: MediaGenerationRequest
+    generation: AiInteractionMediaGenerationRequest
+    prompt: unknown
+    sourceNodeIds: string[]
+    resumePayload: Record<string, unknown>
+    admit: <T>(write: () => Promise<T>) => Promise<T>
+}): Promise<MediaGenerationRequest> => {
+    const parsed = parseProseMirrorJsonContent(prompt)
+
+    if (parsed?.type !== aiUserMessageNodeType)
+        throw new Error('CANVAS_REGENERATION_ORIGINAL_PROMPT_UNAVAILABLE')
+
+    const handler = aiInteractionSubjects.find(item => item.subject === AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE)
+
+    if (!handler)
+        throw new Error('CANVAS_REGENERATION_UNAVAILABLE')
+
+    const payload = {
+        ...resumePayload,
+        user: { userId: original.userId },
+        workspaceId: original.workspaceId,
+        organizationId: original.organizationId,
+        conversationAssetId: original.conversationAssetId,
+        generationRequestId: generation.generationRequestId,
+        aiReasoningModels: generation.reasoningModelIds,
+        aiImageModels: generation.imageModelIds,
+        aiVideoModels: generation.videoModelIds,
+        mediaGenerationRequest: generation,
+    }
+    frozenRegenerationInputs.set(
+        payload,
+        {
+            prompt: parsed,
+            sourceNodeIds,
+            admit,
+        },
+    )
+
+    try {
+        await handler.handler(payload, undefined)
+    } finally {
+        frozenRegenerationInputs.delete(payload)
+    }
+
+    const result = await MediaGenerationRequestModel.getAuthorized({
+        generationRequestId: generation.generationRequestId,
+        workspaceId: original.workspaceId,
+        userId: original.userId,
+    })
+
+    if ('error' in result)
+        throw new Error('CANVAS_REGENERATION_ADMISSION_FAILED')
+
+    return result
+}
+
 export const resumeAiInteractionMediaGenerationRequest = async ({
     request,
     user,
@@ -2300,6 +2428,7 @@ export const resumeAiInteractionMediaGenerationRequest = async ({
     const checkpoint = await new MediaGenerationRequestService().getCheckpoint(request)
     const configuration = checkpoint.configuration as {
         resumePayload?: Record<string, unknown>
+        serverRegenerationSourceNodeIds?: string[]
     }
 
     if (!configuration.resumePayload)
@@ -2310,19 +2439,32 @@ export const resumeAiInteractionMediaGenerationRequest = async ({
     if (!subscription)
         throw new Error('MEDIA_REQUEST_RESUME_HANDLER_MISSING')
 
-    await subscription.handler(
-        {
-            ...configuration.resumePayload,
-            user: {
-                userId: user.userId,
-            },
-            resumeGenerationRequestId: request.generationRequestId,
-            ...(request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))
+    const payload = {
+        ...configuration.resumePayload,
+        user: {
+            userId: user.userId,
+        },
+        resumeGenerationRequestId: request.generationRequestId,
+        ...(request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))
                 ? {
                     resolvedBranchTargetAssetId: request.resolvedReferences.find(resolution => resolution.bindingId.startsWith('branch-target-'))!.assetId,
                 }
                 : {}),
-        },
-        undefined,
-    )
+    }
+    const prompt = parseProseMirrorJsonContent(checkpoint.promptDocument)
+
+    if (prompt?.type === aiUserMessageNodeType)
+        frozenRegenerationInputs.set(
+            payload,
+            {
+                prompt,
+                sourceNodeIds: configuration.serverRegenerationSourceNodeIds ?? [],
+            },
+        )
+
+    try {
+        await subscription.handler(payload, undefined)
+    } finally {
+        frozenRegenerationInputs.delete(payload)
+    }
 }

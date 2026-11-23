@@ -188,26 +188,37 @@ export class AccountRequestContext {
             return
         }
 
+        const deny = (): void => {
+            if (!res.destroyed)
+                res.destroy()
+        }
+
         try {
             await this.runVerified(decoded, async scope => {
                 const finished = Promise.withResolvers<void>()
                 const complete = (): void => void finished.resolve()
                 const abort = (): void => void scope.cancel()
-                const deny = (): void => void res.destroy()
                 const originalWrite = res.write.bind(res)
                 const originalEnd = res.end.bind(res)
+                const canWrite = (): boolean => {
+                    if (res.destroyed)
+                        return false
 
-                // A dependency that ignores abort still cannot write a late HTTP response.
-                res.write = ((...args: Parameters<Response['write']>) => {
-                    scope.assertActive()
+                    try {
+                        scope.assertActive()
 
-                    return originalWrite(...args)
-                }) as Response['write']
-                res.end = ((...args: Parameters<Response['end']>) => {
-                    scope.assertActive()
+                        return true
+                    } catch {
+                        deny()
 
-                    return originalEnd(...args)
-                }) as Response['end']
+                        return false
+                    }
+                }
+
+                // Express may finalize a cancelled request from an asynchronous callback.
+                // Suppress late bytes without throwing into code outside this request.
+                res.write = ((...args: Parameters<Response['write']>) => canWrite() && originalWrite(...args)) as Response['write']
+                res.end = ((...args: Parameters<Response['end']>) => canWrite() ? originalEnd(...args) : res) as Response['end']
                 res.once('finish', complete)
                 res.once('close', complete)
                 req.once('aborted', abort)
@@ -229,7 +240,7 @@ export class AccountRequestContext {
                 }
             })
         } catch {
-            res.destroy()
+            deny()
         }
     }
 }

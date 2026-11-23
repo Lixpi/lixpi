@@ -47,11 +47,26 @@ const TITLE: &str = "Lixpi";
 /// Returns the error that stopped the app from starting or running, such as a
 /// window that could not be created.
 pub fn run() -> tauri::Result<()> {
-    runtime_builder()?
+    let context = tauri::generate_context!();
+    #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+    let native_startup = diagnostics::NativeStartup::new(&context.config().identifier);
+    #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+    native_startup.record("entered the desktop app");
+
+    let builder = runtime_builder()?;
+    #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+    native_startup.record("initializing Chromium and Tauri");
+
+    #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+    let setup_startup = native_startup.clone();
+    let app = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .menu(app_menu::build)
-        .setup(|app| {
+        .setup(move |app| {
+            #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+            setup_startup.record("AppKit started Tauri setup");
+
             let origins = Origins::from_build()?;
             let web_ui = origins.web_ui.clone();
             app.on_menu_event(move |app, event| window_commands::run_menu_item(app, event.id().as_ref(), &web_ui));
@@ -61,7 +76,13 @@ pub fn run() -> tauri::Result<()> {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(context)?;
+    #[cfg(all(feature = "diagnostics", target_os = "macos"))]
+    native_startup.record("Chromium and Tauri initialized, entering the AppKit event loop");
+
+    app.run(|_, _| {});
+
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -152,14 +173,16 @@ fn open_main_window(
         .fold(builder, |builder, &script| builder.initialization_script(script));
     let builder = builder.on_page_load(move |window, payload| {
         if matches!(payload.event(), PageLoadEvent::Finished) {
-            if payload.url().as_str() == "about:blank"
-                && loaded_startup.blank_finished()
-                && let Err(error) = window.navigate(startup_web_ui.clone())
-            {
+            if loaded_startup.page_finished(payload.url()) {
                 #[cfg(feature = "diagnostics")]
-                page_loads.record(&format!("Could not open web-ui after Chromium startup: {error}"));
-                #[cfg(not(feature = "diagnostics"))]
-                eprintln!("Could not open web-ui after Chromium startup: {error}");
+                page_loads.record("startup placeholder finished, scheduling Web UI navigation");
+
+                if let Err(error) = startup_navigation::schedule(window.clone(), startup_web_ui.clone()) {
+                    #[cfg(feature = "diagnostics")]
+                    page_loads.record(&format!("Could not schedule Web UI navigation after Chromium startup: {error}"));
+                    #[cfg(not(feature = "diagnostics"))]
+                    eprintln!("Could not schedule Web UI navigation after Chromium startup: {error}");
+                }
             }
 
             title_bar::reflect_fullscreen_after_page_load(window);
@@ -169,6 +192,8 @@ fn open_main_window(
         page_loads.page_load(&payload);
     });
     let window = builder.build()?;
+    #[cfg(feature = "diagnostics")]
+    diagnostics.record("Chromium window created");
 
     let resized_window = window.clone();
     window.on_window_event(move |event| {
@@ -190,10 +215,13 @@ fn open_main_window(
     }
 
     #[cfg(all(feature = "diagnostics", target_os = "macos"))]
-    diagnostics.watch(window.clone());
+    Arc::clone(&diagnostics).watch(window.clone());
 
     if startup.trust_verified() {
-        window.navigate(web_ui)?;
+        #[cfg(feature = "diagnostics")]
+        diagnostics.record("startup trust verified after the placeholder, scheduling Web UI navigation");
+
+        startup_navigation::schedule(window, web_ui)?;
     }
 
     Ok(())

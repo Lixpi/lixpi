@@ -28,6 +28,7 @@ import {
 } from '@lixpi/ui-kit/components/application-panel'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import { bindCanvasTheme } from '@lixpi/canvas-components/theme'
+import { workspaceExportUrl } from '$src/utils/workspace-export.ts'
 import { canvasThemeStore } from '$src/canvas-adapters/canvas-theme.ts'
 
 import { workspaceTreeStore } from '$src/stores/workspaceTreeStore.ts'
@@ -343,8 +344,15 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         if (!token)
             return
 
-        const apiUrl = import.meta.env.VITE_API_URL
-        window.open(`${apiUrl}/api/workspaces/${workspaceId}/export?token=${token}`, '_blank')
+        window.open(
+            workspaceExportUrl({
+                workspaceId,
+                apiBaseUrl: import.meta.env.VITE_API_URL || '',
+                origin: window.location.origin,
+                token,
+            }),
+            '_blank',
+        )
     }
 
     private onWorkspaceImportHandler = (workspaceId: string): void => {

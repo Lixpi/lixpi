@@ -1,3 +1,6 @@
+import { verifyCanvasHumanAction } from '../../capability-system/canvas-handoff-adapter.ts'
+import { conversationEventForViewer } from './conversation-protocol.ts'
+
 import {
     getDynamoDbTableStageName,
     getNatsUserSubjectToken,
@@ -65,6 +68,7 @@ export class ConversationAdapters {
                     : undefined
             },
             authorize: this.authorize,
+            verifyHumanAction: verifyCanvasHumanAction,
             getAgentPreferences: async userId => {
                 const user = await User.get(userId)
 
@@ -298,7 +302,7 @@ export class ConversationAdapters {
                         event.workspaceId,
                         event.conversationAssetId,
                     ),
-                    event,
+                    conversationEventForViewer(event, userId),
                 )
         } catch (error) {
             // The durable event remains available for replay after a disconnect.

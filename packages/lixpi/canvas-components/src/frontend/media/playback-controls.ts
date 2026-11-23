@@ -80,6 +80,12 @@ const safeZoom = (viewport: CanvasViewport): number => (Number.isFinite(viewport
 export class PlaybackControls<Node extends PlaybackControlsNode = PlaybackControlsNode> {
     readonly element: HTMLDivElement
     private readonly entries = new Map<string, VideoControlsEntry>()
+    private previewTarget: {
+        nodeId: string
+        pane: HTMLElement
+    } | null = null
+    private previewMount: HTMLElement | null = null
+    private previewEntry: VideoControlsEntry | null = null
     private destroyed = false
 
     constructor(private readonly options: PlaybackControlsOptions<Node>) {
@@ -133,6 +139,69 @@ export class PlaybackControls<Node extends PlaybackControlsNode = PlaybackContro
             entry.destroy()
             this.entries.delete(nodeId)
         }
+
+        this.reflectExpandedPreview()
+    }
+
+    setExpandedPreview(
+        nodeId: string | null,
+        pane: HTMLElement,
+    ): void {
+        if (
+            this.previewTarget?.nodeId === nodeId
+            && this.previewTarget?.pane === pane
+        )
+            return
+
+        this.clearExpandedPreview()
+        this.previewTarget = nodeId ? {
+            nodeId,
+            pane,
+        } : null
+        this.reflectExpandedPreview()
+    }
+
+    private reflectExpandedPreview(): void {
+        const target = this.previewTarget
+        const entry = target && this.entries.get(target.nodeId)
+
+        if (
+            !target
+            || !entry
+            || entry.video.tagName !== 'VIDEO'
+        ) {
+            this.clearExpandedPreview()
+
+            return
+        }
+
+        if (this.previewEntry === entry)
+            return
+
+        this.clearExpandedPreview()
+        const html = createDocumentHtml(target.pane.ownerDocument)
+        const mount = html`<div className="workspace-canvas-follow-media"></div>` as HTMLDivElement
+        mount.inert = true
+        target.pane.append(mount)
+        mount.append(entry.element)
+        this.previewMount = mount
+        this.previewEntry = entry
+        entry.setExpanded(mount)
+    }
+
+    private clearExpandedPreview(): void {
+        const entry = this.previewEntry
+
+        if (entry) {
+            if (entry.element.parentNode === this.previewMount)
+                this.element.append(entry.element)
+
+            entry.setExpanded(null)
+        }
+
+        this.previewMount?.remove()
+        this.previewMount = null
+        this.previewEntry = null
     }
 
     update(
@@ -170,6 +239,8 @@ export class PlaybackControls<Node extends PlaybackControlsNode = PlaybackContro
     }
 
     clear(): void {
+        this.clearExpandedPreview()
+        this.previewTarget = null
         const entries = [...this.entries.values()]
         this.entries.clear()
         const cleanup = new Lifetime()
@@ -201,6 +272,11 @@ class VideoControlsEntry {
     private readonly host: HTMLElement
     private readonly svg: SVGSVGElement
     private readonly controls: VideoControlsInstance
+    private expanded: HTMLElement | null = null
+    private lastGeometry: {
+        bounds: CanvasEngineRect
+        viewport: CanvasViewport
+    } | null = null
 
     constructor(
         private readonly nodeId: string,
@@ -336,10 +412,36 @@ class VideoControlsEntry {
         }
     }
 
+    setExpanded(mount: HTMLElement | null): void {
+        this.expanded = mount
+
+        if (this.lastGeometry)
+            this.update(this.lastGeometry.bounds, this.lastGeometry.viewport)
+    }
+
     update(
         bounds: CanvasEngineRect,
         viewport: CanvasViewport,
     ): void {
+        this.lastGeometry = {
+            bounds,
+            viewport,
+        }
+
+        if (this.expanded) {
+            bounds = {
+                x: 0,
+                y: 0,
+                width: Math.max(1, this.expanded.clientWidth),
+                height: Math.max(1, this.expanded.clientHeight - this.options.settings.canvas.bottomInset - this.options.settings.height),
+            }
+            viewport = {
+                x: 0,
+                y: 0,
+                zoom: 1,
+            }
+        }
+
         const layout = this.layout(bounds, viewport)
         applyStyle(
             this.element,
