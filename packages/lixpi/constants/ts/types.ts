@@ -1027,6 +1027,7 @@ export type MediaGenerationRun = {
 
 export type ProviderVerificationSession = {
     sessionId: string
+    requestedByUserId?: string
     generationRun: number
     provider: ProviderName
     assetId: string
@@ -2362,6 +2363,7 @@ export type AiInteractionChatSendMessagePayload = {
     // Allocated by the browser before a media turn is submitted so provisional
     // canvas ownership, cancellation, and the durable request all share one ID.
     generationRequestId?: string
+    sourceGenerationRequestId?: string
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Explicit composer context attached to this submitted turn.
@@ -2547,3 +2549,263 @@ export type AiModelInferenceProvider = {
 }
 
 export type AiModelId = `${string}:${string}`
+
+export type CanvasCollaborationPoint = {
+    x: number
+    y: number
+}
+
+export type CanvasCollaborationComposerPresence = {
+    composer?: {
+        conversationAssetId?: string | null
+        content: object
+    } | null
+    composerSelection?: {
+        anchor: number
+        head: number
+    } | null
+}
+
+export type CanvasCollaborationPresence = CanvasCollaborationComposerPresence & {
+    // The camera position is the workspace point at the viewport center.
+    camera?: CanvasViewport
+    cursor?: CanvasCollaborationPoint | null
+    selection?: {
+        nodeIds: string[]
+        edgeIds: string[]
+    }
+    menu?: {
+        kind: string
+        nodeId?: string
+        edgeId?: string
+        controlId?: string
+        textSelection?: {
+            anchor: number
+            head: number
+        }
+        position?: CanvasCollaborationPoint
+    } | null
+    caret?: {
+        nodeId: string
+        field?: 'content' | 'title'
+        anchor: number
+        head: number
+    } | null
+    panel?: {
+        isOpen: boolean
+        mode: CanvasRightSidePanelMode
+        width?: number
+        detailsTarget?: CanvasGeneratedOutputDetailsTarget | null
+        contextNodeIds?: string[]
+    }
+    playback?: {
+        nodeId: string
+        time: number
+        paused: boolean
+        rate: number
+        volume: number
+        muted: boolean
+        fullscreen?: boolean
+    } | null
+    library?: {
+        kind: 'media' | 'artifacts' | 'capabilities'
+        selectedId: string | null
+        scrollTop?: number
+    } | null
+    connector?: {
+        source: CanvasCollaborationPoint
+        target: CanvasCollaborationPoint
+        pathType: WorkspaceEdgePathType
+        lineStyle: 'solid' | 'dashed'
+    } | null
+    geometry?: (CanvasCollaborationPoint & {
+        nodeId: string
+        width: number
+        height: number
+    })[]
+}
+
+export type CanvasCollaborationMainCamera = {
+    viewerId: string
+    actorId: string
+    sequence: number
+    updatedAt: number
+    camera: CanvasViewport
+}
+
+export const isNewerCanvasMainCamera = (
+    candidate: CanvasCollaborationMainCamera,
+    current?: CanvasCollaborationMainCamera,
+): boolean => {
+    if (
+        !current
+        || candidate.updatedAt !== current.updatedAt
+    )
+        return !current || candidate.updatedAt > current.updatedAt
+
+    if (candidate.actorId !== current.actorId)
+        return candidate.actorId > current.actorId
+
+    return candidate.sequence > current.sequence
+}
+
+export type CanvasCollaborationActor = CanvasCollaborationPresence & {
+    actorId: string
+    viewerId?: string
+    lastActiveAt?: number
+    mainCamera?: CanvasCollaborationMainCamera
+    kind: 'human' | 'agent'
+    name: string
+    followingActorId?: string | null
+    followingViewerId?: string | null
+    presenceSequence?: number
+    composerSequence?: number
+}
+
+export const resolveCanvasViewerActor = <Actor extends Pick<CanvasCollaborationActor, 'actorId' | 'viewerId' | 'lastActiveAt'>>(
+    actors: readonly Actor[],
+    viewerId: string,
+    excludedActorId?: string,
+): Actor | undefined => {
+    let active: Actor | undefined
+
+    for (const actor of actors) {
+        if (
+            actor.viewerId !== viewerId
+            || actor.actorId === excludedActorId
+        )
+            continue
+
+        const activity = actor.lastActiveAt ?? -1
+        const current = active?.lastActiveAt ?? -1
+
+        if (
+            !active
+            || activity > current
+            || (activity === current && actor.actorId < active.actorId)
+        )
+            active = actor
+    }
+
+    return active
+}
+
+export type CanvasCollaborationLease = {
+    target: string
+    actorId: string
+    leaseId: string
+}
+
+export type CanvasCollaborationQueueEntry = {
+    target: string
+    actorId: string
+    requestId: string
+}
+
+export type CanvasCollaborationChanges = {
+    nodes?: CanvasNode[]
+    removedNodeIds?: string[]
+    edges?: WorkspaceEdge[]
+    removedEdgeIds?: string[]
+}
+
+export type CanvasCollaborationCommit = {
+    requestId: string
+    baseCanvasRevision: number
+    changes: CanvasCollaborationChanges
+    leases?: Record<string, string>
+}
+
+export type CanvasCollaborationComposerReader = {
+    inboxId: string
+    publicKey: string
+}
+
+export type EncryptedCanvasCollaborationComposerEvent = {
+    publicKey: string
+    iv: string
+    ciphertext: string
+}
+
+type CanvasCollaborationAction =
+    | {
+        action: 'join'
+        composerReader?: CanvasCollaborationComposerReader
+    }
+    | { action: 'leave' }
+    | ({
+        action: 'presence'
+        sequence: number
+        knownCanvasRevision?: number
+        activityAt?: number
+        mainCameraAt?: number
+    } & CanvasCollaborationPresence)
+    | {
+        action: 'follow'
+        actorId: string | null
+        viewerId?: string
+        sequence?: number
+    }
+    | {
+        action: 'acquire'
+        target: string
+        requestId: string
+    }
+    | {
+        action: 'release'
+        target: string
+        leaseId: string
+    }
+    | ({ action: 'commit' } & CanvasCollaborationCommit)
+
+export type CanvasCollaborationRequest = CanvasCollaborationAction & {
+    workspaceId: string
+    sessionId: string
+}
+
+export type CanvasCollaborationEvent = {
+    workspaceId: string
+    mainCamera?: CanvasCollaborationMainCamera
+    revision: number
+    canvasRevision: number
+    actors: CanvasCollaborationActor[]
+    ownership: CanvasCollaborationLease[]
+    queue: CanvasCollaborationQueueEntry[]
+    canvasState?: CanvasState
+}
+
+export type CanvasCollaborationPresenceEvent = {
+    workspaceId: string
+    mainCamera?: CanvasCollaborationMainCamera
+    presence: Omit<CanvasCollaborationPresence, keyof CanvasCollaborationComposerPresence> & {
+        actorId: string
+        sequence: number
+        lastActiveAt?: number
+    }
+}
+
+export type CanvasCollaborationComposerEvent = {
+    workspaceId: string
+    recipientActorId: string
+    composerPresence: CanvasCollaborationComposerPresence & {
+        actorId: string
+        sequence: number
+    }
+}
+
+export type CanvasCollaborationMessage = CanvasCollaborationEvent | CanvasCollaborationPresenceEvent
+
+export type CanvasCollaborationSnapshot = CanvasCollaborationEvent & {
+    actorId: string
+    lease?: CanvasCollaborationLease
+}
+
+export type CanvasCollaborationPresenceAck = {
+    workspaceId: string
+    actorId: string
+    presenceSequence: number
+}
+
+export type CanvasCollaborationResponse = CanvasCollaborationSnapshot | CanvasCollaborationPresenceAck | {
+    error: string
+}

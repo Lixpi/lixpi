@@ -1,3 +1,6 @@
+import {
+    type CanvasCollaborationPresence,
+} from '@lixpi/constants'
 import { WorkspacePromptControlRail } from '../composer/workspace-prompt-control-rail.ts'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { createButton } from '@lixpi/ui-kit/components/button'
@@ -45,6 +48,7 @@ export type WorkspaceCanvasControlsPorts = {
     uploadFile: (file: File) => Promise<void>
     importUrl: (url: string) => Promise<void>
     reportError: (error: unknown) => void
+    onMenuChange?: (menu: CanvasCollaborationPresence['menu']) => void
 }
 
 export class WorkspaceCanvasControls {
@@ -66,6 +70,8 @@ export class WorkspaceCanvasControls {
     private readonly zoomIndicator: HTMLSpanElement | null
     private menuOpen = false
     private menuMode: 'menu' | 'url' = 'menu'
+    private followed = false
+    private ownMenu: CanvasCollaborationPresence['menu'] = null
     private imageUrl = ''
     private releaseOutsideClick: (() => void) | null = null
     private disposed = false
@@ -155,6 +161,44 @@ export class WorkspaceCanvasControls {
             this.element.classList.toggle('workspace-canvas-right-side-panel-open', open)
     }
 
+    getMenu(): CanvasCollaborationPresence['menu'] {
+        if (!this.menuOpen)
+            return null
+
+        return { kind: this.menuMode === 'url' ? 'upload-url' : 'upload' }
+    }
+
+    setFollowedMenu(
+        active: boolean,
+        menu: CanvasCollaborationPresence['menu'],
+    ): void {
+        if (
+            !active
+            && !this.followed
+        )
+            return
+
+        if (
+            active
+            && !this.followed
+        )
+            this.ownMenu = this.getMenu()
+
+        const next = active ? menu : this.ownMenu
+        const menuOpen = next?.kind === 'upload' || next?.kind === 'upload-url'
+        const menuMode = next?.kind === 'upload-url' ? 'url' : 'menu'
+        const changed = active !== this.followed
+            || menuOpen !== this.menuOpen
+            || menuMode !== this.menuMode
+        this.followed = active
+
+        if (changed) {
+            this.menuOpen = menuOpen
+            this.menuMode = menuMode
+            this.renderUploadMenu()
+        }
+    }
+
     closeUploadMenu(): void {
         if (this.disposed)
             return
@@ -235,7 +279,10 @@ export class WorkspaceCanvasControls {
     }
 
     private readonly toggleUploadMenu = (): void => {
-        if (this.disposed)
+        if (
+            this.disposed
+            || this.followed
+        )
             return
 
         this.menuOpen = !this.menuOpen
@@ -266,6 +313,12 @@ export class WorkspaceCanvasControls {
         const html = this.html
         imageButton.classList.toggle('active', this.menuOpen)
         imageWrapper.querySelector('.workspace-image-submenu')?.remove()
+
+        if (!this.followed)
+            this.ports.onMenuChange?.(
+                this.getMenu(),
+            )
+
         this.releaseOutsideClick?.()
         this.releaseOutsideClick = null
 
@@ -345,6 +398,13 @@ export class WorkspaceCanvasControls {
         }
 
         imageWrapper.append(menu)
+
+        if (this.followed) {
+            menu.inert = true
+
+            return
+        }
+
         const outsideClick = (event: MouseEvent) => {
             const target = event.target
             const NodeType = this.ports.document.defaultView?.Node

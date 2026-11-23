@@ -41,6 +41,14 @@ const resolvedPositionHasNodeType = (
     return false
 }
 
+type FormattingMenuPreview = {
+    kind: 'format-text' | 'format-image' | 'format-link'
+    textSelection: {
+        anchor: number
+        head: number
+    }
+}
+
 type BubbleMenuViewOptions = {
     downloadImage?: (src: string) => Promise<void>
     // Replaces the default rich-text items.
@@ -67,6 +75,7 @@ class BubbleMenuView {
     private linkInputPanel: HTMLElement | null = null
     private isLinkInputActive = false
     private isSelecting = false
+    private preview: FormattingMenuPreview | null = null
     // Set by a press outside the text, or one a feature consumed. The menu
     // stays closed until the user selects text again, whatever the editor
     // updates in the meantime.
@@ -105,16 +114,19 @@ class BubbleMenuView {
             parentEl: menuParent,
             items: this.menuItems,
             panels: this.linkInputPanel ? [this.linkInputPanel] : [],
+            onShow: () => this.publishVisibility(),
             onHide: () => {
                 this.currentContext = 'none'
                 this.closeLinkInput()
                 this.activeImageWrapper?.classList.remove('pm-image-menu-active')
                 this.activeImageWrapper = null
+                this.publishVisibility()
             },
         })
 
         // Track selection state
         view.dom.addEventListener('mousedown', this.handleEditorMouseDown)
+        view.dom.addEventListener('lixpi:canvas-formatting-preview', this.reflectPreview)
         view.dom.addEventListener('touchstart', this.handleEditorTouchStart)
         view.dom.addEventListener('focusout', this.handleEditorFocusOut)
         view.dom.addEventListener('keydown', this.handleEditorKeyDown)
@@ -130,6 +142,99 @@ class BubbleMenuView {
 
         // Listen for image resize events
         view.dom.addEventListener('image-resize', this.handleImageResize)
+    }
+
+    private publishVisibility(): void {
+        if (this.preview)
+            return
+
+        const {
+            anchor,
+            head,
+        } = this.view.state.selection
+        const visible = this.bubbleMenu.isVisible && this.currentContext !== 'none'
+        const kind = this.isLinkInputActive
+            ? 'format-link'
+            : this.currentContext === 'image'
+                ? 'format-image'
+                : 'format-text'
+        this.view.dom.dispatchEvent(
+            new CustomEvent<FormattingMenuPreview | null>(
+                'lixpi:editor-formatting-menu',
+                {
+                    bubbles: true,
+                    detail: visible ? {
+                        kind,
+                        textSelection: {
+                            anchor,
+                            head,
+                        },
+                    } : null,
+                },
+            ),
+        )
+    }
+
+    private reflectPreview = (event: Event): void => {
+        const preview = (event as CustomEvent<FormattingMenuPreview | null>).detail
+
+        if (!preview) {
+            if (this.preview) {
+                this.bubbleMenu.forceHide()
+                this.bubbleMenu.element.inert = false
+                this.preview = null
+            }
+
+            return
+        }
+
+        this.preview = preview
+        this.bubbleMenu.element.inert = true
+        const {
+            anchor,
+            head,
+        } = preview.textSelection
+        const from = Math.min(anchor, head)
+        const to = Math.max(anchor, head)
+
+        if (to > this.view.state.doc.content.size) {
+            this.bubbleMenu.forceHide()
+
+            return
+        }
+
+        const context = preview.kind === 'format-image' ? 'image' : 'text'
+        this.currentContext = context
+
+        try {
+            const start = this.view.coordsAtPos(from)
+            const end = this.view.coordsAtPos(to)
+            const left = Math.min(start.left, end.left)
+            const right = Math.max(start.right, end.right)
+            const top = Math.min(start.top, end.top)
+            const bottom = Math.max(start.bottom, end.bottom)
+            const image = context === 'image' ? this.view.nodeDOM(from) : null
+            const targetRect = image instanceof Element
+                ? image.getBoundingClientRect()
+                : new DOMRect(
+                    left,
+                    top,
+                    right - left,
+                    bottom - top,
+                )
+            this.bubbleMenu.show(
+                context,
+                {
+                    targetRect,
+                    placement: context === 'image' ? 'below' : this.textPlacement,
+                    animateOnShow: false,
+                },
+            )
+            this.linkInputPanel?.classList.toggle('is-active', preview.kind === 'format-link')
+            this.updateMenuState()
+        } catch {
+            this.bubbleMenu.forceHide()
+        }
     }
 
     // Expose view for image actions
@@ -168,6 +273,9 @@ class BubbleMenuView {
     // Hides the menu and drops any pending reposition, which would otherwise
     // show it again.
     private close(): void {
+        if (this.preview)
+            return
+
         if (this.updateDebounceTimer) {
             clearTimeout(this.updateDebounceTimer)
             this.updateDebounceTimer = null
@@ -425,7 +533,10 @@ class BubbleMenuView {
     }
 
     update(): void {
-        if (this.isSelecting)
+        if (
+            this.isSelecting
+            || this.preview
+        )
             return
 
         const wasVisible = this.bubbleMenu.isVisible
@@ -480,6 +591,8 @@ class BubbleMenuView {
 
                     if (position)
                         this.bubbleMenu.updateContext(context, position)
+
+                    this.publishVisibility()
                 },
                 this.debounceDelay,
             )
@@ -524,6 +637,19 @@ class BubbleMenuView {
         if (!type)
             return false
 
+        if (this.preview) {
+            const {
+                anchor,
+                head,
+            } = this.preview.textSelection
+
+            return state.doc.rangeHasMark(
+                Math.min(anchor, head),
+                Math.max(anchor, head),
+                type,
+            )
+        }
+
         if (empty)
             return !!type.isInSet(state.storedMarks || $from.marks())
 
@@ -556,6 +682,7 @@ class BubbleMenuView {
 
     showLinkInput(): void {
         this.isLinkInputActive = true
+        this.publishVisibility()
 
         if (this.linkInputPanel) {
             this.linkInputPanel.classList.add('is-active')
@@ -588,7 +715,14 @@ class BubbleMenuView {
     }
 
     closeLinkInput(): void {
+        const changed = this.isLinkInputActive
         this.isLinkInputActive = false
+
+        if (
+            changed
+            && this.bubbleMenu.isVisible
+        )
+            this.publishVisibility()
 
         if (this.linkInputPanel)
             this.linkInputPanel.classList.remove('is-active')
@@ -657,6 +791,7 @@ class BubbleMenuView {
             clearTimeout(this.updateDebounceTimer)
 
         this.view.dom.removeEventListener('mousedown', this.handleEditorMouseDown)
+        this.view.dom.removeEventListener('lixpi:canvas-formatting-preview', this.reflectPreview)
         this.view.dom.removeEventListener('touchstart', this.handleEditorTouchStart)
         this.view.dom.removeEventListener('image-resize', this.handleImageResize)
         document.removeEventListener('mouseup', this.handleDocumentMouseUp)

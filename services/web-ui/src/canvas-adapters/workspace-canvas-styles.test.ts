@@ -58,18 +58,19 @@ describe('workspace canvas styles', () => {
         expect(result.css).toContain('.workspace-pane')
     })
 
-    it('compiles inside the complete web UI stylesheet graph', async () => {
-        const result = await compileAsync(resolve(webUiSourceDirectory, 'sass/styles.scss'), {
+    it('loads private editor styles with the workspace application', async () => {
+        const workspaceApplication = readFileSync(resolve(webUiSourceDirectory, 'workspaceApplication.ts'), 'utf-8')
+        const options: Parameters<typeof compileAsync>[1] = {
             importers: [packageStylesheetImporter],
-            silenceDeprecations: [
-                'color-4-api',
-                'color-functions',
-                'global-builtin',
-                'import',
-            ],
-        })
+            silenceDeprecations: ['color-4-api', 'color-functions', 'global-builtin', 'import'],
+        }
+        const publicStyles = await compileAsync(resolve(webUiSourceDirectory, 'sass/styles.scss'), options)
+        const workspaceStyles = await compileAsync(resolve(webUiSourceDirectory, 'sass/workspace.scss'), options)
 
-        expect(result.css).toContain('.execution-trace')
+        expect(workspaceApplication).toContain("import '$src/sass/workspace.scss'")
+        expect(publicStyles.css).not.toContain('.execution-trace')
+        expect(workspaceStyles.css).toContain('.execution-trace')
+        expect(workspaceStyles.css).toContain('.code-block-wrapper .cm-scroller')
     })
 
     it('gives prompt references on the workspace the shared dark chip palette', () => {

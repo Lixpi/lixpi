@@ -158,6 +158,39 @@ afterEach(() => {
 })
 
 describe('ConnectionManager gesture ownership', () => {
+    it('paints a remotely selected edge without selecting it locally', () => {
+        const onSelectedEdgeChange = vi.fn()
+        const {
+            manager,
+            paneEl,
+            onConnectorGeometry,
+            onEdgesChange,
+        } = setup(0, { onSelectedEdgeChange })
+        paneEl.style.setProperty('--connector-line-default-color', '#000000')
+        paneEl.style.setProperty('--connector-line-focus-color', '#3366cc')
+        manager.syncEdges([existingEdge])
+        manager.setRemoteSelectedEdges(new Set(['ab']))
+
+        expect(onConnectorGeometry.mock.lastCall?.[0]?.[0]).toMatchObject({
+            id: 'ab',
+            strokeColor: '#3366cc',
+        })
+        expect(manager.recomputeConnectorGeometry(2)).toBe(true)
+        expect(onConnectorGeometry.mock.lastCall?.[0]?.[0]).toMatchObject({
+            id: 'ab',
+            strokeColor: '#3366cc',
+        })
+        expect(onSelectedEdgeChange).not.toHaveBeenCalled()
+        manager.deleteSelectedEdge()
+        expect(onEdgesChange).not.toHaveBeenCalled()
+
+        manager.setRemoteSelectedEdges(new Set())
+        expect(onConnectorGeometry.mock.lastCall?.[0]?.[0]).toMatchObject({
+            id: 'ab',
+            strokeColor: '#000000',
+        })
+    })
+
     it('cancels touch reconnection without deleting its edge', () => {
         const {
             manager,

@@ -651,6 +651,57 @@ const modelSelectorLabel = (option: AiModelDropdownOption): string => {
     return `${option.providerTitle}: ${option.title}`
 }
 
+class CanvasModelDropdownPreview {
+    private readOnly = false
+
+    constructor(
+        private readonly host: HTMLElement,
+        private readonly id: string,
+        private readonly setOpen: (open: boolean) => void,
+    ) {
+        host.dataset.canvasModelControlId = id
+        host.addEventListener('lixpi:canvas-model-control-preview', this.reflect)
+    }
+
+    get passive(): boolean {
+        return this.readOnly
+    }
+
+    changed = (open: boolean): void => {
+        if (!this.readOnly)
+            this.host.dispatchEvent(
+                new CustomEvent(
+                    'lixpi:canvas-model-control',
+                    {
+                        bubbles: true,
+                        detail: {
+                            id: this.id,
+                            open,
+                        },
+                    },
+                ),
+            )
+    }
+
+    destroy(): void {
+        this.host.removeEventListener('lixpi:canvas-model-control-preview', this.reflect)
+    }
+
+    private reflect = (event: Event): void => {
+        const {
+            open,
+            readOnly,
+        } = (
+            event as CustomEvent<{
+                open: boolean
+                readOnly: boolean
+            }>
+        ).detail
+        this.readOnly = readOnly
+        this.setOpen(open)
+    }
+}
+
 type ModelSlidingDropdownControls = {
     getCurrentModel: () => string
     setModel: (modelId: string) => void
@@ -671,6 +722,7 @@ class ModelSlidingDropdownView {
 
     private readonly unsubscribe: () => void
     private dropdown: SlidingDropdownInstance<string> | null = null
+    private readonly preview: CanvasModelDropdownPreview
     private modelOptions: AiModelDropdownOption[] = []
     private modelOptionsById = new Map<string, AiModelDropdownOption>()
     private renderedOptionsSignature = ''
@@ -683,6 +735,11 @@ class ModelSlidingDropdownView {
                 contenteditable="false"
             ></span>
         ` as HTMLElement
+        this.preview = new CanvasModelDropdownPreview(
+            this.dom,
+            config.id,
+            open => this.dropdown?.setOpen(open),
+        )
         this.syncModels(
             aiModelsStore.getData(),
         )
@@ -818,8 +875,12 @@ class ModelSlidingDropdownView {
                             ...settings.slidingDropdown.styles.option,
                         },
                     ),
+                onOpenChange: this.preview.changed,
                 onChange: value => {
-                    if (value)
+                    if (
+                        value
+                        && !this.preview.passive
+                    )
                         this.config.controls.setModel(value)
                 },
             },
@@ -856,6 +917,7 @@ class ModelSlidingDropdownView {
             clearTimeout(this.defaultSelectionTimer)
 
         this.unsubscribe()
+        this.preview.destroy()
         this.dropdown?.destroy()
         this.dom.remove()
     }
@@ -1278,10 +1340,16 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
                     ),
                 )
                 : undefined
+        const controlId = `${group.groupId}:${group.selectedModelIds[0] ?? ''}:${control.key}`
+        const preview = new CanvasModelDropdownPreview(
+            host,
+            controlId,
+            open => slidingDropdown.setOpen(open),
+        )
         const slidingDropdown: SlidingDropdownInstance<string> = createSlidingDropdown(
             svg,
             {
-                id: `${group.groupId}:${group.selectedModelIds[0] ?? ''}:${control.key}`,
+                id: controlId,
                 ...portalScope.options,
                 x: 0,
                 y: 0,
@@ -1293,11 +1361,15 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
                 ariaLabel: control.label,
                 observeParentResize: false,
                 renderOption,
-                onChange: value => this.setGroupControlValue(
-                    group,
-                    control,
-                    value,
-                ),
+                onOpenChange: preview.changed,
+                onChange: value => {
+                    if (!preview.passive)
+                        this.setGroupControlValue(
+                            group,
+                            control,
+                            value,
+                        )
+                },
             },
         )
         this.mountedControls.push({
@@ -1306,7 +1378,10 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             control,
             setValue: value => slidingDropdown.setValue(value),
             closeMenu: () => slidingDropdown.setOpen(false),
-            destroy: () => slidingDropdown.destroy(),
+            destroy: () => {
+                preview.destroy()
+                slidingDropdown.destroy()
+            },
         })
     }
 

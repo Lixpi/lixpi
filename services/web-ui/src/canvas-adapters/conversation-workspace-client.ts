@@ -39,6 +39,7 @@ export class ConversationWorkspaceClient {
                     conversationAssetId,
                     asset.revision,
                     { title },
+                    workspaceId,
                 )
 
                 if ('error' in result)

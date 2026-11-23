@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
         getWorkspace: vi.fn(),
         updateCanvasState: vi.fn(),
     },
+    collaboration: {
+        handle: vi.fn(),
+        saveHumanCanvas: vi.fn(),
+    },
     organization: {
         getUserOrganizations: vi.fn(),
     },
@@ -29,6 +33,7 @@ vi.mock('@lixpi/debug-tools', () => ({
     warn: vi.fn(),
 }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../services/canvas-collaboration.ts', () => ({ canvasCollaboration: mocks.collaboration }))
 vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../services/workspace-tree-service.ts', () => ({
     workspaceTreeService: () => mocks.service,
@@ -47,7 +52,7 @@ beforeEach(() => {
         workspace: { workspaceId: 'ws-1' },
         tree: { roots: [] },
     })
-    mocks.workspace.updateCanvasState.mockResolvedValue({ success: true })
+    mocks.collaboration.saveHumanCanvas.mockResolvedValue({ success: true })
 })
 
 // =============================================================================
@@ -56,7 +61,15 @@ beforeEach(() => {
 
 describe('Workspace subject bindings', () => {
     it('binds every workspace subject, with the tree subjects served by the tree service', async () => {
-        expect(workspaceSubjects.map(subscription => subscription.subject).sort()).toEqual(Object.values(WORKSPACE_SUBJECTS).sort())
+        const {
+            CANVAS_EVENTS,
+            CANVAS_INTERNAL_PRESENCE,
+            ...requestSubjects
+        } = WORKSPACE_SUBJECTS
+
+        expect(workspaceSubjects.map(subscription => subscription.subject).sort()).toEqual(Object.values(requestSubjects).sort())
+        expect(workspaceSubjects.map(subscription => subscription.subject)).not.toContain(CANVAS_EVENTS)
+        expect(workspaceSubjects.map(subscription => subscription.subject)).not.toContain(CANVAS_INTERNAL_PRESENCE)
 
         mocks.service.getUserWorkspaceTree.mockResolvedValue({ organizations: [] })
         expect(await getHandler(WORKSPACE_SUBJECTS.GET_USER_WORKSPACE_TREE)({ user: { userId: 'user-1' } })).toEqual({ organizations: [] })
@@ -123,6 +136,22 @@ describe('Workspace creation', () => {
 // =============================================================================
 
 describe('Workspace read and canvas save', () => {
+    it('binds collaboration to the authenticated user and queues each request for one replica', async () => {
+        const request = {
+            user: { userId: 'verified-user' },
+            userId: 'client-claimed-user',
+            workspaceId: 'ws-1',
+            sessionId: 'tab-1',
+            action: 'join',
+        }
+        const collaboration = workspaceSubjects.find(subscription => subscription.subject === WORKSPACE_SUBJECTS.CANVAS_COLLABORATE)
+
+        await getHandler(WORKSPACE_SUBJECTS.CANVAS_COLLABORATE)(request)
+
+        expect(collaboration?.queue).toBe('workspaceCanvasCollaboration')
+        expect(mocks.collaboration.handle).toHaveBeenCalledWith('verified-user', request)
+    })
+
     it('reads a workspace for the requesting user', async () => {
         mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'ws-1' })
 
@@ -149,7 +178,7 @@ describe('Workspace read and canvas save', () => {
             accessLevel: 'editor',
         })
         expect(await getHandler(WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE)(request)).toEqual({ success: true })
-        expect(mocks.workspace.updateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mocks.collaboration.saveHumanCanvas).toHaveBeenCalledWith(expect.objectContaining({
             workspaceId: 'ws-1',
             expectedCanvasStateUpdatedAt: 4,
             persistViewport: false,

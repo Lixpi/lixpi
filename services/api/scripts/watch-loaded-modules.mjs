@@ -30,14 +30,26 @@ const restart = (path) => {
 
 const readList = () => {
     try {
-        return readFileSync(LIST_FILE, 'utf8').split('\n').filter(Boolean)
+        return new Set(readFileSync(LIST_FILE, 'utf8').split('\n').filter(Boolean))
     } catch {
-        return []
+        return undefined
     }
 }
 
 const watchNewFiles = () => {
-    for (const path of readList()) {
+    const loaded = readList()
+
+    if (!loaded)
+        return
+
+    for (const path of watched) {
+        if (!loaded.has(path)) {
+            unwatchFile(path)
+            watched.delete(path)
+        }
+    }
+
+    for (const path of loaded) {
         if (watched.has(path))
             continue
 
@@ -47,7 +59,8 @@ const watchNewFiles = () => {
             { interval: POLL_INTERVAL_MS },
             (current, previous) => {
                 if (current.mtimeMs !== previous.mtimeMs || current.size !== previous.size)
-                    restart(path)
+                    if (readList()?.has(path) ?? true)
+                        restart(path)
             },
         )
     }

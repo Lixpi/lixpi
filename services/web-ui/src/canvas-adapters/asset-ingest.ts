@@ -32,6 +32,7 @@ export const uploadCanvasAsset = async (
     {
         workspaceId,
         file,
+        conversationFile,
         onStart,
     }: CanvasUploadRequest & { file: File },
 ): Promise<CanvasIngestReply> => {
@@ -45,6 +46,12 @@ export const uploadCanvasAsset = async (
 
     const body = new FormData()
     body.append('file', file)
+
+    if (conversationFile) {
+        body.append('conversationAssetId', conversationFile.conversationAssetId)
+        body.append('interruptId', conversationFile.interruptId)
+    }
+
     const response = await fetch(
         `${import.meta.env.VITE_API_URL || ''}/api/assets/workspaces/${workspaceId}`,
         {

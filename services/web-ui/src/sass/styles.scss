@@ -10,12 +10,6 @@
 
 @import "components/animations";
 
-@import "@lixpi/prosemirror/styles/editor";
-@import "@lixpi/canvas-components/styles/workspace/context-preview";
-@import "@lixpi/prosemirror/styles/code-mirror";
-@import "../components/executionTrace/execution-trace";
-@import "../components/capabilityRun/capability-run";
-
 // web-ui fills the window and scrolls only inside its own panels and lists,
 // so the page itself never scrolls. A wheel over a list with nothing left to
 // scroll, such as a short conversation, passes to the page, and an element

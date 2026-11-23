@@ -23,6 +23,9 @@ import {
     type WorkspaceCanvasDocument as Document,
     type WorkspaceCanvasConversation as AiChatThread,
 } from './workspace-canvas-surface.ts'
+import {
+    type CanvasGenerationSubmitOptions,
+} from '../../shared/generation/canvas-generation-submission.ts'
 import { WorkspaceGenerationContext } from '../../shared/generation/workspace-generation-context.ts'
 import {
     WorkspaceNodeDeletion,
@@ -100,6 +103,8 @@ import {
 } from '@lixpi/canvas-engine/shared'
 import {
     LoadingStatus,
+    type CanvasCollaborationActor,
+    type CanvasCollaborationPresence,
     type CanvasState,
     type CanvasNode,
     type ImageCanvasNode,
@@ -160,6 +165,9 @@ import { WorkspaceCanvasLibraries } from './workspace-canvas-libraries.ts'
 import { WorkspaceBranchMarkerModels } from './workspace-branch-marker-models.ts'
 import { WorkspaceMediaGeometry } from './workspace-media-geometry.ts'
 import { WorkspaceCanvasSelection } from './workspace-canvas-selection.ts'
+import {
+    type WorkspaceConnectionDrafts,
+} from './workspace-canvas-collaboration.ts'
 import { WorkspaceBranchMarkerGeneration } from './workspace-branch-marker-generation.ts'
 import { WorkspaceOperationStatusNodes } from './workspace-operation-status-nodes.ts'
 import { WorkspaceBranchMarkerPresentation } from './workspace-branch-marker-presentation.ts'
@@ -293,6 +301,12 @@ export class LixpiWorkspaceCanvas {
     private readonly mediaAnalysis
     private readonly outputReview
     private projectionOverrides
+    private remoteGeometryOverrides
+    private remoteGeometryNodeIds = new Set<string>()
+    private followedActor: CanvasCollaborationActor | null = null
+    private releaseFollowPan: (() => void) | null = null
+    private ownInteraction: Pick<CanvasCollaborationPresence, 'selection' | 'menu'> | null = null
+    private ownContextChips: string[] | null = null
     private projectionSceneKey
     private readonly videoControls
     private readonly outputControls
@@ -600,7 +614,10 @@ export class LixpiWorkspaceCanvas {
                     this.persistAiChatSidebarState()
                 },
                 // Conversation selection and context chips are private per user, so they never enter shared canvas state.
-                applyLocalPanelState: state => void (this.aiChatPanelState = state),
+                applyLocalPanelState: state => {
+                    if (!this.followedActor)
+                        this.aiChatPanelState = state
+                },
                 findNode: this.findCanvasNodeById,
                 getPreviewNode: reference => this.referenceProjection.getPromptReferencePreviewNode(reference),
             })
@@ -617,6 +634,7 @@ export class LixpiWorkspaceCanvas {
                 reportError: (message, error) => console.error(message, error),
             })
             this.libraries = new WorkspaceCanvasLibraries({
+                onViewChange: this.options.onPresenceChange ? library => this.options.onPresenceChange?.({ library }) : undefined,
                 host: this.host,
                 document: this.paneEl.ownerDocument,
                 getWorkspaceId: () => this.workspaceId,
@@ -794,6 +812,7 @@ export class LixpiWorkspaceCanvas {
                 onImageIntrinsicSize: this.mediaGeometry.handleImageIntrinsicSize,
                 onVideoIntrinsicSize: this.mediaGeometry.handleVideoIntrinsicSize,
                 onPlaybackReady: () => this.scheduleGeneratedMediaControlsSync(),
+                onPlaybackPresence: this.options.onPlaybackPresence,
                 marker: this.connectorIcon,
                 onEdgesChange: edges => {
                     if (this.currentCanvasState)
@@ -803,6 +822,7 @@ export class LixpiWorkspaceCanvas {
                         })
                 },
                 onEdgeSelectionChange: edgeId => this.selectionController.setEdgeSelection(edgeId),
+                onConnectionDraft: this.options.onConnectionDraft,
                 settings: this.host.settings,
                 sources: this.host.media.sources,
                 onError: error => console.error('Canvas media rendering failed:', error),
@@ -1113,6 +1133,7 @@ export class LixpiWorkspaceCanvas {
                 reportError: (message, error) => console.error(message, error),
             })
             this.projectionOverrides = this.liveNodeOverrides.createScope()
+            this.remoteGeometryOverrides = this.liveNodeOverrides.createScope(1)
             this.projectionSceneKey = this.canvasRuntime.scene.scene.sceneKey
             this.callbacks.own(
                 this.canvasRuntime.scene.subscribeScene(scene => {
@@ -1131,6 +1152,7 @@ export class LixpiWorkspaceCanvas {
                     this.projectionSceneKey = scene.sceneKey
                     this.projectionOverrides.destroy()
                     this.projectionOverrides = this.liveNodeOverrides.createScope()
+                    this.resetRemoteGeometry()
                 }),
             )
             this.viewportEl = this.canvasMediaLayer.worldElement as HTMLDivElement
@@ -1153,6 +1175,7 @@ export class LixpiWorkspaceCanvas {
                 suppressPaneClick: () => this.nodeGestures.suppressPaneClick(),
                 addContext: this.context.add,
                 scheduleEdges: this.scheduleEdgesRender,
+                onChanged: selection => this.options.onPresenceChange?.({ selection }),
                 menu: {
                     showNode: nodeId => this.interactions.menu.showNode(nodeId),
                     showEdge: edgeId => this.interactions.menu.showEdge(edgeId),
@@ -1330,6 +1353,16 @@ export class LixpiWorkspaceCanvas {
                     this.manuallyPositionedBranchMarkerNodeIds.add(node.nodeId)
                 },
                 commit: this.commitCanvasState,
+                preview: bounds => this.options.onGeometryPreview?.(
+                    Array.from(
+                        bounds,
+                        ([nodeId, rect]) => ({
+                            nodeId,
+                            ...rect,
+                        }),
+                    ),
+                ),
+                finishPreview: this.options.onGeometryFinish,
                 setTimer: (callback, delay) => {
                     const timer = this.window.setTimeout(callback, delay)
 
@@ -1388,6 +1421,7 @@ export class LixpiWorkspaceCanvas {
                 },
                 commit: this.commitCanvasState,
                 defaultConnectorCurve: this.host.settings.connector.lineCurve,
+                onMenuChange: menu => this.options.onPresenceChange?.({ menu }),
                 getMenuVisualScale: () =>
                     scaleCanvasControlsToScreenForZoom(
                         1,
@@ -1718,10 +1752,16 @@ export class LixpiWorkspaceCanvas {
             this.unlockCanvasScrollLayers = lockCanvasScrollLayers([this.paneEl, this.viewportEl, this.paneEl.parentElement])
             this.canvasRuntime.installKeyboard({
                 onEscape: () => {
+                    if (this.followedActor)
+                        return
+
                     this.selectionController.clearEdgeSelection(true)
                     this.selectNode(null)
                 },
                 onDelete: () => {
+                    if (this.followedActor)
+                        return false
+
                     if (this.selection.nodeIds.size > 0) {
                         void this.deleteCanvasNodes(
                             new Set(this.selection.nodeIds),
@@ -1753,6 +1793,7 @@ export class LixpiWorkspaceCanvas {
                 this.callbacks.own(releaseCommands)
 
             this.initializePanZoom()
+            this.watchModelMenu()
             this.canvasRuntime.setScrollCapture(this.options.scrollCapture ?? 'always')
             this.canvasRuntime.setFitOptions(this.options.fit ?? {})
             this.setLocked(this.options.locked ?? false)
@@ -2174,9 +2215,13 @@ export class LixpiWorkspaceCanvas {
     }
 
     private persistAiChatSidebarState = (): void => {
-        if (!this.currentCanvasState)
+        if (
+            !this.currentCanvasState
+            || this.followedActor
+        )
             return
 
+        this.options.onPresenceChange?.({ panel: this.getPresencePanel() })
         this.writeConversationContext()
         const nextCanvasState = setAiChatPanelState(
             this.currentCanvasState,
@@ -2193,9 +2238,33 @@ export class LixpiWorkspaceCanvas {
     }
 
     private syncActiveAiChatPanelFromState = (): void => {
-        const contextChips = this.aiChatPanelState.contextChips
+        const previousChips = this.aiChatPanelState.contextChips
         this.aiChatPanelState = getAiChatPanelState(this.currentCanvasState)
+        const panel = this.followedActor?.panel
+
+        if (panel) {
+            this.aiChatPanelState = {
+                ...this.aiChatPanelState,
+                isOpen: panel.isOpen,
+                topLevelMode: panel.mode,
+                width: panel.width,
+                generatedOutputDetailsTarget: panel.detailsTarget ?? undefined,
+            }
+        }
+
+        const contextChips = panel?.contextNodeIds
+            ? panel.contextNodeIds.filter(
+                nodeId => Boolean(
+                    this.findCanvasNodeById(nodeId),
+                ),
+            )
+            : this.followedActor
+                ? []
+                : previousChips
         this.aiChatPanelState.contextChips = contextChips
+
+        if (JSON.stringify(previousChips) !== JSON.stringify(contextChips))
+            this.context.refresh()
 
         this.rightPanel?.syncState()
     }
@@ -2204,7 +2273,7 @@ export class LixpiWorkspaceCanvas {
         try {
             this.host.storage.setItem(
                 `lixpi:conversation-context:${this.host.workspace.userId()}:${this.workspaceId}:${this.contextDraftConversationId}`,
-                JSON.stringify(this.aiChatPanelState.contextChips),
+                JSON.stringify(this.ownContextChips ?? this.aiChatPanelState.contextChips),
             )
         } catch {}
     }
@@ -2230,7 +2299,16 @@ export class LixpiWorkspaceCanvas {
             : this.contextDraftInitialized
                 || migrated
                 ? []
-                : this.aiChatPanelState.contextChips
+                : this.ownContextChips ?? this.aiChatPanelState.contextChips
+
+        if (this.followedActor) {
+            this.ownContextChips = contextChips
+            this.contextDraftInitialized = true
+            this.writeConversationContext()
+
+            return
+        }
+
         this.aiChatPanelState = {
             ...this.aiChatPanelState,
             contextChips,
@@ -2292,6 +2370,7 @@ export class LixpiWorkspaceCanvas {
                 workspaceId: this.workspaceId,
                 userId: this.host.workspace.userId(),
                 storage: this.host.storage,
+                onDraftChange: this.options.onComposerPresence,
                 mountContextTray: () => {
                     const element = this.context.createTray("canvas")
 
@@ -2370,6 +2449,70 @@ export class LixpiWorkspaceCanvas {
                     }),
                 },
                 this.host.workspace.openConversation,
+                {
+                    upload: async (file, interruptId) => {
+                        if (!this.options.uploadConversationFile)
+                            throw new Error('File upload is unavailable in this workspace.')
+
+                        const conversationAssetId = controller.current?.conversationAssetId
+
+                        if (!conversationAssetId)
+                            throw new Error('This conversation is no longer active.')
+
+                        return await this.options.uploadConversationFile(
+                            file,
+                            {
+                                conversationAssetId,
+                                interruptId,
+                            },
+                        )
+                    },
+                    attest: async action => {
+                        const asset = await this.host.assets.refresh(action.assetId, this.workspaceId)
+
+                        if ('error' in asset)
+                            throw new Error(asset.error)
+
+                        const result = await this.host.assets.attestSubjectIdentity(
+                            action.assetId,
+                            asset.revision,
+                            action.classification,
+                        )
+
+                        if ('error' in result)
+                            throw new Error(result.error)
+                    },
+                    download: action => this.host.media.download({
+                        assetId: action.assetId,
+                        rendition: action.rendition,
+                        attachment: true,
+                        document: this.paneEl.ownerDocument,
+                        signal: this.callbacks.signal,
+                    }),
+                    exportWorkspace: async workspaceId => {
+                        if (!this.host.workspace.exportArchive)
+                            throw new Error('Workspace export is unavailable.')
+
+                        await this.host.workspace.exportArchive(workspaceId)
+                    },
+                    openVerification: async action => {
+                        const coordinate = {
+                            workspaceId: this.workspaceId,
+                            generationRequestId: action.generationRequestId,
+                        }
+                        const { request } = await this.host.generation.get({
+                            ...coordinate,
+                            includeCheckpoint: false,
+                        })
+                        const session = await this.host.generation.startVerification({
+                            ...coordinate,
+                            generationRun: action.generationRun,
+                            requestRevision: request.revision,
+                            assetId: action.assetId,
+                        })
+                        this.host.openExternalUrl(session.verificationUrl)
+                    },
+                },
             )
 
             if (composer)
@@ -2417,12 +2560,14 @@ export class LixpiWorkspaceCanvas {
         explicitContextNodeIds = [],
         excludedCanvasNodeIds = [],
         regeneration,
+        sourceGenerationRequestId,
     }: {
         thread: AiChatThread
         submittedData?: AiPromptComposerSubmitData
         explicitContextNodeIds?: string[]
         excludedCanvasNodeIds?: string[]
         regeneration?: NonNullable<AiInteractionMediaGenerationRequest['regeneration']>
+        sourceGenerationRequestId?: string
     }): CanvasConversationRun => {
         const threadId = thread.threadId
         const runWorkspaceId = this.workspaceId
@@ -2439,6 +2584,7 @@ export class LixpiWorkspaceCanvas {
                         explicitContextNodeIds,
                         excludedCanvasNodeIds,
                         regeneration,
+                        sourceGenerationRequestId,
                     },
                     {
                         mountEditor: this.editors.createConversation({
@@ -2581,7 +2727,67 @@ export class LixpiWorkspaceCanvas {
         }
     }
 
-    private submitCanvasGenerationRun = async (data: AiPromptComposerSubmitData): Promise<void> => {
+    private submitCanvasGenerationRun = async (
+        data: AiPromptComposerSubmitData,
+        options?: CanvasGenerationSubmitOptions,
+    ): Promise<void> => {
+        if (
+            options?.sourceConversationAssetId
+            && options.regeneration
+        ) {
+            const threadId = options.sourceConversationAssetId
+            const workspaceId = this.workspaceId
+            const asset = await this.host.assets.refresh(threadId, workspaceId)
+
+            if ('error' in asset)
+                throw new Error(asset.error)
+
+            if (
+                this.rendererDestroyed
+                || workspaceId !== this.workspaceId
+            )
+                return
+
+            if (asset.conversationRuntime !== 'deep-agents') {
+                const thread = this.getPersistedAiChatThread(threadId) ?? await this.host.generation.fetchConversation({
+                    workspaceId,
+                    threadId,
+                })
+
+                if (
+                    !thread
+                    || this.detachedAiChatThreadEditors.isActive(threadId)
+                )
+                    throw new Error('The source generation conversation is unavailable or already running.')
+
+                if (
+                    this.rendererDestroyed
+                    || workspaceId !== this.workspaceId
+                )
+                    return
+
+                if (this.detachedAiChatThreadEditors.has(threadId))
+                    this.teardownDetachedCanvasRun(threadId)
+
+                if (!options.sourceGenerationRequestId)
+                    throw new Error('This output does not have a retained generation request.')
+
+                this.detachedAiChatThreadEditors.activate(threadId)
+                await this.createDetachedCanvasThreadEditor({
+                    thread,
+                    submittedData: data,
+                    explicitContextNodeIds: options.explicitContextNodeIds,
+                    excludedCanvasNodeIds: options.excludedCanvasNodeIds,
+                    regeneration: options.regeneration,
+                    sourceGenerationRequestId: options.sourceGenerationRequestId,
+                }).submitRegeneration()
+
+                return
+            }
+
+            throw new Error('This output requires regeneration through its current media pipeline.')
+        }
+
         if (!this.agentConversation)
             throw new Error('The conversation is not ready yet.')
 
@@ -2615,7 +2821,16 @@ export class LixpiWorkspaceCanvas {
         for (const node of data.contentJSON)
             visit(node)
 
-        for (const nodeId of this.aiChatPanelState.contextChips) {
+        const excluded = new Set(options?.excludedCanvasNodeIds)
+        const contextNodeIds = [...new Set([
+            ...this.aiChatPanelState.contextChips,
+            ...options?.explicitContextNodeIds ?? [],
+        ])]
+
+        for (const nodeId of contextNodeIds) {
+            if (excluded.has(nodeId))
+                continue
+
             const node = this.currentCanvasState?.nodes.find(candidate => candidate.nodeId === nodeId)
 
             if (
@@ -3535,7 +3750,16 @@ export class LixpiWorkspaceCanvas {
                 beginLoading: () => this.loadingLayer!.acquire({ visible: true }),
                 getAsset: assetId => this.host.assets.read(assetId),
                 getDocument: assetId => this.host.assets.readDocument(assetId, 'capabilityArtifact'),
-                refreshAsset: assetId => this.host.assets.refresh(assetId, this.workspaceId),
+                refreshAsset: assetId => (this.host.assets.hydrateArtifact ?? this.host.assets.refresh)(assetId, this.workspaceId),
+                subscribeContent: changed => {
+                    const assets = this.host.assets.subscribe(changed)
+                    const documents = this.host.assets.subscribeDocuments?.(changed)
+
+                    return () => {
+                        documents?.()
+                        assets()
+                    }
+                },
                 ensureAssetsLoaded: assetIds => this.host.assets.ensureAssetsLoaded(assetIds),
                 getDefinitions: artifactTypeId => ({
                     frontend: this.host.capabilities.frontend.require(artifactTypeId),
@@ -3721,6 +3945,7 @@ export class LixpiWorkspaceCanvas {
         this.releasePanZoomForNodePointer()
         this.liveNodeOverrides.clear()
         this.projectionOverrides = this.liveNodeOverrides.createScope()
+        this.resetRemoteGeometry()
         this.branchMarkerProjectionOverrideNodeIds.clear()
         this.manuallyPositionedBranchMarkerNodeIds.clear()
         this.selectionController.clearState()
@@ -3942,6 +4167,222 @@ export class LixpiWorkspaceCanvas {
             this.canvasRuntime.setScrollCapture(mode)
     }
 
+    private resetRemoteGeometry(): void {
+        this.remoteGeometryOverrides.destroy()
+        this.remoteGeometryOverrides = this.liveNodeOverrides.createScope(1)
+        this.remoteGeometryNodeIds.clear()
+    }
+
+    setRemoteGeometry = (geometry: NonNullable<CanvasCollaborationPresence['geometry']>): void => {
+        if (
+            this.rendererDestroyed
+            || !this.currentCanvasState
+        )
+            return
+
+        const changed = this.remoteGeometryNodeIds
+        const next = new Set<string>()
+        this.remoteGeometryOverrides.clear()
+
+        for (const {
+            nodeId,
+            x,
+            y,
+            width,
+            height,
+        } of geometry) {
+            this.remoteGeometryOverrides.set(
+                nodeId,
+                {
+                    position: {
+                        x,
+                        y,
+                    },
+                    dimensions: {
+                        width,
+                        height,
+                    },
+                },
+            )
+            next.add(nodeId)
+        }
+
+        for (const nodeId of next)
+            changed.add(nodeId)
+
+        const nodes = this.currentCanvasState.nodes.filter(node => changed.has(node.nodeId))
+
+        if (nodes.length) {
+            this.syncCanvasNodeDomGeometry(nodes)
+            this.scheduleEdgesRender()
+        }
+
+        this.remoteGeometryNodeIds = next
+    }
+
+    getComposerPresence = (): CanvasCollaborationPresence['composer'] => this.globalCanvasComposer?.getDraft()
+
+    setFollowedComposer = (
+        following: boolean,
+        draft: CanvasCollaborationPresence['composer'],
+    ): void => {
+        this.globalCanvasComposer?.setFollowedDraft(following, draft)
+        this.agentConversationPanel?.setFollowedConversation(following, draft?.conversationAssetId)
+    }
+
+    setFollowedPlayback = (
+        following: boolean,
+        state: CanvasCollaborationPresence['playback'],
+    ): void => {
+        this.canvasMediaLayer?.playback.setFollowedPlayback(following, state)
+        this.videoControls.setExpandedPreview(following
+            && state?.fullscreen
+            ? state.nodeId
+            : null, this.paneEl)
+    }
+
+    getRemoteNodeBounds = (nodeId: string): Rect | undefined => this.canvasMediaLayer?.getNodeBounds(nodeId)
+
+    setRemoteSelectedEdges = (edgeIds: ReadonlySet<string>): void => void this.connectionManager?.setRemoteSelectedEdges(edgeIds)
+
+    setRemoteConnectors = (connectors: WorkspaceConnectionDrafts): void => void this.canvasMediaLayer?.setRemoteConnectors(connectors)
+
+    private modelMenuTrigger(): HTMLElement | null {
+        return this.options.modelMenuControlMountEl.querySelector<HTMLElement>('.ai-prompt-model-menu-trigger')
+    }
+
+    private watchModelMenu(): void {
+        if (!this.options.onPresenceChange)
+            return
+
+        let lastMenu = ''
+        const observer = new MutationObserver(() => {
+            const menu = this.getPresenceMenu()
+            const key = JSON.stringify(menu)
+
+            if (
+                key === lastMenu
+                || this.followedActor
+            )
+                return
+
+            lastMenu = key
+            this.options.onPresenceChange?.({ menu })
+        })
+        observer.observe(
+            this.options.modelMenuControlMountEl,
+            {
+                attributeFilter: ['aria-expanded', 'data-canvas-model-control'],
+                childList: true,
+                subtree: true,
+            },
+        )
+        this.callbacks.own(() => observer.disconnect())
+    }
+
+    private reflectModelMenu(
+        menu: CanvasCollaborationPresence['menu'],
+        readOnly: boolean,
+    ): void {
+        this.modelMenuTrigger()?.dispatchEvent(
+            new CustomEvent(
+                'lixpi:canvas-model-menu',
+                {
+                    detail: {
+                        open: menu?.kind === 'model-settings',
+                        readOnly,
+                        controlId: menu?.controlId,
+                    },
+                },
+            ),
+        )
+    }
+
+    getPresenceMenu = (): CanvasCollaborationPresence['menu'] =>
+        this.modelMenuTrigger()?.ariaExpanded === 'true'
+            ? {
+                kind: 'model-settings',
+                controlId: this.modelMenuTrigger()?.dataset.canvasModelControl,
+            }
+            : this.interactions.menu.getSnapshot()
+
+    getPresencePanel = (): NonNullable<CanvasCollaborationPresence['panel']> => ({
+        isOpen: this.aiChatPanelState.isOpen,
+        mode: this.aiChatPanelState.topLevelMode,
+        width: this.aiChatPanelState.width,
+        detailsTarget: this.aiChatPanelState.generatedOutputDetailsTarget ?? null,
+        contextNodeIds: this.aiChatPanelState.contextChips.slice(0, 32),
+    })
+
+    setFollowedActor = (actor: CanvasCollaborationActor | null): void => {
+        if (this.rendererDestroyed)
+            return
+
+        const previous = this.followedActor
+        this.followedActor = actor
+
+        if (
+            actor
+            && !previous
+        ) {
+            this.ownContextChips = [...this.aiChatPanelState.contextChips]
+            this.ownInteraction = {
+                selection: this.selectionController.getSnapshot(),
+                menu: this.getPresenceMenu(),
+            }
+            this.canvasRuntime.cancelInteraction('replaced')
+            this.releaseFollowPan = this.panZoom?.lock() ?? null
+        }
+
+        if (actor)
+            this.reflectFollowedActor(actor)
+        else if (previous) {
+            this.releaseFollowPan?.()
+            this.releaseFollowPan = null
+            this.selectionController.setSnapshot(this.ownInteraction?.selection)
+            this.interactions.menu.setSnapshot(this.ownInteraction?.menu)
+            this.reflectModelMenu(this.ownInteraction?.menu, false)
+            this.ownInteraction = null
+            this.aiChatPanelState.contextChips = this.ownContextChips?.filter(
+                nodeId => Boolean(
+                    this.findCanvasNodeById(nodeId),
+                ),
+            ) ?? []
+            this.ownContextChips = null
+            this.reflectFollowedPanel()
+            this.context.refresh()
+            this.libraries.setFollowedView(false, null)
+        }
+    }
+
+    private reflectFollowedActor(actor: CanvasCollaborationActor): void {
+        this.selectionController.setSnapshot(actor.selection)
+        this.interactions.menu.setSnapshot(actor.menu)
+        this.reflectModelMenu(actor.menu, true)
+
+        this.reflectFollowedPanel()
+        this.libraries.setFollowedView(true, actor.library)
+    }
+
+    private reflectFollowedPanel(): void {
+        const previous = this.aiChatPanelState
+        this.syncActiveAiChatPanelFromState()
+
+        if (
+            this.aiChatPanelState.isOpen
+            && (!this.rightPanel?.element ||
+                previous.topLevelMode !== this.aiChatPanelState.topLevelMode ||
+                previous.generatedOutputDetailsTarget?.nodeId !== this.aiChatPanelState.generatedOutputDetailsTarget?.nodeId ||
+                previous.generatedOutputDetailsTarget?.kind !== this.aiChatPanelState.generatedOutputDetailsTarget?.kind)
+        )
+            this.outputDetails.render({ animateOpen: false })
+        else if (
+            !this.aiChatPanelState.isOpen
+            && this.rightPanel?.element
+        )
+            this.destroyActiveAiChatPanel(false)
+    }
+
     setViewport = (nextViewport: Viewport) => {
         if (this.rendererDestroyed)
             return
@@ -4038,6 +4479,17 @@ export class LixpiWorkspaceCanvas {
             newAiChatThreads,
             newWorkspaceId,
         )
+
+        if (this.followedActor)
+            this.reflectFollowedActor(this.followedActor)
+
+        if (
+            this.currentCanvasState
+            && this.remoteGeometryNodeIds.size
+        )
+            this.syncCanvasNodeDomGeometry(
+                this.currentCanvasState.nodes.filter(node => this.remoteGeometryNodeIds.has(node.nodeId)),
+            )
     }
 
     toggleMediaLibrary = () => {
@@ -4151,6 +4603,8 @@ export class LixpiWorkspaceCanvas {
             () => this.mediaOperationRecovery?.destroy(),
             () => this.nodeDeletion?.destroy(),
             () => this.projectionOverrides?.destroy(),
+            () => this.remoteGeometryOverrides?.destroy(),
+            () => this.releaseFollowPan?.(),
             () => this.callbacks.destroy(),
         ])
     }

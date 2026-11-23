@@ -39,6 +39,14 @@ type CanvasState = {
 
 The persisted chat panel contains ordered conversation tabs, the active tab, open/history state, panel width, the `capabilities | artifacts | media | aiThreads` top-level mode, and explicit context-chip node IDs. Conversation tab `refId` values are conversation Asset IDs. Capability Runs are API records and are never persisted in Workspace state.
 
+## Participant views and shared edits
+
+Each device keeps its own camera. The follow picker shows one entry per human account and one per agent. Following a person uses the world-space center and zoom of the device they most recently interacted with. An idle device’s heartbeat leaves the followed camera alone. A smaller viewport shows less of the surrounding canvas at the same scale. Followers also see the participant’s selection, open controls, text caret, and media playback. Choosing "My view" restores the local camera. Incoming graph revisions preserve the viewer’s own panel and active conversation. A node move, connection edit, or placement changes the shared workspace for everyone, regardless of whom they follow.
+
+During a gesture the initiating browser draws locally and coalesces camera and pointer changes into updates spaced 50 milliseconds apart. The browser flushes pending changes at the end of a gesture. The API relays presence through NATS. Joining or reconnecting retrieves current participant and canvas state. Accepted graph edits carry a canvas revision so a delayed update cannot roll back a newer view of the graph.
+
+The backend coordinates writers per target. Agents working on different targets can proceed independently. Agents requesting the same target wait in arrival order. A human can take control from an agent, and the backend checks the current lease when committing a guarded write. Asset-backed editors submit versioned ProseMirror steps through the document authority. It remaps pending local steps and selections when accepted remote edits arrive.
+
 ## Canvas node identity
 
 Media and document nodes contain exactly one storage coordinate:

@@ -4,7 +4,7 @@
 // browser uses, such as a canvas setting, then reloads the page without taking
 // the API down.
 import { registerHooks } from 'node:module'
-import { writeFileSync } from 'node:fs'
+import { renameSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const PACKAGES_DIR = '/usr/src/service/packages/lixpi/'
@@ -20,7 +20,9 @@ const scheduleFlush = () => {
     flush = setTimeout(
         () => {
             flush = undefined
-            writeFileSync(LIST_FILE, [...loaded].join('\n'))
+            const temporary = `${LIST_FILE}.${process.pid}.tmp`
+            writeFileSync(temporary, [...loaded].join('\n'))
+            renameSync(temporary, LIST_FILE)
         },
         200,
     )

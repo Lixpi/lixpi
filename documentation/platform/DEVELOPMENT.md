@@ -94,6 +94,8 @@ These commands run inside standalone Node containers without installing dependen
 ./run.sh
 ```
 
+The Web UI uses one loading layer across startup and workspace rendering. A direct workspace URL keeps the startup request active until the canvas data arrives or the workspace presents a retry state. Editor styles load with the workspace application while authentication runs. Once the session is available, NATS connects and loads the user profile alongside the private workspace module.
+
 ### User portal
 
 ```shell
@@ -133,7 +135,7 @@ Each JSON batch includes `source` with the page ID, runtime (`tauri` or `browser
 
 - `longtask` and `long-animation-frame` come from the browser when supported. Long animation frames also list the longest-running scripts and their source files and functions.
 - `event` describes input with a browser-reported duration of at least 40 ms. The timing fields separate the wait before event processing, the time spent processing, and the estimated time from the end of processing to the browser's reported paint. The entry also carries raw `processingStart` and `processingEnd` timestamps. The target includes only the element tag, a role if present, and up to three CSS class names.
-- `mark` and `measure` are the application's own phases. Startup marks are `startup:session`, `startup:workspace-created`, `startup:nats-connected`, `startup:user-loaded`, `startup:view`, `startup:services` and `startup:application-started`. Opening a workspace records `workspace-open:fetch`, `workspace-open:assets` and `workspace-open:render`, and the side panel records `navigation:request`, `navigation:response` and `navigation:render`.
+- `mark` and `measure` are the application's own phases. Startup marks are `startup:session`, `startup:workspace-created`, `startup:nats-connected`, `startup:user-loaded`, `startup:view`, `startup:services`, `startup:application-started` and `startup:route-ready`. Opening a workspace records `workspace-open:fetch`, `workspace-open:assets` and `workspace-open:render`, and the side panel records `navigation:request`, `navigation:response` and `navigation:render`.
 - `navigation` and `resource-summary` give the page load and how long its modules took to arrive.
 
 Check the `canvas:renderer:webgl` or `canvas:renderer:webgpu` mark before comparing captures. A `canvas:resize:<width>x<height>` mark records the physical canvas dimensions after each Pixi resize call. Repeated identical dimensions can occur when a logical size change rounds to the same physical dimensions.

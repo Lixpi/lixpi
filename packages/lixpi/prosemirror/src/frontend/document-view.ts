@@ -129,6 +129,85 @@ const combineAttributes = (instances: DocumentViewFeatureInstance[]): ((state: E
         )
 }
 
+const mountedViews = new WeakMap<Element, EditorView>()
+
+const mountedEditor = (element: Element): EditorView | undefined => {
+    for (let node: Element | null = element; node; node = node.parentElement) {
+        const view = mountedViews.get(node)
+
+        if (view)
+            return view
+    }
+
+    return undefined
+}
+
+export const readDocumentCaret = (element: Element): {
+    anchor: number
+    head: number
+} | null => {
+    const selection = mountedEditor(element)?.state.selection
+
+    return selection ? {
+        anchor: selection.anchor,
+        head: selection.head,
+    } : null
+}
+
+export const getDocumentCaretRect = (
+    element: Element,
+    position: number,
+): DOMRect | null => {
+    const view = mountedEditor(element)
+
+    if (
+        !view
+        || !Number.isInteger(position)
+        || position < 0
+        || position > view.state.doc.content.size
+    )
+        return null
+
+    const rect = view.coordsAtPos(position)
+
+    return new DOMRect(
+        rect.left,
+        rect.top,
+        rect.right - rect.left,
+        rect.bottom - rect.top,
+    )
+}
+
+export const getDocumentSelectionRects = (
+    element: Element,
+    anchor: number,
+    head: number,
+): DOMRect[] => {
+    const view = mountedEditor(element)
+    const from = Math.min(anchor, head)
+    const to = Math.max(anchor, head)
+
+    if (
+        !view
+        || !Number.isInteger(from)
+        || !Number.isInteger(to)
+        || from < 0
+        || to > view.state.doc.content.size
+        || from === to
+    )
+        return []
+
+    const start = view.domAtPos(from, 1)
+    const end = view.domAtPos(to, -1)
+    const range = view.dom.ownerDocument.createRange()
+    range.setStart(start.node, start.offset)
+    range.setEnd(end.node, end.offset)
+
+    return Array.from(
+        range.getClientRects(),
+    )
+}
+
 class DocumentView<Context> implements DocumentViewHandle {
     readonly view: EditorView
     private readonly instances: DocumentViewFeatureInstance[]
@@ -166,6 +245,7 @@ class DocumentView<Context> implements DocumentViewHandle {
         }
 
         this.view = new EditorView(options.container, props)
+        mountedViews.set(this.view.dom, this.view)
     }
 
     private initialDocument(environment: DocumentViewEnvironment<Context>): ProseMirrorNode {
@@ -211,6 +291,7 @@ class DocumentView<Context> implements DocumentViewHandle {
         for (const instance of this.instances)
             instance.destroy?.()
 
+        mountedViews.delete(this.view.dom)
         this.view.destroy()
     }
 }

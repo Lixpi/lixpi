@@ -5,6 +5,7 @@ import {
 } from '@lixpi/constants'
 import {
     normalizeWorkspaceCanvasState,
+    preserveWorkspaceCanvasPresentation,
     type CanvasPersistencePorts,
     type CanvasVersion,
     type WorkspaceCanvasSnapshot,
@@ -42,6 +43,8 @@ const version = (
 type WorkspacePersistenceConfig = {
     auth: AuthTokenProvider
     router: Pick<WebClientRouterService, 'getRouteParams'>
+    isCollaborating?: (workspaceId: string) => boolean
+    getCollaborationSessionId?: (workspaceId: string) => string | undefined
 }
 
 const ownsActiveStore = (
@@ -55,8 +58,11 @@ const ownsActiveStore = (
 export const createWorkspacePersistencePorts = ({
     auth,
     router,
+    getCollaborationSessionId,
+    isCollaborating,
 }: WorkspacePersistenceConfig): CanvasPersistencePorts => {
     return {
+        mergeConcurrentWrites: isCollaborating,
         read: workspaceId => {
             if (!ownsActiveStore(workspaceId, router))
                 return null
@@ -72,11 +78,13 @@ export const createWorkspacePersistencePorts = ({
             }
         },
         save: async request => {
+            const sessionId = getCollaborationSessionId?.(request.workspaceId)
             const result: CanvasStateUpdateResponse = await servicesStore.getData('nats')!.request(
                 NATS_SUBJECTS.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE,
                 {
                     token: await auth.getTokenSilently(),
                     workspaceId: request.workspaceId,
+                    ...(sessionId ? { sessionId } : {}),
                     canvasState: request.canvasState,
                     ...(request.persistViewport ? { persistViewport: true } : {}),
                     ...(Number.isFinite(request.expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt: request.expectedCanvasStateUpdatedAt } : {}),
@@ -120,7 +128,16 @@ export const createWorkspacePersistencePorts = ({
             if (result.workspaceId !== workspaceId)
                 throw new Error('Workspace snapshot belongs to another workspace')
 
-            const canvasState: CanvasState = normalizeWorkspaceCanvasState(result.canvasState)
+            const incoming = normalizeWorkspaceCanvasState(result.canvasState)
+            const canvasState: CanvasState = (
+                isCollaborating?.(workspaceId)
+                && ownsActiveStore(workspaceId, router)
+            )
+                ? preserveWorkspaceCanvasPresentation(
+                    incoming,
+                    workspaceStore.getData('canvasState'),
+                )
+                : incoming
 
             return {
                 canvasState,
@@ -131,14 +148,25 @@ export const createWorkspacePersistencePorts = ({
             if (!ownsActiveStore(publication.workspaceId, router))
                 return
 
-            if (publication.canvasState)
-                workspaceStore.setDataValues({ canvasState: publication.canvasState })
+            const patch = {
+                ...(publication.canvasState ? { canvasState: publication.canvasState } : {}),
+                ...(typeof publication.version?.updatedAt === 'number' ? { updatedAt: publication.version.updatedAt } : {}),
+                ...(typeof publication.version?.canvasStateUpdatedAt === 'number' ? { canvasStateUpdatedAt: publication.version.canvasStateUpdatedAt } : {}),
+            }
 
-            if (typeof publication.version?.updatedAt === 'number')
-                workspaceStore.setDataValues({ updatedAt: publication.version.updatedAt })
+            if (isCollaborating?.(publication.workspaceId)) {
+                if (Object.keys(patch).length)
+                    workspaceStore.setDataValues(patch)
+            } else {
+                if (publication.canvasState)
+                    workspaceStore.setDataValues({ canvasState: publication.canvasState })
 
-            if (typeof publication.version?.canvasStateUpdatedAt === 'number')
-                workspaceStore.setDataValues({ canvasStateUpdatedAt: publication.version.canvasStateUpdatedAt })
+                if (typeof publication.version?.updatedAt === 'number')
+                    workspaceStore.setDataValues({ updatedAt: publication.version.updatedAt })
+
+                if (typeof publication.version?.canvasStateUpdatedAt === 'number')
+                    workspaceStore.setDataValues({ canvasStateUpdatedAt: publication.version.canvasStateUpdatedAt })
+            }
 
             if (workspaceStore.getMeta('requiresSave') !== publication.requiresSave)
                 workspaceStore.setMetaValues({ requiresSave: publication.requiresSave })

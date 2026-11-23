@@ -32,6 +32,8 @@ export const ingestAssetFile = async ({
     buffer,
     originalName,
     expectedKind,
+    assetId,
+    withAssetWrite,
 }: {
     organizationId: string
     workspaceId: string
@@ -39,6 +41,8 @@ export const ingestAssetFile = async ({
     buffer: Buffer
     originalName: string
     expectedKind?: AssetMediaKind
+    assetId?: string
+    withAssetWrite?: <T>(write: () => Promise<T>) => Promise<T>
 }): Promise<AssetIngestResult> => {
     const detection = await detectFileType(buffer, originalName)
 
@@ -63,37 +67,40 @@ export const ingestAssetFile = async ({
         description: originalName,
     })
     const now = Date.now()
-    const asset = await AssetModel.create({
-        organizationId,
-        title: originalName,
-        scope: 'workspace',
-        scopeOwnerId: workspaceId,
-        originWorkspaceId: workspaceId,
-        ownerUserId,
-        documents: {},
-        media: {
-            kind: detection.kind,
-            originalName,
-            sourceMimeType: detection.mimeType,
-            modelSafe: detection.modelSafe,
-            renditions: {
-                original: {
-                    name: 'original',
-                    status: 'ready',
-                    blobHash: blob.blobHash,
-                    mimeType: blob.mimeType,
-                    byteSize: blob.byteSize,
-                    updatedAt: now,
+    const createAsset = () =>
+        AssetModel.create({
+            ...(assetId ? { assetId } : {}),
+            organizationId,
+            title: originalName,
+            scope: 'workspace',
+            scopeOwnerId: workspaceId,
+            originWorkspaceId: workspaceId,
+            ownerUserId,
+            documents: {},
+            media: {
+                kind: detection.kind,
+                originalName,
+                sourceMimeType: detection.mimeType,
+                modelSafe: detection.modelSafe,
+                renditions: {
+                    original: {
+                        name: 'original',
+                        status: 'ready',
+                        blobHash: blob.blobHash,
+                        mimeType: blob.mimeType,
+                        byteSize: blob.byteSize,
+                        updatedAt: now,
+                    },
                 },
             },
-        },
-        states: {
-            lifecycle: 'creating',
-            media: 'processing',
-            conversation: 'none',
-            provenance: 'none',
-        },
-    })
+            states: {
+                lifecycle: 'creating',
+                media: 'processing',
+                conversation: 'none',
+                provenance: 'none',
+            },
+        })
+    const asset = withAssetWrite ? await withAssetWrite(createAsset) : await createAsset()
     AccountRequestContext.startDetached(
         async () => {
             try {

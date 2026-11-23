@@ -24,7 +24,8 @@ let scopes: AccountRequestScopes
 class TestResponse extends EventEmitter {
     write = vi.fn().mockReturnValue(true)
     end = vi.fn()
-    destroy = vi.fn()
+    destroyed = false
+    destroy = vi.fn(() => void (this.destroyed = true))
 }
 
 beforeEach(() => {
@@ -167,11 +168,40 @@ describe('authenticated request execution', () => {
         await running
         expect(scope.signal.aborted).toBe(true)
         expect(res.destroy).toHaveBeenCalled()
-        expect(() => res.write('late')).toThrow('ACCOUNT_ADMISSION_DENIED')
-        expect(() => res.end('late')).toThrow('ACCOUNT_ADMISSION_DENIED')
+        expect(res.write('late')).toBe(false)
+        expect(res.end('late')).toBe(res)
         expect(write).not.toHaveBeenCalled()
         expect(end).not.toHaveBeenCalled()
         expect(req.listenerCount('aborted')).toBe(0)
+    })
+
+    it('drops a late asynchronous response after a client reload without throwing through the framework', async () => {
+        const req = new EventEmitter()
+        const res = new TestResponse()
+        const write = res.write
+        const end = res.end
+        const entered = Promise.withResolvers<AccountRequestScope>()
+        const finalize = Promise.withResolvers<void>()
+        const lateResponse = async () => {
+            await finalize.promise
+
+            return res.end('delayed response')
+        }
+        const running = AccountRequestContext.runHttp(decoded, req as never, res as never, () => void entered.resolve(AccountRequestContext.current()!))
+
+        const scope = await entered.promise
+        expect(res.write('active response')).toBe(true)
+        expect(write).toHaveBeenCalledWith('active response')
+        const late = lateResponse()
+        const settled = expect(late).resolves.toBe(res)
+        req.emit('aborted')
+        await running
+        finalize.resolve()
+
+        await settled
+        expect(scope.signal.aborted).toBe(true)
+        expect(res.destroy).toHaveBeenCalledOnce()
+        expect(end).not.toHaveBeenCalled()
     })
 
     it('releases HTTP scope after a completed response and on client abort', async () => {

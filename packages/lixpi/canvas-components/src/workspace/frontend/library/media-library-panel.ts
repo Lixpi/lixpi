@@ -29,7 +29,7 @@ import {
 export type MediaLibraryPanelInstance = {
     readonly rootEl: HTMLElement
     mountInto: (hostEl: HTMLElement) => void
-    showAsset: (assetId: string) => void
+    showAsset: (assetId: string | null) => void
     refresh: () => void
     unmount: () => void
     destroy: () => void
@@ -49,6 +49,7 @@ export type MediaLibraryPanelOptions = WorkspaceLibraryPorts & {
     ) => Promise<LibraryAssetResult>
     removeFromLibrary: (assetId: string) => Promise<{ error?: string }>
     onInsertAsset?: (item: AssetMeta) => Promise<boolean>
+    onSelectionChange?: (assetId: string | null) => void
 }
 
 export const stripMediaFileExtension = (name: string): string => name.replace(/\.[^./\\]+$/, '')
@@ -145,11 +146,12 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             void this.load()
     }
 
-    showAsset(assetId: string): void {
+    showAsset(assetId: string | null): void {
         if (this.destroyed)
             return
 
         this.selectedAssetId = assetId
+        this.options.onSelectionChange?.(assetId)
 
         if (this.isMounted)
             this.render()
@@ -329,10 +331,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 )}
             </article>
         ` as HTMLElement
-        const selectAsset = (): void => {
-            this.selectedAssetId = asset.assetId
-            this.render()
-        }
+        const selectAsset = (): void => void this.showAsset(asset.assetId)
         const keydown = (event: KeyboardEvent) => {
             if (
                 event.key !== 'Enter'
@@ -524,10 +523,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
         this.listen(
             detail.querySelector('.media-library-detail-back')!,
             'click',
-            () => {
-                this.selectedAssetId = null
-                this.render()
-            },
+            () => this.showAsset(null),
         )
         this.listen(
             detail.querySelector('.media-library-detail-remove')!,
@@ -571,8 +567,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 }
 
                 this.allAssets = this.allAssets.filter(item => item.assetId !== asset.assetId)
-                this.selectedAssetId = null
-                this.render()
+                this.showAsset(null)
             },
             this.options.onError,
         )

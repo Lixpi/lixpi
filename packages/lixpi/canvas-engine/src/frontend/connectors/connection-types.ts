@@ -31,6 +31,13 @@ export type ProximityCandidate = {
     targetT?: number
 }
 
+export type ConnectionDraft = {
+    source: CanvasEnginePoint
+    target: CanvasEnginePoint
+    pathType: PathType
+    lineStyle: 'solid' | 'dashed'
+}
+
 export type ConnectionSettings = {
     lineCurve: PathType
     useZoomCompensatedScaling: boolean
@@ -69,6 +76,7 @@ export type ConnectionManagerConfig<Node extends ConnectionNode> = {
     onError: (error: unknown) => void
     onSelectedEdgeChange?: (edgeId: string | null) => void
     onConnectorGeometry?: (edges: ConnectorRenderDatum[]) => void
+    onDraftChange?: (draft: ConnectionDraft | null) => void
     onSettingsChange?: (settings: ConnectionSettings) => void
     // A false result rejects new, changed, selected and deleted connections
     // while existing connectors keep rendering.

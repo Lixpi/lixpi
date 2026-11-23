@@ -52,6 +52,8 @@ import {
     ConversationRepository,
     conversationPartition,
 } from './conversation-repository.ts'
+import { ConversationService } from './conversation-service.ts'
+import { createConversationExecutionFixture } from './conversation-test-support.ts'
 
 // =============================================================================
 // HARNESS
@@ -560,5 +562,97 @@ describe('delegation outline and scope', () => {
             access: 'act',
             allowedOperationFamilies: ['image'],
         })
+    })
+})
+
+describe('Same-workspace composer delegation', () => {
+    it('commits one delegation debit and cancels only its linked child message', async () => {
+        const {
+            repository,
+            owner,
+            turn,
+        } = await createConversationExecutionFixture()
+        let id = 0
+        const service = new ConversationService(repository, {
+            authorize: async (workspaceId, userId) => ({
+                organizationId: 'org',
+                workspaceId,
+                userId,
+                fences: [],
+            }),
+            resolveReferences: async () => [],
+            activate: async (_meta, operations) => await repository.commit(operations),
+            publish: async () => {},
+            dispatchScheduled: () => {},
+            createId: () => `target-turn-${++id}`,
+            now: () => 1000,
+        })
+        const base = {
+            protocolVersion: 1 as const,
+            workspaceId: owner.job.workspaceId,
+        }
+        const target = await service.create({
+            ...base,
+            clientConversationId: 'target',
+        }, owner.job.userId)
+        const request = {
+            ...base,
+            conversationAssetId: target.conversationAssetId,
+            clientMessageId: 'composer-message',
+            settingsRevision: target.settingsRevision,
+            fragment: {
+                type: 'aiUserMessage',
+                content: [{
+                    type: 'paragraph',
+                    content: [{
+                        type: 'text',
+                        text: 'Continue the requested work.',
+                    }],
+                }],
+            },
+            references: [],
+        }
+        const delegation = new AgentDelegation(repository, configuration, () => service)
+        const execute = async () => await AgentExecutionScope.run({
+            owner,
+            turn,
+            permissions: {
+                readOnly: false,
+                allowedOperationFamilies: ['workspace-canvas'],
+            },
+            responseMessageId: 'response',
+            continuationEpoch: 0,
+            createdAssetIds: new Set(),
+        }, async () => await delegation.dispatchToConversation(owner, request, 'Design'))
+
+        const first = await execute()
+        const duplicate = await execute()
+
+        expect(first.acknowledgement.status).toBe('accepted')
+        expect(duplicate.acknowledgement.status).toBe('duplicate')
+        expect(duplicate.operationId).toBe(first.operationId)
+        expect((await owner.read()).run?.budget.delegationCalls).toBe(1)
+
+        const independent = await service.submit({
+            ...request,
+            clientMessageId: 'person-message',
+        }, owner.job.userId)
+
+        if (
+            first.acknowledgement.status === 'rejected'
+            || independent.status === 'rejected'
+            || !first.operationId
+        )
+            throw new Error('Test messages were not queued')
+
+        await delegation.operations().cancelOperation!(owner, first.operationId)
+
+        const snapshot = await service.get(target, owner.job.userId)
+        expect(snapshot.queuePaused).toBe(false)
+        expect(snapshot.queuedTurns.map(item => item.turnId)).toEqual([independent.turnId])
+        expect(snapshot.messages).toContainEqual(expect.objectContaining({
+            turnId: first.acknowledgement.turnId,
+            authorLabel: 'Design agent',
+        }))
     })
 })

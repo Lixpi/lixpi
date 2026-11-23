@@ -1,6 +1,7 @@
 import { createNatsSubscriptions } from '../create-nats-subscriptions.ts'
 import { getNatsSubjectPath } from '@lixpi/constants'
 import { createWorkspaceTreeHandlers } from '../../services/workspace-navigation/workspace-tree-handlers.ts'
+import { canvasCollaboration } from '../../services/canvas-collaboration.ts'
 import { canEditWorkspace } from '../../services/workspace-navigation/access.ts'
 
 import Organization from '../../models/organization.ts'
@@ -43,6 +44,8 @@ export const workspaceSubjects = createNatsSubscriptions(
 
             return workspace
         },
+        [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.CANVAS_COLLABORATE)]: async (data: any) =>
+            await canvasCollaboration.handle(data.user.userId, data),
         [getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE)]: async (data: any) => {
             const workspace = await Workspace.getWorkspace({
                 userId: data.user.userId,
@@ -58,13 +61,14 @@ export const workspaceSubjects = createNatsSubscriptions(
             if (!canEditWorkspace(workspace.accessLevel))
                 return { error: 'PERMISSION_DENIED' }
 
-            return await Workspace.updateCanvasState({
+            return await canvasCollaboration.saveHumanCanvas({
                 userId: data.user.userId,
                 workspaceId: data.workspaceId,
                 canvasState: data.canvasState,
                 expectedCanvasStateUpdatedAt: data.expectedCanvasStateUpdatedAt,
                 expectedUpdatedAt: data.expectedUpdatedAt,
                 persistViewport: data.persistViewport === true,
+                ...(typeof data.sessionId === 'string' ? { sessionId: data.sessionId } : {}),
             })
         },
     },

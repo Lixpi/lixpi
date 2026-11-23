@@ -1,12 +1,56 @@
 <!doctype html>
-<html lang="en">
+<html
+    lang="en"
+    data-desktop-startup="loading"
+>
     <head>
         <meta charset="UTF-8" />
         <meta
             name="viewport"
             content="width=device-width, initial-scale=1.0"
         />
+        <meta
+            name="color-scheme"
+            content="light dark"
+        />
         <title>Lixpi</title>
+        <script>
+            try {
+                if (sessionStorage.getItem('lixpi:desktop-startup-scheme') === 'dark')
+                    document.documentElement.dataset.desktopStartupScheme = 'dark'
+            } catch {}
+        </script>
+        <style>
+            html[data-title-bar="overlay"][data-desktop-startup] {
+                --desktop-startup-background: #ffffff;
+                background-color: var(--desktop-startup-background);
+            }
+
+            html[data-title-bar="overlay"][data-desktop-startup][data-desktop-startup-scheme="dark"] {
+                --desktop-startup-background: #282c34;
+            }
+
+            #desktop-startup-frame {
+                display: none;
+            }
+
+            html[data-title-bar="overlay"][data-desktop-startup] #desktop-startup-frame {
+                position: fixed;
+                z-index: 19999;
+                inset: 0;
+                display: block;
+                width: auto;
+                height: auto;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                background-color: var(--desktop-startup-background);
+            }
+
+            html[data-title-bar="overlay"][data-desktop-startup="reloading"] #desktop-startup-frame {
+                z-index: 2147483647;
+            }
+        </style>
 
         <link
             rel="icon"
@@ -15,7 +59,30 @@
         />
     </head>
     <body>
+        <div
+            id="desktop-startup-frame"
+            aria-hidden="true"
+        ></div>
         <div id="app"></div>
+        <script>
+            if (window.__lixpiDiagnostics && document.documentElement.dataset.titleBar === 'overlay') {
+                requestAnimationFrame(() => {
+                    const frame = document.getElementById('desktop-startup-frame')
+                    const { backgroundColor, display, opacity } = getComputedStyle(frame)
+                    const appMounted = document.getElementById('app').childElementCount > 0
+
+                    try {
+                        const outgoing = sessionStorage.getItem('lixpi:desktop-reload-outgoing-frame')
+                        sessionStorage.removeItem('lixpi:desktop-reload-outgoing-frame')
+
+                        if (outgoing)
+                            console.debug('desktop reload: outgoing loading frame before navigation', JSON.parse(outgoing))
+                    } catch {}
+
+                    console.debug('desktop reload: incoming loading frame', { backgroundColor, display, opacity, appMounted })
+                })
+            }
+        </script>
         <script
             type="module"
             src="/src/main.ts"

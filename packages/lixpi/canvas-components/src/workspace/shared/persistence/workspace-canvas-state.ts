@@ -28,6 +28,17 @@ export const normalizeWorkspaceCanvasState = (canvasState?: Partial<CanvasState>
     }
 }
 
+export const preserveWorkspaceCanvasPresentation = (
+    incoming: CanvasState,
+    local: CanvasState | null,
+): CanvasState =>
+    local ? {
+        ...incoming,
+        viewport: local.viewport,
+        aiChatPanel: local.aiChatPanel,
+        lastActiveConversationAssetId: local.lastActiveConversationAssetId,
+    } : incoming
+
 export const workspaceCanvasStatePatch = (
     canvasState: CanvasState,
     origin: 'local-intent' | 'authoritative',

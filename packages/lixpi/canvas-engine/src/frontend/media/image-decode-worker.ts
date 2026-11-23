@@ -1,3 +1,4 @@
+import { fetchRetryableGet } from './fetch-retryable-get.ts'
 import {
     type ImageDecodeRequest,
     type ImageDecodeResponse,
@@ -32,7 +33,7 @@ worker.onmessage = async (event: MessageEvent<ImageDecodeRequest>) => {
     let bitmap: ImageBitmap | null = null
 
     try {
-        const response = await fetch(
+        const response = await fetchRetryableGet(
             source.url,
             {
                 credentials: source.credentials ?? 'omit',

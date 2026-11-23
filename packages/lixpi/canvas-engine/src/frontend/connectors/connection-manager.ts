@@ -22,6 +22,7 @@ import {
 } from '../../shared/index.ts'
 import {
     computeConnectorDatum,
+    computeConnectorEndpoints,
     type ConnectorDatumStyle,
 } from './connector-datum.ts'
 import { OrthogonalRoutingError } from '../../shared/connectors/paths/index.ts'
@@ -38,6 +39,7 @@ import {
 } from '../../shared/connectors/path-types.ts'
 import {
     type ConnectionNode,
+    type ConnectionDraft,
     type ConnectionSettings,
     type ConnectionEdge,
     type ConnectionManagerConfig,
@@ -124,6 +126,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
     private edges: ConnectionEdge[] = []
 
     private selectedEdgeId: string | null = null
+    private remoteSelectedEdges: ReadonlySet<string> = new Set()
     private connectionInProgress: ConnectionSession | null = null
 
     private reconnectingEdge: {
@@ -959,6 +962,14 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         )
     }
 
+    public setRemoteSelectedEdges(edgeIds: ReadonlySet<string>): void {
+        if (this.destroyed)
+            return
+
+        this.remoteSelectedEdges = new Set(edgeIds)
+        this.render()
+    }
+
     public selectEdge(edgeId: string | null) {
         if (
             this.destroyed
@@ -1026,6 +1037,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             this.cachedConnectorData = []
             this.cachedFlattenedEdgePaths.clear()
             this.config.onConnectorGeometry?.([])
+            this.config.onDraftChange?.(null)
 
             return
         }
@@ -1113,7 +1125,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 worldNodeMap,
                 {
                     selected: isSelected,
-                    color: drawingDefaultColor,
+                    color: this.remoteSelectedEdges.has(edgeConfig.id) ? drawingFocusColor : drawingDefaultColor,
                     selectedColor: drawingFocusColor,
                     strokeWidth: drawingStrokeWidth,
                     markerSize: drawingMarkerSize,
@@ -1296,6 +1308,8 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 return
         }
 
+        let draft: ConnectionDraft | null = null
+
         // Add in-progress edge (new connection or reconnecting existing edge)
         if (this.connectionInProgress) {
             const to = this.connectionInProgress.candidate ?? this.connectionInProgress.worldPointer
@@ -1419,6 +1433,25 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             }
             addConnectorDatum(tempEdge, false)
 
+            if (this.config.onDraftChange) {
+                const endpoints = computeConnectorEndpoints(
+                    tempEdge,
+                    worldNodeMap,
+                    {
+                        markerOffset: scaledMarkerOffset,
+                        worldMarkerSize: scaledMarkerSizeWorld,
+                        markerBodyLengthFraction: this.config.markerBodyLengthFraction,
+                    },
+                )
+
+                if (endpoints)
+                    draft = {
+                        ...endpoints,
+                        pathType: this.config.settings.lineCurve,
+                        lineStyle: isReconnecting ? 'solid' : 'dashed',
+                    }
+            }
+
             if (this.destroyed)
                 return
         }
@@ -1458,6 +1491,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
         }
 
         this.config.onConnectorGeometry?.(connectorData)
+        this.config.onDraftChange?.(draft)
         this.cachedEdgeConfigs = drawingEdgeConfigsForCache
         this.cachedWorldNodeMap = worldNodeMap
         this.cachedConnectorData = connectorData
@@ -1514,7 +1548,7 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 this.cachedWorldNodeMap,
                 {
                     selected: isSelected,
-                    color: this.cachedDefaultColor,
+                    color: this.remoteSelectedEdges.has(edgeConfig.id) ? this.cachedFocusColor : this.cachedDefaultColor,
                     selectedColor: this.cachedFocusColor,
                     strokeWidth: connectorScaling.strokeWidth,
                     markerSize: connectorScaling.markerSize,

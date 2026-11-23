@@ -1,4 +1,10 @@
+import { getDynamoDbTableStageName } from '@lixpi/constants'
 import DynamoDBService from '@lixpi/dynamodb-service'
+import {
+    appendCanvasTransactionFences,
+    canvasLeaseTransaction,
+    notifyWorkspaceCanvasWrites,
+} from './canvas-collaboration-transaction.ts'
 import { AccountRequestContext } from './account-request-context.ts'
 import { AccountCommitter } from './account-committer.ts'
 
@@ -15,6 +21,25 @@ export class AccountDatabaseService extends DynamoDBService {
     }
 
     override async transactWrite(request: Parameters<DynamoDBService['transactWrite']>[0]) {
+        const leaseFences = canvasLeaseTransaction.getStore()
+        const operations = leaseFences ? appendCanvasTransactionFences(request.operations, await leaseFences()) : request.operations
+        const result = await this.transactAuthorized({
+            ...request,
+            operations,
+        })
+        notifyWorkspaceCanvasWrites(
+            request.operations,
+            getDynamoDbTableStageName(
+                'WORKSPACES',
+                process.env.ORG_NAME,
+                process.env.STAGE,
+            ),
+        )
+
+        return result
+    }
+
+    private async transactAuthorized(request: Parameters<DynamoDBService['transactWrite']>[0]) {
         const guarded = {
             ...request,
             operations: request.operations.map(operation => this.guardReconciliation(operation)),

@@ -7,6 +7,12 @@ import {
     vi,
 } from 'vitest'
 import {
+    EditorState,
+    TextSelection,
+    type Transaction,
+} from 'prosemirror-state'
+import { schema } from '../shared/base-schema.ts'
+import {
     getAssetDocumentEventSubject,
     type AssetStepStreamEvent,
     type SubmitResult,
@@ -310,6 +316,52 @@ describe('DocumentAuthority', () => {
         expect(nats.request).not.toHaveBeenCalled()
     })
 
+    it('keeps a pending edit inside an earlier local insertion when a remote step arrives', async () => {
+        const nats = createNats()
+        mocks.connection = nats
+        nats.request.mockResolvedValue({
+            currentVersion: 0,
+            currentStreamSeq: 0,
+            liveSubject: eventSubject,
+            events: [],
+        })
+        const view = {
+            state: EditorState.create({ schema }),
+            dispatch(transaction: Transaction) {
+                this.state = this.state.apply(transaction)
+            },
+        }
+        const remote = view.state.tr.insertText('remote', 1).steps[0]!
+        mocks.stepFromJSON.mockReturnValue(remote)
+        const service = new DocumentAuthority({
+            ...dependencies,
+            ...coordinate,
+            baseVersion: 0,
+            getView: () => view as never,
+        })
+
+        try {
+            await service.recover()
+            const local = view.state.tr.insertText('ab', 1).insertText('X', 2)
+            view.dispatch(local)
+            service.submitLocalTransaction(local)
+            view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
+            const handler = nats.subscribe.mock.calls[0]![1]
+            handler(createEvent({
+                kind: 'STEP',
+                version: 1,
+                clientId: 'other',
+                step: remote.toJSON(),
+            }))
+
+            expect(view.state.doc.textContent).toBe('remoteaXb')
+            expect(view.state.selection.head).toBe(8)
+            expect(service.version).toBe(1)
+        } finally {
+            service.disconnect()
+        }
+    })
+
     it('applies out-of-order steps once replayed and drains backlog', async () => {
         vi.useFakeTimers()
         const nats = createNats()
@@ -522,6 +574,64 @@ describe('DocumentAuthority', () => {
         )
 
         service.disconnect()
+    })
+
+    it('keeps new typing pending when a submit reply follows its own live echo', async () => {
+        vi.useFakeTimers()
+        vi.mocked(crypto.randomUUID)
+            .mockReturnValueOnce('actor' as never)
+            .mockReturnValueOnce('first' as never)
+            .mockReturnValueOnce('second' as never)
+        const reply = createDeferred<SubmitResult>()
+        const nats = createNats()
+        mocks.connection = nats
+        nats.request
+            .mockResolvedValueOnce({
+                currentVersion: 0,
+                liveSubject: eventSubject,
+                events: [],
+            })
+            .mockReturnValueOnce(reply.promise)
+            .mockResolvedValueOnce({
+                status: 'ACCEPTED',
+                version: 2,
+            })
+        const { view } = createView()
+        const authority = new DocumentAuthority({
+            ...dependencies,
+            ...coordinate,
+            getView: () => view,
+        })
+
+        try {
+            await authority.recover()
+            const submit = (text: string) => authority.submitLocalTransaction({
+                docChanged: true,
+                getMeta: () => false,
+                steps: [{ toJSON: () => ({ text }) }],
+                docs: [{}],
+            } as never)
+            submit('first')
+            const flushing = authority.flushPendingSteps()
+            const sent = nats.request.mock.calls[1]![1].steps[0]
+            nats.subscribe.mock.calls[0]![1](createEvent({
+                ...sent,
+                kind: 'STEP',
+                version: 1,
+            }))
+            submit('second')
+            reply.resolve({
+                status: 'ACCEPTED',
+                version: 1,
+            })
+            await flushing
+            expect(nats.request.mock.calls[2]![1]).toMatchObject({
+                expectedVersion: 1,
+                steps: [{ step: { text: 'second' } }],
+            })
+        } finally {
+            authority.disconnect()
+        }
     })
 
     it('flushes immediately when local batch reaches max size', async () => {

@@ -2909,7 +2909,9 @@ export class WorkspaceTreeService {
 
             // Never split the parent-index removal from the full/meta
             // removal: recovery discovers descendants through that index.
-            if (cleanupChanges.reduce((count, change) => count + workspaceTreeChangeItemCount(change), 0) + 3 > MAX_COMMIT_ITEMS) {
+            const itemCount = [...cleanupChanges, ...removalChanges].reduce((count, change) => count + workspaceTreeChangeItemCount(change), 0)
+
+            if (itemCount > MAX_COMMIT_ITEMS) {
                 await this.commitLocked(lock, cleanupChanges)
                 await this.commitLocked(lock, removalChanges)
             } else

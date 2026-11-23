@@ -3,14 +3,15 @@ import { ApplicationThemeBinding } from '@lixpi/themes/browser'
 import { AuthPanel } from '@lixpi/ui-kit/components/auth-panel'
 import { lixpiLogo } from '@lixpi/ui-kit/svg'
 import { createHelpTooltipProvider } from '@lixpi/ui-kit/components/help-tooltip'
-import { createWebClientService } from '@lixpi/web-client-service-factory'
-import NatsService from '@lixpi/nats-service'
-import { getNatsUserInboxPrefix } from '@lixpi/constants'
+import {
+    createWebClientService,
+    type WebClientRouterService,
+} from '@lixpi/web-client-service-factory'
+import { LoadingStatus } from '@lixpi/constants'
 import {
     type LoadingLayer,
 } from '@lixpi/canvas-components/loading'
 import {
-    AccessRecovery,
     createUserService,
     CurrentUserRefresh,
     type AuthClientInstance,
@@ -27,6 +28,7 @@ import {
 } from '$src/services/onboarding-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
+import { workspaceStore } from '$src/stores/workspaceStore.ts'
 
 import {
     createLixpiCanvasThemeFromPreset,
@@ -34,6 +36,7 @@ import {
     settings,
 } from '$src/settings.ts'
 import { canvasThemeStore } from './canvas-adapters/canvas-theme.ts'
+import '$src/sass/workspace.scss'
 import '@lixpi/ui-kit/styles/auth-panel'
 import '@lixpi/ui-kit/styles/bubble-menu'
 import '@lixpi/ui-kit/styles/canvas-node-footer'
@@ -50,64 +53,85 @@ import '@lixpi/ui-kit/styles/side-panel'
 import '@lixpi/canvas-engine/styles/interaction'
 import '@lixpi/web-client-service-factory/styles/foundation'
 
-import { workspaceRouting } from '$src/routes.ts'
+import {
+    WORKSPACE_ROUTE_PATH,
+    workspaceRouting,
+} from '$src/routes.ts'
 import { createLayout } from '$src/views/layouts/layout.ts'
+import {
+    beginWorkspaceConnection,
+    type WorkspaceConnection,
+} from './workspaceConnection.ts'
 
-const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
+// Let route and canvas subscribers render before releasing the startup lease.
+const keepStartupLoadingUntilFirstView = (
+    router: WebClientRouterService,
+    onReady: () => void,
+) => {
+    let listening = true
+    const check = () =>
+        queueMicrotask(() => {
+            if (!listening)
+                return
 
-type WebUiDependencies = {
-    auth: AuthClientInstance
-    nats: NatsService
+            const route = router.getCurrentRoute()
+
+            if (!route.path)
+                return
+
+            if (route.path === WORKSPACE_ROUTE_PATH) {
+                const {
+                    data,
+                    meta,
+                } = workspaceStore.get()
+
+                if (
+                    data.workspaceId !== route.routeParams.workspaceId
+                    || (meta.loadingStatus !== LoadingStatus.success && meta.loadingStatus !== LoadingStatus.error)
+                )
+                    return
+            }
+
+            destroy()
+
+            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
+                performance.mark('startup:route-ready')
+
+            onReady()
+        })
+    const unsubscribeRoute = router.subscribe(check)
+    const unsubscribeWorkspace = workspaceStore.subscribe(check)
+    const destroy = () => {
+        listening = false
+        unsubscribeRoute()
+        unsubscribeWorkspace()
+    }
+
+    return { destroy }
 }
 
-export const createWorkspaceApplication = (config: {
-    loadingLayer: LoadingLayer
-    auth: AuthClientInstance
-    session: AuthClientSession
-    onAuthRequired: () => void
-    onReady: () => void
-    onError: (error: unknown) => void
-}) => {
-    const application = createWebClientService<WebUiDependencies>({
+export const createWorkspaceApplication = (
+    config: {
+        loadingLayer: LoadingLayer
+        auth: AuthClientInstance
+        session: AuthClientSession
+        onAuthRequired: () => void
+        onReady: () => void
+        onError: (error: unknown) => void
+    },
+    preparedConnection?: WorkspaceConnection,
+) => {
+    let connection = preparedConnection
+    const application = createWebClientService<Awaited<ReturnType<WorkspaceConnection['waitUntilReady']>>>({
         createDependencies: async () => {
-            const {
-                auth,
-                session,
-            } = config
+            connection ??= beginWorkspaceConnection(config)
+            connection.onAccessLoss(application.destroy)
 
-            const recovery = new AccessRecovery(
-                auth,
-                async () => await application.destroy(),
-                config.onAuthRequired,
-            )
-            const nats = await NatsService.init({
-                servers: [VITE_NATS_SERVER],
-                webSocket: true,
-                name: 'web-client',
-                token: session?.accessToken,
-                inboxPrefix: session ? getNatsUserInboxPrefix(session.userId) : undefined,
-                getToken: session?.getToken,
-                onAuthError: session
-                ? recovery.authError
-                : undefined,
-                onAccessDenied: recovery.deny,
-            })
-
-            // The first connection succeeded inside init(), before this
-            // listener existed, so a later outage starts its own retry window.
-            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
-                performance.mark('startup:nats-connected')
-
-            recovery.connected()
-            nats.onReconnect(recovery.connected)
-
-            return {
-                auth,
-                nats,
-            }
+            return await connection.waitUntilReady()
         },
         routing: workspaceRouting,
         createResources: [
+            ({ router }) => keepStartupLoadingUntilFirstView(router, config.onReady),
             ({ dependencies: { auth } }) => new ApplicationThemeBinding({
                 subscribePreference: listener => auth.userStore.subscribe(state => listener(state.data.preferences?.appearance)),
                 onChange: preset => {
@@ -143,8 +167,6 @@ export const createWorkspaceApplication = (config: {
             if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
                 performance.mark('startup:view')
 
-            config.onReady()
-
             return createLayout({
                 assetService: servicesStore.getData('assetService'),
                 auth,
@@ -153,8 +175,8 @@ export const createWorkspaceApplication = (config: {
                 workspaceService: servicesStore.getData('workspaceService'),
             })
         },
-        destroyDependencies: async ({ nats }) => await nats.disconnect(),
-        initializeServices: async ({
+        destroyDependencies: async () => await connection?.destroy(),
+        initializeServices: ({
             dependencies: {
                 auth,
                 nats,
@@ -180,16 +202,6 @@ export const createWorkspaceApplication = (config: {
                 }),
                 organizationService: new OrganizationService(),
             })
-
-            if (auth.features.currentUser)
-                await auth.loadCurrentUser({
-                    requestClient: {
-                        request: (subject, payload) => nats.request(subject, payload),
-                    },
-                })
-
-            if (import.meta.env.VITE_CLIENT_PERFORMANCE_DEBUG === 'true')
-                performance.mark('startup:user-loaded')
         },
         startServices: async ({ dependencies: {
             auth,
@@ -243,5 +255,14 @@ export const createWorkspaceApplication = (config: {
         },
     })
 
-    return application
+    return {
+        start: application.start,
+        destroy: async () => {
+            try {
+                await application.destroy()
+            } finally {
+                await connection?.destroy()
+            }
+        },
+    }
 }

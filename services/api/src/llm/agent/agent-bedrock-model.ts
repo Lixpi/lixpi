@@ -335,7 +335,7 @@ export class AgentBedrockModel extends BaseChatModel<AgentBedrockCallOptions> {
             messages: converted.messages,
             max_tokens: this.options.maxTokens,
             ...(converted.system.length ? { system: converted.system } : {}),
-            ...(options.tools?.length ? { tools: options.tools } : {}),
+            ...(options.tools?.length ? { tools: options.tools.map(bedrockToolDefinition) } : {}),
             ...(options.stop?.length ? { stop_sequences: options.stop } : {}),
             ...(this.profile.inferenceCapabilities.thinkingMode === 'anthropic-adaptive' ? { thinking: { type: 'adaptive' } } : {}),
             ...(this.options.reasoningEffort ? { output_config: { effort: this.options.reasoningEffort as NonNullable<MessageCreateParamsNonStreaming['output_config']>['effort'] } } : {}),
@@ -721,6 +721,33 @@ const canonicalize = (value: unknown): unknown => {
         )
 
     return value
+}
+
+const bedrockToolDefinition = (tool: Tool): Tool => {
+    const schema = tool.input_schema
+
+    if (!['oneOf', 'allOf', 'anyOf'].some(keyword => Object.hasOwn(schema, keyword)))
+        return tool
+
+    // Bedrock requires an object root. Apply its branch constraints to that same object.
+    const root = { ...schema }
+    const constraints: Record<string, unknown> = {}
+
+    for (const keyword of ['oneOf', 'allOf', 'anyOf', 'if', 'then', 'else']) {
+        if (Object.hasOwn(root, keyword)) {
+            constraints[keyword] = root[keyword]
+            delete root[keyword]
+        }
+    }
+
+    return {
+        ...tool,
+        input_schema: {
+            ...root,
+            if: { type: 'object' },
+            then: constraints,
+        },
+    }
 }
 
 const assertClosedSchema = (value: unknown): void => {

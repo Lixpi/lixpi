@@ -24,4 +24,28 @@ describe('API native TypeScript imports', () => {
             )
         }).not.toThrow()
     })
+
+    it('keeps browser asset hydration outside the native shared canvas imports', () => {
+        const script = `
+            import { registerHooks } from 'node:module'
+            const loaded = new Set()
+            registerHooks({
+                load(url, context, nextLoad) {
+                    loaded.add(url)
+                    return nextLoad(url, context)
+                },
+            })
+            await import('@lixpi/canvas-components/workspace/shared')
+            if ([...loaded].some(url => url.endsWith('/workspace-assets.ts')))
+                throw new Error('API shared canvas entry point loaded browser assets')
+        `
+        expect(() => execFileSync(
+            process.execPath,
+            ['--experimental-transform-types', '--input-type=module', '--eval', script],
+            {
+                cwd: resolve(import.meta.dirname, '..'),
+                stdio: 'pipe',
+            },
+        )).not.toThrow()
+    })
 })

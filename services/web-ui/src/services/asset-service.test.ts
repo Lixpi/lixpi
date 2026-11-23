@@ -227,6 +227,108 @@ describe('AssetService.loadWorkspaceAssets', () => {
         )
     })
 
+    it('shares pending Artifact metadata and reads the initial snapshot directly over HTTP', async () => {
+        const asset = makeAsset({
+            assetId: 'timeline-asset',
+            title: 'Artifact',
+            documents: { capabilityArtifact: {
+                role: 'capabilityArtifact',
+                version: 3,
+                blobHash: 'snapshot',
+                byteSize: 10,
+                schemaVersion: 'fixture-artifact-v1',
+                updatedAt: 1,
+            } },
+        })
+        const pendingAsset = Promise.withResolvers<Asset>()
+        const pendingSnapshot = Promise.withResolvers<Response>()
+        mocks.request.mockReturnValue(pendingAsset.promise)
+        const fetchSnapshot = vi.fn(() => pendingSnapshot.promise)
+        vi.stubGlobal('fetch', fetchSnapshot)
+
+        try {
+            const service = createAssetService()
+            const route = service.loadWorkspaceAssets('workspace-1')
+            const artifact = service.hydrateArtifact(asset.assetId, 'workspace-1')
+            await vi.waitFor(() => expect(mocks.request).toHaveBeenCalledOnce())
+            pendingAsset.resolve(asset)
+            await vi.waitFor(() => expect(mocks.setAssets).toHaveBeenCalledOnce())
+
+            const snapshot = {
+                organizationId: asset.organizationId,
+                assetId: asset.assetId,
+                role: 'capabilityArtifact',
+                version: 3,
+                schemaVersion: 'fixture-artifact-v1',
+                doc: { type: 'doc' },
+            }
+            pendingSnapshot.resolve(Response.json(snapshot))
+
+            await expect(route).resolves.toEqual([asset])
+            await expect(artifact).resolves.toEqual(asset)
+            expect(mocks.request).toHaveBeenCalledOnce()
+            expect(fetchSnapshot).toHaveBeenCalledExactlyOnceWith(
+                expect.stringContaining('/api/assets/timeline-asset/documents/capabilityArtifact/snapshot'),
+                {
+                    method: 'GET',
+                    headers: { Authorization: 'Bearer token' },
+                },
+            )
+            expect(mocks.setDocument).toHaveBeenCalledWith(expect.objectContaining({
+                assetId: asset.assetId,
+                role: 'capabilityArtifact',
+                version: 3,
+            }))
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    })
+
+    it('recovers a passive document while NATS stays connected through HTTP startup', async () => {
+        vi.useFakeTimers()
+        const asset = makeAsset({
+            assetId: 'timeline-asset',
+            title: 'Artifact',
+            documents: { capabilityArtifact: {
+                role: 'capabilityArtifact',
+                version: 3,
+                blobHash: 'snapshot',
+                byteSize: 10,
+                schemaVersion: 'fixture-artifact-v1',
+                updatedAt: 1,
+            } },
+        })
+        mocks.request.mockResolvedValue(asset)
+        const snapshot = {
+            assetId: asset.assetId,
+            organizationId: asset.organizationId,
+            role: 'capabilityArtifact',
+            version: 3,
+            schemaVersion: 'fixture-artifact-v1',
+            doc: { type: 'doc' },
+        }
+        const fetchSnapshot = vi.fn()
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValueOnce(new Response(null, { status: 502 }))
+            .mockResolvedValueOnce(Response.json(snapshot))
+        vi.stubGlobal('fetch', fetchSnapshot)
+
+        try {
+            const load = createAssetService().hydrateArtifact(asset.assetId, 'workspace-1')
+            await vi.advanceTimersByTimeAsync(1000)
+            await expect(load).resolves.toEqual(asset)
+            expect(mocks.request).toHaveBeenCalledOnce()
+            expect(fetchSnapshot).toHaveBeenCalledTimes(3)
+            expect(mocks.setDocument).toHaveBeenCalledWith(expect.objectContaining({
+                assetId: asset.assetId,
+                version: 3,
+            }))
+        } finally {
+            vi.unstubAllGlobals()
+            vi.useRealTimers()
+        }
+    })
+
     it('loads lineage source Assets required by persisted Artifact references', async () => {
         const timelineAsset = makeAsset({
             assetId: 'timeline-asset',

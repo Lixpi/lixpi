@@ -59,7 +59,9 @@ const projection = (overrides: Partial<WorkspaceAssetProjectionPorts> = {}) => {
     const ports: WorkspaceAssetProjectionPorts = {
         get: vi.fn(async id => asset(id)),
         hasDocument: vi.fn(() => false),
-        resumeDocument: vi.fn(async () => null),
+        loadDocument: vi.fn(async () => null),
+        readAsset: vi.fn(() => undefined),
+        publishAsset: vi.fn(),
         publishAssets: vi.fn(),
         publishDocuments: vi.fn(),
         setLoading: vi.fn(),
@@ -78,12 +80,19 @@ const synchronization = (overrides: Partial<WorkspaceAssetSynchronizationPorts> 
     let onEvent: (event: WorkspaceAssetEvent) => void = () => {}
     const unsubscribe = vi.fn()
     const cancelTimer = vi.fn()
+    const stopReconnect = vi.fn()
+    let reconnect = () => {}
     let tick = () => {}
     const ports: WorkspaceAssetSynchronizationPorts = {
         subscribe: vi.fn(listener => {
             onEvent = listener
 
             return unsubscribe
+        }),
+        onReconnect: vi.fn(callback => {
+            reconnect = callback
+
+            return stopReconnect
         }),
         setInterval: vi.fn(callback => {
             tick = callback
@@ -109,6 +118,8 @@ const synchronization = (overrides: Partial<WorkspaceAssetSynchronizationPorts> 
             deleted,
         }),
         tick: () => tick(),
+        reconnect: () => reconnect(),
+        stopReconnect,
         unsubscribe,
         cancelTimer,
     }
@@ -194,6 +205,38 @@ describe('WorkspaceAssetProjection', () => {
         expect(fixture.ports.publishAssets).toHaveBeenCalledExactlyOnceWith('workspace', result)
     })
 
+    it('publishes the active conversation and snapshot before unrelated lineage finishes', async () => {
+        const source = Promise.withResolvers<Asset>()
+        const conversation = {
+            ...asset('conversation'),
+            documents: { conversation: { version: 2 } },
+        } as Asset
+        const fixture = projection({
+            get: vi.fn(async id => {
+                if (id === 'conversation')
+                    return conversation
+
+                if (id === 'source')
+                    return await source.promise
+
+                return asset(id, ['source'])
+            }),
+            loadDocument: vi.fn(async coordinate => ({
+                ...coordinate,
+                version: 2,
+                doc: {},
+            })),
+        })
+        const pending = fixture.owner.load('workspace', canvas(['other'], 'conversation'), () => true)
+
+        await vi.waitFor(() => expect(fixture.ports.publishDocuments).toHaveBeenCalledOnce())
+        expect(fixture.ports.publishAsset).toHaveBeenCalledExactlyOnceWith(conversation)
+        expect(fixture.ports.publishAssets).not.toHaveBeenCalled()
+        source.resolve(asset('source'))
+        await pending
+        expect(fixture.ports.loadDocument).toHaveBeenCalledOnce()
+    })
+
     it('does not publish an obsolete workspace or start queued fetches after navigation', async () => {
         let current = true
         let finish!: (value: Asset) => void
@@ -208,7 +251,7 @@ describe('WorkspaceAssetProjection', () => {
         expect(await pending).toEqual([])
         expect(fixture.ports.get).toHaveBeenCalledTimes(1)
         expect(fixture.ports.publishAssets).not.toHaveBeenCalled()
-        expect(fixture.ports.resumeDocument).not.toHaveBeenCalled()
+        expect(fixture.ports.loadDocument).not.toHaveBeenCalled()
     })
 
     it('admits only the latest load on the same owner', async () => {
@@ -238,23 +281,23 @@ describe('WorkspaceAssetProjection', () => {
         }) as Asset)
         const fixture = projection({
             hasDocument: vi.fn((_id, role) => role === 'provenance'),
-            resumeDocument: vi.fn(async coordinate => ({
+            loadDocument: vi.fn(async coordinate => ({
                 ...coordinate,
                 version: 1,
                 doc: {},
             })),
         })
         await fixture.owner.hydrate(assets, () => true)
-        expect(fixture.ports.resumeDocument).toHaveBeenCalledTimes(19)
+        expect(fixture.ports.loadDocument).toHaveBeenCalledTimes(19)
         expect(vi.mocked(fixture.ports.publishDocuments).mock.calls.map(([snapshots]) => snapshots.length)).toEqual([16, 3])
-        expect(vi.mocked(fixture.ports.resumeDocument).mock.calls.every(([coordinate]) => coordinate.role === 'conversation')).toBe(true)
+        expect(vi.mocked(fixture.ports.loadDocument).mock.calls.every(([coordinate]) => coordinate.role === 'conversation')).toBe(true)
     })
 
     it('drops late document snapshots and stops allocating work when disposed', async () => {
         let current = true
         let finish!: (value: null) => void
         const fixture = projection({
-            resumeDocument: vi.fn(() =>
+            loadDocument: vi.fn(() =>
                 new Promise(resolve => void (finish = resolve))
             ),
         })
@@ -304,6 +347,22 @@ describe('WorkspaceAssetSynchronization', () => {
         expect(fixture.ports.load).not.toHaveBeenCalled()
         expect(fixture.unsubscribe).toHaveBeenCalledTimes(1)
         expect(fixture.cancelTimer).toHaveBeenCalledTimes(1)
+    })
+
+    it('rebinds browser subscriptions on reconnect and reloads only when hydration is incomplete', async () => {
+        const needsRecovery = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true)
+        const fixture = synchronization({ needsRecovery })
+
+        fixture.reconnect()
+        expect(fixture.ports.subscribe).toHaveBeenCalledTimes(2)
+        expect(fixture.unsubscribe).toHaveBeenCalledOnce()
+        expect(fixture.ports.load).not.toHaveBeenCalled()
+        fixture.reconnect()
+        await vi.waitFor(() => expect(fixture.ports.load).toHaveBeenCalledOnce())
+        fixture.owner.destroy()
+        fixture.reconnect()
+        expect(fixture.ports.subscribe).toHaveBeenCalledTimes(3)
+        expect(fixture.stopReconnect).toHaveBeenCalledOnce()
     })
 
     it('rejects a fetch superseded by deletion and a fetch settling after disposal', async () => {

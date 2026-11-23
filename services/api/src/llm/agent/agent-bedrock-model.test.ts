@@ -312,6 +312,26 @@ describe('AgentBedrockModel', () => {
         expect(fixture.calls.execute).not.toHaveBeenCalled()
     })
 
+    it.each(['oneOf', 'allOf', 'anyOf'])('preserves %s constraints below the Bedrock tool schema root', async keyword => {
+        const fixture = new ModelFixture()
+        const branches = [{ required: ['edgeId'] }, { required: ['sourceNodeId'] }]
+        const schema = {
+            type: 'object' as const,
+            properties: { edgeId: { type: 'string' }, sourceNodeId: { type: 'string' } },
+            [keyword]: branches,
+        }
+        await fixture.model.bindTools([{ name: 'edit_connection', input_schema: schema }]).invoke('Hello.')
+        const request = fixture.requests[0] as { tools: Array<{ input_schema: unknown }> }
+
+        expect(request.tools[0].input_schema).toEqual({
+            type: 'object',
+            properties: schema.properties,
+            if: { type: 'object' },
+            then: { [keyword]: branches },
+        })
+        expect(schema[keyword]).toEqual(branches)
+    })
+
     it('rejects context overflow and incompatible forced tool choices before authorization', async () => {
         const fixture = new ModelFixture()
         await expect(fixture.model.invoke('x'.repeat(400_000))).rejects.toThrow('MODEL_INPUT_CONTEXT_EXCEEDED')

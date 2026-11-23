@@ -21,6 +21,7 @@ const {
     METRICS_SUBJECTS,
     MEDIA_RENDER_SUBJECTS,
     PROTOCOL_SUBJECTS,
+    WORKSPACE_SUBJECTS,
 } = NATS_SUBJECTS
 const { JETSTREAM } = PROTOCOL_SUBJECTS
 
@@ -67,6 +68,8 @@ export const builtInPermissions = {
             allow: [
                 `${ACCOUNT_ADMISSION_REPLY_PREFIX}.AUTH.>`,
                 ...storagePublish,
+                WORKSPACE_SUBJECTS.CANVAS_INTERNAL_PRESENCE,
+                `${WORKSPACE_SUBJECTS.CANVAS_EVENTS}.*`,
                 ...events,
                 ...Object.values(ASSET_MAINTENANCE_SUBJECTS),
                 ...Object.values(METRICS_SUBJECTS),
@@ -90,6 +93,7 @@ export const builtInPermissions = {
                 CONVERSATION_SUBJECTS.DISPATCH,
                 CONVERSATION_SUBJECTS.OPERATION_COMPLETED,
                 ...activeContracts.map(contract => contract.subject),
+                WORKSPACE_SUBJECTS.CANVAS_INTERNAL_PRESENCE,
                 MEDIA_RENDER_SUBJECTS.PROGRESS,
                 MEDIA_RENDER_SUBJECTS.COMPLETE,
                 MEDIA_RENDER_SUBJECTS.DISPATCH,

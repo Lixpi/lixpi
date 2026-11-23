@@ -54,6 +54,17 @@ export const contracts = [
         getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_WORKSPACE),
         WORKSPACE_SUBJECTS.UPDATE_WORKSPACE,
     ),
+    {
+        ...userRequest(
+            getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.CANVAS_COLLABORATE),
+            WORKSPACE_SUBJECTS.CANVAS_COLLABORATE,
+        ),
+        queue: 'workspaceCanvasCollaboration',
+        permissions: {
+            pub: { allow: [WORKSPACE_SUBJECTS.CANVAS_COLLABORATE] },
+            sub: { allow: [`${WORKSPACE_SUBJECTS.CANVAS_EVENTS}.{userIdToken}`] },
+        },
+    },
     userRequest(
         getNatsSubjectPath(subjects => subjects.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE),
         WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE,

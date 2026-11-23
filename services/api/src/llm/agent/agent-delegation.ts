@@ -3,7 +3,9 @@ import { DynamicStructuredTool } from '@langchain/core/tools'
 import {
     type AgentOperation,
     type AgentTurnBudget,
+    type ConversationAcknowledgement,
     type ConversationMessage,
+    type ConversationSubmitRequest,
     type ConversationOperationSummary,
     type ConversationTurn,
     type WorkspaceDelegationAccess,
@@ -38,6 +40,8 @@ import {
     type ConversationService,
 } from './conversation-service.ts'
 
+import { conversationPayloadHash } from './conversation-protocol.ts'
+
 export const DELEGATION_OPERATION_KEY = 'workspace-delegation'
 
 // How a delegated instruction's author is named in the child conversation.
@@ -62,6 +66,9 @@ export type DelegationOperation = AgentOperation & {
     answer?: string
     chargedBudget?: Pick<AgentTurnBudget, 'modelCalls' | 'toolCalls' | 'specialistCalls' | 'delegationCalls'>
     notified?: boolean
+    // The target is a normal workspace conversation that can contain unrelated work.
+    existingConversation?: boolean
+    acknowledgement?: Extract<ConversationAcknowledgement, { status: 'accepted' | 'duplicate' }>
 }
 
 type ToolError = {
@@ -333,6 +340,130 @@ export class AgentDelegation {
         return JSON.stringify(
             this.result(operation),
         )
+    }
+
+    async dispatchToConversation(
+        owner: ConversationOwner,
+        request: ConversationSubmitRequest,
+        workspaceName: string,
+    ): Promise<{
+        acknowledgement: ConversationAcknowledgement
+        operationId?: string
+    }> {
+        const execution = await AgentExecutionScope.authorize('execute')
+
+        if (
+            execution.owner !== owner
+            || request.workspaceId !== owner.job.workspaceId
+            || request.conversationAssetId === owner.job.conversationAssetId
+            || request.interruptId
+            || request.humanActionResult
+        )
+            throw new Error('CANVAS_COMPOSER_RECURSIVE_DISPATCH')
+
+        const meta = await owner.read()
+        const operationId = `${OPERATION_PREFIX}${conversationPayloadHash(['canvas-composer', meta.run!.runId, request.clientMessageId]).slice(0, 32)}`
+        const inputHash = conversationPayloadHash(request)
+        const existing = await this.read(owner, operationId)
+
+        if (existing) {
+            if (
+                existing.inputHash !== inputHash
+                || !existing.acknowledgement
+            )
+                throw new Error('CONVERSATION_IDEMPOTENCY_CONFLICT')
+
+            return {
+                acknowledgement: {
+                    ...existing.acknowledgement,
+                    status: 'duplicate',
+                },
+                ...(existing.state === 'running' ? { operationId } : {}),
+            }
+        }
+
+        const acknowledgement = await this.service().submit(
+            request,
+            owner.job.userId,
+            {
+                prepareDelegation: async () => {
+                    const charge = await owner.prepareDelegationCharge(execution.continuationEpoch)
+                    const { permissions } = execution
+                    const allowedOperationFamilies = permissions.allowedOperationFamilies.filter(
+                        family => !permissions.legacyIntent || permissions.legacyIntent.operationFamilies.includes(family),
+                    )
+
+                    return {
+                        delegation: {
+                            access: 'act',
+                            parentWorkspaceId: owner.job.workspaceId,
+                            parentWorkspaceName: workspaceName,
+                            parentConversationAssetId: owner.job.conversationAssetId,
+                            parentTurnId: execution.turn.turnId,
+                            operationId,
+                            allowedOperationFamilies,
+                            budgetLimits: remaining(charge.run.budget),
+                        },
+                        operations: accepted => {
+                            const now = Date.now()
+                            const operation: DelegationOperation = {
+                                operationId,
+                                conversationAssetId: owner.job.conversationAssetId,
+                                turnId: execution.turn.turnId,
+                                runId: charge.run.runId,
+                                responseMessageId: execution.responseMessageId,
+                                operationKey: DELEGATION_OPERATION_KEY,
+                                inputHash,
+                                sources: [],
+                                state: 'running',
+                                epoch: meta.epoch,
+                                continuationEpoch: execution.continuationEpoch,
+                                outputAssetIds: {},
+                                childWorkspaceId: request.workspaceId,
+                                childWorkspaceName: workspaceName,
+                                childConversationAssetId: request.conversationAssetId,
+                                childTurnId: accepted.turnId,
+                                delegationAccess: 'act',
+                                existingConversation: true,
+                                acknowledgement: accepted,
+                                createdAt: now,
+                                updatedAt: now,
+                            }
+
+                            return [
+                                ...charge.operations,
+                                this.repository.put(
+                                    owner.partition,
+                                    `OPERATION#${operationId}`,
+                                    operation,
+                                ),
+                            ]
+                        },
+                    }
+                },
+            },
+        )
+
+        if (acknowledgement.status === 'rejected')
+            return { acknowledgement }
+
+        const operation = await this.read(owner, operationId)
+
+        if (
+            !operation
+            || operation.inputHash !== inputHash
+        )
+            throw new Error('CONVERSATION_IDEMPOTENCY_CONFLICT')
+
+        await owner.event(
+            'operation.status',
+            summary(operation),
+        )
+
+        return {
+            acknowledgement,
+            operationId,
+        }
     }
 
     private result(operation: DelegationOperation): unknown {
@@ -608,6 +739,67 @@ export class AgentDelegation {
         )])
     }
 
+    private async stopOperation(
+        owner: ConversationOwner,
+        operation: DelegationOperation,
+    ): Promise<void> {
+        const service = this.service()
+
+        if (!operation.existingConversation) {
+            await service.stopConversationBySystem(owner.job.organizationId, operation.childConversationAssetId)
+
+            return
+        }
+
+        const base = {
+            protocolVersion: 1 as const,
+            workspaceId: operation.childWorkspaceId,
+            conversationAssetId: operation.childConversationAssetId,
+        }
+        const clientCommandId = `cancel-${operation.operationId.slice(OPERATION_PREFIX.length)}`
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            const snapshot = await service.get(base, owner.job.userId)
+
+            try {
+                if (
+                    snapshot.run?.turnId === operation.childTurnId
+                    && !terminal.has(snapshot.run.state)
+                )
+                    await service.stop(
+                        {
+                            ...base,
+                            runId: snapshot.run.runId,
+                            clientCommandId,
+                        },
+                        owner.job.userId,
+                        { pauseQueue: false },
+                    )
+                else if (snapshot.queuedTurns.some(turn => turn.turnId === operation.childTurnId)) {
+                    await service.queue(
+                        {
+                            ...base,
+                            action: 'cancel-message',
+                            turnIds: [operation.childTurnId],
+                            expectedRevision: snapshot.queueRevision,
+                            clientCommandId,
+                        },
+                        owner.job.userId,
+                    )
+                }
+
+                return
+            } catch (error) {
+                if (
+                    !(error instanceof Error)
+                    || !['STALE_CONVERSATION_RUN', 'STALE_CONVERSATION_QUEUE', 'CONVERSATION_TURN_NOT_QUEUED'].includes(error.message)
+                    || attempt === 2
+                )
+                    throw error
+            }
+        }
+    }
+
     private async runOperations(owner: ConversationOwner): Promise<DelegationOperation[]> {
         const meta = await owner.read()
         const operations: DelegationOperation[] = []
@@ -648,7 +840,7 @@ export class AgentDelegation {
                 if (!operation)
                     throw new Error('AGENT_OPERATION_NOT_FOUND')
 
-                await this.service().stopConversationBySystem(owner.job.organizationId, operation.childConversationAssetId)
+                await this.stopOperation(owner, operation)
 
                 return summary(operation)
             },
@@ -689,7 +881,7 @@ export class AgentDelegation {
             cancel: async owner => {
                 for (const operation of await this.runOperations(owner)) {
                     if (operation.state === 'running')
-                        await this.service().stopConversationBySystem(owner.job.organizationId, operation.childConversationAssetId)
+                        await this.stopOperation(owner, operation)
                 }
             },
         }

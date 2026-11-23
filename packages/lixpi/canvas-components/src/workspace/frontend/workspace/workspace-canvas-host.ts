@@ -81,6 +81,7 @@ export type WorkspaceCanvasAssetPorts = {
     read: (assetId: string) => Asset | undefined
     upsert: (asset: Asset) => void
     subscribe: (changed: (snapshot: { items: ReadonlyMap<string, Asset> }) => void) => () => void
+    subscribeDocuments?: (changed: () => void) => () => void
     readDocument: (
         assetId: string,
         role: AssetDocumentRole,
@@ -105,6 +106,10 @@ export type WorkspaceCanvasAssetPorts = {
         workspaceId?: string,
     ) => Promise<Asset | { error: string }>
     loadWorkspaceAssets: (workspaceId: string) => Promise<Asset[]>
+    hydrateArtifact?: (
+        assetId: string,
+        workspaceId: string,
+    ) => Promise<Asset | { error: string }>
     ensureAssetsLoaded: (assetIds: readonly string[]) => Promise<Asset[]>
     updateMetadata: WorkspaceAssetDetailsPorts['updateMetadata']
     changeScope: WorkspaceAssetDetailsPorts['changeScope']
@@ -199,6 +204,7 @@ export type WorkspaceCanvasHost = {
             error?: unknown
         }) => void) => () => void
         reload: (workspaceId: string) => Promise<unknown>
+        exportArchive?: (workspaceId: string) => Promise<void>
         // Opens a conversation in another workspace, such as the parent
         // conversation whose agent started a delegated one.
         openConversation?: (

@@ -32,12 +32,13 @@ export type ArtifactLibraryPanelOptions = WorkspaceLibraryPorts & {
     ensureStyles: (document: Document) => void
     onInsertAsset?: (item: AssetMeta) => Promise<boolean>
     onAcceptAsset?: (item: Asset) => Promise<boolean>
+    onSelectionChange?: (assetId: string | null) => void
 }
 
 export type ArtifactLibraryPanelInstance = {
     readonly rootEl: HTMLElement
     mountInto: (hostEl: HTMLElement) => void
-    showAsset: (assetId: string) => void
+    showAsset: (assetId: string | null) => void
     refresh: () => void
     unmount: () => void
     destroy: () => void
@@ -103,14 +104,18 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
             void this.load()
     }
 
-    showAsset(assetId: string): void {
+    showAsset(assetId: string | null): void {
         if (this.destroyed)
             return
 
         this.selectedAssetId = assetId
+        this.options.onSelectionChange?.(assetId)
 
         if (this.mounted) {
-            if (this.entries.some(entry => entry.meta.assetId === assetId))
+            if (
+                !assetId
+                || this.entries.some(entry => entry.meta.assetId === assetId)
+            )
                 this.render()
             else
                 void this.load()
@@ -307,10 +312,7 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
             },
         })
         this.viewLifetime.own(() => view.destroy())
-        const select = (): void => {
-            this.selectedAssetId = entry.meta.assetId
-            this.render()
-        }
+        const select = (): void => void this.showAsset(entry.meta.assetId)
         const click = (event: MouseEvent) => {
             if ((event.target as HTMLElement).closest('[data-action="inspect"]')) {
                 select()
@@ -483,10 +485,7 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
         this.listen(
             detail.querySelector('.media-library-detail-back')!,
             'click',
-            () => {
-                this.selectedAssetId = null
-                this.render()
-            },
+            () => this.showAsset(null),
         )
         this.listen(
             title,

@@ -45,4 +45,4 @@ export * from './canvas-node/generated-media-node.ts'
 export * from './canvas-node/workspace-drag-plan.ts'
 export * from './scene/workspace-node-deletion.ts'
 
-export * from './assets/workspace-assets.ts'
+export { resolveFollowedActor } from './scene/resolve-followed-actor.ts'

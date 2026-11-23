@@ -201,7 +201,7 @@ describe('public web UI startup', () => {
         expect(document.querySelector('button')).toBeNull()
     })
 
-    it('loads the private workspace only after a session and releases the startup view before mounting', async () => {
+    it('loads the private workspace after a session and releases the startup view when the workspace reports readiness', async () => {
         const {
             startup,
             pending,

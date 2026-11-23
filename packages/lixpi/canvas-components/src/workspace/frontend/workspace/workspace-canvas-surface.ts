@@ -2,12 +2,16 @@ import {
     LoadingStatus,
     type Asset,
     type AssetDocumentRole,
+    type CanvasCollaborationActor,
+    type CanvasCollaborationPresence,
     type CanvasState,
+    type ConversationFileUploadCoordinate,
     type CapabilityArtifactCanvasNode,
     type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
+    type CanvasEngineRect,
     type ViewportSnapshot as Viewport,
 } from '@lixpi/canvas-engine/shared'
 import {
@@ -21,6 +25,13 @@ import {
     WorkspaceViewportPersistence,
     type WorkspaceViewportPersistencePorts,
 } from '../../shared/persistence/workspace-viewport-persistence.ts'
+import {
+    WorkspaceCanvasCollaboration,
+    type WorkspaceCanvasCaretPort,
+    type WorkspaceCanvasCollaborationPorts,
+    type WorkspaceConnectionDrafts,
+} from './workspace-canvas-collaboration.ts'
+import { preserveWorkspaceCanvasPresentation } from '../../shared/persistence/workspace-canvas-state.ts'
 import { rebaseCanvasMembershipState } from '../../shared/scene/membership-state-rebase.ts'
 import {
     WorkspaceCanvasActions,
@@ -73,11 +84,27 @@ export type WorkspaceCanvasRendererOptions = {
     documents: WorkspaceCanvasDocument[]
     aiChatThreads: WorkspaceCanvasConversation[]
     onViewportChange: (viewport: Viewport) => void
+    onPresenceChange?: (presence: CanvasCollaborationPresence) => void
+    onConnectionDraft?: (connector: CanvasCollaborationPresence['connector']) => void
+    onComposerPresence?: (draft: CanvasCollaborationPresence['composer']) => void
+    onPlaybackPresence?: (
+        playback: CanvasCollaborationPresence['playback'],
+        terminal: boolean,
+    ) => void
+    onGeometryPreview?: (geometry: NonNullable<CanvasCollaborationPresence['geometry']>) => void
+    onGeometryFinish?: (
+        nodeIds: readonly string[],
+        committed: boolean,
+    ) => void
     onCanvasStateChange: (state: CanvasState) => void
     onAuthoritativeCanvasStateChange: (change: {
         canvasState: CanvasState
         layoutRevision: number
     }) => void
+    uploadConversationFile?: (
+        file: File,
+        conversationFile: ConversationFileUploadCoordinate,
+    ) => Promise<{ assetId: string }>
     onAssetAttach: (request: {
         assetId: string
         nodeId: string
@@ -96,6 +123,22 @@ export type WorkspaceCanvasRenderer = {
     getCanvasState: () => CanvasState | null
     getViewport: () => Viewport
     setViewport: (viewport: Viewport) => void
+    setFollowedActor?: (actor: CanvasCollaborationActor | null) => void
+    setRemoteGeometry?: (geometry: NonNullable<CanvasCollaborationPresence['geometry']>) => void
+    getRemoteNodeBounds?: (nodeId: string) => CanvasEngineRect | undefined
+    setRemoteSelectedEdges?: (edgeIds: ReadonlySet<string>) => void
+    getPresenceMenu?: () => CanvasCollaborationPresence['menu']
+    getComposerPresence?: () => CanvasCollaborationPresence['composer']
+    setFollowedComposer?: (
+        following: boolean,
+        draft: CanvasCollaborationPresence['composer'],
+    ) => void
+    setRemoteConnectors?: (connectors: WorkspaceConnectionDrafts) => void
+    setFollowedPlayback?: (
+        following: boolean,
+        state: CanvasCollaborationPresence['playback'],
+    ) => void
+    getPresencePanel?: () => CanvasCollaborationPresence['panel']
     insertNodeAtViewportCenter: (
         node: WorkspaceCanvasRendererInsertion,
         patch?: Omit<Partial<CanvasState>, 'nodes' | 'edges' | 'viewport'>,
@@ -138,6 +181,10 @@ export type WorkspaceCanvasSurfacePorts = {
     ingest: Pick<WorkspaceCanvasActionsPorts, 'createDocument' | 'uploadFile' | 'importUrl' | 'refreshAsset'>
     createId: () => string
     now: () => number
+    collaborate?: WorkspaceCanvasCollaborationPorts['createConnection']
+    cameraStorageKey?: (workspaceId: string) => string
+    cameraStorage?: Pick<WorkspaceViewportPersistencePorts['storage'], 'get' | 'set'>
+    caret?: WorkspaceCanvasCaretPort
     publishTransient: (
         workspaceId: string,
         state: CanvasState,
@@ -167,6 +214,8 @@ export class WorkspaceCanvasSurface {
     private readonly actions: WorkspaceCanvasActions
     private renderer: WorkspaceCanvasRenderer | null = null
     private viewportPersistence: WorkspaceViewportPersistence | null = null
+    private collaboration: WorkspaceCanvasCollaboration | null = null
+    private followedPanelOpen: boolean | undefined
     private snapshot: WorkspaceCanvasSurfaceSnapshot
     private canvasState: CanvasState | null = null
     private documents: WorkspaceCanvasDocument[] = []
@@ -254,6 +303,9 @@ export class WorkspaceCanvasSurface {
                 uploadFile: file => this.actions.uploadFile(file),
                 importUrl: url => this.actions.importUrl(url),
                 reportError: error => ports.reportError('[CANVAS] Toolbar action failed:', error),
+                onMenuChange: menu => this.collaboration?.updatePresence({
+                    menu: menu ?? this.renderer?.getPresenceMenu?.() ?? null,
+                }),
             },
         )
         this.el = this.controls.element
@@ -261,6 +313,7 @@ export class WorkspaceCanvasSurface {
         this.lifetime.own(() => this.actions.destroy())
         this.lifetime.own(() => this.stopSynchronization?.())
         this.lifetime.own(() => this.viewportPersistence?.destroy())
+        this.lifetime.own(() => this.collaboration?.destroy())
 
         try {
             this.derive(this.snapshot)
@@ -278,6 +331,22 @@ export class WorkspaceCanvasSurface {
                 documents: this.documents,
                 aiChatThreads: this.conversations,
                 onViewportChange: viewport => this.changeViewport(viewport),
+                ...(ports.collaborate ? {
+                    onPresenceChange: (presence: CanvasCollaborationPresence) => this.collaboration?.updatePresence(
+                        'menu' in presence ? {
+                            ...presence,
+                            menu: this.controls.getMenu() ?? presence.menu,
+                        } : presence,
+                    ),
+                    onConnectionDraft: (connector: CanvasCollaborationPresence['connector']) => this.collaboration?.previewConnector(connector),
+                    onPlaybackPresence: (playback: CanvasCollaborationPresence['playback'], terminal: boolean) => this.collaboration?.previewPlayback(
+                        playback,
+                        terminal,
+                    ),
+                    onComposerPresence: (draft: CanvasCollaborationPresence['composer']) => this.collaboration?.previewComposer(draft),
+                    onGeometryPreview: (geometry: NonNullable<CanvasCollaborationPresence['geometry']>) => this.collaboration?.previewNodes(geometry),
+                    onGeometryFinish: (nodeIds: readonly string[], committed: boolean) => void this.collaboration?.finishPreview(nodeIds, committed),
+                } : {}),
                 onCanvasStateChange: state => this.persist(state),
                 onAuthoritativeCanvasStateChange: ({
                     canvasState,
@@ -294,13 +363,39 @@ export class WorkspaceCanvasSurface {
                         },
                     })
                 },
+                uploadConversationFile: async (file, conversationFile) => {
+                    const workspaceId = this.snapshot.workspaceId
+                    const revision = this.viewRevision
+                    const current = () => this.isLoaded() && this.snapshot.workspaceId === workspaceId && this.viewRevision === revision
+
+                    if (!current())
+                        throw new Error('The workspace is no longer active.')
+
+                    const result = await this.ports.ingest.uploadFile({
+                        file,
+                        workspaceId,
+                        conversationFile,
+                        onStart: current,
+                    })
+
+                    if (
+                        !result
+                        || 'error' in result
+                    )
+                        throw new Error(result?.error || 'The file could not be uploaded.')
+
+                    return { assetId: result.assetId }
+                },
                 onAssetAttach: request => this.mutateMembership('attach', request),
                 onAssetDetach: request => this.mutateMembership('detach', request),
             })
             this.renderer = renderer
             this.lifetime.own(() => renderer.destroy())
             this.lifetime.own(
-                ports.onPageHide(() => this.viewportPersistence?.stashForUnload()),
+                ports.onPageHide(() => {
+                    this.viewportPersistence?.stashForUnload()
+                    this.collaboration?.flush()
+                }),
             )
             this.reconcile()
 
@@ -343,6 +438,7 @@ export class WorkspaceCanvasSurface {
         } finally {
             this.renderer = null
             this.viewportPersistence = null
+            this.collaboration = null
             this.stopSynchronization = null
         }
 
@@ -427,6 +523,7 @@ export class WorkspaceCanvasSurface {
         this.viewport = viewport
         this.controls.setZoom(viewport.zoom)
         this.viewportPersistence?.change(viewport)
+        this.collaboration?.changedViewport(viewport)
     }
 
     private derive(snapshot: WorkspaceCanvasSurfaceSnapshot): void {
@@ -446,6 +543,8 @@ export class WorkspaceCanvasSurface {
             const previous = this.viewportPersistence
             this.viewportPersistence = null
             previous?.destroy()
+            this.collaboration?.destroy()
+            this.collaboration = null
         }
 
         this.snapshot = snapshot
@@ -515,6 +614,7 @@ export class WorkspaceCanvasSurface {
             !this.canvasState
             || !this.isLoaded()
             || this.viewportPersistence
+            || this.ports.collaborate
         )
             return
 
@@ -548,6 +648,79 @@ export class WorkspaceCanvasSurface {
         )
     }
 
+    private ensureCollaboration(): void {
+        const {
+            collaborate,
+            cameraStorageKey,
+            cameraStorage,
+        } = this.ports
+        const renderer = this.renderer
+
+        if (
+            !collaborate
+            || !renderer
+            || !this.isLoaded()
+            || !this.canvasState
+            || this.collaboration
+        )
+            return
+
+        const workspaceId = this.snapshot.workspaceId
+        const key = cameraStorageKey?.(workspaceId) ?? `lixpi:canvas-camera:${workspaceId}`
+        const persistence = this.ports.session(workspaceId).persistence
+
+        this.collaboration = new WorkspaceCanvasCollaboration({
+            workspaceId,
+            pane: this.controls.pane,
+            controls: this.el,
+            setViewport: viewport => {
+                renderer.setViewport(viewport)
+                this.viewport = viewport
+                this.controls.setZoom(viewport.zoom)
+            },
+            getViewport: renderer.getViewport,
+            setFollowedActor: actor => {
+                this.followedPanelOpen = actor?.panel?.isOpen
+                this.reflectPanelOpen()
+                this.controls.setFollowedMenu(
+                    Boolean(actor),
+                    actor?.menu,
+                )
+                renderer.setFollowedActor?.(actor)
+            },
+            setRemoteGeometry: geometry => renderer.setRemoteGeometry?.(geometry),
+            getRemoteNodeBounds: nodeId => renderer.getRemoteNodeBounds?.(nodeId),
+            setRemoteSelectedEdges: edgeIds => renderer.setRemoteSelectedEdges?.(edgeIds),
+            setFollowedComposer: (following, draft) => renderer.setFollowedComposer?.(following, draft),
+            setRemoteConnectors: connectors => renderer.setRemoteConnectors?.(connectors),
+            setFollowedPlayback: (following, state) => renderer.setFollowedPlayback?.(following, state),
+            createConnection: collaborate,
+            receiveCanvas: (canvasState, revision) => persistence.adoptCollaborative({
+                canvasState: preserveWorkspaceCanvasPresentation(canvasState, this.canvasState),
+                version: {
+                    canvasStateUpdatedAt: revision,
+                },
+            }),
+            readCamera: () => (cameraStorage ?? this.ports.storage).get(key),
+            writeCamera: (_, camera) => (cameraStorage ?? this.ports.storage).set(key, camera),
+            drainCanvas: () => persistence.drain(),
+            caret: this.ports.caret,
+            reportError: this.ports.reportError,
+        })
+        this.collaboration.previewComposer(renderer.getComposerPresence?.())
+        const panel = renderer.getPresencePanel?.()
+
+        if (panel)
+            this.collaboration.updatePresence({ panel })
+    }
+
+    private reflectPanelOpen(): void {
+        const isOpen = this.followedPanelOpen
+            ?? this.canvasState?.aiChatPanel?.isOpen
+            ?? this.canvasState?.lastActiveConversationAssetId
+        this.controls.setRightPanelOpen(this.isLoaded() && Boolean(isOpen))
+    }
+
     private reconcile = (): void => {
         if (this.disposed)
             return
@@ -570,9 +743,7 @@ export class WorkspaceCanvasSurface {
                 if (this.disposed)
                     return
 
-                this.controls.setRightPanelOpen(
-                    Boolean(this.isLoaded() && (this.canvasState?.aiChatPanel?.isOpen ?? this.canvasState?.lastActiveConversationAssetId)),
-                )
+                this.reflectPanelOpen()
                 this.synchronize()
 
                 if (this.disposed)
@@ -594,6 +765,7 @@ export class WorkspaceCanvasSurface {
                 this.controls.setZoom(this.viewport.zoom)
                 this.viewportPersistence?.sync(this.viewport, this.canvasState)
                 this.viewportPersistence?.restore(this.canvasState?.viewport)
+                this.ensureCollaboration()
             } while (
                 this.reconcileRequested
                 && !this.disposed

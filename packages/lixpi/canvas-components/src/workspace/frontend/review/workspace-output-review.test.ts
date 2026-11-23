@@ -43,6 +43,7 @@ const imageNode = (nodeId = 'image'): ImageCanvasNode => ({
     },
     generatedBy: {
         conversationAssetId: 'conversation',
+        generationRequestId: 'generation',
         responseId: 'response',
         aiModel: 'reasoner:model',
         reasoningModelId: 'reasoner:model',
@@ -224,6 +225,8 @@ describe('workspace output review', () => {
                 },
             }),
             {
+                sourceConversationAssetId: 'conversation',
+                sourceGenerationRequestId: 'generation',
                 explicitContextNodeIds: ['reference', 'context'],
                 excludedCanvasNodeIds: ['image'],
                 regeneration: {

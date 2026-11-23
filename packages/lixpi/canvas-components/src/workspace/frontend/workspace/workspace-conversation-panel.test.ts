@@ -216,6 +216,27 @@ describe('WorkspaceConversationPanel canvas gestures', () => {
 })
 
 describe('WorkspaceConversationPanel native conversation editor', () => {
+    it('shows the followed transcript through authority with the local selection parked', async () => {
+        const f = fixture()
+        const select = vi.spyOn(f.controller, 'select')
+
+        try {
+            await vi.waitFor(() => expect(f.mount).toHaveBeenCalledOnce())
+            f.panel.setFollowedConversation(true, 'peer-conversation')
+            await vi.waitFor(() => expect(f.load).toHaveBeenLastCalledWith('peer-conversation'))
+            await vi.waitFor(() => expect(f.mount).toHaveBeenCalledTimes(2))
+            expect(f.mount.mock.lastCall?.[0].readOnly).toBe(true)
+            expect(f.controller.current?.conversationAssetId).toBe('conversation')
+            expect(select).not.toHaveBeenCalled()
+
+            f.panel.setFollowedConversation(false)
+            await vi.waitFor(() => expect(f.load).toHaveBeenLastCalledWith('conversation'))
+            expect(select).not.toHaveBeenCalled()
+        } finally {
+            f.panel.destroy()
+        }
+    })
+
     it('mounts the authoritative conversation once and never renders command-log text as messages', async () => {
         const f = fixture()
 

@@ -3,6 +3,14 @@
 // parent's children, and the sort key orders them by position. Two entries
 // that received the same position from concurrent inserts are ordered by id.
 
+export const canvasRoomKey = (workspaceId: string): {
+    pk: string
+    sk: string
+} => ({
+    pk: `CANVAS#${workspaceId}`,
+    sk: 'COLLABORATION',
+})
+
 export const WORKSPACE_TREE_ROOT_PARENT = 'ROOT'
 
 export const workspaceTreePartitionKey = (

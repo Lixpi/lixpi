@@ -39,6 +39,7 @@ import {
     type ConnectionEdge,
     type ConnectionPolicy,
     type ConnectionSettings,
+    type ConnectionDraft,
 } from '../connectors/connection-types.ts'
 import {
     ViewportController,
@@ -99,13 +100,14 @@ export type CanvasInteractionOptions = {
         fromMarquee: boolean,
     ) => void
 }
-export type CanvasConnectionControls = Pick<ConnectionManager<EngineNode>, 'flowId' | 'cancelTransientConnection' | 'startConnectionFromMenu' | 'onHandlePointerDown' | 'selectEdge' | 'deleteSelectedEdge' | 'deselect' | 'getEdgeMidpointRect' | 'checkProximity' | 'commitProximityConnection' | 'recomputeConnectorGeometry' | 'updateSettings' | 'render'>
+export type CanvasConnectionControls = Pick<ConnectionManager<EngineNode>, 'flowId' | 'cancelTransientConnection' | 'startConnectionFromMenu' | 'onHandlePointerDown' | 'selectEdge' | 'deleteSelectedEdge' | 'deselect' | 'getEdgeMidpointRect' | 'setRemoteSelectedEdges' | 'checkProximity' | 'commitProximityConnection' | 'recomputeConnectorGeometry' | 'updateSettings' | 'render'>
 export type CanvasConnectionOptions = {
     settings: ConnectionSettings
     renderer?: Omit<ConnectorRendererOptions, 'surface'>
     markerBodyLengthFraction?: number
     policy?: Partial<ConnectionPolicy<EngineNode>>
     onSelectionChange?: (edgeId: string | null) => void
+    onDraftChange?: (draft: ConnectionDraft | null) => void
     onEdgesChange?: (edges: readonly ConnectionEdge[]) => void
 }
 export type CanvasOptions = {
@@ -463,6 +465,7 @@ export class CanvasController {
                     options.onSelectionChange?.(id)
                 },
                 onConnectorGeometry: edges => drawing.render(edges, this.scene.viewport),
+                onDraftChange: options.onDraftChange,
             })
             const connection = this.connections
             lifetime.own(() => connection.destroy())

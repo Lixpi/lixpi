@@ -25,6 +25,9 @@ import {
     type ConversationStopRequest,
     type ConversationSubmitRequest,
     type ConversationTurn,
+    type ConversationHumanAction,
+    type ConversationHumanActionResult,
+    type ConversationHumanActionAnswer,
     type ConversationDelegation,
     type ConversationTurnDelegation,
 } from '@lixpi/constants'
@@ -35,6 +38,8 @@ import {
 import {
     conversationMessageText,
     conversationPayloadHash,
+    conversationRunForViewer,
+    conversationEventForViewer,
     resolveConversationSettings,
 } from './conversation-protocol.ts'
 import {
@@ -73,6 +78,11 @@ export type ConversationServicePorts = {
         write: boolean,
     ) => Promise<ConversationAccess>
     getAgentPreferences?: (userId: string) => Promise<AccountAgentPreferences | undefined>
+    verifyHumanAction?: (
+        action: ConversationHumanAction,
+        result: ConversationHumanActionResult,
+        access: ConversationAccess,
+    ) => Promise<ConversationHumanActionAnswer | undefined>
     resolveReferences: (
         access: ConversationAccess,
         references: ConversationReference[],
@@ -85,6 +95,13 @@ export type ConversationServicePorts = {
     dispatchScheduled: (dueAt: number) => void
     now: () => number
     createId: () => string
+}
+
+type AcceptedDispatch = Extract<ConversationAcknowledgement, { status: 'accepted' | 'duplicate' }>
+
+type PreparedConversationDelegation = {
+    delegation: ConversationTurnDelegation
+    operations: (acknowledgement: AcceptedDispatch) => TransactOperation[]
 }
 
 type AcceptedClient = {
@@ -234,7 +251,7 @@ export class ConversationService {
         )
             throw new Error('CONVERSATION_IDEMPOTENCY_CONFLICT')
 
-        const snapshot = await this.snapshot(saved)
+        const snapshot = await this.snapshot(saved, userId)
 
         if (!saved.delegatedBy)
             snapshot.settings = {
@@ -281,7 +298,11 @@ export class ConversationService {
                 meta?.activated
                 && meta.workspaceId === request.workspaceId
             ) {
-                const snapshot = await this.snapshot(meta, false)
+                const snapshot = await this.snapshot(
+                    meta,
+                    userId,
+                    false,
+                )
 
                 if (!meta.delegatedBy)
                     snapshot.settings = {
@@ -328,7 +349,7 @@ export class ConversationService {
             userId,
             false,
         )
-        const snapshot = await this.snapshot(meta)
+        const snapshot = await this.snapshot(meta, userId)
 
         if (!meta.delegatedBy)
             snapshot.settings = {
@@ -368,7 +389,10 @@ export class ConversationService {
     async submit(
         request: ConversationSubmitRequest,
         userId: string,
-        options: { delegation?: ConversationTurnDelegation } = {},
+        options: {
+            delegation?: ConversationTurnDelegation
+            prepareDelegation?: () => Promise<PreparedConversationDelegation>
+        } = {},
     ): Promise<ConversationAcknowledgement> {
         const payloadHash = conversationPayloadHash(request)
 
@@ -429,12 +453,14 @@ export class ConversationService {
                     'The conversation already has 32 queued messages. Wait for a turn to finish or remove a queued message.',
                 )
 
-            const agentPreferences = options.delegation ? undefined : await this.ports.getAgentPreferences?.(userId)
+            const prepared = await options.prepareDelegation?.()
+            const delegation = prepared?.delegation ?? options.delegation
+            const agentPreferences = delegation ? undefined : await this.ports.getAgentPreferences?.(userId)
             const settings = {
                 ...meta.settings,
                 ...agentPreferences,
             }
-            const midRunPolicy = options.delegation
+            const midRunPolicy = delegation
                 ? 'queue'
                 : request.interruptId
                     ? 'steer'
@@ -478,6 +504,28 @@ export class ConversationService {
                     'An answer to this question has already been accepted.',
                 )
 
+            const humanAction = request.interruptId ? meta.run?.humanAction : undefined
+            const humanActionAnswer = humanAction
+                && humanAction.userId === userId
+                && request.humanActionResult
+                && !delegation
+                ? await this.ports.verifyHumanAction?.(
+                    humanAction,
+                    request.humanActionResult,
+                    access,
+                )
+                : undefined
+
+            if (
+                (humanAction && !humanActionAnswer)
+                || (!humanAction && request.humanActionResult)
+            )
+                return this.reject(
+                    request,
+                    'CONVERSATION_HUMAN_ACTION_INCOMPLETE',
+                    'Complete the requested action before continuing.',
+                )
+
             const turn: ConversationTurn = {
                 turnId,
                 clientMessageId: request.clientMessageId,
@@ -492,7 +540,8 @@ export class ConversationService {
                 state: 'queued',
                 createdAt: now,
                 ...(request.interruptId ? { interruptId: request.interruptId } : {}),
-                ...(options.delegation ? { delegation: options.delegation } : {}),
+                ...(humanActionAnswer ? { humanActionAnswer } : {}),
+                ...(delegation ? { delegation } : {}),
             }
             const next: ConversationMeta = {
                 ...meta,
@@ -519,7 +568,7 @@ export class ConversationService {
                 next.queuePaused = false
             }
 
-            const acknowledgement: ConversationAcknowledgement = {
+            const acknowledgement: AcceptedDispatch = {
                 status: 'accepted',
                 clientMessageId: request.clientMessageId,
                 turnId,
@@ -546,6 +595,7 @@ export class ConversationService {
             }
             const operations = [
                 ...access.fences,
+                ...(prepared?.operations(acknowledgement) ?? []),
                 ...(request.interruptId ? [this.repository.put(
                     pk,
                     `INTERRUPT_ANSWER#${request.interruptId}`,
@@ -602,7 +652,7 @@ export class ConversationService {
                         role: 'user',
                         text: conversationMessageText(request.fragment),
                         clientMessageId: request.clientMessageId,
-                        ...(options.delegation ? { authorLabel: delegatedAuthorLabel(options.delegation.parentWorkspaceName) } : {}),
+                        ...(delegation ? { authorLabel: delegatedAuthorLabel(delegation.parentWorkspaceName) } : {}),
                         complete: true,
                         createdAt: now,
                     },
@@ -681,7 +731,7 @@ export class ConversationService {
             && settings.midRunPolicy === meta.settings.midRunPolicy
             && conversationModelPreferencesEqual(settings.models, meta.settings.models)
         )
-            return await this.snapshot(meta)
+            return await this.snapshot(meta, userId)
 
         const now = this.ports.now()
         const next = {
@@ -780,12 +830,13 @@ export class ConversationService {
 
         await this.ports.publish(event)
 
-        return await this.snapshot(next)
+        return await this.snapshot(next, userId)
     }
 
     async stop(
         request: ConversationStopRequest,
         userId: string,
+        options: { pauseQueue?: boolean } = {},
     ): Promise<ConversationSnapshot> {
         return await this.commandMutation(
             request,
@@ -796,7 +847,7 @@ export class ConversationService {
 
                 return {
                     ...meta,
-                    queuePaused: true,
+                    queuePaused: options.pauseQueue === false ? meta.queuePaused : true,
                     queueRevision: meta.queueRevision + 1,
                     run: {
                         ...meta.run,
@@ -1069,7 +1120,7 @@ export class ConversationService {
                 break
             }
 
-            const event = { ...row } as ConversationEvent & {
+            const event = { ...conversationEventForViewer(row, userId) } as ConversationEvent & {
                 pk?: string
                 sk?: string
             }
@@ -1128,7 +1179,7 @@ export class ConversationService {
             if (receipt.hash !== hash)
                 throw new Error('CONVERSATION_IDEMPOTENCY_CONFLICT')
 
-            return await this.snapshot(meta)
+            return await this.snapshot(meta, userId)
         }
 
         const next = await change(
@@ -1188,7 +1239,7 @@ export class ConversationService {
 
         await this.ports.publish(event)
 
-        return await this.snapshot(next)
+        return await this.snapshot(next, userId)
     }
 
     private async load(
@@ -1230,6 +1281,7 @@ export class ConversationService {
 
     private async snapshot(
         meta: ConversationMeta,
+        userId: string,
         includeMessages = true,
         attempt = 0,
     ): Promise<ConversationSnapshot> {
@@ -1275,7 +1327,7 @@ export class ConversationService {
                     ...(interruptId ? { interruptId } : {}),
                 }),
             ),
-            ...(meta.run ? { run: meta.run } : {}),
+            ...(meta.run ? { run: conversationRunForViewer(meta.run, userId) } : {}),
             messages: [],
             documentRevision: meta.documentRevision,
             eventSeq: meta.eventSeq,
@@ -1311,6 +1363,7 @@ export class ConversationService {
 
             return await this.snapshot(
                 latest,
+                userId,
                 includeMessages,
                 attempt + 1,
             )
@@ -1374,6 +1427,7 @@ export class ConversationService {
                 createdAt: row.createdAt,
                 orderKey: row.sk.slice('MESSAGE#'.length),
                 ...(row.clientMessageId ? { clientMessageId: row.clientMessageId } : {}),
+                ...(row.authorLabel ? { authorLabel: row.authorLabel } : {}),
             }
             const messageOperations = message.role === 'assistant' ? await this.messageOperations(meta, message.messageId) : []
             const size = Buffer.byteLength(

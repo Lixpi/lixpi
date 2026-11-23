@@ -941,14 +941,14 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             },
         ])
 
-        const toggleModelMenu = (event: MouseEvent): void => {
-            event.preventDefault()
-            event.stopPropagation()
-
-            if (!modelMenu)
+        const showModelMenu = (open: boolean): void => {
+            if (
+                !modelMenu
+                || modelMenu.isVisible === open
+            )
                 return
 
-            if (modelMenu.isVisible) {
+            if (!open) {
                 modelMenu.hide()
 
                 return
@@ -963,6 +963,73 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             modelMenu.show('modelSettings', position)
         }
 
+        const toggleModelMenu = (event: MouseEvent): void => {
+            event.preventDefault()
+            event.stopPropagation()
+            showModelMenu(!modelMenu?.isVisible)
+        }
+
+        let modelMenuFollowing = false
+        const reflectModelMenu = (event: Event): void => {
+            const {
+                open,
+                readOnly,
+                controlId,
+            } = (
+                event as CustomEvent<{
+                    open: boolean
+                    readOnly: boolean
+                    controlId?: string
+                }>
+            ).detail
+            modelMenuFollowing = readOnly
+
+            if (modelMenuTrigger)
+                modelMenuTrigger.inert = readOnly
+
+            if (modelMenu)
+                modelMenu.element.inert = readOnly
+
+            showModelMenu(open)
+
+            for (const host of modelMenu?.element.querySelectorAll<HTMLElement>('[data-canvas-model-control-id]') ?? []) {
+                host.dispatchEvent(
+                    new CustomEvent(
+                        'lixpi:canvas-model-control-preview',
+                        {
+                            detail: {
+                                open: host.dataset.canvasModelControlId === controlId,
+                                readOnly,
+                            },
+                        },
+                    ),
+                )
+            }
+        }
+
+        const onModelControlMenu = (event: Event): void => {
+            if (
+                modelMenuFollowing
+                || !modelMenuTrigger
+            )
+                return
+
+            const {
+                id,
+                open,
+            } = (
+                event as CustomEvent<{
+                    id: string
+                    open: boolean
+                }>
+            ).detail
+
+            if (open)
+                modelMenuTrigger.dataset.canvasModelControl = id
+            else if (modelMenuTrigger.dataset.canvasModelControl === id)
+                delete modelMenuTrigger.dataset.canvasModelControl
+        }
+
         const handleModelMenuWheel = (event: WheelEvent): void => {
             if (event.ctrlKey)
                 event.preventDefault()
@@ -975,6 +1042,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             onClick: toggleModelMenu,
         })
         modelMenuTrigger = modelMenuTriggerPresentation.element
+        modelMenuTrigger.addEventListener('lixpi:canvas-model-menu', reflectModelMenu)
         modelControls.applyAiModelMenuStyleSettings(modelMenuTrigger)
         const unsubscribeModelMenuTriggerSummary = models.subscribe(() => {
             updateModelMenuTriggerSummary()
@@ -1020,6 +1088,8 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
                 updateModelMenuControls()
             },
             onHide: () => {
+                delete modelMenuTrigger.dataset.canvasModelControl
+
                 for (const matrix of mediaConfigMatrices)
                     matrix.closeMenus()
 
@@ -1033,6 +1103,7 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
             'nowheel',
         )
         modelMenu.element.ariaLabel = 'Model settings'
+        modelMenu.element.addEventListener('lixpi:canvas-model-control', onModelControlMenu)
 
         // `ignoreMutation` skips these regions, so scroll containers inside them
         // can host the shared overlay scrollbar without editing the document.
@@ -1053,6 +1124,9 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
         )
 
         const handleDocumentMouseDown = (event: MouseEvent): void => {
+            if (modelMenuFollowing)
+                return
+
             const target = event.target as Node
 
             if (controlsEl.contains(target))
@@ -1136,6 +1210,8 @@ export const createAiPromptInputNodeView = (options: AiPromptInputNodeViewOption
                     true,
                 )
                 modelMenu?.element.removeEventListener('wheel', handleModelMenuWheel)
+                modelMenu?.element.removeEventListener('lixpi:canvas-model-control', onModelControlMenu)
+                modelMenuTrigger.removeEventListener('lixpi:canvas-model-menu', reflectModelMenu)
                 modelMenuContent.destroy()
                 modelMenu?.destroy()
                 reasoningAddModel.destroy()

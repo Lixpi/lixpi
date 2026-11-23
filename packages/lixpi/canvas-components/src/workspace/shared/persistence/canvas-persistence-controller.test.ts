@@ -6,6 +6,7 @@ import {
 } from 'vitest'
 import {
     type CanvasState,
+    type DocumentCanvasNode,
 } from '@lixpi/constants'
 import {
     CanvasPersistenceController,
@@ -26,7 +27,7 @@ const state = (x = 0): CanvasState => {
     }
 }
 
-const setup = () => {
+const setup = (mergeConcurrentWrites = false) => {
     let snapshot: WorkspaceCanvasSnapshot = {
         canvasState: state(),
         version: {
@@ -50,6 +51,7 @@ const setup = () => {
         },
     }))
     const ports: CanvasPersistencePorts = {
+        mergeConcurrentWrites: () => mergeConcurrentWrites,
         read: () => snapshot,
         save,
         fetch: vi.fn(async () => ({
@@ -96,6 +98,58 @@ describe('CanvasPersistenceController', () => {
         expect(save.mock.calls[1][0]).toMatchObject({
             canvasState: state(3),
             persistViewport: true,
+            expectedCanvasStateUpdatedAt: 6,
+        })
+    })
+
+    it('keeps a remote graph edit when retrying a stale local canvas write', async () => {
+        const {
+            controller,
+            ports,
+            save,
+        } = setup(true)
+        const local = {
+            ...state(),
+            lastActiveConversationAssetId: 'local',
+        }
+        const remote: CanvasState = {
+            ...state(),
+            nodes: [{
+                type: 'operationStatus',
+                nodeId: 'remote',
+                position: {
+                    x: 10,
+                    y: 20,
+                },
+                dimensions: {
+                    width: 120,
+                    height: 80,
+                },
+                operation: {
+                    kind: 'upload',
+                    status: 'active',
+                    title: 'Upload',
+                },
+            }] as CanvasState['nodes'],
+        }
+        save.mockResolvedValueOnce({
+            status: 'stale',
+            workspaceId: 'one',
+            current: { canvasStateUpdatedAt: 6 },
+        })
+        ports.fetch = async () => ({
+            canvasState: remote,
+            version: { canvasStateUpdatedAt: 6 },
+        })
+
+        controller.update(local)
+        await controller.drain()
+
+        expect(save.mock.calls[1][0]).toMatchObject({
+            canvasState: {
+                ...remote,
+                lastActiveConversationAssetId: 'local',
+            },
             expectedCanvasStateUpdatedAt: 6,
         })
     })
@@ -207,6 +261,90 @@ describe('CanvasPersistenceController', () => {
         await controller.flush()
         expect(save).toHaveBeenCalledTimes(2)
         expect(save.mock.calls[1][0].canvasState).toEqual(state(4))
+    })
+
+    it('retries a write interrupted by reconnect after rebasing on the newest peer graph', async () => {
+        const {
+            controller,
+            save,
+        } = setup(true)
+        const first = Promise.withResolvers<CanvasWriteResult>()
+        save.mockReturnValueOnce(first.promise).mockResolvedValue({
+            status: 'saved',
+            workspaceId: 'one',
+            version: { canvasStateUpdatedAt: 9 },
+        })
+        const node = (nodeId: string, x: number): DocumentCanvasNode => ({
+            type: 'document',
+            nodeId,
+            assetId: nodeId,
+            position: {
+                x,
+                y: 10,
+            },
+            dimensions: {
+                width: 100,
+                height: 150,
+            },
+        })
+        const initial = {
+            ...state(),
+            nodes: [node('dragged', 10)],
+        }
+        controller.adoptCollaborative({
+            canvasState: initial,
+            version: { canvasStateUpdatedAt: 6 },
+        })
+
+        const moved = {
+            ...initial,
+            nodes: [node('dragged', 100)],
+        }
+        controller.update(moved)
+        await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+        const additionalLocalNode = node('local', 200)
+        controller.update({
+            ...moved,
+            nodes: [...moved.nodes, additionalLocalNode],
+        })
+
+        const peer = node('peer', 300)
+        controller.adoptCollaborative({
+            canvasState: {
+                ...initial,
+                nodes: [...initial.nodes, peer],
+            },
+            version: { canvasStateUpdatedAt: 8 },
+        })
+        const retry = controller.retryInterruptedWrite()
+        first.reject(new Error('NATS transport closed'))
+        await retry
+
+        expect(save).toHaveBeenCalledTimes(2)
+        expect(save.mock.calls[1][0]).toMatchObject({
+            expectedCanvasStateUpdatedAt: 8,
+            canvasState: {
+                ...moved,
+                nodes: expect.arrayContaining([node('dragged', 100), peer, additionalLocalNode]),
+            },
+        })
+        expect(controller.read()?.version.canvasStateUpdatedAt).toBe(9)
+    })
+
+    it('does not retry a rejected canvas save after reconnect', async () => {
+        const {
+            controller,
+            save,
+        } = setup(true)
+        save.mockResolvedValueOnce({
+            status: 'error',
+            workspaceId: 'one',
+            error: new Error('Canvas change denied'),
+        })
+        controller.update(state(5))
+        await expect(controller.drain()).rejects.toThrow('Canvas change denied')
+        await controller.retryInterruptedWrite()
+        expect(save).toHaveBeenCalledOnce()
     })
 
     it('lets a newer complete snapshot settle after an earlier write fails', async () => {

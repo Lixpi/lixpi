@@ -24,8 +24,11 @@ export type WorkspaceAssetProjectionPorts = {
     hasDocument: (
         assetId: string,
         role: AssetDocumentRole,
+        version: number,
     ) => boolean
-    resumeDocument: (coordinate: WorkspaceAssetDocumentCoordinate) => Promise<WorkspaceAssetDocument | null>
+    loadDocument: (coordinate: WorkspaceAssetDocumentCoordinate) => Promise<WorkspaceAssetDocument | null>
+    readAsset: (assetId: string) => Asset | undefined
+    publishAsset: (asset: Asset) => void
     publishAssets: (
         workspaceId: string,
         assets: Asset[],
@@ -97,11 +100,13 @@ export class WorkspaceAssetProjection {
         this.ports.setLoading(workspaceId)
 
         try {
+            const activeConversation = canvasState?.lastActiveConversationAssetId
+            let conversation: Promise<void> | undefined
             const prioritized = getWorkspaceCanvasAssetIds(canvasState).sort((left, right) => {
-                if (left === canvasState?.lastActiveConversationAssetId)
+                if (left === activeConversation)
                     return -1
 
-                if (right === canvasState?.lastActiveConversationAssetId)
+                if (right === activeConversation)
                     return 1
 
                 return 0
@@ -110,6 +115,24 @@ export class WorkspaceAssetProjection {
                 prioritized,
                 workspaceId,
                 admitted,
+                asset => {
+                    const pointer = asset.documents.conversation
+
+                    if (
+                        asset.assetId !== activeConversation
+                        || !pointer
+                    )
+                        return
+
+                    this.ports.publishAsset(asset)
+
+                    if (!this.ports.hasDocument(
+                        asset.assetId,
+                        'conversation',
+                        pointer.version,
+                    ))
+                        conversation = this.publishActiveConversation(asset, admitted)
+                },
             )
 
             if (!admitted())
@@ -132,7 +155,14 @@ export class WorkspaceAssetProjection {
 
             const assets = [...directAssets, ...lineageAssets]
             this.ports.publishAssets(workspaceId, assets)
-            await this.hydrate(assets, admitted)
+            await Promise.all([
+                conversation,
+                this.hydrate(
+                    assets,
+                    admitted,
+                    activeConversation,
+                ),
+            ])
 
             return admitted() ? assets : []
         } catch (error) {
@@ -143,9 +173,44 @@ export class WorkspaceAssetProjection {
         }
     }
 
+    needsHydration(canvasState: CanvasState | undefined): boolean {
+        return getWorkspaceCanvasAssetIds(canvasState).some(assetId => {
+            const asset = this.ports.readAsset(assetId)
+
+            return !asset || (Object.keys(asset.documents) as AssetDocumentRole[]).some(
+                role => !this.ports.hasDocument(
+                    assetId,
+                    role,
+                    asset.documents[role]?.version ?? 0,
+                ),
+            )
+        })
+    }
+
+    private async publishActiveConversation(
+        asset: Asset,
+        current: () => boolean,
+    ): Promise<void> {
+        const snapshot = await this.readDocument(
+            {
+                organizationId: asset.organizationId,
+                assetId: asset.assetId,
+                role: 'conversation',
+            },
+            current,
+        )
+
+        if (
+            snapshot
+            && current()
+        )
+            this.ports.publishDocuments([snapshot])
+    }
+
     async hydrate(
         assets: Asset[],
         current: () => boolean,
+        activeConversation?: string,
     ): Promise<void> {
         const coordinates = assets.flatMap(
             asset =>
@@ -154,12 +219,21 @@ export class WorkspaceAssetProjection {
                         organizationId: asset.organizationId,
                         assetId: asset.assetId,
                         role,
+                        version: asset.documents[role]?.version ?? 0,
                     }),
                 ),
-        ).filter(({
-            assetId,
-            role,
-        }) => !this.ports.hasDocument(assetId, role))
+        ).filter(
+            ({
+                assetId,
+                role,
+                version,
+            }) => !(assetId === activeConversation && role === 'conversation')
+                && !this.ports.hasDocument(
+                    assetId,
+                    role,
+                    version,
+                ),
+        )
             .sort((left, right) => {
                 if (
                     left.role === 'conversation'
@@ -190,30 +264,44 @@ export class WorkspaceAssetProjection {
             4,
             current,
             async coordinate => {
-                try {
-                    const snapshot = await this.ports.resumeDocument(coordinate)
+                const {
+                    version: _,
+                    ...request
+                } = coordinate
+                const snapshot = await this.readDocument(request, current)
 
-                    if (!current())
-                        return
+                if (
+                    snapshot
+                    && current()
+                )
+                    snapshots.push(snapshot)
 
-                    if (snapshot)
-                        snapshots.push(snapshot)
-
-                    if (snapshots.length >= 16)
-                        flush()
-                } catch (error) {
-                    if (current())
-                        this.ports.reportError('Asset document resume failed; synchronization will retry it', error)
-                }
+                if (snapshots.length >= 16)
+                    flush()
             },
         )
         flush()
+    }
+
+    private async readDocument(
+        coordinate: WorkspaceAssetDocumentCoordinate,
+        current: () => boolean,
+    ): Promise<WorkspaceAssetDocument | null> {
+        try {
+            return await this.ports.loadDocument(coordinate)
+        } catch (error) {
+            if (current())
+                this.ports.reportError('Asset document load failed; synchronization will retry it', error)
+
+            return null
+        }
     }
 
     private async loadAssets(
         ids: string[],
         workspaceId: string,
         current: () => boolean,
+        loaded?: (asset: Asset) => void,
     ): Promise<Asset[]> {
         const assets = await this.map(
             ids,
@@ -223,7 +311,15 @@ export class WorkspaceAssetProjection {
                 try {
                     const result = await this.ports.get(assetId, workspaceId)
 
-                    return 'error' in result ? undefined : result
+                    if (
+                        'error' in result
+                        || !current()
+                    )
+                        return undefined
+
+                    loaded?.(result)
+
+                    return result
                 } catch (error) {
                     if (current())
                         this.ports.reportError('Asset load failed; synchronization will retry it', error)
@@ -268,6 +364,8 @@ export type WorkspaceAssetEvent = {
 }
 export type WorkspaceAssetSynchronizationPorts = {
     subscribe: (listener: (event: WorkspaceAssetEvent) => void) => () => void
+    onReconnect?: (listener: () => void) => () => void
+    needsRecovery?: () => boolean
     setInterval: (
         callback: () => void,
         delayMs: number,
@@ -290,6 +388,7 @@ export type WorkspaceAssetSynchronizationPorts = {
 export class WorkspaceAssetSynchronization {
     private readonly cleanup: (() => void)[] = []
     private readonly revisions = new Map<string, number>()
+    private stopEvents: (() => void) | undefined
     private closed = false
     private loading = false
 
@@ -298,9 +397,14 @@ export class WorkspaceAssetSynchronization {
         private readonly ports: WorkspaceAssetSynchronizationPorts,
     ) {
         try {
-            this.cleanup.push(
-                ports.subscribe(this.onEvent),
-            )
+            this.stopEvents = ports.subscribe(this.onEvent)
+            this.cleanup.push(() => this.stopEvents?.())
+
+            if (ports.onReconnect)
+                this.cleanup.push(
+                    ports.onReconnect(this.reconnect),
+                )
+
             this.cleanup.push(
                 ports.setInterval(() => void this.synchronize(), 5 * 60000),
             )
@@ -333,6 +437,21 @@ export class WorkspaceAssetSynchronization {
 
         if (errors.length)
             throw new AggregateError(errors, 'Asset synchronization cleanup failed')
+    }
+
+    private reconnect = (): void => {
+        if (this.closed)
+            return
+
+        try {
+            this.stopEvents?.()
+            this.stopEvents = this.ports.subscribe(this.onEvent)
+
+            if (this.ports.needsRecovery?.())
+                void this.synchronize()
+        } catch (error) {
+            this.ports.reportError(error)
+        }
     }
 
     private onEvent = (event: WorkspaceAssetEvent): void => {

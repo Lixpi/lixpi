@@ -831,6 +831,7 @@ export default class AiInteractionService {
 
     async sendChatMessage({
         generationRequestId,
+        sourceGenerationRequestId,
         aiReasoningModels,
         mediaGenerationMode,
         useMultipleReasoningModels,
@@ -879,6 +880,12 @@ export default class AiInteractionService {
 
         if (generationRequestId)
             payload.generationRequestId = generationRequestId
+
+        if (
+            sourceGenerationRequestId
+            && regeneration
+        )
+            payload.sourceGenerationRequestId = sourceGenerationRequestId
 
         if (mediaBranchCandidateSnapshot)
             payload.mediaBranchCandidateSnapshot = mediaBranchCandidateSnapshot

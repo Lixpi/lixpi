@@ -9,8 +9,15 @@ import {
     type WorkspaceAccessGrant,
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
-import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
+import {
+    isTransactionConditionalCheckFailure,
+    type TransactOperation,
+} from '@lixpi/dynamodb-service'
 
+import {
+    appendCanvasTransactionFences,
+    isCanvasTransactionConflict,
+} from '../services/canvas-collaboration-transaction.ts'
 import { workspaceAccessResolver } from '../services/workspace-tree.ts'
 
 const {
@@ -358,10 +365,7 @@ export default {
             accessLevel: access.grant.accessLevel,
             accessGrant: access.grant,
             canvasStateUpdatedAt: getCanvasStateUpdatedAt(workspace),
-            canvasState: {
-                ...workspace.canvasState,
-                edges: workspace.canvasState?.edges ?? [],
-            },
+            canvasState: normalizeCanvasState(workspace.canvasState),
         } as AuthorizedWorkspace
     },
 
@@ -372,6 +376,7 @@ export default {
         expectedCanvasStateUpdatedAt,
         expectedUpdatedAt,
         persistViewport = false,
+        prepareCanvasWrite,
     }: {
         workspaceId: string
         canvasState: CanvasState
@@ -379,6 +384,10 @@ export default {
         expectedCanvasStateUpdatedAt?: number
         expectedUpdatedAt?: number
         persistViewport?: boolean
+        prepareCanvasWrite?: (
+            current: CanvasState,
+            next: CanvasState,
+        ) => TransactOperation[]
     }): Promise<UpdateCanvasStateResult> => {
         const canvasStateSaveToken = expectedCanvasStateUpdatedAt ?? expectedUpdatedAt
         const hasExpectedCanvasStateUpdatedAt = canvasStateSaveToken !== undefined
@@ -394,6 +403,20 @@ export default {
                 consistentRead: true,
                 origin: 'updateWorkspaceCanvasState:get',
             })
+            const currentCanvasRevision = getCanvasStateUpdatedAt(currentWorkspace)
+
+            if (
+                prepareCanvasWrite
+                && canvasStateSaveToken !== currentCanvasRevision
+            )
+                return {
+                    success: false,
+                    workspaceId,
+                    error: 'STALE_CANVAS_STATE',
+                    currentUpdatedAt: currentWorkspace?.updatedAt,
+                    currentCanvasStateUpdatedAt: currentCanvasRevision,
+                }
+
             const currentCanvasState = normalizeCanvasState(currentWorkspace?.canvasState)
             const rawIncomingCanvasState = normalizeCanvasState(canvasState)
             const incomingCanvasState = persistViewport
@@ -439,43 +462,46 @@ export default {
                 }
 
             await dynamoDBService.transactWrite({
-                operations: [
-                    {
-                        type: 'update',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        key: { workspaceId },
-                        updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
-                        conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
-                        expressionAttributeNames: {
-                            '#canvasState': 'canvasState',
-                            '#updatedAt': 'updatedAt',
-                            '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
-                            '#deletingAt': 'deletingAt',
+                operations: appendCanvasTransactionFences(
+                    [
+                        {
+                            type: 'update',
+                            tableName: getDynamoDbTableStageName(
+                                'WORKSPACES',
+                                ORG_NAME,
+                                STAGE,
+                            ),
+                            key: { workspaceId },
+                            updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
+                            conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
+                            expressionAttributeNames: {
+                                '#canvasState': 'canvasState',
+                                '#updatedAt': 'updatedAt',
+                                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+                                '#deletingAt': 'deletingAt',
+                            },
+                            expressionAttributeValues: {
+                                ':canvasState': nextCanvasState,
+                                ':updatedAt': currentDate,
+                                ':canvasStateUpdatedAt': currentDate,
+                                ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {}),
+                            },
                         },
-                        expressionAttributeValues: {
-                            ':canvasState': nextCanvasState,
-                            ':updatedAt': currentDate,
-                            ':canvasStateUpdatedAt': currentDate,
-                            ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {}),
+                        {
+                            type: 'update',
+                            tableName: getDynamoDbTableStageName(
+                                'WORKSPACES_META',
+                                ORG_NAME,
+                                STAGE,
+                            ),
+                            key: { workspaceId },
+                            updates: {
+                                updatedAt: currentDate,
+                            },
                         },
-                    },
-                    {
-                        type: 'update',
-                        tableName: getDynamoDbTableStageName(
-                            'WORKSPACES_META',
-                            ORG_NAME,
-                            STAGE,
-                        ),
-                        key: { workspaceId },
-                        updates: {
-                            updatedAt: currentDate,
-                        },
-                    },
-                ],
+                    ],
+                    prepareCanvasWrite?.(currentCanvasState, nextCanvasState) ?? [],
+                ),
                 logConditionalCheckFailures: false,
                 origin: 'updateWorkspaceCanvasState',
             })
@@ -487,7 +513,10 @@ export default {
                 canvasStateUpdatedAt: currentDate,
             }
         } catch (error) {
-            if (isTransactionConditionalCheckFailure(error)) {
+            if (
+                isTransactionConditionalCheckFailure(error)
+                || (prepareCanvasWrite && isCanvasTransactionConflict(error))
+            ) {
                 const workspace = await dynamoDBService.getItem({
                     tableName: getDynamoDbTableStageName(
                         'WORKSPACES',

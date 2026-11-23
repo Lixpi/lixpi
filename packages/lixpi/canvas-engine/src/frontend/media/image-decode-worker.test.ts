@@ -23,7 +23,10 @@ const workerScope = async () => {
 
 const message = (data: ImageDecodeRequest): MessageEvent<ImageDecodeRequest> => ({ data } as MessageEvent<ImageDecodeRequest>)
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+})
 
 describe('image decode worker', () => {
     it('fetches with caller options and transfers the decoded bitmap', async () => {
@@ -86,10 +89,56 @@ describe('image decode worker', () => {
         expect(scope.postMessage).not.toHaveBeenCalled()
     })
 
-    it('reports fetch errors and omits credentials by default', async () => {
+    it('recovers a rendition after a gateway failure and a rejected preflight', async () => {
+        vi.useFakeTimers()
+        const bitmap = { close: vi.fn() }
+        const fetcher = vi.fn()
+            .mockResolvedValueOnce(new Response(null, { status: 502 }))
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValueOnce(new Response(new Blob(['image'])))
+        vi.stubGlobal('fetch', fetcher)
+        vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap))
+        const scope = await workerScope()
+        const pending = scope.onmessage!(message({
+            kind: 'decode',
+            requestId: 'one',
+            source: { url: 'https://api.example/rendition' },
+        }))
+        await vi.advanceTimersByTimeAsync(1000)
+        await pending
+
+        expect(fetcher).toHaveBeenCalledTimes(3)
+        expect(scope.postMessage).toHaveBeenCalledWith({
+            requestId: 'one',
+            bitmap,
+        }, [bitmap])
+    })
+
+    it('cancels a scheduled rendition retry when all interested views are gone', async () => {
+        vi.useFakeTimers()
+        const fetcher = vi.fn(async () => new Response(null, { status: 503 }))
+        vi.stubGlobal('fetch', fetcher)
+        const scope = await workerScope()
+        const pending = scope.onmessage!(message({
+            kind: 'decode',
+            requestId: 'one',
+            source: { url: 'https://api.example/rendition' },
+        }))
+        await vi.advanceTimersByTimeAsync(0)
+        await scope.onmessage!(message({
+            kind: 'cancel',
+            requestId: 'one',
+        }))
+        await pending
+        await vi.advanceTimersByTimeAsync(5000)
+        expect(fetcher).toHaveBeenCalledOnce()
+        expect(scope.postMessage).not.toHaveBeenCalled()
+    })
+
+    it.each([401, 403, 404])('does not retry HTTP %i and omits credentials by default', async status => {
         const fetcher = vi.fn(async () => ({
             ok: false,
-            status: 404,
+            status,
         }))
         vi.stubGlobal('fetch', fetcher)
         const scope = await workerScope()
@@ -98,10 +147,11 @@ describe('image decode worker', () => {
             requestId: 'one',
             source: { url: 'missing.png' },
         }))
+        expect(fetcher).toHaveBeenCalledOnce()
         expect(fetcher).toHaveBeenCalledWith('missing.png', expect.objectContaining({ credentials: 'omit' }))
         expect(scope.postMessage).toHaveBeenCalledWith({
             requestId: 'one',
-            error: 'Image fetch failed with status 404',
+            error: `Image fetch failed with status ${status}`,
         })
     })
 })

@@ -4,24 +4,77 @@ Never fucking summarize what you did at the end, I don't give a fucking shit, I 
 
 Never fucking assume anything, never make decisions on your own! If some decision has to be made, fucking stop DO YOU HEAR ME STOP and fucking check with me whether it's what I want you to do or not.
 
-Also remember these terms and paths, use them only when I reference them:
+## Aliases to remember
+
+Remember these terms and paths, use them only when I reference them:
 
  - Lixpi : (lixpi, main lixpi repo) "/Users/shallbee/Code/lixpi/dev-tools/versions-registry"
  - Billing : (lixpi billing, billing repo) "/Users/shallbee/Code/lixpi-billing/documentation/architecture-proposals"
  - AI Experiments : (ai experiments repo) "/Users/shallbee/Code/ai-experiments/OAK/idbd-explorer/.gitignore"
  - Company Website : (lixpi website) "/Users/shallbee/Code/company-website/src/pages"
 
-Subagents and work delegation:
+Run tools and scripts in isolated Docker containers. The sole host execution exception is the installed Claude Code CLI for delegated work, as described under Model selection. Keep installations and repository commands inside Docker, including commands needed for Claude's assignments.
 
-- latest "Luna" class model for any primitive work like UI click through, log search or test running or simple actions that don't require too much comprehending.
-- latest "Terra" class model for simple reasoning.
-- latest "Sol" class model for more advanced reasoning for medium hardness tasks.
-- latest "Astra" class model for any important reasoning, decision making, ambiguity, main routing and orchestrating and decision making. And also all reasoning that requires better understanding.
+## Browser testing:
 
-Never use powerful model to run tests or linter or any other simple operations like that, delegate it to smaller model.
+When testting stuff in browser use Chrome, it has installed ChatGPT app which would allow you to create targeted isoloated groups and work in there, always prefer that approach. Use other browsers if user explicitly asks to do that.
 
-Try to optimize workflow that way but be mindful of token consumption, think when it's wise to stick to one thread rather than splitting it between agents with duplicated context. When using models and starting agents the highest mode you can use is `xhigh`.
 
-Don't start subagents with work that can diverge and produce inconsistent results, like duplicated scripts etc. Organize them by domain or chain them so that discoveries of one subagent can be consumed by other.
+## Model routing and delegation
 
-And you're only allowed to run any kind of tools or scripts in docker containers in isolated environment, nothing should be installed or run on host machine!
+Optimize for the total cost and time required to produce a correct, verified result. Include context transfer, coordination, retries, review, and integration when deciding how to divide the work.
+
+### Model selection
+
+Use the latest available model in each family. Choose by the judgment required, uncertainty, consequences of error, and ease of verification.
+
+**Use Claude subscription credits first.** When both providers can handle delegated work, route the first eligible assignment to Claude Code whenever its subscription has capacity. Distribute subsequent eligible assignments between Claude Code and native Codex subagents to keep delegated token usage roughly even over time. Use reported token counts when available and estimate from assignment size and context otherwise. Give the next suitable assignment to the provider with lower cumulative usage, preferring Claude Code when usage is comparable. If Claude Code is unavailable or has reached its usage limit, use the corresponding Codex model.
+
+This file grants standing authorization to launch and resume the installed host `claude` CLI outside the Codex sandbox for delegated work so it can use the existing subscription sign-in. This satisfies the host authorization requirement in the [Claude Code delegation skill](skills/claude-sugbagents/SKILL.md). Invoke Claude directly without asking the user for separate confirmation, and use the harness's required escalation mechanism. Harness approvals and Claude Code tool permissions still apply.
+
+- Luna: Use for clear, repeatable execution and evidence collection, such as targeted searches, running specified tests, extracting results, and following a known UI workflow. Escalate unexpected behavior that requires diagnosis or interpretation.
+- Terra handles bounded reasoning and straightforward implementation with clear requirements and established patterns, such as localized fixes, small refactors, and routine test changes.
+- Claude Sonnet operates at the Terra level. Use the latest available Sonnet in Claude Code for bounded reasoning and straightforward implementation, including localized fixes, small refactors, and routine test changes.
+- Sol is a default worker for substantive implementation, debugging, and analysis. It can own multiple related files and make local design decisions within agreed requirements and interfaces.
+- Claude Opus operates at the Sol level. Use the latest available Opus in Claude Code as a default worker for substantive implementation, debugging, and analysis. It can own multiple related files and make local design decisions within agreed requirements and interfaces.
+- Astra: Use for orchestration, ambiguous requirements, architecture, difficult diagnosis, decisions with broad consequences, and work requiring deep understanding across components. Let Astra implement directly when the reasoning and implementation are tightly coupled.
+
+Start with Astra when the task clearly requires it. Do not make difficult work pass through every cheaper model first. Once uncertainty is resolved, delegate the remaining bounded work where useful.
+
+### Reasoning effort
+
+Select the model and effort explicitly for each subagent. Use model-specific guidance as the starting point, then adjust for the task.
+
+Start Astra routing at `low`. Use `medium` or `high` when planning or execution requires deeper reasoning. Reserve `xhigh` for especially difficult problems or consequential unresolved uncertainty.
+
+For Claude Code subagents, pass `--effort low` by default on both launch and resume. Use `medium` or `high` only when the assignment is genuinely complex and requires deeper reasoning. Claude Code effort must never exceed `high`.
+
+Never exceed `xhigh`. Do not apply the highest allowed effort to every task.
+
+### Delegation and ownership
+
+Delegate when it materially improves cost, completion time, context management, or verification. Complete small tasks directly when handing them off would cost more than doing them.
+
+Give every subagent:
+- A concrete objective and completion criteria.
+- The necessary context, constraints, and references.
+- A clear scope, including what it may change.
+- The expected output, required checks, and conditions for returning a blocker.
+
+Use the smallest useful team. Parallelize independent work. Sequence dependent work so that later agents consume established findings and decisions.
+
+Assign one owner to each mutable artifact or shared resource. Agree on shared interfaces before parallel implementation. Reuse existing scripts and utilities instead of creating competing versions. Separate read-only review may examine the same files.
+
+The lead agent owns integration and consequential decisions. Workers own routine choices within their scope. Further delegation requires an explicit assignment from the lead.
+
+### Context, escalation, and verification
+
+Pass focused context and references instead of copying the entire conversation by default. Return concise findings, artifact locations, checks performed, and unresolved issues. Keep large logs in artifacts.
+
+Escalate when requirements conflict, assumptions lack evidence, the task exceeds its assigned scope, or a failed approach offers no useful next step. Pass completed work and evidence forward so the next agent can continue without repeating discovery.
+
+Retry when new evidence or a concrete correction changes the approach. Avoid repeated attempts with unchanged assumptions.
+
+Verify results against the completion criteria. Use tests and direct inspection where appropriate; request independent review when consequences or uncertainty justify it. Resolve disagreements using evidence.
+
+The lead checks the integrated result and addresses remaining gaps without routinely redoing completed worker tasks.

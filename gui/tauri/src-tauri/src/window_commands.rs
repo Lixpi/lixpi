@@ -14,6 +14,14 @@ use crate::MAIN_WINDOW;
 pub(crate) const RELOAD: &str = "reload";
 pub(crate) const DEVELOPER_TOOLS: &str = "developer-tools";
 
+const RELOAD_WEB_UI: &str = r"
+if (typeof window.__lixpiReload === 'function') {
+    window.__lixpiReload();
+} else {
+    window.location.reload();
+}
+";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Command {
     Reload,
@@ -34,6 +42,7 @@ impl Command {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReloadAction {
     Reload,
+    ReloadWebUi,
     OpenWebUi,
 }
 
@@ -70,9 +79,17 @@ fn reload(
     window: &WebviewWindow,
     web_ui: &Url,
 ) {
-    let action = window.url().map_or(ReloadAction::Reload, |current| reload_action(&current));
+    let action = window.url().map_or(ReloadAction::Reload, |current| reload_action(&current, web_ui));
     let reloaded = match action {
         ReloadAction::Reload => window.reload(),
+        ReloadAction::ReloadWebUi => match window.eval(RELOAD_WEB_UI) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                eprintln!("Could not prepare the Web UI before reloading: {error}");
+
+                window.reload()
+            },
+        },
         ReloadAction::OpenWebUi => window.navigate(web_ui.clone()),
     };
     if let Err(error) = reloaded {
@@ -83,9 +100,16 @@ fn reload(
 // The window starts on a blank page and can still be on it when the first
 // load of web-ui failed, for example because the stack wasn't running.
 // Reloading the blank page would show nothing, so it opens web-ui instead.
-fn reload_action(current: &Url) -> ReloadAction {
+fn reload_action(
+    current: &Url,
+    web_ui: &Url,
+) -> ReloadAction {
     if current.scheme() == "about" {
         return ReloadAction::OpenWebUi;
+    }
+
+    if current.origin() == web_ui.origin() {
+        return ReloadAction::ReloadWebUi;
     }
 
     ReloadAction::Reload
@@ -115,15 +139,21 @@ mod tests {
 
     #[test]
     fn reloading_a_blank_window_opens_web_ui() {
+        let web_ui = Url::parse("https://localhost:3443/").unwrap();
+
         for url in ["about:blank", "about:srcdoc"] {
-            assert_eq!(reload_action(&Url::parse(url).unwrap()), ReloadAction::OpenWebUi, "{url}");
+            assert_eq!(reload_action(&Url::parse(url).unwrap(), &web_ui), ReloadAction::OpenWebUi, "{url}");
         }
     }
 
     #[test]
-    fn reloading_a_page_reloads_that_page() {
-        for url in ["https://localhost:3443/", "https://localhost:3443/workspace/1?tab=2", "https://lixpi.ai/"] {
-            assert_eq!(reload_action(&Url::parse(url).unwrap()), ReloadAction::Reload, "{url}");
-        }
+    fn only_the_configured_web_ui_runs_the_loading_frame_hook() {
+        let web_ui = Url::parse("https://localhost:3443/").unwrap();
+        let workspace = Url::parse("https://localhost:3443/workspace/1?tab=2").unwrap();
+        let external = Url::parse("https://lixpi.ai/").unwrap();
+        let other_port = Url::parse("https://localhost:3445/").unwrap();
+        assert_eq!(reload_action(&workspace, &web_ui), ReloadAction::ReloadWebUi);
+        assert_eq!(reload_action(&external, &web_ui), ReloadAction::Reload);
+        assert_eq!(reload_action(&other_port, &web_ui), ReloadAction::Reload);
     }
 }

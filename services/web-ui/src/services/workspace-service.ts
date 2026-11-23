@@ -6,12 +6,15 @@ import {
     type WebClientRouterService,
 } from '@lixpi/web-client-service-factory'
 import {
+    type AuthClientInstance,
     type AuthTokenProvider,
 } from '@lixpi/auth-client'
 import { createWorkspacePersistencePorts } from '$src/canvas-adapters/workspace-persistence.ts'
+import { WorkspaceCanvasCollaborationClient } from '$src/canvas-adapters/workspace-canvas-collaboration-client.ts'
 
 import {
     NATS_SUBJECTS,
+    type CanvasCollaborationEvent,
     type CanvasState,
 } from '@lixpi/constants'
 
@@ -36,9 +39,59 @@ export type WorkspaceServiceConfig = {
 
 class WorkspaceService {
     readonly canvasSessions: WorkspaceCanvasSessionHub
+    private readonly collaboration = new Map<string, WorkspaceCanvasCollaborationClient>()
 
     constructor(private readonly config: WorkspaceServiceConfig) {
-        this.canvasSessions = new WorkspaceCanvasSessionHub(() => createWorkspacePersistencePorts(config))
+        this.canvasSessions = new WorkspaceCanvasSessionHub(
+            () => createWorkspacePersistencePorts({
+                ...config,
+                isCollaborating: workspaceId => this.collaboration.has(workspaceId),
+                getCollaborationSessionId: workspaceId => {
+                    const client = this.collaboration.get(workspaceId)
+
+                    return client?.actorId ? client.sessionId : undefined
+                },
+            }),
+        )
+    }
+
+    collaborate(
+        auth: AuthClientInstance,
+        workspaceId: string,
+        changed: (
+            event: CanvasCollaborationEvent,
+            actorId: string,
+        ) => void,
+    ) {
+        const client = new WorkspaceCanvasCollaborationClient(
+            auth,
+            workspaceId,
+            changed,
+            async () => {
+                try {
+                    await this.canvasSessions.get(workspaceId).persistence.retryInterruptedWrite()
+                } catch {
+                    // The persistence coordinator already reported the retry failure.
+                }
+            },
+        )
+        this.collaboration.set(workspaceId, client)
+
+        return {
+            start: () => client.start(),
+            update: client.update.bind(client),
+            flush: () => client.flush(),
+            follow: client.follow.bind(client),
+            activity: client.activity.bind(client),
+            acquireNode: client.acquireNode.bind(client),
+            releaseNodes: client.releaseNodes.bind(client),
+            destroy: () => {
+                if (this.collaboration.get(workspaceId) === client)
+                    this.collaboration.delete(workspaceId)
+
+                client.destroy()
+            },
+        }
     }
 
     // `beforePublish` receives the fetched workspace before the store does.

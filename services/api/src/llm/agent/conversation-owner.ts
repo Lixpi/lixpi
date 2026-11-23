@@ -4,6 +4,7 @@ import {
     type ConversationEvent,
     type ConversationEventPayloads,
     type ConversationMessage,
+    type ConversationHumanAction,
     type ConversationRun,
     type ConversationTurn,
     type AgentOperation,
@@ -474,6 +475,7 @@ export class ConversationOwner {
                     updatedAt: this.ports.now(),
                 }
                 delete run.interruptId
+                delete run.humanAction
 
                 return {
                     ...meta,
@@ -559,41 +561,90 @@ export class ConversationOwner {
         return saved.run!
     }
 
-    async consumeBudget(
+    private chargeBudget(
+        meta: ConversationMeta,
         kind: 'modelCalls' | 'toolCalls' | 'specialistCalls' | 'delegationCalls',
         continuation: number,
-    ): Promise<void> {
+    ): ConversationMeta {
         const maximum = {
             modelCalls: 'maxModelCalls',
             toolCalls: 'maxToolCalls',
             specialistCalls: 'maxSpecialistCalls',
             delegationCalls: 'maxDelegationCalls',
         } as const
-        await this.mutate(meta => {
-            const run = meta.run
+        const run = meta.run
 
-            if (
-                !run
-                || run.state === 'stopping'
-                || terminal.has(run.state)
-                || run.continuationEpoch !== continuation
-            )
-                throw new Error('CONVERSATION_CONTINUATION_STOPPED')
+        if (
+            !run
+            || run.state === 'stopping'
+            || terminal.has(run.state)
+            || run.continuationEpoch !== continuation
+        )
+            throw new Error('CONVERSATION_CONTINUATION_STOPPED')
 
-            if (run.budget[kind] >= run.budget[maximum[kind]])
-                throw new Error(`AGENT_BUDGET_EXHAUSTED:${kind}`)
+        if (run.budget[kind] >= run.budget[maximum[kind]])
+            throw new Error(`AGENT_BUDGET_EXHAUSTED:${kind}`)
 
-            return {
-                ...meta,
-                run: {
-                    ...run,
-                    budget: {
-                        ...run.budget,
-                        [kind]: run.budget[kind] + 1,
-                    },
+        return {
+            ...meta,
+            run: {
+                ...run,
+                budget: {
+                    ...run.budget,
+                    [kind]: run.budget[kind] + 1,
                 },
-            }
-        })
+            },
+        }
+    }
+
+    async consumeBudget(
+        kind: 'modelCalls' | 'toolCalls' | 'specialistCalls' | 'delegationCalls',
+        continuation: number,
+    ): Promise<void> {
+        await this.mutate(
+            meta => this.chargeBudget(
+                meta,
+                kind,
+                continuation,
+            ),
+        )
+    }
+
+    // The caller adds these writes to the child acceptance transaction, with
+    // the normal active-owner fence, so a duplicate send spends budget once.
+    async prepareDelegationCharge(continuation: number): Promise<{
+        run: ConversationRun
+        operations: TransactOperation[]
+    }> {
+        const meta = await this.read()
+        const charged = this.chargeBudget(
+            meta,
+            'delegationCalls',
+            continuation,
+        )
+        const next = {
+            ...charged,
+            revision: meta.revision + 1,
+            updatedAt: this.ports.now(),
+        }
+        const run = next.run!
+
+        return {
+            run,
+            operations: [
+                this.repository.put(
+                    this.partition,
+                    'META',
+                    next,
+                    meta.revision,
+                ),
+                this.repository.replace(
+                    this.partition,
+                    `RUN#${run.runId}`,
+                    run,
+                ),
+            ],
+        }
     }
 
     async finish(
@@ -648,7 +699,10 @@ export class ConversationOwner {
         await this.event('run.state', saved.run!)
     }
 
-    async waitForInput(interruptId: string): Promise<void> {
+    async waitForInput(
+        interruptId: string,
+        humanAction?: ConversationHumanAction,
+    ): Promise<void> {
         const saved = await this.mutate(meta => {
             if (
                 !meta.run
@@ -662,6 +716,7 @@ export class ConversationOwner {
                     ...meta.run,
                     state: 'waiting-input',
                     interruptId,
+                    ...(humanAction ? { humanAction } : {}),
                     updatedAt: this.ports.now(),
                 },
             }
@@ -687,6 +742,7 @@ export class ConversationOwner {
                 updatedAt: this.ports.now(),
             }
             delete run.interruptId
+            delete run.humanAction
 
             return {
                 ...meta,

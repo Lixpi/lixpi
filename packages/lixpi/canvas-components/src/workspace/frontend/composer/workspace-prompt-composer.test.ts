@@ -121,6 +121,51 @@ describe('Workspace prompt composer', () => {
         expect(document.body.childElementCount).toBe(0)
     })
 
+    it('shows an authorized followed draft without writing it to local storage or allowing submission', async () => {
+        const f = fixture()
+        const local = {
+            type: 'doc',
+            content: [{
+                type: 'text',
+                text: 'Local draft',
+            }],
+        }
+        const remote = {
+            type: 'doc',
+            content: [{
+                type: 'text',
+                text: 'Followed draft',
+            }],
+        }
+        const mountEditor = f.options.mountEditor
+        const publish = vi.fn()
+        let shown: object = local
+        f.options.onDraftChange = publish
+        f.options.mountEditor = request => ({
+            ...mountEditor(request),
+            readContent: () => shown,
+            restoreContent: content => {
+                shown = content
+                request.onContentChange(content)
+            },
+        })
+        const composer = f.mount()
+
+        composer.setFollowedDraft(true, { content: remote })
+        expect(shown).toEqual(remote)
+        expect(f.options.storage.setItem).not.toHaveBeenCalled()
+        expect(publish).not.toHaveBeenCalled()
+        await f.requests[0]!.onSubmit({} as never)
+        expect(f.options.onSubmit).not.toHaveBeenCalled()
+
+        composer.setFollowedDraft(false, null)
+        expect(shown).toEqual(local)
+        expect(composer.getDraft()).toEqual({
+            conversationAssetId: null,
+            content: local,
+        })
+    })
+
     it('migrates the workspace draft once into the user draft without overwriting a saved conversation', () => {
         const f = fixture()
         const stored = new Map([['lixpi:canvas-global-composer-draft:w', '{"type":"doc","content":[]}']])

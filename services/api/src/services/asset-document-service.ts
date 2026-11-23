@@ -1116,12 +1116,60 @@ const AssetDocumentService = {
         })
     },
     assertAssetBackedMediaNodes,
+    assertValidLiveEdit: async ({
+        asset,
+        role,
+        before,
+        after,
+        requester,
+    }: {
+        asset: Asset
+        role: 'content' | 'capabilityArtifact'
+        before: object
+        after: object
+        requester: AssetRequesterContext
+    }): Promise<void> => {
+        assertAssetBackedMediaNodes(after)
+
+        if (role === 'capabilityArtifact') {
+            const definition = getArtifactDefinition(asset)
+
+            try {
+                definition?.assertEditableMutation(before, after)
+            } catch {
+                throw new Error('CANVAS_DOCUMENT_ARTIFACT_CHANGE_INVALID')
+            }
+        }
+
+        const previousAssets = collectEmbeddedAssetIds(before, role)
+
+        for (const assetId of collectEmbeddedAssetIds(after, role)) {
+            if (previousAssets.has(assetId))
+                continue
+
+            const embedded = await AssetModel.get({
+                assetId,
+                requester,
+                origin: 'AssetDocumentService.assertValidLiveEdit',
+            })
+
+            if (
+                'error' in embedded
+                || embedded.assetId === asset.assetId
+                || embedded.organizationId !== asset.organizationId
+                || !['active', 'creating'].includes(embedded.states.lifecycle)
+            )
+                throw new Error('CANVAS_DOCUMENT_INVALID_EMBEDDED_ASSET')
+        }
+    },
     submitSteps: async ({
         payload,
         requester,
+        withWrite,
     }: {
         payload: AssetSubmitStepsPayload
         requester: AssetRequesterContext
+        withWrite?: <T>(write: () => Promise<T>) => Promise<T>
     }): Promise<SubmitResult | { error: string }> => {
         if (!ASSET_DOCUMENT_ROLES.includes(payload.role))
             return { error: 'INVALID_DOCUMENT_ROLE' }
@@ -1178,7 +1226,8 @@ const AssetDocumentService = {
         ))
             return { error: 'LEASE_INVALID' }
 
-        const result = await AssetProseMirrorStepTransport.fromSingleton().submitSteps(payload)
+        const write = () => AssetProseMirrorStepTransport.fromSingleton().submitSteps(payload)
+        const result = withWrite ? await withWrite(write) : await write()
 
         if (result.status === 'ACCEPTED') {
             const settlementRequest: AssetDocumentSettlementRequest = {

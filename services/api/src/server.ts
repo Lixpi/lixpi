@@ -30,6 +30,7 @@ import {
 } from './NATS/subscriptions/ai-interaction-subjects.ts'
 import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
+import { canvasCollaboration } from './services/canvas-collaboration.ts'
 import { workspaceTreeService } from './services/workspace-tree-service.ts'
 import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
 import { mediaGenerationRequestSubjects } from './NATS/subscriptions/media-generation-request-subjects.ts'
@@ -207,6 +208,8 @@ accountWorkPolicy?.start()
 
 await startAssetMaintenanceWorker(apiNatsService)
 new CapabilityRunEventRelay(apiNatsService).start()
+
+canvasCollaboration.start()
 
 // Authorize provider requests and record measured usage over the internal NATS port.
 // These service requests carry no browser token and bypass the JWT middleware.
